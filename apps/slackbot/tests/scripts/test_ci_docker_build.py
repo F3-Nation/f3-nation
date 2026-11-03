@@ -8,7 +8,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[4]
 WORKFLOW = REPO_ROOT / ".github/workflows/ci.yml"
 SCRIPTS_IMAGE = {"app": "slackbot-scripts", "dockerfile": "apps/slackbot/scripts/Dockerfile"}
-EXISTING_IMAGES = {"admin", "api", "auth", "map", "me", "slackbot"}
+STAGING_REFRESH_IMAGE = {"app": "staging-refresh", "dockerfile": "tooling/scripts/Dockerfile.staging-refresh"}
+EXISTING_IMAGES = {"admin", "api", "auth", "map", "me", "region-pages", "slackbot"}
 
 
 @pytest.fixture
@@ -35,11 +36,12 @@ def test_scripts_image_has_its_own_matrix_entry_and_cache_identity(workflow: dic
     assert len(apps) == len(set(apps)), "Images must not overwrite each other's cache"
     expected_apps = EXISTING_IMAGES | {"slackbot-scripts"}
     if job_name == "docker-build":
-        expected_apps |= {"analytics"}
+        expected_apps |= {"analytics", "staging-refresh"}
+        assert images.count(STAGING_REFRESH_IMAGE) == 1
     assert set(apps) == expected_apps
     for image in images:
         assert (REPO_ROOT / image["dockerfile"]).is_file()
-        if image != SCRIPTS_IMAGE:
+        if image not in (SCRIPTS_IMAGE, STAGING_REFRESH_IMAGE):
             assert image["dockerfile"] == f"apps/{image['app']}/Dockerfile"
 
 

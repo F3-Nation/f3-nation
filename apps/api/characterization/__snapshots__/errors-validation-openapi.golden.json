@@ -19,10 +19,8 @@
     "status": 400
   },
   "headers": {
-    "access-control-allow-credentials": "true",
-    "access-control-allow-origin": "",
-    "content-type": "application/json",
-    "vary": "Origin"
+    "access-control-allow-origin": "*",
+    "content-type": "application/json"
   },
   "status": 400
 }

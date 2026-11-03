@@ -13,13 +13,15 @@
     "scripts/python-task.sh"
   ],
   "globalPassThroughEnv": [
+    "ALLOW_DEV_MOCK_SESSION",
     "F3_ADMIN_PORT",
     "F3_AUTH_PORT",
     "F3_CONTAINER_PREFIX",
     "F3_HOMEPAGE_PORT",
     "F3_MAP_PORT",
     "F3_ME_PORT",
-    "GITHUB_SHA",
+    "F3_REGION_PAGES_PORT",
+    "F3_SLACKBOT_PORT",
     "INIT_CWD",
     "SNAPSHOT_CALLER_CWD"
   ],
@@ -48,6 +50,7 @@
     "CHAR_TEST_SHARED_DB",
     "CHAR_TEST_SIGNING_JWK",
     "SUPER_ADMIN_API_KEY",
+    "PROXY_CLIENT_IP_SECRET",
     "EMAIL_ADMIN_DESTINATIONS",
     "EMAIL_FROM",
     "EMAIL_SERVER",
@@ -68,6 +71,8 @@
     "F3_ADMIN_URL",
     "F3_API_TIMEOUT_MS",
     "F3_CHANNEL",
+    "GA_MEASUREMENT_ID",
+    "SITE_URL",
     "F3_GOOGLE_API_KEY",
     "F3_MAP_BASE_URL",
     "PORT",
@@ -83,9 +88,6 @@
     "GCS_CREDENTIALS",
     "GCS_EMULATOR_HOST",
     "NODE_TLS_REJECT_UNAUTHORIZED",
-    "CI_FACTORY_INFERENCE_API_KEY",
-    "CI_FACTORY_INFERENCE_BASE_URL",
-    "CI_FACTORY_INFERENCE_MODEL",
     "UV_PYTHON"
   ],
   "tasks": {

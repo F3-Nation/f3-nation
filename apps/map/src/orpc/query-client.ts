@@ -1,9 +1,12 @@
 import { StandardRPCJsonSerializer } from "@orpc/client/standard";
 import {
   defaultShouldDehydrateQuery,
+  environmentManager,
   QueryCache,
   QueryClient,
 } from "@tanstack/react-query";
+
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 const serializer = new StandardRPCJsonSerializer();
 
@@ -24,6 +27,14 @@ export const createQueryClient = () =>
         // above 0 to avoid refetching immediately on the client
         staleTime: 30 * 1000,
         gcTime: 30 * 60 * 1000,
+        // An outage fails at once so <ApiOutageBanner /> shows without waiting
+        // out three more attempts (each up to API_RESPONSE_TIMEOUT_MS); the
+        // banner then does the retrying. Otherwise TanStack's default: three
+        // retries in the browser, none on the server.
+        retry: (failureCount, error) =>
+          !environmentManager.isServer() &&
+          !isApiUnavailableError(error) &&
+          failureCount < 3,
         // Suppress abort errors - they're expected when queries are cancelled on unmount
         // This prevents console noise from expected behavior
         throwOnError: (error, query) => {
@@ -31,6 +42,10 @@ export const createQueryClient = () =>
           // SSG-hydrated map datasets) keeps showing that data; throwing would
           // replace a working map with the error boundary.
           if (query.state.data !== undefined) return false;
+          // The API being down is not a bug in the map: keep it mounted and
+          // let <ApiOutageBanner /> explain and retry, rather than replacing
+          // the whole app with the global error screen.
+          if (isApiUnavailableError(error)) return false;
           // Don't throw abort errors - they're expected when components unmount
           if (
             error instanceof Error &&

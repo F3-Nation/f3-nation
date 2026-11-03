@@ -17,6 +17,7 @@ import "~/app/globals.css";
 
 import { TooltipProvider } from "@acme/ui/tooltip";
 
+import { ApiOutageBanner } from "~/app/_components/api-outage-banner";
 import { GoogleAnalytics } from "~/app/_components/google-analytics";
 import { UserLocationProvider } from "~/app/_components/map/user-location-provider";
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
@@ -64,6 +65,7 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
           <UserLocationProvider>
             <KeyPressProvider>{children}</KeyPressProvider>
           </UserLocationProvider>
+          <ApiOutageBanner />
         </OrpcReactProvider>
       </RuntimeConfigProvider>
     </SessionProvider>

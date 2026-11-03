@@ -1,0 +1,106 @@
+{
+  "files": [
+    {
+      "path": "REVIEW.md",
+      "description": "Code-review priorities, critical checks, reviewer conduct and do-not-flag decisions for the whole repo."
+    },
+    {
+      "path": ".github/AGENTS.md",
+      "description": "Conventions for .github/.",
+      "scope": [".github/**"]
+    },
+    {
+      "path": "apps/AGENTS.md",
+      "description": "Shared conventions for the Next.js apps (admin, auth, homepage, map, me).",
+      "scope": [
+        "apps/admin/**",
+        "apps/auth/**",
+        "apps/homepage/**",
+        "apps/map/**",
+        "apps/me/**"
+      ]
+    },
+    {
+      "path": "apps/admin/AGENTS.md",
+      "description": "Conventions for apps/admin/.",
+      "scope": ["apps/admin/**"]
+    },
+    {
+      "path": "apps/analytics/AGENTS.md",
+      "description": "Conventions for apps/analytics/.",
+      "scope": ["apps/analytics/**"]
+    },
+    {
+      "path": "apps/api/AGENTS.md",
+      "description": "Conventions for apps/api/.",
+      "scope": ["apps/api/**"]
+    },
+    {
+      "path": "apps/auth/AGENTS.md",
+      "description": "Conventions for apps/auth/, including the security rules for tokens, sessions and redirects that the SSO packages, app proxies and API session resolution follow.",
+      "scope": [
+        "apps/auth/**",
+        "packages/auth/**",
+        "packages/sso/**",
+        "packages/sso-next/**",
+        "apps/*/src/proxy.ts",
+        "packages/api/src/shared.ts"
+      ]
+    },
+    {
+      "path": "apps/homepage/AGENTS.md",
+      "description": "Conventions for apps/homepage/.",
+      "scope": ["apps/homepage/**"]
+    },
+    {
+      "path": "apps/map/AGENTS.md",
+      "description": "Conventions for apps/map/.",
+      "scope": ["apps/map/**"]
+    },
+    {
+      "path": "apps/me/AGENTS.md",
+      "description": "Conventions for apps/me/.",
+      "scope": ["apps/me/**"]
+    },
+    {
+      "path": "apps/region-pages/AGENTS.md",
+      "description": "Conventions for apps/region-pages/.",
+      "scope": ["apps/region-pages/**"]
+    },
+    {
+      "path": "apps/slackbot/AGENTS.md",
+      "description": "Conventions for apps/slackbot/.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
+      "path": "packages/api/AGENTS.md",
+      "description": "Conventions for packages/api/.",
+      "scope": ["packages/api/**"]
+    },
+    {
+      "path": "packages/auth/AGENTS.md",
+      "description": "Conventions for packages/auth/.",
+      "scope": ["packages/auth/**"]
+    },
+    {
+      "path": "packages/db/AGENTS.md",
+      "description": "Conventions for packages/db/.",
+      "scope": ["packages/db/**"]
+    },
+    {
+      "path": "packages/sso-next/AGENTS.md",
+      "description": "Conventions for packages/sso-next/.",
+      "scope": ["packages/sso-next/**"]
+    },
+    {
+      "path": "packages/sso/AGENTS.md",
+      "description": "Conventions for packages/sso/.",
+      "scope": ["packages/sso/**"]
+    },
+    {
+      "path": "packages/ui/AGENTS.md",
+      "description": "Conventions for packages/ui/.",
+      "scope": ["packages/ui/**"]
+    }
+  ]
+}

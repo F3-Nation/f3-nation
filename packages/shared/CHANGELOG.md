@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.5.1...pkg-shared@0.6.0) (2026-10-29)
+
+
+### Features
+
+* **region-pages:** migrate region pages into the monorepo ([#1355](https://github.com/F3-Nation/f3-nation/issues/1355)) ([4ecc49c](https://github.com/F3-Nation/f3-nation/commit/4ecc49cc1cf622d1397df4251f57128c4fe8b097))
+
+
+### Bug Fixes
+
+* **api,auth,shared:** key rate limits on the Cloud Run-appended X-Forwarded-For hop ([#1340](https://github.com/F3-Nation/f3-nation/issues/1340)) ([ab85040](https://github.com/F3-Nation/f3-nation/commit/ab850404f1e78a5422173b53f0e2b35a857cb768))
+* **me,map:** handle an unavailable API with an outage screen and banner ([#1343](https://github.com/F3-Nation/f3-nation/issues/1343)) ([1f1a1e3](https://github.com/F3-Nation/f3-nation/commit/1f1a1e3324194250a53c11cb64f48ee7603d843f))
+* **me:** show a retrying outage screen when the API is down ([#1354](https://github.com/F3-Nation/f3-nation/issues/1354)) ([bf6343b](https://github.com/F3-Nation/f3-nation/commit/bf6343b4af94d8d82db6ba8dccb3f8c0f3fea140))
+
 ## [0.5.1](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.5.0...pkg-shared@0.5.1) (2026-10-23)
 
 

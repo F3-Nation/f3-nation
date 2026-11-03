@@ -1,5 +1,5 @@
 import type { JWT } from "next-auth/jwt";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OrgRole } from "@acme/shared/app/types";
 
@@ -45,6 +45,13 @@ const token = (overrides: Partial<JWT> = {}): JWT =>
   }) as JWT;
 
 describe("jwt callback on trigger=update", () => {
+  // The first import transforms the whole auth and db module graph, which can
+  // outlast the 5s test timeout on a busy CI runner. resetModules() keeps that
+  // transform cache, so warming it here leaves each test's own import fast.
+  beforeAll(async () => {
+    await loadJwtCallback();
+  }, 30_000);
+
   beforeEach(() => {
     getUser.mockReset();
   });

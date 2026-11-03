@@ -154,3 +154,38 @@ export function computeFanOffsets(
   }
   return offsets;
 }
+
+/**
+ * Fan radius that keeps `count` markers' square tap targets (`targetPx` wide)
+ * from overlapping, so a tap anywhere on a marker's target — its visible dot
+ * included — hits that marker and not a neighbour stacked above it. Adjacent
+ * markers on the circle sit one chord apart; a chord of `targetPx·√2` puts
+ * every pair at least `targetPx` apart on one axis, which separates the
+ * squares at any angle. Never returns less than `minRadiusPx`.
+ */
+export function fanRadiusForTargets(
+  count: number,
+  targetPx: number,
+  minRadiusPx: number,
+): number {
+  if (count <= 1) return minRadiusPx;
+  const radius = (targetPx * Math.SQRT2) / (2 * Math.sin(Math.PI / count));
+  return Math.max(minRadiusPx, radius);
+}
+
+/**
+ * Pixels to pan along one axis so the span `[min, max]` lies inside the
+ * visible range `[lo, hi]` — negative pans toward `lo`. Returns 0 when the
+ * span already fits, or when it is wider than the range and can't.
+ */
+export function panToContain(
+  min: number,
+  max: number,
+  lo: number,
+  hi: number,
+): number {
+  if (max - min > hi - lo) return 0;
+  if (min < lo) return min - lo;
+  if (max > hi) return max - hi;
+  return 0;
+}

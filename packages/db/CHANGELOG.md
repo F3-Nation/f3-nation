@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.2](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.10.1...pkg-db@0.10.2) (2026-10-29)
+
+
+### Performance Improvements
+
+* **db:** index roles_x_users_x_org and positions_x_orgs_x_users lookups ([#1338](https://github.com/F3-Nation/f3-nation/issues/1338)) ([9e3517f](https://github.com/F3-Nation/f3-nation/commit/9e3517f14cdb5300ccba746299d9779ded861d7b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/env bumped to 0.2.0
+    * @acme/shared bumped to 0.6.0
+
 ## [0.10.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.10.0...pkg-db@0.10.1) (2026-10-23)
 
 

@@ -2,7 +2,7 @@
 
 import type { SortingState, TableOptions } from "@tanstack/react-table";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import type { MdTableFeatures } from "@acme/ui/table-features";
@@ -24,6 +24,7 @@ import { AOSFilter } from "../_components/ao-filter";
 import type { DateRange } from "../_components/date-range-filter";
 import {
   DateRangeFilter,
+  EMPTY_DATE_RANGE,
   todayForwardDateRange,
 } from "../_components/date-range-filter";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
@@ -46,6 +47,18 @@ function seriesExceptionLabel(value: string): string {
   }
 }
 
+// Nothing to subscribe to, the date is only read when the table renders.
+const subscribeToToday = () => () => undefined;
+const getServerToday = () => null;
+
+// Keeps the first date it reads, so a table left open past midnight doesn't
+// move the filter (and the rows under the current page) on its next render.
+// Reset swaps in a new reader to pick up the current date.
+const createTodayReader = () => {
+  let today: string | undefined;
+  return () => (today ??= todayForwardDateRange().from);
+};
+
 export const EventInstancesTable = () => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const { pagination, setPagination } = usePagination({ pageSize: 20 });
@@ -55,9 +68,24 @@ export const EventInstancesTable = () => {
     "active",
   ]);
 
-  const [startDateRange, setStartDateRange] = useState<DateRange>(
-    todayForwardDateRange,
+  // "Today" has to come from the browser: the server runs on UTC, so on a US
+  // evening it's already tomorrow there and the filter label wouldn't match
+  // during hydration. It's null for the server render and hydration, then
+  // React re-renders with the browser's date.
+  const [getBrowserToday, setGetBrowserToday] = useState(() =>
+    createTodayReader(),
   );
+  const today = useSyncExternalStore(
+    subscribeToToday,
+    getBrowserToday,
+    getServerToday,
+  );
+  // null means the default today-forward range, derived below.
+  const [startDateRange, setStartDateRange] = useState<DateRange | null>(null);
+  const dateRange =
+    startDateRange ??
+    (today === null ? EMPTY_DATE_RANGE : { from: today, to: "" });
+
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
@@ -75,9 +103,12 @@ export const EventInstancesTable = () => {
             : undefined,
         aoOrgIds:
           selectedAos.length > 0 ? selectedAos.map((a) => a.id) : undefined,
-        startDate: startDateRange.from || undefined,
-        startDateTo: startDateRange.to || undefined,
+        startDate: dateRange.from || undefined,
+        startDateTo: dateRange.to || undefined,
       },
+      // Wait for today's date, otherwise the first page would include every
+      // past instance.
+      enabled: today !== null,
     }),
   );
 
@@ -85,7 +116,8 @@ export const EventInstancesTable = () => {
     setSelectedStatuses(["active"]);
     setSelectedAos([]);
     setSelectedRegions([]);
-    setStartDateRange(todayForwardDateRange());
+    setStartDateRange(null);
+    setGetBrowserToday(() => createTodayReader());
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
@@ -93,7 +125,7 @@ export const EventInstancesTable = () => {
     selectedStatuses.length +
     selectedAos.length +
     selectedRegions.length +
-    (startDateRange.from || startDateRange.to ? 1 : 0);
+    (dateRange.from || dateRange.to ? 1 : 0);
 
   const handleStartDateRangeChange = (range: DateRange) => {
     setStartDateRange(range);
@@ -155,7 +187,7 @@ export const EventInstancesTable = () => {
               selectedRegions={selectedRegions}
             />
             <DateRangeFilter
-              value={startDateRange}
+              value={dateRange}
               onChange={handleStartDateRangeChange}
               label="Filter by start date"
             />
@@ -189,7 +221,7 @@ export const EventInstancesTable = () => {
             <div>
               <p className="mb-1 text-sm font-medium">Start date</p>
               <DateRangeFilter
-                value={startDateRange}
+                value={dateRange}
                 onChange={handleStartDateRangeChange}
                 label="Filter by start date"
               />

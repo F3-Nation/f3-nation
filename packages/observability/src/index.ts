@@ -10,7 +10,7 @@
 // (see each app's instrumentation.ts).
 
 import type { LogContext } from "@acme/logger";
-import { logs, SeverityNumber } from "@opentelemetry/api-logs";
+import { logs, SeverityNumber } from "@opentelemetry/api";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { LoggerProvider } from "@opentelemetry/sdk-logs";
 import {

@@ -20,11 +20,17 @@ interface QueryState {
   data?: unknown;
   isLoading?: boolean;
   isError?: boolean;
+  error?: Error | null;
 }
 
-const { queryStates, enabledCalls } = vi.hoisted(() => ({
+const { queryStates, enabledCalls, captureException } = vi.hoisted(() => ({
   queryStates: new Map<string, QueryState>(),
-  enabledCalls: [] as { key: string; enabled?: boolean }[],
+  enabledCalls: [] as {
+    key: string;
+    enabled?: boolean;
+    throwOnError?: boolean;
+  }[],
+  captureException: vi.fn(),
 }));
 
 // One fake query per oRPC procedure the panel calls, keyed by the tag its
@@ -33,14 +39,26 @@ const { queryStates, enabledCalls } = vi.hoisted(() => ({
 vi.mock("~/orpc/react", () => {
   const queryOptions =
     (key: string) =>
-    (options: { enabled?: boolean } = {}) => ({ key, ...options });
+    (options: { enabled?: boolean; throwOnError?: boolean } = {}) => ({
+      key,
+      ...options,
+    });
   return {
-    useQuery: ({ key, enabled }: { key: string; enabled?: boolean }) => {
-      enabledCalls.push({ key, enabled });
+    useQuery: ({
+      key,
+      enabled,
+      throwOnError,
+    }: {
+      key: string;
+      enabled?: boolean;
+      throwOnError?: boolean;
+    }) => {
+      enabledCalls.push({ key, enabled, throwOnError });
       return {
         data: undefined,
         isLoading: false,
         isError: false,
+        error: null,
         ...(enabled === false ? {} : queryStates.get(key)),
       };
     },
@@ -73,7 +91,8 @@ vi.mock("~/utils/hooks/use-update-event-search-params", () => ({
 }));
 // The exception-list hook reports failures to PostHog; the report itself is
 // covered in `__tests__/utils/hooks/use-upcoming-instances.test.ts`.
-vi.mock("posthog-js", () => ({ default: { captureException: vi.fn() } }));
+vi.mock("posthog-js", () => ({ default: { captureException } }));
+vi.mock("~/env", () => ({ env: { NEXT_PUBLIC_POSTHOG_KEY: "phc_test" } }));
 
 import {
   createWorkoutEventFromInstance,
@@ -174,6 +193,7 @@ describe("WorkoutDetailsContent event resolution", () => {
   beforeEach(() => {
     queryStates.clear();
     enabledCalls.length = 0;
+    captureException.mockClear();
     // Most locations carry a series event. An empty events array alongside a
     // non-null location means the location's only workouts are upcoming
     // instances; that case has its own describe block below.
@@ -262,6 +282,38 @@ describe("WorkoutDetailsContent event resolution", () => {
     renderPanel(999);
 
     expect(warning()).toBeTruthy();
+  });
+
+  it("opts the parent-series fallback out of the app-wide throwOnError", () => {
+    queryStates.set("upcomingInstances", { data: [] });
+
+    renderPanel(999);
+
+    // Under the app-wide default a failed fallback throws into global-error.tsx
+    // and replaces the whole map instead of reaching the warning below.
+    const calls = enabledCalls.filter((call) => call.key === "eventById");
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.throwOnError === false)).toBe(true);
+  });
+
+  it("reports a failed parent-series fallback to PostHog once", () => {
+    const error = new Error("boom");
+    queryStates.set("upcomingInstances", { data: [] });
+    queryStates.set("eventById", { isError: true, error });
+
+    const { rerender } = renderPanel(999);
+    rerender(
+      <WorkoutDetailsContent
+        locationId={10}
+        providedEventId={999}
+        chipSize="small"
+      />,
+    );
+
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(error, {
+      event: "map.event_by_id.fetch_failed",
+    });
   });
 
   it("holds off warning while the parent-series fallback is still in flight", () => {

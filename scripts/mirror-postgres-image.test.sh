@@ -24,8 +24,9 @@ assert_eq() {
   fi
 }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/mirror-postgres-image-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/mirror-postgres-image-test.XXXXXX")" || exit 1
 
 # A fake `docker` that records every invocation's argv. `inspect` returns
 # $DOCKER_INSPECT_OUTPUT verbatim (defaulting to RepoDigests with the Docker

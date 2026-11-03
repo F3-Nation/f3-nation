@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   computeFanOffsets,
+  fanRadiusForTargets,
   fuzzyScore,
   convexHull,
+  panToContain,
   createCircleBuffer,
   createStarPolygon,
   dedupePoints,
@@ -280,5 +282,53 @@ describe("computeFanOffsets", () => {
       expect(large[i]!.dx).toBeCloseTo(s.dx * 2, 6);
       expect(large[i]!.dy).toBeCloseTo(s.dy * 2, 6);
     });
+  });
+});
+
+describe("fanRadiusForTargets", () => {
+  it("uses the minimum radius for a lone marker", () => {
+    expect(fanRadiusForTargets(1, 32, 18)).toBe(18);
+  });
+
+  it("never goes below the minimum radius", () => {
+    // Two 8px targets need only a ~5.7px radius.
+    expect(fanRadiusForTargets(2, 8, 18)).toBe(18);
+  });
+
+  it("keeps tap targets from overlapping", () => {
+    for (const count of [2, 3, 6, 12]) {
+      const target = 32;
+      const offsets = computeFanOffsets(
+        count,
+        fanRadiusForTargets(count, target, 18),
+      );
+      offsets.forEach((a, i) => {
+        offsets.forEach((b, j) => {
+          if (i === j) return;
+          const overlap =
+            Math.abs(a.dx - b.dx) < target - 1e-9 &&
+            Math.abs(a.dy - b.dy) < target - 1e-9;
+          expect(overlap).toBe(false);
+        });
+      });
+    }
+  });
+});
+
+describe("panToContain", () => {
+  it("leaves a span that already fits", () => {
+    expect(panToContain(20, 80, 10, 100)).toBe(0);
+  });
+
+  it("pans toward the low edge when the span starts before it", () => {
+    expect(panToContain(-5, 40, 12, 378)).toBe(-17);
+  });
+
+  it("pans toward the high edge when the span ends past it", () => {
+    expect(panToContain(300, 400, 12, 378)).toBe(22);
+  });
+
+  it("does not pan a span wider than the range", () => {
+    expect(panToContain(0, 500, 12, 378)).toBe(0);
   });
 });

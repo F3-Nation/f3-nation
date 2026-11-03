@@ -10,7 +10,7 @@
  */
 
 import { vi } from "vitest";
-import type { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import type { checkHasRolesOnOrgs } from "../check-has-role-on-org";
 import { waitForRegionNotificationTasks } from "./request";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
@@ -42,17 +42,21 @@ vi.mock("../lib/first-event-service", () => ({
 
 vi.mock("../check-has-role-on-org", async (importOriginal) => {
   const original = await importOriginal<{
-    checkHasRoleOnOrg: typeof checkHasRoleOnOrg;
+    checkHasRolesOnOrgs: typeof checkHasRolesOnOrgs;
   }>();
   return {
     ...original,
-    checkHasRoleOnOrg: async (
-      params: Parameters<typeof original.checkHasRoleOnOrg>[0],
+    // checkUpdatePermissions (used by validateSubmissionByAdmin) resolves its
+    // orgs through the batched check, so the forced-success override lives here.
+    checkHasRolesOnOrgs: async (
+      params: Parameters<typeof original.checkHasRolesOnOrgs>[0],
     ) => {
-      const result = await original.checkHasRoleOnOrg(params);
-      return params.orgId === mockPermissionOrgId.value
-        ? { ...result, success: true }
-        : result;
+      const results = await original.checkHasRolesOnOrgs(params);
+      return results.map((result, i) =>
+        params.checks[i]?.orgId === mockPermissionOrgId.value
+          ? { ...result, success: true }
+          : result,
+      );
     },
   };
 });

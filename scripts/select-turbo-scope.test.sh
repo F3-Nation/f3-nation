@@ -25,8 +25,9 @@ assert_eq() {
   fi
 }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/select-turbo-scope-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/select-turbo-scope-test.XXXXXX")" || exit 1
 
 # A fake turbo binary that records its own argv (so tests can assert on
 # forwarded task names) and produces BEHAVIOR-controlled dry-run output,

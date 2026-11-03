@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-env@0.1.4...pkg-env@0.2.0) (2026-10-29)
+
+
+### Features
+
+* **api:** trust a list of auth issuers (AUTH_TRUSTED_ISSUERS) ([#1321](https://github.com/F3-Nation/f3-nation/issues/1321)) ([b88c157](https://github.com/F3-Nation/f3-nation/commit/b88c157a6b4d009e735f5e3e4407a898add1e725))
+
+
+### Bug Fixes
+
+* **api,auth,shared:** key rate limits on the Cloud Run-appended X-Forwarded-For hop ([#1340](https://github.com/F3-Nation/f3-nation/issues/1340)) ([ab85040](https://github.com/F3-Nation/f3-nation/commit/ab850404f1e78a5422173b53f0e2b35a857cb768))
+
 ## [0.1.4](https://github.com/F3-Nation/f3-nation/compare/pkg-env@0.1.3...pkg-env@0.1.4) (2026-10-06)
 
 

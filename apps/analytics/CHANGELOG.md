@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/F3-Nation/f3-nation/compare/analytics@1.2.0...analytics@1.2.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** pin dependencies ([#1389](https://github.com/F3-Nation/f3-nation/issues/1389)) ([f16af61](https://github.com/F3-Nation/f3-nation/commit/f16af61d0dcd0869971d659e1cd5dd198c185570))
+
 ## [1.2.0](https://github.com/F3-Nation/f3-nation/compare/analytics@1.1.0...analytics@1.2.0) (2026-10-23)
 
 

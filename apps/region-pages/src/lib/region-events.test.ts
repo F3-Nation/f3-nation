@@ -1,0 +1,225 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  buildEventSlug,
+  findRegionEvent,
+  formatEventDate,
+  formatEventTime,
+  formatEventTimeRange,
+  getUpcomingRegionEvents,
+  hasEventEnded,
+} from "@/lib/region-events";
+import type { RegionEvent } from "@/types/event";
+
+// Replace the real (currently empty) data file with a fixture so the
+// filtering and lookup logic is exercised deterministically.
+vi.mock("@/data/region-events.json", () => ({
+  default: [
+    {
+      regionSlug: "atlanta",
+      regionName: "Atlanta",
+      events: [
+        {
+          id: "aaaaaa",
+          title: "Past Event",
+          date: "2024-01-10",
+          startTime: "06:00",
+        },
+        {
+          id: "dddddd",
+          title: "Today Event",
+          date: "2024-02-01",
+          startTime: "06:00",
+        },
+        {
+          id: "cccccc",
+          title: "Sooner Event",
+          date: "2024-02-05",
+          startTime: "07:00",
+          legacySlugs: ["old-sooner"],
+        },
+        {
+          id: "bbbbbb",
+          title: "Later Event",
+          slugSuffix: "Spring Kickoff",
+          date: "2024-03-20",
+          startTime: "18:00",
+        },
+        { id: "eeeeee", title: "Undated Event", date: "" },
+      ],
+    },
+  ],
+}));
+
+const makeEvent = (overrides: Partial<RegionEvent> = {}): RegionEvent => ({
+  id: "abc123",
+  title: "Holiday Hike",
+  date: "2024-12-01",
+  ...overrides,
+});
+
+// 10:30 on Thursday 2024-02-01 at UTC-12, the last timezone to reach a day.
+const REFERENCE = new Date("2024-02-01T22:30:00Z");
+
+describe("buildEventSlug", () => {
+  it.each([
+    [{ slugSuffix: "Holiday Hike" }, "abc123-holiday-hike"],
+    [{ title: "Turkey Trot" }, "abc123-turkey-trot"],
+    [{ slugSuffix: "   ", title: "Turkey Trot" }, "abc123-turkey-trot"],
+    [{ title: "  " }, "abc123"],
+  ])("%j -> %s", (overrides, expected) => {
+    expect(buildEventSlug(makeEvent(overrides))).toBe(expected);
+  });
+});
+
+describe("formatEventDate", () => {
+  it("formats an ISO date as a long English date", () => {
+    expect(formatEventDate("2024-03-15")).toBe("Friday, March 15, 2024");
+    expect(formatEventDate("")).toBe("Date TBD");
+    expect(formatEventDate("not-a-date")).toBe("Date TBD");
+  });
+});
+
+describe("formatEventTime", () => {
+  it.each([
+    [undefined, undefined],
+    ["", undefined],
+    ["09:00", "9:00 AM"],
+    ["13:05", "1:05 PM"],
+    ["00:30", "12:30 AM"],
+    ["12:00", "12:00 PM"],
+    ["9", "9:00 AM"],
+    ["25:00", "25:00"],
+    ["10:75", "10:75"],
+    ["abc", "abc"],
+  ])("%j -> %j", (input, expected) => {
+    expect(formatEventTime(input)).toBe(expected);
+  });
+});
+
+describe("formatEventTimeRange", () => {
+  it.each([
+    ["09:00", "11:00", "9:00 AM – 11:00 AM"],
+    ["09:00", undefined, "9:00 AM"],
+    [undefined, "11:00", "11:00 AM"],
+    [undefined, undefined, undefined],
+    ["", "", undefined],
+  ])("%j, %j -> %j", (start, end, expected) => {
+    expect(formatEventTimeRange(start, end)).toBe(expected);
+  });
+});
+
+describe("hasEventEnded", () => {
+  it.each([
+    ["an earlier day", { date: "2024-01-31", startTime: "23:00" }, true],
+    ["later today", { date: "2024-02-01", startTime: "06:00" }, false],
+    ["a future day", { date: "2024-03-01" }, false],
+    ["no date", { date: "" }, false],
+    ["a malformed date", { date: "2024-2-1" }, false],
+    // Would count as ended if only the YYYY-MM-DD shape were checked.
+    ["a day that doesn't exist", { date: "2023-02-30" }, false],
+  ])("%s -> %s", (_label, overrides, expected) => {
+    expect(hasEventEnded(makeEvent(overrides), REFERENCE)).toBe(expected);
+  });
+
+  it("keeps an event current until its date has ended everywhere", () => {
+    const event = makeEvent({ date: "2024-02-01", startTime: "19:00" });
+
+    // Evening of the event in the US: already the next day in UTC.
+    expect(hasEventEnded(event, new Date("2024-02-02T01:00:00Z"))).toBe(false);
+    expect(hasEventEnded(event, new Date("2024-02-02T11:59:59Z"))).toBe(false);
+    expect(hasEventEnded(event, new Date("2024-02-02T12:00:00Z"))).toBe(true);
+  });
+
+  describe("server timezone", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it.each(["Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC"])(
+      "gives the same answer in %s",
+      (timeZone) => {
+        vi.stubEnv("TZ", timeZone);
+        const event = makeEvent({ date: "2024-02-01", startTime: "06:00" });
+
+        expect(hasEventEnded(event, new Date("2024-02-02T06:00:00Z"))).toBe(
+          false,
+        );
+        expect(hasEventEnded(event, new Date("2024-02-02T13:00:00Z"))).toBe(
+          true,
+        );
+      },
+    );
+  });
+});
+
+describe("getUpcomingRegionEvents", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns today-and-later dated events in order, skipping past and undated", () => {
+    const ids = getUpcomingRegionEvents("atlanta", {
+      referenceDate: REFERENCE,
+    }).map((event) => event.id);
+
+    expect(ids).toEqual(["dddddd", "cccccc", "bbbbbb"]);
+  });
+
+  it("applies the limit", () => {
+    const upcoming = getUpcomingRegionEvents("atlanta", {
+      referenceDate: REFERENCE,
+      limit: 1,
+    });
+
+    expect(upcoming.map((event) => event.id)).toEqual(["dddddd"]);
+  });
+
+  it("includes recent past events when includePastDays is set", () => {
+    const upcoming = getUpcomingRegionEvents("atlanta", {
+      referenceDate: REFERENCE,
+      includePastDays: 30,
+    });
+
+    expect(upcoming[0]?.id).toBe("aaaaaa");
+    expect(upcoming).toHaveLength(4);
+  });
+
+  it("still lists today's event on the evening of its date in the US", () => {
+    // Production servers run in UTC, where it is already the next day.
+    vi.stubEnv("TZ", "UTC");
+    const ids = getUpcomingRegionEvents("atlanta", {
+      referenceDate: new Date("2024-02-02T02:00:00Z"),
+    }).map((event) => event.id);
+
+    expect(ids[0]).toBe("dddddd");
+  });
+
+  it("returns an empty array for an unknown region", () => {
+    expect(
+      getUpcomingRegionEvents("nowhere", { referenceDate: REFERENCE }),
+    ).toEqual([]);
+  });
+});
+
+describe("findRegionEvent", () => {
+  it("returns null for a region that does not exist", () => {
+    expect(findRegionEvent("nowhere", "bbbbbb-spring-kickoff")).toBeNull();
+  });
+
+  it("returns null when no event matches the slug", () => {
+    expect(findRegionEvent("atlanta", "does-not-exist")).toBeNull();
+  });
+
+  it("finds an event by the id prefix of its slug", () => {
+    const result = findRegionEvent("atlanta", "bbbbbb-spring-kickoff");
+
+    expect(result?.event.id).toBe("bbbbbb");
+    expect(result?.region.regionSlug).toBe("atlanta");
+  });
+
+  it("finds an event by a legacy slug", () => {
+    const result = findRegionEvent("atlanta", "old-sooner");
+
+    expect(result?.event.id).toBe("cccccc");
+  });
+});

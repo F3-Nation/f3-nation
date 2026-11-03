@@ -8,7 +8,7 @@ import { UserRole } from "@acme/shared/app/enums";
 import { queryBooleanSchema } from "@acme/shared/app/functions";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { checkHasRolesOnOrgs } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { logError, logWarn } from "../logger";
 import type { Context } from "../shared";
@@ -317,21 +317,26 @@ export const apiKeyRouter = {
       const roles = input.roles ?? [];
       const expiresAt = input.expiresAt ?? null;
 
-      // Check permissions for each org-role combination
+      // Check permissions for each org-role combination (one hierarchy query
+      // per chunk of up to 10,000 orgs; the first denied role in request
+      // order is reported).
       if (roles.length > 0) {
-        for (const role of roles) {
-          const permissionCheck = await checkHasRoleOnOrg({
-            session: ctx.session,
+        const permissionChecks = await checkHasRolesOnOrgs({
+          session: ctx.session,
+          db: ctx.db,
+          checks: roles.map((role) => ({
             orgId: role.orgId,
-            db: ctx.db,
             roleName: role.roleName,
+          })),
+        });
+        const deniedIndex = permissionChecks.findIndex(
+          (permissionCheck) => !permissionCheck.success,
+        );
+        const deniedRole = roles[deniedIndex];
+        if (deniedRole) {
+          throw new ORPCError("FORBIDDEN", {
+            message: `You do not have permission to grant "${deniedRole.roleName}" role on organization ${deniedRole.orgId}`,
           });
-
-          if (!permissionCheck.success) {
-            throw new ORPCError("FORBIDDEN", {
-              message: `You do not have permission to grant "${role.roleName}" role on organization ${role.orgId}`,
-            });
-          }
         }
 
         // Callers may only create keys they can also manage.

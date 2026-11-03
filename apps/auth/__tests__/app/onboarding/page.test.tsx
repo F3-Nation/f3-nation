@@ -224,6 +224,17 @@ describe("home region", () => {
     await screen.findByLabelText("F3 Name");
   }
 
+  // The form appears before the effect that fills in the saved region has
+  // run. Typing into the box before then lets that effect overwrite the text.
+  async function savedRegionShown() {
+    await waitFor(() =>
+      expect(screen.getByLabelText("Home Region")).toHaveProperty(
+        "value",
+        "Test South",
+      ),
+    );
+  }
+
   it("shows the saved home region so it can be confirmed", async () => {
     await renderForm();
 
@@ -240,6 +251,7 @@ describe("home region", () => {
     searchParams.set("callbackUrl", callback);
     fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
     await renderForm();
+    await savedRegionShown();
 
     fireEvent.change(screen.getByLabelText("Home Region"), {
       target: { value: "north" },
@@ -323,12 +335,7 @@ describe("home region", () => {
       ),
     );
     await renderForm();
-    await waitFor(() =>
-      expect(screen.getByLabelText("Home Region")).toHaveProperty(
-        "value",
-        "Test South",
-      ),
-    );
+    await savedRegionShown();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
@@ -387,12 +394,7 @@ describe("home region", () => {
     prefill({ ...saved, isExistingUser: true });
     fetchMock.mockResolvedValueOnce(Response.json({}, { status: 500 }));
     await renderForm();
-    await waitFor(() =>
-      expect(screen.getByLabelText("Home Region")).toHaveProperty(
-        "value",
-        "Test South",
-      ),
-    );
+    await savedRegionShown();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 

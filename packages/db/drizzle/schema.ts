@@ -1000,6 +1000,17 @@ export const positionsXOrgsXUsers = pgTable(
     userId: integer("user_id").notNull(),
   },
   (table) => [
+    // The PK leads with position_id, so lookups by user (me.profile,
+    // position.getUserAssignments) or by org (position.getOrgAssignments)
+    // need their own indexes.
+    index("idx_positions_x_orgs_x_users_user_id").using(
+      "btree",
+      table.userId.asc().nullsLast().op("int4_ops"),
+    ),
+    index("idx_positions_x_orgs_x_users_org_id").using(
+      "btree",
+      table.orgId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.orgId],
       foreignColumns: [orgs.id],
@@ -1030,6 +1041,20 @@ export const rolesXUsersXOrg = pgTable(
     orgId: integer("org_id").notNull(),
   },
   (table) => [
+    // The PK leads with role_id, but the hot authorization paths filter by
+    // user_id (alone, or with org_id) or by org_id alone. The (user_id,
+    // org_id) index also serves user_id-only lookups.
+    index("idx_roles_x_users_x_org_user_id_org_id").using(
+      "btree",
+      table.userId.asc().nullsLast().op("int4_ops"),
+      table.orgId.asc().nullsLast().op("int4_ops"),
+    ),
+    // Keep: org_id-only lookups (e.g. map-request-notification) cannot use the
+    // (user_id, org_id) index above because it leads with user_id.
+    index("idx_roles_x_users_x_org_org_id").using(
+      "btree",
+      table.orgId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.orgId],
       foreignColumns: [orgs.id],

@@ -6,10 +6,15 @@ import { ORPCError } from "@orpc/client";
  * is not an outage.
  */
 export function isApiUnavailableError(error: unknown, depth = 0): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  // Matched by name, not `instanceof DOMException`: the abort reasons Node
+  // and the browser create can come from a different realm than the global
+  // DOMException (a test's jsdom, an iframe), so `instanceof` can miss them.
+  // A bare `AbortError` is deliberately NOT an outage: it is what the caller
+  // cancelling a request (unmount, navigation) produces. Clients that bound
+  // their own wait abort with a `TimeoutError` reason instead.
+  if ((error as { name?: unknown }).name === "TimeoutError") return true;
   if (error instanceof ORPCError) return error.status >= 500;
-  if (error instanceof DOMException) {
-    return error.name === "TimeoutError" || error.name === "AbortError";
-  }
   // Node's fetch (undici) rejects with "fetch failed" on DNS, refused, or
   // reset connections before headers, and "terminated" when the socket closes
   // mid-body. Matching the message keeps ordinary TypeErrors from bugs out of
@@ -25,4 +30,15 @@ export function isApiUnavailableError(error: unknown, depth = 0): boolean {
     error instanceof Error &&
     isApiUnavailableError(error.cause, depth + 1)
   );
+}
+
+/**
+ * Whether a response is a gateway or load-balancer failure rather than an
+ * answer from the API. oRPC cannot decode these (no JSON body, or no
+ * content-type), so it would surface them as a body-parse error with the
+ * status lost; callers turn them into an `ORPCError` before oRPC sees them.
+ */
+export function isUpstreamFailureResponse(response: Response): boolean {
+  if (response.status < 500) return false;
+  return !response.headers.get("content-type")?.startsWith("application/json");
 }

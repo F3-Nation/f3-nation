@@ -133,8 +133,9 @@ describe("getMyProfile during an API outage", () => {
     fetchMock.mockImplementation(
       (_input, init) =>
         new Promise((_resolve, reject) => {
+          // Like fetch, reject with the signal's reason.
           init?.signal?.addEventListener("abort", () => {
-            reject(new DOMException("aborted", "AbortError"));
+            reject(init.signal?.reason as Error);
           });
         }),
     );
@@ -151,7 +152,7 @@ describe("getMyProfile during an API outage", () => {
         start(stream) {
           stream.enqueue(new TextEncoder().encode('{"json":'));
           signal?.addEventListener("abort", () => {
-            stream.error(new DOMException("aborted", "AbortError"));
+            stream.error(signal.reason);
           });
         },
       });

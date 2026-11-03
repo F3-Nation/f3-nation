@@ -133,7 +133,35 @@ def _show_emergency_info_modal(
     else:
         accessing_user_name = safe_get(body, "user", "name") or safe_get(body, "user", "username") or "Unknown"
 
-    _notify_user_of_access(user, accessing_user_name, is_local, accessing_region_name)
+    notification_submitted = _notify_user_of_access(user, accessing_user_name, is_local, accessing_region_name)
+    if not notification_submitted:
+        reason = "no_email" if not user.email else "send_unconfirmed"
+        logger.warning(
+            "slackbot.emergency.access_notification_unconfirmed "
+            "reason=%s accessed_user_id=%s region_org_id=%s is_local=%s",
+            reason,
+            user.id,
+            region_record.org_id,
+            is_local,
+            extra={
+                "json_fields": {
+                    "event": "slackbot.emergency.access_notification_unconfirmed",
+                    "reason": reason,
+                    "accessed_user_id": user.id,
+                    "region_org_id": region_record.org_id,
+                    "is_local": is_local,
+                }
+            },
+        )
+    if not user.email:
+        notification_status = ":warning: No email notification was sent because this user has no email address on file."
+    elif notification_submitted:
+        notification_status = ":email: An email notification about this access was submitted for delivery."
+    else:
+        notification_status = (
+            ":x: The email notification about this access may not have been sent. "
+            "Please let the member or your region leadership know you viewed their emergency info."
+        )
 
     blocks = [
         HeaderBlock(label=f"Emergency Info for {user.f3_name or 'Unknown'}").as_form_field(),
@@ -175,13 +203,7 @@ def _show_emergency_info_modal(
         )
 
     blocks.append(DividerBlock().as_form_field())
-    blocks.append(
-        ContextBlock(
-            element=ContextElement(
-                initial_value=":warning: The user has been emailed to let them know that their emergency information was accessed."  # noqa: E501
-            )
-        ).as_form_field()
-    )
+    blocks.append(ContextBlock(element=ContextElement(initial_value=notification_status)).as_form_field())
 
     client.views_update(
         view_id=update_view_id,
@@ -195,10 +217,16 @@ def _show_emergency_info_modal(
     )
 
 
-def _notify_user_of_access(user: User, accessing_user_name: str, is_local: bool, accessing_region_name: str):
-    """Send email notification to user that their emergency info was accessed."""
+def _notify_user_of_access(user: User, accessing_user_name: str, is_local: bool, accessing_region_name: str) -> bool:
+    """Attempt to email the user that their emergency info was accessed.
+
+    Return True when SMTP submission and cleanup finish without reported errors.
+    Return False for no email address or an unsuccessful attempt, including
+    partial refusal or cleanup failure after acceptance. Neither result proves
+    final inbox delivery.
+    """
     if not user.email:
-        return
+        return False
 
     access_type = "local Slack workspace" if is_local else f"downrange search from {accessing_region_name}"
     timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p UTC")
@@ -225,7 +253,7 @@ def _notify_user_of_access(user: User, accessing_user_name: str, is_local: bool,
     </html>
     """
 
-    send_via_sendgrid(
+    return send_via_sendgrid(
         to_email=user.email,
         subject="F3 Nation - Your Emergency Information Was Accessed",
         html_content=html_content,
@@ -256,8 +284,8 @@ EMERGENCY_SEARCH_FORM = BlockView(
         HeaderBlock(label="Search for Emergency Info"),
         ContextBlock(
             element=ContextElement(
-                initial_value=":warning: *Important:* The user will be emailed to let them know that their emergency "
-                "information was accessed. Only use this feature in genuine emergency situations."
+                initial_value=":warning: *Important:* The bot will attempt to email the user to let them know that "
+                "their emergency information was accessed. Only use this feature in genuine emergency situations."
             )
         ),
         DividerBlock(),

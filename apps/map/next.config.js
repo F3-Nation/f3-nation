@@ -1,6 +1,8 @@
 import { fileURLToPath } from "url";
 import _jiti from "jiti";
 
+import { nextSecurityHeaders } from "@acme/security-headers";
+
 const jiti = _jiti(fileURLToPath(import.meta.url));
 
 // Import env files to validate at build time. Use jiti so we can load .ts files in here.
@@ -10,6 +12,8 @@ jiti("./src/env");
 const config = {
   output: "standalone",
   reactStrictMode: true,
+  poweredByHeader: false,
+  headers: nextSecurityHeaders({ frame: "embeddable", geolocation: true }),
 
   /** Enables hot reloading for local packages without a build step */
   transpilePackages: [

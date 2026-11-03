@@ -3,6 +3,10 @@ description: Create a bug report to help us improve
 title: "bug: "
 labels: ["🐞❔ unconfirmed bug"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        One problem per issue. Found several? File one issue each and mention the related ones.
   - type: dropdown
     id: affected-app
     attributes:
@@ -15,6 +19,7 @@ body:
         - apps/homepage
         - apps/map
         - apps/me
+        - apps/region-pages
         - apps/slackbot
         - packages (shared code)
         - repo / tooling / CI / deps

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 
+import { getTrustedClientIp } from "@acme/shared/common/client-ip";
+
 import { checkEmailCode } from "~/lib/email-mfa";
 import { logError } from "~/lib/logging";
 import { env } from "~/env";
@@ -32,10 +34,7 @@ function normalizePhone(phone: string | undefined): string | undefined {
 }
 
 export async function POST(request: NextRequest) {
-  // The last hop is the one our proxy appended; earlier hops are caller-set.
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
-    "unknown";
+  const ip = getTrustedClientIp(request.headers) ?? "unknown";
   const { allowed } = rateLimit(`register:${ip}`, 5, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });

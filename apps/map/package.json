@@ -1,6 +1,6 @@
 {
   "name": "f3-map",
-  "version": "7.8.1",
+  "version": "7.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -24,6 +24,7 @@
     "@acme/auth": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/observability": "workspace:*",
+    "@acme/security-headers": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
     "@acme/ui": "workspace:*",

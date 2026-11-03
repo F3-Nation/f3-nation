@@ -50,6 +50,11 @@
       "changelog-path": "CHANGELOG.md",
       "path": "apps/api"
     },
+    "apps/region-pages": {
+      "component": "region-pages",
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/region-pages"
+    },
     "apps/slackbot": {
       "component": "slackbot",
       "changelog-path": "CHANGELOG.md",

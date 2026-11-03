@@ -68,7 +68,7 @@ Tell me when that's done and I'll check again.
 > ### <✅ Recommendation: Approve | ✅ Recommendation: Approve, with optional suggestions | ❌ Recommendation: Don't approve yet | ⏸️ Can't recommend yet>
 >
 > <One plain sentence on why.>
-> <❌/⏸️ only: what would change this, e.g. "Fix the crash when a region has no AOs, then re-test.">
+> <❌/⏸️ only: what would change this, e.g. "Fix the crash when a region has no AOs.">
 > <✅ with suggestions only: "The suggestions below are optional; the PR does what it set out to do without them.">
 
 | #   | Check                      | Result    | Notes                    |

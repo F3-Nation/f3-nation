@@ -17,37 +17,41 @@ vi.mock("@acme/db", () => ({
 // The per-org role check has its own coverage; here we drive its boolean
 // outcome directly to isolate the aggregation rule (.every) under test.
 vi.mock("../check-has-role-on-org", () => ({
-  checkHasRoleOnOrg: vi.fn(),
+  checkHasRolesOnOrgs: vi.fn(),
 }));
 
 import { schema } from "@acme/db";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { checkHasRolesOnOrgs } from "../check-has-role-on-org";
 import { checkUpdatePermissions } from "./check-update-permissions";
 
 type CheckArgs = Parameters<typeof checkUpdatePermissions>[0];
 
-const mockCheckHasRoleOnOrg = vi.mocked(checkHasRoleOnOrg);
+const mockCheckHasRolesOnOrgs = vi.mocked(checkHasRolesOnOrgs);
 
 /**
- * Makes checkHasRoleOnOrg succeed only for the given org ids, so a test can
+ * Makes checkHasRolesOnOrgs succeed only for the given org ids, so a test can
  * describe exactly which regions/AOs the reviewer controls.
  */
 const allowOrgs = (allowed: number[]) => {
-  mockCheckHasRoleOnOrg.mockImplementation(({ orgId }) =>
-    Promise.resolve({
-      success: allowed.includes(orgId),
-      orgId,
-      roleName: "editor",
-      mode: allowed.includes(orgId) ? "direct-permission" : "no-permission",
-    }),
+  mockCheckHasRolesOnOrgs.mockImplementation(({ checks }) =>
+    Promise.resolve(
+      checks.map(({ orgId }) => ({
+        success: allowed.includes(orgId),
+        orgId,
+        roleName: "editor" as const,
+        mode: allowed.includes(orgId)
+          ? ("direct-permission" as const)
+          : ("no-permission" as const),
+      })),
+    ),
   );
 };
 
 /** The org ids that were actually run through the role check, sorted. */
 const checkedOrgIds = () =>
-  mockCheckHasRoleOnOrg.mock.calls
-    .map((call) => call[0].orgId)
+  mockCheckHasRolesOnOrgs.mock.calls
+    .flatMap((call) => call[0].checks.map((check) => check.orgId))
     .sort((a, b) => a - b);
 
 interface FakeRows {
@@ -93,7 +97,7 @@ describe("checkUpdatePermissions", () => {
     });
 
     expect(result).toEqual({ success: false, results: [] });
-    expect(mockCheckHasRoleOnOrg).not.toHaveBeenCalled();
+    expect(mockCheckHasRolesOnOrgs).not.toHaveBeenCalled();
   });
 
   it("returns success:false and runs no role checks when there are no orgs to check", async () => {
@@ -103,7 +107,7 @@ describe("checkUpdatePermissions", () => {
     });
 
     expect(result).toEqual({ success: false, results: [] });
-    expect(mockCheckHasRoleOnOrg).not.toHaveBeenCalled();
+    expect(mockCheckHasRolesOnOrgs).not.toHaveBeenCalled();
   });
 
   it("checks BOTH the source and the target region for a cross-region move", async () => {
@@ -206,7 +210,7 @@ describe("checkUpdatePermissions", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(mockCheckHasRoleOnOrg).toHaveBeenCalledTimes(1);
+    expect(mockCheckHasRolesOnOrgs).toHaveBeenCalledTimes(1);
     expect(checkedOrgIds()).toEqual([1]);
   });
 });

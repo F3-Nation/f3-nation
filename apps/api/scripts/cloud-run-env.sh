@@ -38,6 +38,7 @@ declare -A SECRET_MAP=(
   [AUTH_SECRET]="AUTH_SECRET"
   [DATABASE_URL]="DATABASE_URL"
   [EMAIL_SERVER]="EMAIL_SERVER"
+  [PROXY_CLIENT_IP_SECRET]="PROXY_CLIENT_IP_SECRET"
   [TEST_DATABASE_URL]="TEST_DATABASE_URL"
 )
 
@@ -98,6 +99,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 # Source the env file.
+unset PROXY_CLIENT_IP_SECRET
 set -a
 source "$ENV_FILE"
 set +a
@@ -105,6 +107,15 @@ set +a
 if [[ -z "${AUTH_TRUSTED_ISSUERS:-}" ]]; then
   echo "Error: AUTH_TRUSTED_ISSUERS is empty in $ENV_FILE."
   echo "Set it to the auth server origin(s) whose tokens the API accepts."
+  exit 1
+fi
+
+# The API trusts the client IP the map and admin proxies report only with this
+# secret, so all three services need the same value.
+proxy_secret="${PROXY_CLIENT_IP_SECRET:-}"
+if [[ ${#proxy_secret} -lt 32 ]]; then
+  echo "Error: PROXY_CLIENT_IP_SECRET in $ENV_FILE must be at least 32 characters." >&2
+  echo "Use the same value in the api, map and admin env files." >&2
   exit 1
 fi
 

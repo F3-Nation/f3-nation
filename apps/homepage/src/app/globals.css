@@ -1,5 +1,27 @@
 @import "@acme/tailwind-config/web.css";
 
+/* /org map layout (org/_components/org-map.tsx). `org-wide` is the side-by-side
+   map + sidebar: at md, and on short landscape screens too (sideways phones
+   under 768px), where a bottom sheet would leave almost no map. `org-overlay`
+   is its exact complement: full-bleed map with floating search and a bottom
+   sheet. Keep DESKTOP_MEDIA_QUERY in org-map.tsx in step with `org-wide`. */
+@custom-variant org-wide {
+  @media (min-width: 768px) {
+    @slot;
+  }
+  @media (max-height: 500px) and (orientation: landscape) {
+    @slot;
+  }
+}
+@custom-variant org-overlay {
+  @media (max-width: 767.98px) and (min-height: 500.02px) {
+    @slot;
+  }
+  @media (max-width: 767.98px) and (orientation: portrait) {
+    @slot;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

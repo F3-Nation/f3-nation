@@ -39,7 +39,7 @@ import { protectedProcedure, publicReadProcedure } from "../../shared";
  * Shared by eventsAndLocations and locationWorkout so the two endpoints can't
  * drift apart on which events count as current.
  */
-const withinCurrentEventDateWindow = () =>
+export const withinCurrentEventDateWindow = () =>
   and(
     lte(schema.events.startDate, sql`CURRENT_DATE + INTERVAL '6 days'`),
     or(

@@ -184,7 +184,15 @@ jobs:
           AUTH_URL: ${{ steps.meta.outputs.url_auth }}
           NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.PREVIEW_POSTHOG_KEY }}
         run: |
-          envsubst '${SERVICE_API} ${PR_NUMBER} ${RUNTIME_SA} ${API_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${NEXT_PUBLIC_POSTHOG_KEY}' \
+          # Throwaway proxy secret, generated fresh per deploy: preview
+          # services are public, so a committed value would let any caller
+          # choose its own rate-limit key. $GITHUB_ENV hands the same value
+          # to the map deploy step.
+          PROXY_CLIENT_IP_SECRET=$(openssl rand -hex 32)
+          echo "::add-mask::${PROXY_CLIENT_IP_SECRET}"
+          echo "PROXY_CLIENT_IP_SECRET=${PROXY_CLIENT_IP_SECRET}" >> "${GITHUB_ENV}"
+          export PROXY_CLIENT_IP_SECRET
+          envsubst '${SERVICE_API} ${PR_NUMBER} ${RUNTIME_SA} ${API_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${NEXT_PUBLIC_POSTHOG_KEY} ${PROXY_CLIENT_IP_SECRET}' \
             < .github/preview/api-service.template.yaml > /tmp/api-service.yaml
           gcloud run services replace /tmp/api-service.yaml \
             --region "${REGION}" --project "${PROJECT}" --quiet
@@ -261,7 +269,7 @@ jobs:
           export FAKE_GCS
           # The map runs a DB sidecar (like api/auth) because @acme/auth reaches
           # the database during signed-in SSR — see docs/PREVIEW_AUTH.md.
-          envsubst '${SERVICE_MAP} ${PR_NUMBER} ${RUNTIME_SA} ${MAP_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${MAPS_KEY} ${NEXT_PUBLIC_POSTHOG_KEY} ${FAKE_GCS}' \
+          envsubst '${SERVICE_MAP} ${PR_NUMBER} ${RUNTIME_SA} ${MAP_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${MAPS_KEY} ${NEXT_PUBLIC_POSTHOG_KEY} ${FAKE_GCS} ${PROXY_CLIENT_IP_SECRET}' \
             < .github/preview/map-service.template.yaml > /tmp/map-service.yaml
           gcloud run services replace /tmp/map-service.yaml \
             --region "${REGION}" --project "${PROJECT}" --quiet
@@ -348,8 +356,8 @@ jobs:
   # Two-tier E2E model (F3-59/F3-60, docs/E2E_TIERS.md):
   #   - e2e-blocking: small, must-never-break suite. Red means no merge.
   #   - e2e-advisory: everything else. Runs and reports, never blocks
-  #     (continue-on-error at the job level); failures are triage input
-  #     (F3-61 auto-triage will consume them).
+  #     (continue-on-error at the job level); failures are triage input,
+  #     reviewed by hand (docs/E2E_TIERS.md).
   e2e-blocking:
     # Blocking-tier Playwright suite (F3-59) against the freshly deployed
     # preview environment. Same gating as deploy: PRs from this repo carrying
