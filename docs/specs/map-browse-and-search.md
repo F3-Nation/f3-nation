@@ -80,7 +80,11 @@ city X" to "this workout, this address, this time" in a few interactions.
 - **AC-12** — GIVEN pins are visible WHEN the user activates a day filter
   (e.g. "Today") THEN only locations with at least one matching event remain
   on the map; when nothing matches, the nearby list shows a "No locations
-  found matching your filters" message.
+  found matching your filters" message. When filtering leaves only one AO at a
+  shared location, its nearby-list row uses the remaining workouts' AO name
+  and logo. A missing name falls back to the AO name assigned to the pin; a
+  missing logo uses the pin's logo only when the AO names match. Otherwise,
+  or when neither has a logo, the default F3 image is shown.
 - **AC-13** — GIVEN the AM quick filter is active WHEN the user activates PM
   THEN AM deactivates (mutually exclusive), and Reset restores the unfiltered
   pin set.
@@ -106,6 +110,20 @@ city X" to "this workout, this address, this time" in a few interactions.
 - **AC-17** — GIVEN the outage banner is showing WHEN the user dismisses it
   THEN it stays hidden while retrying continues, and the next outage shows it
   again.
+
+### Event edits and cached map data
+
+- **AC-18** — GIVEN someone creates, updates or deletes an event, including a
+  one-off event with no weekday, WHEN the change is saved THEN the API instance
+  that handled it clears its cached public map data and asks the Map app to
+  revalidate, and it attempts a `map.created`, `map.updated` or `map.deleted`
+  webhook carrying the event ID. Webhook destinations are optional; delivery
+  failures are logged, with no retries or durable delivery. A rejected write
+  clears no cache and notifies no one.
+
+This does not synchronously refresh every API instance or open browser:
+other instances serve cached data until it expires, and browsers refetch on
+their own query schedule.
 
 ## 5. Roles & authorization (RBAC)
 
