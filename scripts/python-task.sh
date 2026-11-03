@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Shared wrapper for Python-backed pnpm/turbo tasks (currently the Slack bot;
-# any future Python package can route through this too).
+# Shared wrapper for Python-backed pnpm/Turbo tasks.
 #
 # - Skips cleanly (exit 0, one line) when `uv` isn't installed locally, so
 #   contributors without Python installed can still run `pnpm lint`/`pnpm test`.

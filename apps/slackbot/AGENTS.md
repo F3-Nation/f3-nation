@@ -68,15 +68,23 @@ uninstalled. When the wrapper executes with `CI` set to a nonempty value,
 missing `uv` is an error instead of a skip.
 
 Python contributors should install `uv` and run `pnpm python:install` from the
-root. To verify a package after installing `uv`, force Turbo to re-run the
-checks and overwrite any cached local skip; for example:
+root. To replace a cached local skip, re-run the same root command with
+`TURBO_FORCE=true`. For example, to refresh the normal checks for Slackbot:
 
 ```bash
-pnpm exec turbo run format lint test typecheck --filter=f3-slackbot --force
+TURBO_FORCE=true pnpm format --filter=f3-slackbot
+TURBO_FORCE=true pnpm lint --filter=f3-slackbot
+TURBO_FORCE=true pnpm test --filter=f3-slackbot
+TURBO_FORCE=true pnpm typecheck --filter=f3-slackbot
 ```
 
-Use the target member's `package.json` name for other packages. Installation
-instructions are in [local development](../../docs/LOCAL_DEV_DOCKER.md#uv-python-package-manager-for-slackbot).
+Turbo's cache keys include command arguments and environment inputs, so a
+direct `pnpm exec turbo` run does not necessarily replace a root script's
+cached skip. Prefix other commands that replay a skip, including fix commands,
+with `TURBO_FORCE=true` too; it forces Turbo without passing a flag to the
+underlying formatter or linter. Use the target member's `package.json` name
+for other packages. Installation instructions are in
+[local development](../../docs/LOCAL_DEV_DOCKER.md#uv-python-package-manager-for-slackbot).
 
 GitHub also runs CodeQL's `Analyze (python)` security analysis through **default
 setup**, configured in repository settings rather than a checked-in workflow.
