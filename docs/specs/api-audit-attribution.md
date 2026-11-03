@@ -42,8 +42,8 @@ non-transactional database client.
   session without a positive integer user ID WHEN an otherwise permitted write
   succeeds THEN `changed_by` is NULL. Attribution grants no permission.
 - **AC-4** — GIVEN covered writes and related history WHEN their transaction
-  fails THEN neither the source changes nor their history persist. Existing
-  error codes and resource authorization remain unchanged.
+  fails THEN neither the source changes nor their history persist. Attribution
+  changes no error code or authorization decision.
 - **AC-5** — GIVEN an attributed transaction that commits or rolls back WHEN
   its connection is reused by another request or unattributed write THEN no
   previous actor identity leaks into that write. Concurrent requests also keep
@@ -81,8 +81,11 @@ identified as the people who performed automated writes.
 Development credential sessions differ from the API mock fallback: attribution
 uses the account ID issued by that provider, not the email entered at sign-in.
 
-Attendance mutations declare response schemas that retain their existing fields.
-Successful user deletion returns `{ userId }`.
+Successful attendance mutations return `success: true`; creating planned or
+actual attendance and taking Q also return `attendanceId`, and deleting actual
+or planned attendance returns `deletedCount` (zero when nothing matches).
+Successful user deletion returns `{ userId }`; a caller-supplied user ID that
+matches no user returns `NOT_FOUND`.
 
 | Action                        | Allowed                                                    | Explicitly denied                                                         |
 | ----------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -117,9 +120,12 @@ Use the API's real migrated, isolated test database and synthetic users:
    attributed transactions and check the persisted actor on every result.
 5. Exercise pending submission, human approval/rejection and API-key
    approval without trusting the request's submitter as the decision maker.
-6. Retain query results, attendance response fields and existing soft-delete
-   behavior; verify the user-deletion identifier response.
-7. Verify an unconverted router still records NULL attribution.
+6. Verify query results and the attendance responses described in
+   [Roles & authorization](#5-roles--authorization-rbac). Event, organization and
+   location deletes mark their source rows inactive; successful user deletion
+   returns the deleted user's ID, and a missing user returns `NOT_FOUND`.
+7. Verify that a write through a router outside the covered set records NULL
+   attribution.
 8. Drive a covered write through the local app and inspect its source row and
    history together. Use a synthetic authenticated user and the existing
    application flow, with no new public history endpoint.

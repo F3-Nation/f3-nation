@@ -146,6 +146,7 @@ describe("transaction-local audit context", () => {
     }
   });
 
+  // Each transaction holds its own backend, so this guards in-process shared state, not backend reuse.
   it("keeps concurrent callers' actors and sources separate", async () => {
     const connection = postgres(env.TEST_DATABASE_URL!, {
       max: 2,

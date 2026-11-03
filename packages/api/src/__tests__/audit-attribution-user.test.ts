@@ -113,6 +113,19 @@ describe("user audit attribution", () => {
     ).toEqual([]);
   });
 
+  it("rejects deletion of a missing user without adding history", async () => {
+    const user = await createTarget();
+    await createTestClient().user.delete({ id: user.id });
+    const beforeUser = await history(user.id);
+    const beforeRoles = await roleHistory(user.id);
+
+    await expect(
+      createTestClient().user.delete({ id: user.id }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(await history(user.id)).toEqual(beforeUser);
+    expect(await roleHistory(user.id)).toEqual(beforeRoles);
+  });
+
   it("keeps source roles and their history unchanged when a referenced user cannot be deleted", async () => {
     const user = await createTarget();
     const [key] = await db

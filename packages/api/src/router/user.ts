@@ -762,13 +762,18 @@ export const userRouter = {
         });
       }
 
+      let userDeleted = false;
       try {
-        await withAuditContext(ctx, async ({ db: tx }) => {
+        userDeleted = await withAuditContext(ctx, async ({ db: tx }) => {
           await tx
             .delete(schema.rolesXUsersXOrg)
             .where(eq(schema.rolesXUsersXOrg.userId, input.id));
 
-          await tx.delete(schema.users).where(eq(schema.users.id, input.id));
+          const deleted = await tx
+            .delete(schema.users)
+            .where(eq(schema.users.id, input.id))
+            .returning({ id: schema.users.id });
+          return deleted.length > 0;
         });
       } catch (error) {
         // Attendance, positions, linked accounts, API keys and similar records
@@ -792,6 +797,9 @@ export const userRouter = {
         throw new ORPCError("INTERNAL_SERVER_ERROR", {
           message: "Unable to delete user",
         });
+      }
+      if (!userDeleted) {
+        throw new ORPCError("NOT_FOUND", { message: "User not found" });
       }
       return { userId: input.id };
     }),

@@ -2,6 +2,10 @@ import { withAuditUser } from "@acme/db";
 
 import type { Context } from "../shared";
 
+// Match users.id, history.changed_by and the audit trigger's integer range.
+// Widen all three together so valid actor IDs are not recorded as NULL.
+const MAX_PG_INTEGER = 2_147_483_647;
+
 /** Attribute only the write block; use the original context after commit. */
 export const withAuditContext = <T>(
   ctx: Context,
@@ -11,7 +15,10 @@ export const withAuditContext = <T>(
   // A key identifies a credential, not the human who owns that credential.
   const id = Number(ctx.session?.id);
   const userId =
-    !ctx.session?.apiKey && Number.isInteger(id) && id > 0 && id <= 2147483647
+    !ctx.session?.apiKey &&
+    Number.isInteger(id) &&
+    id > 0 &&
+    id <= MAX_PG_INTEGER
       ? id
       : null;
   return withAuditUser(ctx.db, { userId }, (db) => fn({ ...ctx, db }));

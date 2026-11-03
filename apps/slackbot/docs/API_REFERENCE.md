@@ -229,7 +229,8 @@ Updating types, removing Q and assigning leaders return only `success`.
 | `GET`    | `/v1/user/orgs`          | Users by org (includes descendants)                  |
 | `DELETE` | `/v1/user/delete/{id}`   | Permanent delete (nation admin only)                 |
 
-Successful user deletion returns `{ userId }`.
+Successful user deletion returns `{ userId }`. A user ID that matches no user
+returns `NOT_FOUND` (HTTP 404).
 
 **Role values:** `"user"` | `"editor"` | `"admin"`
 
