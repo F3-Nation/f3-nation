@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+import time
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
@@ -462,7 +463,11 @@ def test_overlapping_refresh_waits_through_stable_deletion(overlapping_calendar_
                 row("New AO", datetime(2026, 9, 30, 9), start_date=date(2026, 10, 1) + timedelta(weeks=week_index))
             ]
             refresh = executor.submit(run, "refresh", True)
-            if not state.refresh_lock_attempted.wait(timeout=1):
+            deadline = time.monotonic() + 10
+            while not (state.refresh_lock_attempted.is_set() or refresh.done()):
+                assert time.monotonic() < deadline, "refresh neither locked nor finished"
+                time.sleep(0.01)
+            if not state.refresh_lock_attempted.is_set():
                 # Without locking the refresh finishes while deletion is paused.
                 refresh.result(timeout=5)
             else:
