@@ -116,8 +116,10 @@ blocklist of its own:
   even though their cache key changes.
 
 Python tasks routed through [`scripts/python-task.sh`](../scripts/python-task.sh)
-disable Turbo result caching in [`turbo.json`](../turbo.json). A successful local
-missing-tool skip must not hide checks after `uv` becomes available. These tasks
+disable result caching in their per-package `turbo.json`, extending the root
+configuration so shared task settings remain inherited. New wrapper tasks need
+`cache: false` in their package configuration. A successful local missing-tool
+skip must not hide checks after `uv` becomes available. These tasks
 execute whenever selected, including in CI, while unrelated tasks retain caching.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces

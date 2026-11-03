@@ -11,6 +11,8 @@ import {
   chmodSync,
   rmSync,
   unlinkSync,
+  readdirSync,
+  existsSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -20,9 +22,28 @@ import { test } from "vitest";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const turbo = join(dirname(require.resolve("turbo/package.json")), "bin/turbo");
-const packageDirs = ["apps/analytics", "apps/slackbot", "packages/db-python"];
+const packageDirs = ["apps", "packages"].flatMap((group) =>
+  readdirSync(join(root, group), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `${group}/${entry.name}`)
+    .filter((dir) => {
+      const manifest = join(root, dir, "package.json");
+      if (!existsSync(manifest)) return false;
+      const pkg: { scripts?: Record<string, string> } = JSON.parse(
+        readFileSync(manifest, "utf8"),
+      );
+      return Object.values(pkg.scripts ?? {}).some((command) =>
+        command.includes("scripts/python-task.sh"),
+      );
+    }),
+);
 
 test("Python checks re-evaluate tool availability without changing PATH or source", () => {
+  for (const dir of ["apps/analytics", "apps/slackbot", "packages/db-python"])
+    assert.ok(
+      packageDirs.includes(dir),
+      `Python wrapper user not found: ${dir}`,
+    );
   const temp = mkdtempSync(join(tmpdir(), "python-cache-test-"));
   const repo = join(temp, "repo");
   const bin = join(temp, "bin");
@@ -81,6 +102,9 @@ test("Python checks re-evaluate tool availability without changing PATH or sourc
           `bash ../../scripts/python-task.sh ${task} ${original.name} uv ${original.name}:${task}`;
       }
       mkdirSync(join(repo, dir), { recursive: true });
+      const config = join(root, dir, "turbo.json");
+      if (existsSync(config))
+        copyFileSync(config, join(repo, dir, "turbo.json"));
       writeFileSync(
         join(repo, dir, "package.json"),
         JSON.stringify({ name: original.name, private: true, scripts }),
@@ -113,16 +137,49 @@ test("Python checks re-evaluate tool availability without changing PATH or sourc
       TURBO_TELEMETRY_DISABLED: "1",
       COREPACK_ENABLE_NETWORK: "0",
     };
+    const taskNames = [
+      ...new Set(tasks.map((task) => task.slice(task.lastIndexOf(":") + 1))),
+    ];
+    const plan = spawnSync(
+      process.execPath,
+      [turbo, "run", ...taskNames, "--dry=json"],
+      {
+        cwd: repo,
+        env,
+        encoding: "utf8",
+        timeout: 60000,
+      },
+    );
+    assert.ifError(plan.error);
+    assert.equal(plan.status, 0, plan.stderr);
+    const definitions = JSON.parse(plan.stdout).tasks as {
+      taskId: string;
+      task: string;
+      resolvedTaskDefinition: Record<string, unknown>;
+    }[];
+    const rootTasks = JSON.parse(
+      readFileSync(join(root, "turbo.json"), "utf8"),
+    ).tasks;
+    for (const task of tasks) {
+      const definition = definitions.find(
+        (entry) => entry.taskId === task.replace(":", "#"),
+      );
+      assert.ok(definition, `Missing task: ${task}`);
+      // Disabling caching must retain the shared task's execution contract.
+      for (const field of ["dependsOn", "env", "outputs"])
+        assert.deepEqual(
+          definition.resolvedTaskDefinition[field],
+          rootTasks[definition.task]?.[field] ?? [],
+          `${task}: ${field}`,
+        );
+    }
     const run = (overrides = {}) => {
       const result = spawnSync(
         process.execPath,
         [
           turbo,
           "run",
-          "format",
-          "lint",
-          "test",
-          "typecheck",
+          ...taskNames,
           "--cache=local:rw",
           "--concurrency=1",
           "--continue=always",
@@ -177,4 +234,4 @@ test("Python checks re-evaluate tool availability without changing PATH or sourc
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
-});
+}, 300_000);
