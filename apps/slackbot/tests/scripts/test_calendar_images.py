@@ -599,7 +599,7 @@ def test_special_event_blocks_only_include_displayable_events(monkeypatch, use_s
         assert result[1]["text"] == {"type": "mrkdwn", "text": expected}
 
 
-def test_special_event_blocks_order_same_day_events_by_start_time(monkeypatch):
+def test_special_event_blocks_order_by_date_then_start_time(monkeypatch):
     today = date(2026, 9, 30)
     monkeypatch.setattr(calendar_images, "current_date_cst", lambda: today)
     org = SimpleNamespace(name="Synthetic AO")
@@ -612,13 +612,15 @@ def test_special_event_blocks_order_same_day_events_by_start_time(monkeypatch):
     early = SimpleNamespace(
         name="Early", start_date=today + timedelta(days=1), start_time="0500", org=org, preblast_ts=None
     )
-    monkeypatch.setattr(calendar_images.DbManager, "find_records", lambda **kwargs: [*later, early])
+    earliest_date = SimpleNamespace(name="Today", start_date=today, start_time="0700", org=org, preblast_ts=None)
+    monkeypatch.setattr(calendar_images.DbManager, "find_records", lambda **kwargs: [*later, early, earliest_date])
 
     result = [block.to_dict() for block in calendar_images.create_special_events_blocks({"org_id": 1})]
 
     lines = result[1]["text"]["text"].splitlines()
     assert len(lines) == 10
-    assert lines[0].startswith("1. *Early*")
+    assert lines[0].startswith("1. *Today*")
+    assert lines[1].startswith("2. *Early*")
 
 
 def test_calendar_refresh_commits_when_special_events_are_outside_window(calendar_generation, monkeypatch):

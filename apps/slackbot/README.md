@@ -106,9 +106,9 @@ in [`scripts/calendar_images.py`](scripts/calendar_images.py).
 
 When no events remain in the display window, the post omits the Special Events
 header and section, because Slack rejects a section with empty text. If the
-calendar post fails, the calendar job rolls back and does not save the region's
-new calendar image references or post timestamp. Settings saved from the form
-are not affected.
+calendar post fails, that region's update rolls back and the new calendar image
+references and post timestamp are not saved. The rollback does not undo settings
+already saved from the form.
 
 ## Step debugging
 

@@ -68,10 +68,11 @@ limited to the configured region and its immediate child organizations.
 - Exercise empty, excluded, inclusive-boundary, blank, missing, zero, and
   over-cap inputs through both block-builder query paths (AC-1 through AC-5).
 - Place an earlier same-day event after enough later events to fill the cap;
-  assert it is included first (AC-5).
+  assert date takes precedence over time and earlier same-day events are included
+  before later ones (AC-5).
 - Run calendar generation with synthetic data and a Slack transport mock that
-  rejects empty sections; assert the regular post and persisted settings succeed
-  when all special events are excluded (AC-4 and AC-6).
+  rejects empty sections; assert the regular post succeeds and the refreshed image references and posting
+  timestamp are committed when all special events are excluded (AC-4 and AC-6).
 
 These are Python tests of the posting path, not browser Playwright tests. Live
 Slack delivery requires a separately configured test workspace.
@@ -80,6 +81,6 @@ Slack delivery requires a separately configured test workspace.
 
 No dedicated events or metrics cover special-event selection. A per-region
 calendar job failure is printed and the job continues with the next region. A
-failed post rolls back the job's save of the refreshed image references and
-posting timestamp; image files already written to storage are not part of that
-rollback.
+failed post raises before the job saves the refreshed image references and
+posting timestamp, and that region's transaction is rolled back. External image
+writes are not rolled back by that database transaction.
