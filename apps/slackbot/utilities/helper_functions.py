@@ -1,6 +1,7 @@
 import copy
 import dataclasses
 import hashlib
+import io
 import json
 import logging
 import os
@@ -31,7 +32,7 @@ from slack_sdk.oauth.state_store import FileOAuthStateStore
 from slack_sdk.web import SlackResponse, WebClient
 from sqlalchemy import select, text
 
-from utilities import constants
+from utilities import constants, storage
 from utilities.constants import LOCAL_DEVELOPMENT
 from utilities.database.orm import SlackSettings
 
@@ -604,6 +605,8 @@ def parse_rich_block(
     # parse_users: bool = True,
     # parse_channels: bool = True,
     # region_record: Region = None,
+    *,
+    escape_text: bool = False,
 ) -> str:
     """Extracts the plain text representation from a rich text block.
 
@@ -613,6 +616,9 @@ def parse_rich_block(
         block (Dict[str, Any]): Block to parse
         parse_users (bool, optional): If True, user mentions will be parsed to their name. Defaults to True.
         parse_channels (bool, optional): If True, channel mentions will be parsed to its name. Defaults to True.
+        escape_text (bool, optional): If True, literal text is escaped with ``escape_mrkdwn``, so a typed
+            ``<!channel>`` stays literal when the result is sent as mrkdwn; user and channel elements
+            still become working mentions. Defaults to False.
 
     Returns:
         str: Extracted plain text
@@ -623,7 +629,7 @@ def parse_rich_block(
         if element["type"] == "rich_text_quote":
             msg += '"'
         if text["type"] == "text":
-            msg += text["text"]
+            msg += escape_mrkdwn(text["text"]) if escape_text else text["text"]
         if text["type"] == "emoji":
             msg += f":{text['name']}:"
         if text["type"] == "link":
@@ -846,6 +852,11 @@ def current_date_cst() -> date:
     return datetime.now(pytz.timezone("US/Central")).date()
 
 
+def escape_mrkdwn(text: str) -> str:
+    """Escape the characters Slack treats as control sequences in mrkdwn (`<!channel>`, `<@U…>`, links)."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def upload_files_to_storage(
     files: List[Dict[str, str]],
     client: WebClient,
@@ -856,6 +867,15 @@ def upload_files_to_storage(
     file_name: str = None,
     enforce_png: bool = False,
 ) -> Tuple[List[str], List[Dict[str, Any]], List[str], List[str]]:
+    """Copy Slack-hosted files into storage under ``bucket_name`` (a storage directory).
+
+    Returns the stored files' public URLs, email attachments (``content`` and ``meta``),
+    the Slack file ids, and the public URLs of the low-resolution copies. A file that
+    fails is logged and left out of every list except the Slack file ids, which hold
+    every input file. Copies of it already stored are deleted only when ``file_name``
+    is unset; under a caller-chosen ``file_name`` they stay, because they replace an
+    object a saved URL may point to.
+    """
     file_list = []
     file_send_list = []
     file_ids = [file["id"] for file in files]
@@ -865,14 +885,15 @@ def upload_files_to_storage(
     bucket_name = bucket_name or "backblast-images"
 
     for file in files or []:
+        stored_names = []
         try:
             r_full = requests.get(file["url_private_download"], headers={"Authorization": f"Bearer {client.token}"})
             r_full.raise_for_status()
 
             file_id = file_name or file["id"]
             current_file_name = f"{file_id}.{file['filetype']}"
-            file_path = f"/mnt/{bucket_name}/{current_file_name}"
             file_mimetype = file["mimetype"]
+            content = r_full.content
 
             # Determine the highest thumbnail size possible
             thumb_sizes = [64, 80, 160, 360, 480, 720, 800, 960, 1024]
@@ -880,36 +901,35 @@ def upload_files_to_storage(
             available_thumbs = [size for size in thumb_sizes if f"thumb_{size}" in file]
             thumb_size = max(available_thumbs) if available_thumbs else None
 
-            with open(file_path, "wb") as f:
-                f.write(r_full.content)
-
+            low_res_content = None
             if thumb_size is not None:
-                r_low_res = requests.get(
-                    file[f"thumb_{thumb_size}"],
-                    headers={"Authorization": f"Bearer {client.token}"},
-                    params={"width": constants.LOW_REZ_IMAGE_SIZE, "height": constants.LOW_REZ_IMAGE_SIZE},
-                )
-                file_name_low_res = f"{file_id}_low_res.png"
-                file_path_low_res = f"/mnt/{bucket_name}/{file_name_low_res}"
-
-                with open(file_path_low_res, "wb") as f:
-                    f.write(r_low_res.content)
-
-                low_res_file_list.append(
-                    f"https://storage.googleapis.com/{constants.FILE_BUCKET_PREFIX}/{bucket_name}/{file_name_low_res}"
-                )
+                # The thumbnail is optional: a failed download still stores the full-size file.
+                try:
+                    r_low_res = requests.get(
+                        file[f"thumb_{thumb_size}"],
+                        headers={"Authorization": f"Bearer {client.token}"},
+                        params={"width": constants.LOW_REZ_IMAGE_SIZE, "height": constants.LOW_REZ_IMAGE_SIZE},
+                    )
+                except requests.RequestException as e:
+                    logger.error(f"Error downloading thumbnail for file {file['id']}: {e}")
+                else:
+                    if r_low_res.ok:
+                        low_res_content = r_low_res.content
+                    else:
+                        logger.error(f"Error downloading thumbnail for file {file['id']}: HTTP {r_low_res.status_code}")
 
             change_to_png = enforce_png and file["filetype"] != "png"
             if enforce_square or max_height or change_to_png:
                 img = None
                 if file_mimetype.startswith("image/"):
                     try:
-                        img = Image.open(file_path)
+                        img = Image.open(io.BytesIO(content))
                     except Exception as e:
                         logger.error(f"Error opening image: {e}")
 
                 # If we have an image, apply enforce_square and max_height
                 if img is not None:
+                    source_format = img.format
                     # Enforce square if requested
                     if enforce_square:
                         max_side = max(img.width, img.height)
@@ -921,27 +941,31 @@ def upload_files_to_storage(
                     # Downscale to max_height if provided (after squaring)
                     if max_height is not None and img.height > max_height:
                         img = img.resize((max_height, max_height), Image.LANCZOS)
-                    # Save the possibly modified image
-                    img_format = "PNG" if file["filetype"] == "heic" or change_to_png else img.format
+                    # Re-encode the possibly modified image
+                    img_format = "PNG" if file["filetype"] == "heic" or change_to_png else source_format
                     if img_format == "PNG" and not current_file_name.endswith(".png"):
-                        old_path = file_path
                         current_file_name = f"{file_id}.png"
-                        file_path = f"/mnt/{bucket_name}/{current_file_name}"
                         file_mimetype = "image/png"
-                    else:
-                        old_path = None
-                    img.save(file_path, format=img_format, quality=95, optimize=True)
-                    if old_path and old_path != file_path:
-                        os.remove(old_path)
+                    buffer = io.BytesIO()
+                    img.save(buffer, format=img_format, quality=95, optimize=True)
+                    content = buffer.getvalue()
 
-                # TODO: if LOCAL_DEVELOPMENT, upload to google storage
+            # Nothing is added to the returned lists until every copy is stored, so a
+            # failure never returns a thumbnail without its full-size file.
+            file_url = storage.write_bytes(bucket_name, current_file_name, content, file_mimetype)
+            stored_names.append(current_file_name)
+            low_res_url = None
+            if low_res_content is not None:
+                low_res_name = f"{file_id}_low_res.png"
+                low_res_url = storage.write_bytes(bucket_name, low_res_name, low_res_content, "image/png")
+                stored_names.append(low_res_name)
 
-            file_list.append(
-                f"https://storage.googleapis.com/{constants.FILE_BUCKET_PREFIX}/{bucket_name}/{current_file_name}"
-            )
+            file_list.append(file_url)
+            if low_res_url is not None:
+                low_res_file_list.append(low_res_url)
             file_send_list.append(
                 {
-                    "filepath": file_path,
+                    "content": content,
                     "meta": {
                         "filename": current_file_name,
                         "maintype": file_mimetype.split("/")[0],
@@ -951,6 +975,15 @@ def upload_files_to_storage(
             )
         except Exception as e:
             logger.error(f"Error uploading file: {e}")
+            # A caller-chosen file_name replaces an object a saved URL may already point
+            # to, so only per-upload names (Slack file IDs) are safe to delete.
+            for name in stored_names if file_name is None else []:
+                try:
+                    storage.delete(bucket_name, name)
+                except FileNotFoundError:
+                    pass
+                except Exception as cleanup_error:
+                    logger.error(f"Error deleting partially uploaded file {name}: {cleanup_error}")
 
     return file_list, file_send_list, file_ids, low_res_file_list
 
@@ -962,47 +995,6 @@ def highest_resolution_thumb(file: Dict[str, Any]) -> str:
         return None
     thumb_size = max(available_thumbs)
     return file[f"thumb_{thumb_size}"]
-
-
-def reupload_file_as_bot(
-    file: Dict[str, Any],
-    client: WebClient,
-    logger: Logger,
-    region_record: SlackSettings = None,
-    filename: str = None,
-) -> str | None:
-    """Download a user-uploaded Slack file and re-upload it as the bot to the bot log channel.
-
-    Uploading to the public bot log channel ensures the file is accessible workspace-wide,
-    allowing it to be referenced in slack_file image blocks in channel messages.
-
-    Returns the bot-owned file ID, or None on failure.
-    """
-    from utilities.bot_logger import _ensure_bot_in_channel, _find_or_create_log_channel  # noqa: PLC0415
-
-    try:
-        r = requests.get(file["url_private_download"], headers={"Authorization": f"Bearer {client.token}"})
-        r.raise_for_status()
-        fname = filename or f"{file['id']}.{file.get('filetype', 'bin')}"
-
-        # Resolve the bot log channel so the uploaded file is publicly accessible workspace-wide
-        channel_id = region_record.bot_log_channel if region_record else None
-        if not channel_id:
-            channel_id = _find_or_create_log_channel(client, logger)
-            if channel_id:
-                _ensure_bot_in_channel(client, channel_id, logger)
-
-        response = client.files_upload_v2(
-            filename=fname,
-            file=r.content,
-            channel=channel_id,
-        )
-        print(f"Re-uploaded file {file['id']} as bot with new file ID {safe_get(response, 'file', 'id')}")
-        print(f"Response from Slack API: {response}")
-        return safe_get(response, "files", 0, "id")
-    except Exception as e:
-        logger.error(f"Error re-uploading file {safe_get(file, 'id')} as bot: {e}")
-        return None
 
 
 # Helper function to sort by name, ignoring any prefixes we might want to ignore

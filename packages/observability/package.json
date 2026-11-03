@@ -19,7 +19,6 @@
   "dependencies": {
     "@acme/logger": "workspace:*",
     "@opentelemetry/api": "catalog:",
-    "@opentelemetry/api-logs": "catalog:",
     "@opentelemetry/core": "catalog:",
     "@opentelemetry/resources": "catalog:",
     "@opentelemetry/sdk-logs": "catalog:",

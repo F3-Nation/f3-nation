@@ -24,7 +24,22 @@ export const groupMarkersByAo = (
     }
 
     if (eventsByAo.size <= 1) {
-      return [{ ...marker, aoId: `${marker.id}` }];
+      const event = marker.events[0];
+      // Treat an empty AO name as missing so the row keeps the pin's AO label instead of going blank.
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+      const aoName = event?.aoName || marker.aoName;
+      const fallbackLogo = aoName === marker.aoName ? marker.logo : null;
+      // Empty logos are missing; another AO's logo is not a valid fallback.
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+      const logo = event?.aoLogo || fallbackLogo;
+      return [
+        {
+          ...marker,
+          aoId: `${marker.id}`,
+          aoName,
+          logo,
+        },
+      ];
     }
 
     return Array.from(eventsByAo.entries()).map(([aoName, events]) => ({
