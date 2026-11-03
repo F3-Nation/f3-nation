@@ -2,8 +2,8 @@ import { withAuditUser } from "@acme/db";
 
 import type { Context } from "../shared";
 
-// Match users.id, history.changed_by and the audit trigger's integer range.
-// Widen all three together so valid actor IDs are not recorded as NULL.
+// Keep this upper bound aligned with users.id, each audit history table's
+// changed_by type and trigger parsing; larger actor IDs are recorded as NULL.
 const MAX_PG_INTEGER = 2_147_483_647;
 
 /** Attribute only the write block; use the original context after commit. */

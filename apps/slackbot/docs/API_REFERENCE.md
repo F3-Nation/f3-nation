@@ -229,8 +229,8 @@ Updating types, removing Q and assigning leaders return only `success`.
 | `GET`    | `/v1/user/orgs`          | Users by org (includes descendants)                  |
 | `DELETE` | `/v1/user/delete/{id}`   | Permanent delete (nation admin only)                 |
 
-Successful user deletion returns `{ userId }`. A user ID that matches no user
-returns `NOT_FOUND` (HTTP 404).
+Successful user deletion returns `{ userId }`. For a positive user ID within
+PostgreSQL's integer range, an absent user returns `NOT_FOUND` (HTTP 404).
 
 **Role values:** `"user"` | `"editor"` | `"admin"`
 

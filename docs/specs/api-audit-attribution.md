@@ -83,9 +83,10 @@ uses the account ID issued by that provider, not the email entered at sign-in.
 
 Successful attendance mutations return `success: true`; creating planned or
 actual attendance and taking Q also return `attendanceId`, and deleting actual
-or planned attendance returns `deletedCount` (zero when nothing matches).
-Successful user deletion returns `{ userId }`; a caller-supplied user ID that
-matches no user returns `NOT_FOUND`.
+or planned attendance returns `deletedCount` (zero when the event instance
+exists but has no matching attendance).
+Successful user deletion returns `{ userId }`. For a positive user ID within
+PostgreSQL's integer range, an absent user returns `NOT_FOUND`.
 
 | Action                        | Allowed                                                    | Explicitly denied                                                         |
 | ----------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -120,10 +121,12 @@ Use the API's real migrated, isolated test database and synthetic users:
    attributed transactions and check the persisted actor on every result.
 5. Exercise pending submission, human approval/rejection and API-key
    approval without trusting the request's submitter as the decision maker.
-6. Verify query results and the attendance responses described in
+6. Verify that queries open no attribution transaction and write nothing, and
+   check the attendance responses described in
    [Roles & authorization](#5-roles--authorization-rbac). Event, organization and
    location deletes mark their source rows inactive; successful user deletion
-   returns the deleted user's ID, and a missing user returns `NOT_FOUND`.
+   returns the deleted user's ID, and an absent user with an ID in the supported
+   database range returns `NOT_FOUND`.
 7. Verify that a write through a router outside the covered set records NULL
    attribution.
 8. Drive a covered write through the local app and inspect its source row and
