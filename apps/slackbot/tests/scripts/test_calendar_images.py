@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+import time
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
@@ -465,7 +466,11 @@ def test_overlapping_refresh_waits_through_stable_deletion(overlapping_calendar_
                 row("New AO", datetime(2026, 9, 30, 9), start_date=date(2026, 10, 1) + timedelta(weeks=week_index))
             ]
             refresh = executor.submit(run, "refresh", True)
-            if not state.refresh_lock_attempted.wait(timeout=1):
+            deadline = time.monotonic() + 10
+            while not (state.refresh_lock_attempted.is_set() or refresh.done()):
+                assert time.monotonic() < deadline, "refresh neither locked nor finished"
+                time.sleep(0.01)
+            if not state.refresh_lock_attempted.is_set():
                 # Without locking the refresh finishes while deletion is paused.
                 refresh.result(timeout=5)
             else:
@@ -592,6 +597,28 @@ def test_special_event_blocks_only_include_displayable_events(monkeypatch, use_s
             for index, day in enumerate(included, 1)
         )
         assert result[1]["text"] == {"type": "mrkdwn", "text": expected}
+
+
+def test_special_event_blocks_order_same_day_events_by_start_time(monkeypatch):
+    today = date(2026, 9, 30)
+    monkeypatch.setattr(calendar_images, "current_date_cst", lambda: today)
+    org = SimpleNamespace(name="Synthetic AO")
+    later = [
+        SimpleNamespace(
+            name=f"Late {i}", start_date=today + timedelta(days=1), start_time="0600", org=org, preblast_ts=None
+        )
+        for i in range(10)
+    ]
+    early = SimpleNamespace(
+        name="Early", start_date=today + timedelta(days=1), start_time="0500", org=org, preblast_ts=None
+    )
+    monkeypatch.setattr(calendar_images.DbManager, "find_records", lambda **kwargs: [*later, early])
+
+    result = [block.to_dict() for block in calendar_images.create_special_events_blocks({"org_id": 1})]
+
+    lines = result[1]["text"]["text"].splitlines()
+    assert len(lines) == 10
+    assert lines[0].startswith("1. *Early*")
 
 
 def test_calendar_refresh_commits_when_special_events_are_outside_window(calendar_generation, monkeypatch):

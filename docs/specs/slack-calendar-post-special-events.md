@@ -6,8 +6,8 @@
 
 Slack calendar posts include highlighted upcoming events when the workspace's
 Special Days Out setting permits them. An empty special-event list must not
-produce an invalid Slack section or prevent the regular calendar post and its
-updated settings from being saved.
+produce an invalid Slack section or prevent the regular calendar post and the
+job's refreshed image references and posting timestamp from being saved.
 
 ## 2. Context & links
 
@@ -26,9 +26,10 @@ updated settings from being saved.
 
 ## 4. Acceptance criteria (testable, non-contradictory)
 
-- **AC-1** — GIVEN a positive Special Days Out value WHEN a calendar post is
-  built THEN highlighted upcoming events exactly that many days ahead are
-  eligible and events farther ahead are excluded, using the current Central date.
+- **AC-1** — GIVEN a positive Special Days Out value N WHEN a calendar post is
+  built THEN highlighted events dated from today through N days ahead
+  (inclusive) are eligible and later events are excluded, with today taken as
+  the current Central date.
 - **AC-2** — GIVEN a blank or absent setting WHEN a calendar post is built THEN
   the setting applies no upper date cutoff.
 - **AC-3** — GIVEN a zero setting WHEN a calendar post is built THEN neither
@@ -43,18 +44,18 @@ updated settings from being saved.
 
 ## 5. Roles & authorization (RBAC)
 
-This contract changes formatting, not authorization. It uses existing Slackbot
-workspace settings and scheduled-job access, not oRPC procedure tiers.
+This feature affects formatting only. It uses Slackbot workspace settings and
+scheduled-job access, not oRPC procedure tiers.
 
-| Action                                                   | Allowed                                                                                                           | Explicitly denied                                                                                |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Open General Calendar Settings through the settings menu | Existing region administrators; the existing first-admin bootstrap and all-users-admin mode retain their behavior | Ordinary non-admin members when a region already has admins and all-users-admin mode is disabled |
-| Read a posted calendar                                   | Users with access to the destination Slack channel                                                                | Users without channel access                                                                     |
-| Run the scheduled calendar refresh                       | Existing job runtime with its configured database and Slack access                                                | Users without access to run that job                                                             |
+| Action                                                   | Allowed                                                                                                                                                                               | Explicitly denied                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Open General Calendar Settings through the settings menu | Region administrators; the first user to open the menu when the region has an organization but no admins (who is then made an admin); every user when all-users-admin mode is enabled | Ordinary non-admin members when a region already has admins and all-users-admin mode is disabled |
+| Read a posted calendar                                   | Users with access to the destination Slack channel                                                                                                                                    | Users without channel access                                                                     |
+| Run the scheduled calendar refresh                       | The job runtime with its configured database and Slack access                                                                                                                         | Users without access to run that job                                                             |
 
-The menu-access row describes the existing UI gate, not a new callback-level
-permission check. Event selection remains limited to the configured region and
-its immediate child organizations.
+The menu-access row describes the settings-menu UI gate; the General Calendar
+Settings submit callback does not check admin status itself. Event selection is
+limited to the configured region and its immediate child organizations.
 
 ## 6. Out of scope / non-goals
 
@@ -66,6 +67,8 @@ its immediate child organizations.
 
 - Exercise empty, excluded, inclusive-boundary, blank, missing, zero, and
   over-cap inputs through both block-builder query paths (AC-1 through AC-5).
+- Place an earlier same-day event after enough later events to fill the cap;
+  assert it is included first (AC-5).
 - Run calendar generation with synthetic data and a Slack transport mock that
   rejects empty sections; assert the regular post and persisted settings succeed
   when all special events are excluded (AC-4 and AC-6).
@@ -75,6 +78,8 @@ Slack delivery requires a separately configured test workspace.
 
 ## 8. Observability
 
-No new events or metrics are introduced. Existing calendar job failure reporting
-remains in place. A failed post prevents saving updated calendar settings;
-external image writes are not part of that database rollback.
+No dedicated events or metrics cover special-event selection. A per-region
+calendar job failure is printed and the job continues with the next region. A
+failed post rolls back the job's save of the refreshed image references and
+posting timestamp; image files already written to storage are not part of that
+rollback.
