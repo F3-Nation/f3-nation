@@ -83,8 +83,8 @@ Turbo's cache keys include arguments passed to the underlying tasks and
 environment inputs, so a direct `pnpm exec turbo` run does not necessarily
 replace a root script's cached skip.
 
-Fix commands (`pnpm lint:fix` and `pnpm format:fix`) run repo-wide; do not add
-`--filter` to them. Prefix them with `TURBO_FORCE=true` if they replay a skip.
+For fix commands, follow the [root command guidance](../../AGENTS.md#build-test-and-development-commands)
+and prefix the command with `TURBO_FORCE=true` if it replays a skip.
 This forces Turbo without passing a flag to the underlying formatter or linter.
 Installation instructions are in
 [local development](../../docs/LOCAL_DEV_DOCKER.md#uv-python-package-manager-for-slackbot).
