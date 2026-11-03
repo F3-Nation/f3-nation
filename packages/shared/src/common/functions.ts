@@ -389,7 +389,6 @@ export function getValue<
   const value = get(data, path) as unknown as GetFieldType<TData, TPath>;
   // This allows the getValue function to return "null" if the value is null
   // and not return the default value. Only "undefined" gets overwritten.
-
   return value === null ? value : (value ?? (defaultValue as TDefault));
 }
 
