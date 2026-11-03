@@ -5,18 +5,32 @@
 # Sourced by scripts/local-setup.sh and scripts/dev.sh.
 
 LOCAL_PORTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LOCAL_PORT_DEFAULTS="F3_MAP_PORT=3000 F3_API_PORT=3001 F3_ADMIN_PORT=3002 F3_ME_PORT=3003 F3_AUTH_PORT=3004 F3_HOMEPAGE_PORT=3005 F3_REGION_PAGES_PORT=3006 F3_POSTGRES_PORT=5433 F3_MAILPIT_SMTP_PORT=1025 F3_MAILPIT_UI_PORT=8025 F3_GCS_PORT=9023 F3_ADMINER_PORT=8080"
+LOCAL_PORT_DEFAULTS="F3_MAP_PORT=3000 F3_API_PORT=3001 F3_ADMIN_PORT=3002 F3_ME_PORT=3003 F3_AUTH_PORT=3004 F3_HOMEPAGE_PORT=3005 F3_REGION_PAGES_PORT=3006 F3_SLACKBOT_PORT=3007 F3_POSTGRES_PORT=5433 F3_MAILPIT_SMTP_PORT=1025 F3_MAILPIT_UI_PORT=8025 F3_GCS_PORT=9023 F3_ADMINER_PORT=8080"
 LOCAL_PORT_KEYS_RE='^(COMPOSE_PROJECT_NAME|F3_CONTAINER_PREFIX|F3_[A-Z_]+_PORT)='
 
 # Exports the overrides found in the root .env. Only these keys are read.
 load_local_ports() {
-  local line
+  local line slot="" set_keys=" " pair var
   [ -f "$LOCAL_PORTS_ROOT/.env" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      COMPOSE_PROJECT_NAME=* | F3_CONTAINER_PREFIX=* | F3_*_PORT=*) export "${line?}" ;;
+      COMPOSE_PROJECT_NAME=* | F3_CONTAINER_PREFIX=* | F3_*_PORT=*)
+        export "${line?}"
+        set_keys="$set_keys${line%%=*} "
+        ;;
+    esac
+    case "$line" in
+      COMPOSE_PROJECT_NAME=f3-local-wt[1-9]) slot="${line##*wt}" ;;
     esac
   done <"$LOCAL_PORTS_ROOT/.env"
+  # A slot saved before a port existed has no line for it; derive it from the slot.
+  # A value inherited from the shell (say, another slot's) never stands in for it.
+  [ -n "$slot" ] || return 0
+  for pair in $LOCAL_PORT_DEFAULTS; do
+    var="${pair%%=*}"
+    case "$set_keys" in *" $var "*) continue ;; esac
+    export "$var=$((${pair#*=} + slot * 100))"
+  done
 }
 
 # Writes slot N's overrides (every default + N*100) to the root .env, keeping

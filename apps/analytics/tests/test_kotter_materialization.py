@@ -104,7 +104,7 @@ def test_parquet_schema_is_exact_contract(tmp_path: Path):
     parquet = tmp_path / "pv_kotter.parquet"
     db.execute(
         "COPY (" + SQL.rstrip().rstrip(";") + ") TO ? (FORMAT PARQUET)",
-        [str(parquet), "2026-08-26T12:00:00+00:00", "2026-08-26"],
+        ["2026-08-26T12:00:00+00:00", "2026-08-26", str(parquet)],
     )
     columns = db.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(parquet)]).fetchall()
     assert [column[0] for column in columns] == [

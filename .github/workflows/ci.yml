@@ -65,7 +65,7 @@ jobs:
       # and CI points it at this repo's own mirrored GHCR image via
       # OBFUSCATE_VERIFY_POSTGRES_IMAGE below instead.
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -530,8 +530,9 @@ jobs:
 
   # Builds release Dockerfiles to catch container-specific failures that the
   # affected-scoped workspace build cannot: pruned Node dependencies, Python
-  # dependencies installed by uv, and the Slackbot scripts image's system
-  # packages and Playwright/Chromium installation.
+  # dependencies installed by uv, the Slackbot scripts image's system
+  # packages and Playwright/Chromium installation, and the staging-refresh
+  # image's Node binary running on a Postgres base image.
   # This surfaces those at PR time instead of at release. No image push —
   # building the image is the validation. PRs import the per-app GHCR layer
   # cache read-only; docker-cache-refresh updates it only from main.
@@ -563,6 +564,8 @@ jobs:
             dockerfile: apps/slackbot/Dockerfile
           - app: slackbot-scripts
             dockerfile: apps/slackbot/scripts/Dockerfile
+          - app: staging-refresh
+            dockerfile: tooling/scripts/Dockerfile.staging-refresh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -580,7 +583,7 @@ jobs:
       - name: Log in to GHCR
         id: login
         continue-on-error: true
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -670,7 +673,7 @@ jobs:
       - name: Log in to GHCR
         id: login
         continue-on-error: true
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
