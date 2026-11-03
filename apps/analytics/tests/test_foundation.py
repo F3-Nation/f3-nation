@@ -374,11 +374,11 @@ def test_duckdb_loads_explicit_extension_without_install(tmp_path):
     connection = connect(settings, Duckdb)
     assert connection is not None
     assert calls[0] == ("LOAD", "postgres")
-    assert calls[1] == ("SET pg_experimental_filter_pushdown = false", ())
+    assert calls[1] == ("SET pg_enable_filter_pushdown = false", ())
     assert calls[2] == ("SET lock_configuration = true", ())
     assert "threads" not in configs[0]
     with pytest.raises(RuntimeError, match="configuration is locked"):
-        connection.execute("SET pg_experimental_filter_pushdown = true")
+        connection.execute("SET pg_enable_filter_pushdown = true")
 
 
 def test_duckdb_diagnostic_text_copy_setting_precedes_configuration_lock(tmp_path):
@@ -410,7 +410,7 @@ def test_duckdb_diagnostic_text_copy_setting_precedes_configuration_lock(tmp_pat
     connect(settings, Duckdb, diagnostic_text_copy=True)
     assert calls == [
         ("LOAD", "postgres"),
-        ("SET pg_experimental_filter_pushdown = false", ()),
+        ("SET pg_enable_filter_pushdown = false", ()),
         ("SET pg_use_binary_copy = false", ()),
         ("SET lock_configuration = true", ()),
     ]
@@ -448,7 +448,7 @@ def test_duckdb_diagnostic_single_thread_config_and_limit_precede_lock(tmp_path)
     assert configs[0]["threads"] == "1"
     assert calls == [
         ("LOAD", "postgres"),
-        ("SET pg_experimental_filter_pushdown = false", ()),
+        ("SET pg_enable_filter_pushdown = false", ()),
         ("SET pg_connection_limit = 1", ()),
         ("SET lock_configuration = true", ()),
     ]
@@ -517,7 +517,7 @@ def test_ctas_diagnostic_uses_single_thread_extension_and_private_spill_config(t
     }
     assert calls == [
         ("LOAD", "postgres"),
-        ("SET pg_experimental_filter_pushdown = false", ()),
+        ("SET pg_enable_filter_pushdown = false", ()),
         ("SET pg_connection_limit = 1", ()),
         ("SET lock_configuration = true", ()),
     ]

@@ -21,6 +21,7 @@
     "F3_MAP_PORT",
     "F3_ME_PORT",
     "F3_REGION_PAGES_PORT",
+    "F3_SLACKBOT_PORT",
     "INIT_CWD",
     "SNAPSHOT_CALLER_CWD"
   ],
