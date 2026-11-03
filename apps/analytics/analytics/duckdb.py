@@ -38,7 +38,7 @@ def connect(
         connection.load_extension("postgres")
         # Work around the postgres extension's "Unsupported table filter type";
         # this must precede configuration locking because the setting is immutable after it.
-        connection.execute("SET pg_experimental_filter_pushdown = false")
+        connection.execute("SET pg_enable_filter_pushdown = false")
         if diagnostic_single_thread:
             connection.execute("SET pg_connection_limit = 1")
         if diagnostic_text_copy:

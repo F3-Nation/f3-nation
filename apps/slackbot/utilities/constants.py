@@ -320,8 +320,6 @@ ORG_TYPES = {
     "Sector": 4,
 }
 
-S3_IMAGE_URL = "https://slackblast-images.s3.amazonaws.com/{image_name}"
-GCP_IMAGE_URL = "https://storage.googleapis.com/{bucket}/{image_name}"
 
 # Define colors for event tags
 # first is background color, second is text color
