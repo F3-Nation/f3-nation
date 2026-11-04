@@ -585,6 +585,11 @@ uv --version
 pnpm python:install
 ```
 
+A `Skipping …` message means the Python check did not run. After installing
+`uv`, rerun the check: Python tasks using the shared wrapper do not reuse Turbo
+results. This also means Python type checks run during each commit hook when
+`uv` is installed. See [CI_PIPELINE.md § Gate-by-gate](CI_PIPELINE.md#gate-by-gate) for the cache policy.
+
 ### Port already in use
 
 If you see an error like `port is already allocated`, another process is using that port.
