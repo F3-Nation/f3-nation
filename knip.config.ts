@@ -17,7 +17,6 @@ const config: KnipConfig = {
     ".github/scripts/code-scanning-issue.cjs",
     ".github/scripts/ready-for-human-review-label.cjs",
     ".github/scripts/pr-author-nudge.cjs",
-    ".github/scripts/pr-author-nudge.test.cjs",
   ],
   ignoreBinaries: [
     "uv",
