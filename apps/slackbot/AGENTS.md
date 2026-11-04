@@ -45,8 +45,9 @@ package scripts that Turbo executes:
   Ruff handles `format` and `lint`, pytest handles `test`, and packages with a
   `typecheck` script run mypy. The root pnpm commands reach these scripts
   through [Turbo's task configuration](../../turbo.json).
-- CI selects affected workspaces on pull requests and can reuse cached task
-  results; it does not execute every Python check afresh on every PR. See
+- CI normally selects affected workspaces on pull requests, with
+  full-workspace fallbacks. Python checks are not cached; they run whenever
+  selected. See
   [CI scope and caching](../../docs/CI_PIPELINE.md).
 
 From the repository root, inspect the task plan without executing the checks:
@@ -68,24 +69,18 @@ uninstalled. When the wrapper executes with `CI` set to a nonempty value,
 missing `uv` is an error instead of a skip.
 
 Python contributors should install `uv` and run `pnpm python:install` from the
-root. To replace a cached local skip, re-run the same root command with
-`TURBO_FORCE=true`. For example, to refresh the normal checks for Slackbot:
+root. After installing `uv`, rerun the same command to execute the check.
+For example, the normal checks for Slackbot are:
 
 ```bash
-TURBO_FORCE=true pnpm format --filter=f3-slackbot
-TURBO_FORCE=true pnpm lint --filter=f3-slackbot
-TURBO_FORCE=true pnpm test --filter=f3-slackbot
-TURBO_FORCE=true pnpm typecheck --filter=f3-slackbot
+pnpm format --filter=f3-slackbot
+pnpm lint --filter=f3-slackbot
+pnpm test --filter=f3-slackbot
+pnpm typecheck --filter=f3-slackbot
 ```
 
 Use the target member's `package.json` name in these checks for other packages.
-Turbo's cache keys include arguments passed to the underlying tasks and
-environment inputs, so a direct `pnpm exec turbo` run does not necessarily
-replace a root script's cached skip.
-
-For fix commands, follow the [root command guidance](../../AGENTS.md#build-test-and-development-commands)
-and prefix the command with `TURBO_FORCE=true` if it replays a skip.
-This forces Turbo without passing a flag to the underlying formatter or linter.
+For fix commands, follow the [root command guidance](../../AGENTS.md#build-test-and-development-commands).
 Installation instructions are in
 [local development](../../docs/LOCAL_DEV_DOCKER.md#uv-python-package-manager-for-slackbot).
 

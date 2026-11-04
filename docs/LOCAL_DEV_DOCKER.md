@@ -175,8 +175,7 @@ all Python workspace dependencies.
 Python checks reached by the root pnpm commands print a skip message locally
 and the other workspaces are still checked. A skipped check did not run. See
 [How Python is checked](../apps/slackbot/AGENTS.md#how-python-is-checked) for
-CI behavior, task wiring and caching, and how to replace a cached local skip
-after installing `uv`.
+CI behavior and task wiring.
 
 Python workspaces share Ruff settings from the root [`pyproject.toml`](../pyproject.toml).
 Each member explicitly extends that file in its own `pyproject.toml`, which also
