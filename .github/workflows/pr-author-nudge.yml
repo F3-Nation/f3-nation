@@ -11,6 +11,12 @@ name: PR author nudge
 #
 # Scheduled runs are dry runs (job summary only, nothing written) until the
 # repository variable PR_AUTHOR_NUDGE_LIVE is set to "true".
+#
+# About a day before PRs close, a live run posts them to the Codeowners Slack
+# channel through the incoming webhook in the PR_AUTHOR_NUDGE_SLACK_WEBHOOK
+# secret, so a codeowner can finish one or hold it with `keep-open`. Without
+# the secret the run warns and closes on schedule anyway. A dry run shows the
+# message in the job summary instead of posting it.
 
 on:
   schedule:
@@ -50,17 +56,35 @@ jobs:
           # A manual run uses its input; a scheduled run is live only once the
           # repository variable says so.
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry_run) || vars.PR_AUTHOR_NUDGE_LIVE != 'true' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.PR_AUTHOR_NUDGE_SLACK_WEBHOOK }}
         with:
           script: |
             const { run } = require('./.github/scripts/pr-author-nudge.cjs');
             const dryRun = process.env.DRY_RUN !== 'false';
-            const rows = await run({
+            const webhook = process.env.SLACK_WEBHOOK_URL;
+            const notify = webhook
+              ? async (text) => {
+                  const response = await fetch(webhook, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text }),
+                  });
+                  if (!response.ok) {
+                    throw new Error(`${response.status} ${await response.text()}`);
+                  }
+                }
+              : null;
+            const { rows, slackNote } = await run({
               github,
               owner: context.repo.owner,
               repo: context.repo.repo,
               dryRun,
               log: core.info,
+              notify,
             });
+            if (slackNote && !dryRun && !notify) {
+              core.warning('PRs are about to close but PR_AUTHOR_NUDGE_SLACK_WEBHOOK is not set; no Slack heads-up sent.');
+            }
 
             const table = [
               ['PR', 'Author', "Author's turn", 'Clock', 'Close on/after', 'Result']
@@ -70,10 +94,15 @@ jobs:
               ]),
             ];
             try {
-              await core.summary
+              core.summary
                 .addHeading(dryRun ? 'PR author nudge (dry run)' : 'PR author nudge')
-                .addTable(table)
-                .write();
+                .addTable(table);
+              if (slackNote) {
+                core.summary
+                  .addHeading(dryRun || !notify ? 'Slack heads-up (not sent)' : 'Slack heads-up', 3)
+                  .addCodeBlock(slackNote);
+              }
+              await core.summary.write();
             } catch (error) {
               core.warning(`Failed to write job summary: ${error.message}`);
             }

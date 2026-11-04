@@ -11,6 +11,12 @@
  * paused, and any push or author comment resets it. Bot comments and reviewer
  * pings don't.
  *
+ * About a day before a close, the run posts the PRs about to close to the
+ * Codeowners Slack channel (one message per run, see `warnMessage()`), so a
+ * codeowner can take one over the finish line or hold it with `keep-open`.
+ * The warning is recorded in the nudge comment's marker, and the close waits
+ * until it has been out at least WARN_MIN_MS.
+ *
  * CommonJS because actions/github-script loads it with require(). `decide()`
  * and its helpers are pure; `run()` fetches and writes. Run this file directly
  * for a local dry run through the gh CLI:
@@ -31,6 +37,12 @@ const DAYS = {
   team: { nudge: 5, close: 10 }, // owners, members and collaborators
   outside: { nudge: 3, close: 7 }, // everyone else, including forks
 };
+// The codeowners' Slack heads-up goes out when the close is this close, and
+// the close then waits until the heads-up has been out this long. 20h, not
+// 24h, so a daily run that starts a little earlier than yesterday's still
+// closes on schedule.
+const WARN_LEAD_MS = DAY_MS;
+const WARN_MIN_MS = 20 * 60 * 60 * 1000;
 const TEAM_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 // Authors whose PRs are never nudged. GraphQL logins carry no `[bot]` suffix.
@@ -70,7 +82,8 @@ function parseMarker(body) {
 /**
  * Turns one GraphQL PR node (see PR_FIELDS) into the plain facts `decide()`
  * needs. `requiredContexts` is the list of required check names on the base.
- * `nudge` is `{ id, nudgedAt }` for the bot's existing comment, or null.
+ * `nudge` is `{ id, nudgedAt, warnedAt?, body? }` for the bot's existing
+ * comment, or null.
  */
 function summarize(pr, requiredContexts, nudge) {
   const author = pr.author?.login ?? null;
@@ -220,7 +233,8 @@ function summarize(pr, requiredContexts, nudge) {
 
 /**
  * What to do with one summarized PR at time `now` (ms):
- * `{ action: "none" | "nudge" | "close", why, clockStart, ageDays, closeAt }`.
+ * `{ action: "none" | "nudge" | "warn" | "close", why, clockStart, ageDays,
+ * closeAt }`. "warn" is the codeowners' Slack heads-up a day before the close.
  */
 function decide(facts, now) {
   if (facts.exempt) return { action: "none", why: "exempt" };
@@ -233,14 +247,31 @@ function decide(facts, now) {
   const ageDays = (now - clockStart) / DAY_MS;
   const nudgedAt = ts(facts.nudge?.nudgedAt);
   const nudgedThisStretch = nudgedAt != null && nudgedAt >= clockStart;
+  const warnedAt = ts(facts.nudge?.warnedAt);
+  const warnedThisStretch =
+    nudgedThisStretch && warnedAt != null && warnedAt >= nudgedAt;
   const closeAt = nudgedThisStretch
     ? Math.max(
         clockStart + days.close * DAY_MS,
         nudgedAt + (days.close - days.nudge) * DAY_MS,
+        warnedThisStretch ? warnedAt + WARN_MIN_MS : 0,
       )
     : null;
 
-  if (nudgedThisStretch && now >= closeAt) {
+  if (
+    nudgedThisStretch &&
+    !warnedThisStretch &&
+    now >= closeAt - WARN_LEAD_MS
+  ) {
+    return {
+      action: "warn",
+      why: "author's turn",
+      clockStart,
+      ageDays,
+      closeAt: Math.max(closeAt, now + WARN_LEAD_MS),
+    };
+  }
+  if (warnedThisStretch && now >= closeAt) {
     return {
       action: "close",
       why: "author's turn",
@@ -292,6 +323,39 @@ function describeReasons(reasons) {
 }
 
 const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+// Slack mrkdwn needs &, < and > escaped in anything user-written.
+const slackEscape = (text) =>
+  String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+/** Rewrites the state in the bot's marker, keeping the rest of the comment. */
+function withState(body, state) {
+  return body.replace(
+    /<!-- pr-author-nudge (\{.*?\})? ?-->/,
+    `${MARKER} ${JSON.stringify(state)} -->`,
+  );
+}
+
+/**
+ * The Codeowners Slack heads-up for PRs about to close, or null when none
+ * are. `warns` are summary rows (pr, title, author, age, turn, closeAt).
+ */
+function warnMessage(warns, { owner, repo }) {
+  if (!warns.length) return null;
+  const lines = warns.map((r) => {
+    const url = `https://github.com/${owner}/${repo}/pull/${r.pr}`;
+    return `• <${url}|#${r.pr} ${slackEscape(r.title ?? "")}> by ${slackEscape(r.author ?? "unknown")}: waiting on them ${r.age} (${r.turn}), closes on/after ${r.closeAt}`;
+  });
+  return [
+    `:hourglass: ${warns.length === 1 ? "This PR" : `These ${warns.length} PRs`} will auto-close in about a day. ${warns.length === 1 ? "It has" : "They have"} been waiting on the author since the reminder:`,
+    ...lines,
+    "",
+    "To take one over the finish line, push to its branch or add the `keep-open` label. Otherwise it closes, and the author or any of us can reopen it later.",
+  ].join("\n");
+}
 
 function nudgeBody(facts, decision, now) {
   const state = JSON.stringify({ nudgedAt: new Date(now).toISOString() });
@@ -350,7 +414,9 @@ const PR_FIELDS = `
 /**
  * Fetches every open PR, decides, and (unless dryRun) comments, closes and
  * labels. `github` is actions/github-script's client (or the gh shim below).
- * Returns the rows for the job summary.
+ * `notify(text)` posts the codeowners' Slack heads-up; without it the
+ * heads-up is recorded as sent anyway, so closes keep to schedule.
+ * Returns `{ rows, slackNote }`: the job summary rows and the heads-up text.
  */
 async function run({
   github,
@@ -360,6 +426,7 @@ async function run({
   now = Date.now(),
   botLogin = "github-actions",
   log = console.log,
+  notify = null,
 }) {
   const rules = await github.paginate(
     "GET /repos/{owner}/{repo}/rules/branches/{branch}",
@@ -396,8 +463,14 @@ async function run({
   }
 
   const rows = [];
+  const warns = [];
   for (const pr of prs) {
-    const row = { pr: pr.number, author: pr.author?.login, outcome: "" };
+    const row = {
+      pr: pr.number,
+      title: pr.title,
+      author: pr.author?.login,
+      outcome: "",
+    };
     try {
       // Only the bot's own comments are fetched with bodies, to find its marker.
       const botComments = (pr.timelineItems?.nodes ?? []).filter(
@@ -415,7 +488,12 @@ async function run({
         );
         const state = parseMarker(data.body);
         if (state) {
-          nudge = { id: c.databaseId, nudgedAt: state.nudgedAt };
+          nudge = {
+            id: c.databaseId,
+            nudgedAt: state.nudgedAt,
+            warnedAt: state.warnedAt,
+            body: data.body,
+          };
           break;
         }
       }
@@ -431,6 +509,12 @@ async function run({
         row.outcome = decision.why;
       } else if (dryRun) {
         row.outcome = `would ${decision.action}`;
+        if (decision.action === "warn") warns.push(row);
+      } else if (decision.action === "warn") {
+        // Sent together after the loop, then recorded in each marker.
+        row.outcome = "warning";
+        row.nudge = nudge;
+        warns.push(row);
       } else if (decision.action === "nudge") {
         const body = nudgeBody(facts, decision, now);
         if (nudge) {
@@ -489,10 +573,56 @@ async function run({
       row.outcome = `FAILED: ${error.status ?? ""} ${error.message}`;
       row.failed = true;
     }
-    log(`#${row.pr} ${row.author}: ${row.outcome}`);
+    if (row.outcome !== "warning")
+      log(`#${row.pr} ${row.author}: ${row.outcome}`);
     rows.push(row);
   }
-  return rows;
+
+  const slackNote = warnMessage(warns, { owner, repo });
+  if (slackNote && !dryRun) {
+    let sent = false;
+    let error = null;
+    if (notify) {
+      try {
+        await notify(slackNote);
+        sent = true;
+      } catch (e) {
+        error = e;
+      }
+    }
+    for (const row of warns) {
+      const { nudge } = row;
+      delete row.nudge;
+      if (error) {
+        // Not recorded, so the next run warns again and the close waits.
+        row.outcome = `FAILED: Slack heads-up: ${error.message}`;
+        row.failed = true;
+      } else {
+        try {
+          await github.request(
+            "PATCH /repos/{owner}/{repo}/issues/comments/{id}",
+            {
+              owner,
+              repo,
+              id: nudge.id,
+              body: withState(nudge.body, {
+                nudgedAt: nudge.nudgedAt,
+                warnedAt: new Date(now).toISOString(),
+              }),
+            },
+          );
+          row.outcome = sent
+            ? "warned in Slack"
+            : "warn recorded (no Slack webhook)";
+        } catch (e) {
+          row.outcome = `FAILED: ${e.status ?? ""} ${e.message}`;
+          row.failed = true;
+        }
+      }
+      log(`#${row.pr} ${row.author}: ${row.outcome}`);
+    }
+  }
+  return { rows, slackNote };
 }
 
 module.exports = {
@@ -504,6 +634,8 @@ module.exports = {
   describeReasons,
   nudgeBody,
   closeBody,
+  warnMessage,
+  withState,
   run,
 };
 
@@ -537,7 +669,8 @@ if (require.main === module) {
       gh(["api", "--paginate", fill(route.split(" ")[1], params)]),
   };
   run({ github, owner, repo, dryRun: true, log: () => {} })
-    .then((rows) => {
+    .then(({ rows, slackNote }) => {
+      if (slackNote) console.log(`Slack heads-up (not sent):\n${slackNote}\n`);
       console.table(
         rows.map((r) => ({
           PR: `#${r.pr}`,

@@ -139,7 +139,7 @@ The clock runs only while one of those is true, so time a PR spends waiting on t
 | A repo member or collaborator      | 5 days   | 10 days |
 | Anyone else (outside contributors) | 3 days   | 7 days  |
 
-Drafts follow the same timings. The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 4 days (outside contributors) or 5 days (members and collaborators) after it. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. Renovate and release-please PRs, and PRs labeled `keep-open`, are never reminded or closed.
+Drafts follow the same timings. The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 4 days (outside contributors) or 5 days (members and collaborators) after it. About a day before the close, the workflow posts the PR in the Codeowners Slack channel, so a codeowner can take it over the finish line (push to its branch) or hold it with `keep-open`; the close waits until that heads-up has been out at least 20 hours. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. Renovate and release-please PRs, and PRs labeled `keep-open`, are never reminded or closed.
 
 ## The `ready for human review` label
 
