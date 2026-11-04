@@ -23,13 +23,15 @@ const STALE_LABEL = "stale";
 const KEEP_OPEN_LABEL = "keep-open";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Days of the author's turn before the nudge and before the close. The close
-// also needs a nudge posted at least (close - nudge) days earlier in the same
-// stretch, so nobody is closed without a week's warning.
+// Days of the author's turn before the nudge and before the close, by who the
+// author is to the repo (agreed in #monorepo, 11/3). Drafts follow the same
+// timings. The close also needs a nudge posted at least (close - nudge) days
+// earlier in the same stretch, so nobody is closed without that much warning.
 const DAYS = {
-  ready: { nudge: 7, close: 14 },
-  draft: { nudge: 14, close: 21 },
+  team: { nudge: 5, close: 10 }, // owners, members and collaborators
+  outside: { nudge: 3, close: 7 }, // everyone else, including forks
 };
+const TEAM_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 // Authors whose PRs are never nudged. GraphQL logins carry no `[bot]` suffix.
 const EXEMPT_AUTHORS = ["renovate", "f3-nation-release-please"];
@@ -205,6 +207,7 @@ function summarize(pr, requiredContexts, nudge) {
     title: pr.title,
     author,
     isDraft: pr.isDraft,
+    tier: TEAM_ASSOCIATIONS.has(pr.authorAssociation) ? "team" : "outside",
     exempt:
       isBotAuthor ||
       EXEMPT_AUTHORS.includes(author) ||
@@ -224,7 +227,7 @@ function decide(facts, now) {
   if (!facts.reasons.length)
     return { action: "none", why: "not author's turn" };
 
-  const days = facts.isDraft ? DAYS.draft : DAYS.ready;
+  const days = DAYS[facts.tier];
   const turnStart = minTs(...facts.reasons.map((r) => r.since));
   const clockStart = maxTs(turnStart, facts.lastAuthorActivity);
   const ageDays = (now - clockStart) / DAY_MS;
@@ -316,7 +319,7 @@ function closeBody(facts, decision) {
 // pages risk GitHub's ~10s GraphQL limit (same finding as scripts/pr-triage.sh).
 const PAGE_SIZE = 10;
 const PR_FIELDS = `
-  number title isDraft createdAt mergeable
+  number title isDraft createdAt mergeable authorAssociation
   author { login __typename }
   labels(first: 30) { nodes { name } }
   timelineItems(last: 100, itemTypes: [PULL_REQUEST_COMMIT, HEAD_REF_FORCE_PUSHED_EVENT,

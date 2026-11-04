@@ -134,12 +134,12 @@ A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.y
 
 The clock runs only while one of those is true, so time a PR spends waiting on the bots or a codeowner never counts against the author. A push or a comment from the author resets it; comments from bots and reviewers don't.
 
-| PR    | Reminder | Closed  |
-| ----- | -------- | ------- |
-| Ready | 7 days   | 14 days |
-| Draft | 14 days  | 21 days |
+| Author                             | Reminder | Closed  |
+| ---------------------------------- | -------- | ------- |
+| A repo member or collaborator      | 5 days   | 10 days |
+| Anyone else (outside contributors) | 3 days   | 7 days  |
 
-The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 7 days after it. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. Renovate and release-please PRs, and PRs labeled `keep-open`, are never reminded or closed.
+Drafts follow the same timings. The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 4 days (outside contributors) or 5 days (members and collaborators) after it. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. Renovate and release-please PRs, and PRs labeled `keep-open`, are never reminded or closed.
 
 ## The `ready for human review` label
 

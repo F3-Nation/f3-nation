@@ -19,6 +19,7 @@ const basePr = (overrides = {}) => ({
   number: 1,
   title: "fix(api): thing",
   isDraft: false,
+  authorAssociation: "COLLABORATOR",
   createdAt: at(0),
   mergeable: "MERGEABLE",
   author: { login: "pax", __typename: "User" },
@@ -43,10 +44,10 @@ test("a ready PR with nothing open for the author is not their turn", () => {
   assert.equal(run(basePr(), 30).why, "not author's turn");
 });
 
-test("a bot thread with no author reply starts the clock; nudge at 7 days", () => {
+test("a bot thread with no author reply starts the clock; team nudge at 5 days", () => {
   const pr = basePr({ reviewThreads: { nodes: [thread("coderabbitai", 1)] } });
-  assert.equal(run(pr, 7.9).action, "none");
-  assert.equal(run(pr, 8.1).action, "nudge");
+  assert.equal(run(pr, 5.9).action, "none");
+  assert.equal(run(pr, 6.1).action, "nudge");
 });
 
 test("a thread the author replied to last is waiting on the reviewer", () => {
@@ -59,8 +60,8 @@ test("time waiting on codeowners doesn't count: clock starts at the review", () 
   const pr = basePr({
     reviewThreads: { nodes: [thread("BigGillyStyle", 20)] },
   });
-  assert.equal(run(pr, 26).action, "none");
-  assert.equal(run(pr, 27.1).action, "nudge");
+  assert.equal(run(pr, 24.9).action, "none");
+  assert.equal(run(pr, 25.1).action, "nudge");
 });
 
 test("an author push or comment resets the clock", () => {
@@ -76,8 +77,8 @@ test("an author push or comment resets the clock", () => {
       ],
     },
   });
-  assert.equal(run(pr, 12).action, "none");
-  assert.equal(run(pr, 13.1).action, "nudge");
+  assert.equal(run(pr, 10.9).action, "none");
+  assert.equal(run(pr, 11.1).action, "nudge");
 });
 
 test("reviewer and bot comments don't reset the clock", () => {
@@ -101,13 +102,13 @@ test("reviewer and bot comments don't reset the clock", () => {
   assert.equal(run(pr, 8.1).action, "nudge");
 });
 
-test("close needs a nudge in this stretch and 7 more days", () => {
+test("close needs a nudge in this stretch and 5 more days (team)", () => {
   const pr = basePr({ reviewThreads: { nodes: [thread("coderabbitai", 0)] } });
   // No nudge yet at day 20: nudge first, never close cold.
   assert.equal(run(pr, 20).action, "nudge");
-  const nudge = { id: 9, nudgedAt: at(8) };
-  assert.equal(run(pr, 14.9, nudge).action, "none");
-  assert.equal(run(pr, 15.1, nudge).action, "close");
+  const nudge = { id: 9, nudgedAt: at(5) };
+  assert.equal(run(pr, 9.9, nudge).action, "none");
+  assert.equal(run(pr, 10.1, nudge).action, "close");
 });
 
 test("a nudge from an earlier stretch doesn't count toward closing", () => {
@@ -120,15 +121,33 @@ test("a nudge from an earlier stretch doesn't count toward closing", () => {
     },
   });
   const oldNudge = { id: 9, nudgedAt: at(8) };
-  assert.equal(run(pr, 16, oldNudge).action, "none");
-  assert.equal(run(pr, 17.1, oldNudge).action, "nudge");
+  assert.equal(run(pr, 14.9, oldNudge).action, "none");
+  assert.equal(run(pr, 15.1, oldNudge).action, "nudge");
 });
 
-test("drafts: nudge at 14 days, close at 21", () => {
+test("drafts follow the same timings", () => {
   const pr = basePr({ isDraft: true });
-  assert.equal(run(pr, 13.9).action, "none");
-  assert.equal(run(pr, 14.1).action, "nudge");
-  assert.equal(run(pr, 21.1, { nudgedAt: at(14.1) }).action, "close");
+  assert.equal(run(pr, 4.9).action, "none");
+  assert.equal(run(pr, 5.1).action, "nudge");
+  assert.equal(run(pr, 10.2, { nudgedAt: at(5.1) }).action, "close");
+});
+
+test("outside contributors: nudge at 3 days, close at 7", () => {
+  for (const authorAssociation of [
+    "CONTRIBUTOR",
+    "FIRST_TIME_CONTRIBUTOR",
+    "NONE",
+  ]) {
+    const pr = basePr({
+      authorAssociation,
+      reviewThreads: { nodes: [thread("coderabbitai", 0)] },
+    });
+    assert.equal(run(pr, 2.9).action, "none");
+    assert.equal(run(pr, 3.1).action, "nudge");
+    const nudge = { nudgedAt: at(3.1) };
+    assert.equal(run(pr, 7.0, nudge).action, "none");
+    assert.equal(run(pr, 7.2, nudge).action, "close");
+  }
 });
 
 test("a failing required check is the author's turn; optional checks aren't", () => {
@@ -241,6 +260,6 @@ test("an author's reply inside a review thread resets the clock", () => {
       ],
     },
   });
-  assert.equal(run(pr, 12.9).action, "none");
-  assert.equal(run(pr, 13.1).action, "nudge");
+  assert.equal(run(pr, 10.9).action, "none");
+  assert.equal(run(pr, 11.1).action, "nudge");
 });
