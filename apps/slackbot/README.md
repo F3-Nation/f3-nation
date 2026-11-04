@@ -95,6 +95,21 @@ Once the app is running, you will want to take some admin actions to make it use
    1. Going to `/f3-nation-settings` -> `Backblast & Preblast Settings` and setting for your whole space
    2. Setting them individually by AO by going to `/f3-nation-settings` -> `Calendar Management` -> `Manage AOs` -> `Edit` and setting the channel for each
 
+### Calendar special-event window
+
+`/f3-nation-settings` → **Calendar Management** → **General Calendar Settings** →
+**Special Days Out** controls the upcoming highlighted events included in calendar
+posts. A positive value includes events through that many days ahead, an empty
+value applies no date cutoff, and `0` hides special events. Posts include the
+earliest upcoming highlighted events, capped by `create_special_events_blocks`
+in [`scripts/calendar_images.py`](scripts/calendar_images.py).
+
+When no events remain in the display window, the post omits the Special Events
+header and section, because Slack rejects a section with empty text. If the
+calendar post fails, that region's update rolls back and the new calendar image
+references and post timestamp are not saved. The rollback does not undo settings
+already saved from the form.
+
 ## Step debugging
 
 1. Set `ENABLE_DEBUGGING=true` in `apps/slackbot/.env`.
