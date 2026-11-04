@@ -9,7 +9,11 @@ export interface AuditContext {
 
 export const auditContext = new AsyncLocalStorage<AuditContext>();
 
-/** Consume lazy query builders within the callback to retain attribution. */
+/**
+ * Consume lazy builders within the callback to retain attribution. An async
+ * callback may return a builder: Promise adoption consumes it in that context.
+ * A synchronous callback returning a builder for later consumption loses context.
+ */
 export function runWithAuditContext<T>(store: AuditContext, fn: () => T): T {
   return auditContext.run(store, fn);
 }
@@ -30,6 +34,8 @@ export function auditSettingsSql({ userId, source }: AuditContext): string {
   return `set local app.user_id = '${userId ?? ""}'; set local app.source = '${source ?? ""}'`;
 }
 
+// This leading-keyword heuristic misses hidden writes such as SELECT functions;
+// a WITH read containing a write keyword can also enter the transaction path.
 const writePattern = /^\s*(with\b[\s\S]*?\b)?(insert|update|delete|merge)\b/i;
 
 function activeStore() {
@@ -43,9 +49,15 @@ function activeStore() {
  * Depends on Drizzle's postgres-js session routing statements through unsafe,
  * transactions through begin, and nested transactions through savepoint.
  * Transaction-local settings prevent attribution leaking across pooled users.
- * Install after withQueryTimeout: reads keep its pool-wait bound, while
- * attributed writes use native transactions and the role's statement_timeout.
- * The driver's onexecute BEGIN must retain its native query/reservation path.
+ * Install after withQueryTimeout so unmatched statements keep its existing
+ * timeout. Attributed writes (and heuristic false positives) use native begin:
+ * onexecute BEGIN and transaction-scoped statements bypass that timeout. Their
+ * client-side pool wait has no limit; only a configured server statement_timeout
+ * can bound server execution. Installing the timeout afterward could reject a
+ * begin-backed write while it later commits. BEGIN must retain its native
+ * query/reservation path.
+ * The attributed unsafe result supports only then and values(), the lazy query
+ * shapes Drizzle consumes; it is not a full postgres-js PendingQuery facade.
  */
 export function withAuditContext(client: postgres.Sql): void {
   const originalUnsafe = client.unsafe.bind(client);
@@ -59,7 +71,13 @@ export function withAuditContext(client: postgres.Sql): void {
         ? originalBegin(options, callback!)
         : originalBegin(options);
     }
-    const settings = auditSettingsSql(store);
+    let settings: string;
+    try {
+      settings = auditSettingsSql(store);
+    } catch (error) {
+      const validationError = error as Error;
+      return Promise.reject(validationError);
+    }
     const run = typeof options === "string" ? callback! : options;
     const attributed = async (tx: postgres.TransactionSql) => {
       await tx.unsafe(settings);

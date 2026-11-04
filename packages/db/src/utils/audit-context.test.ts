@@ -69,15 +69,17 @@ describe("audit settings", () => {
     async (userId) => {
       const { client, calls } = recordingClient();
       const invalid = { userId, source: null } as unknown as typeof store;
-      expect(() => auditSettingsSql(invalid)).toThrow(/audit/i);
+      expect(() => auditSettingsSql(invalid)).toThrow(
+        /^Invalid audit user id$/,
+      );
       await expect(
         runWithAuditContext(invalid, async () =>
           client.unsafe("insert into x values (1)"),
         ),
-      ).rejects.toThrow(/audit/i);
+      ).rejects.toThrow(/^Invalid audit user id$/);
       await expect(
         runWithAuditContext(invalid, async () => client.begin(() => 1)),
-      ).rejects.toThrow(/audit/i);
+      ).rejects.toThrow(/^Invalid audit user id$/);
       expect(calls).toEqual([]);
     },
   );
@@ -96,20 +98,88 @@ describe("audit settings", () => {
   ])("rejects invalid source %j before any statement", async (source) => {
     const { client, calls } = recordingClient();
     const invalid = { userId: null, source } as unknown as typeof store;
-    expect(() => auditSettingsSql(invalid)).toThrow(/audit/i);
+    expect(() => auditSettingsSql(invalid)).toThrow(/^Invalid audit source$/);
     await expect(
       runWithAuditContext(invalid, async () =>
         client.unsafe("update x set a=1"),
       ),
-    ).rejects.toThrow(/audit/i);
+    ).rejects.toThrow(/^Invalid audit source$/);
     await expect(
       runWithAuditContext(invalid, async () => client.begin(() => 1)),
-    ).rejects.toThrow(/audit/i);
+    ).rejects.toThrow(/^Invalid audit source$/);
     expect(calls).toEqual([]);
   });
 });
 
 describe("audit client boundaries", () => {
+  it.each([
+    [{ userId: 0, source: null }, "Invalid audit user id"],
+    [{ userId: null, source: "bad'input" }, "Invalid audit source"],
+  ])(
+    "rejects native begin through its Promise before any SQL for %j",
+    async (context, message) => {
+      const { client, calls } = recordingClient();
+      const callback = () => {
+        throw new Error("callback must not run");
+      };
+      const rejected = runWithAuditContext(context, () =>
+        client.begin(callback),
+      );
+      expect(rejected).toBeInstanceOf(Promise);
+      const error: unknown = await rejected.catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).toMatchObject({ message });
+      const withOptions = runWithAuditContext(context, () =>
+        client.begin("read only", callback),
+      );
+      await expect(withOptions).rejects.toMatchObject({ message });
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it("validates active context before read and driver bypasses send any SQL", () => {
+    const { client, calls } = recordingClient();
+    runWithAuditContext({ userId: 0, source: null }, () => {
+      expect(() => client.unsafe("select 1")).toThrow(
+        /^Invalid audit user id$/,
+      );
+      const options = { onexecute: () => undefined, prepare: false };
+      expect(() => client.unsafe("begin", [], options)).toThrow(
+        /^Invalid audit user id$/,
+      );
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it.each(["select 'update' as label", "with x as (select 1) select * from x"])(
+    "passes through read %s with exact arguments",
+    (statement) => {
+      const { client, calls, pending } = recordingClient();
+      const parameters = [7];
+      const options = { prepare: false };
+      expect(
+        runWithAuditContext(store, () =>
+          client.unsafe(statement, parameters, options),
+        ),
+      ).toBe(pending);
+      expect(calls).toEqual([["unsafe", statement, parameters, options]]);
+      expect(calls[0]![2]).toBe(parameters);
+      expect(calls[0]![3]).toBe(options);
+    },
+  );
+
+  it("routes a WITH read containing a write keyword through the heuristic transaction", async () => {
+    const { client, calls } = recordingClient();
+    const statement = "with x as (select 'update' as label) select * from x";
+    await runWithAuditContext(store, () => client.unsafe(statement));
+    expect(calls).toEqual([
+      ["begin"],
+      ["tx", settings],
+      ["tx", statement],
+      ["commit"],
+    ]);
+  });
+
   it("passes through inactive queries and native transaction options", async () => {
     const { client, calls, pending } = recordingClient();
     expect(client.unsafe("update x set a=1")).toBe(pending);

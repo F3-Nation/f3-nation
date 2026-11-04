@@ -4,8 +4,15 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { schema } from "..";
-import { createAuditDatabase } from "../__tests__/audit-database";
-import { runWithAuditContext, withAuditContext } from "./audit-context";
+import {
+  cleanupAuditResources,
+  createAuditDatabase,
+} from "../__tests__/audit-database";
+import {
+  auditContext,
+  runWithAuditContext,
+  withAuditContext,
+} from "./audit-context";
 import { createDbClient } from "./functions";
 import { withQueryTimeout } from "./query-timeout";
 
@@ -46,7 +53,7 @@ beforeAll(async () => {
 }, 30_000);
 
 afterAll(async () => {
-  for (const cleanup of cleanups.reverse()) await cleanup();
+  await cleanupAuditResources(cleanups.reverse());
 });
 
 async function history(type: string) {
@@ -141,6 +148,30 @@ describe("database audit attribution", () => {
     expect(await history("nested")).toEqual([
       { op: "I", changed_by: 41, changed_via: null },
     ]);
+  });
+
+  it("records source-only context and keeps transaction-entry attribution across ambient changes", async () => {
+    await runWithAuditContext({ userId: null, source: "job" }, async () =>
+      db.insert(table).values({ type: "source-only" }),
+    );
+    await runWithAuditContext(actor, () =>
+      db.transaction(async (tx) => {
+        await runWithAuditContext({ userId: 99, source: "other" }, async () =>
+          tx.insert(table).values({ type: "ambient-change" }),
+        );
+        await auditContext.exit(async () =>
+          tx.insert(table).values({ type: "ambient-exit" }),
+        );
+      }),
+    );
+    expect(await history("source-only")).toEqual([
+      { op: "I", changed_by: null, changed_via: "job" },
+    ]);
+    for (const type of ["ambient-change", "ambient-exit"]) {
+      expect(await history(type)).toEqual([
+        { op: "I", changed_by: 41, changed_via: null },
+      ]);
+    }
   });
 
   it("preserves serializable and deferrable transaction configuration", async () => {
@@ -258,20 +289,22 @@ describe("database audit attribution", () => {
 
   it("rejects invalid context before any statement including BEGIN", async () => {
     statements.length = 0;
-    for (const context of [
-      { userId: 2147483648, source: null },
-      { userId: 4, source: "api\n" },
-    ]) {
+    for (const [context, message] of [
+      [{ userId: 2147483648, source: null }, "Invalid audit user id"],
+      [{ userId: 4, source: "api\n" }, "Invalid audit source"],
+    ] as const) {
       await expect(
         runWithAuditContext(context, async () =>
           db.insert(table).values({ type: "invalid" }),
         ),
-      ).rejects.toThrow();
-      expect(() =>
-        runWithAuditContext(context, () =>
-          db.transaction(() => Promise.resolve(1)),
-        ),
-      ).toThrow(/Invalid audit/);
+      ).rejects.toMatchObject({ cause: { message } });
+      const rejected = runWithAuditContext(context, () =>
+        db.transaction(() => Promise.resolve(1)),
+      );
+      expect(rejected).toBeInstanceOf(Promise);
+      const error: unknown = await rejected.catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).toMatchObject({ message });
     }
     expect(statements).toEqual([]);
     expect(await history("invalid")).toEqual([]);

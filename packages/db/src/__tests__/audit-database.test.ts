@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createAuditDatabase } from "./audit-database";
+import { cleanupAuditResources, createAuditDatabase } from "./audit-database";
 
 interface Event {
   kind: "statement" | "close" | "migrate";
@@ -16,6 +16,10 @@ const state = vi.hoisted(() => ({
   targetMismatch: false,
   creationFailure: false,
   migrationFailure: false,
+  dropFailure: false,
+  closeFixtureFailure: false,
+  closeProbeFailure: false,
+  closeAdminFailure: false,
 }));
 
 vi.mock("postgres", () => ({
@@ -43,12 +47,26 @@ vi.mock("postgres", () => ({
           ]);
         if (sql.startsWith("create database") && state.creationFailure)
           return Promise.reject(new Error("creation failed"));
+        if (sql.startsWith("drop database") && state.dropFailure)
+          return Promise.reject(new Error("drop failed"));
         return Promise.resolve([]);
       },
       {
         database,
         end: () => {
           state.events.push({ kind: "close", database });
+          if (state.closeProbeFailure && database === "f3nation_test")
+            return Promise.reject(new Error("probe close failed"));
+          if (state.closeFixtureFailure && database.startsWith("f3_audit_"))
+            return Promise.reject(new Error("fixture close failed"));
+          if (
+            state.closeAdminFailure &&
+            database === "postgres" &&
+            state.events.some((event) =>
+              event.sql?.startsWith("create database"),
+            )
+          )
+            return Promise.reject(new Error("admin close failed"));
           return Promise.resolve();
         },
       },
@@ -76,6 +94,10 @@ beforeEach(() => {
   state.targetMismatch = false;
   state.creationFailure = false;
   state.migrationFailure = false;
+  state.dropFailure = false;
+  state.closeFixtureFailure = false;
+  state.closeProbeFailure = false;
+  state.closeAdminFailure = false;
   vi.stubEnv(
     "TEST_DATABASE_URL",
     "postgresql://local:local@localhost:5432/f3nation_test",
@@ -94,31 +116,160 @@ const closes = () =>
     .map((event) => event.database);
 
 describe("audit test database ownership", () => {
+  it.each(["false", "0"])(
+    "refuses CI=%s as authorization for an unmarked source",
+    async (ci) => {
+      vi.stubEnv("CI", ci);
+      vi.stubEnv(
+        "TEST_DATABASE_URL",
+        "postgresql://local:local@localhost:5432/f3_test",
+      );
+      state.sourceName = "f3_test";
+      state.marker = null;
+      await expect(createAuditDatabase()).rejects.toThrow(/pnpm local:setup/);
+      expect(writes()).toEqual([]);
+    },
+  );
+
+  it("identifies the fixture configuration in remote target refusals without echoing its URL", async () => {
+    vi.stubEnv(
+      "TEST_DATABASE_URL",
+      "postgresql://private-user:private-password@remote.invalid/private_test",
+    );
+    await expect(createAuditDatabase()).rejects.toThrow(
+      /^Refusing to create an audit-test database: TEST_DATABASE_URL in packages\/db\/.env is not a local database\. Run pnpm local:setup/,
+    );
+    expect(state.events).toEqual([]);
+  });
+
+  it("retains a source refusal when closing the probe also fails", async () => {
+    state.marker = null;
+    state.closeProbeFailure = true;
+    const error: unknown = await createAuditDatabase().catch(
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error).toHaveProperty("errors.length", 2);
+    expect(error).toHaveProperty(
+      "errors.0.message",
+      expect.stringContaining("disposable marker is missing or unrecognized"),
+    );
+    expect(error).toHaveProperty("errors.1", new Error("probe close failed"));
+    expect(writes()).toEqual([]);
+    expect(closes()).toEqual(["postgres", "f3nation_test"]);
+  });
+
+  it("retains setup and drop failures and still closes the admin", async () => {
+    state.migrationFailure = true;
+    state.dropFailure = true;
+    await expect(createAuditDatabase()).rejects.toMatchObject({
+      errors: [new Error("migration failed"), new Error("drop failed")],
+    });
+    const name = writes()[0]!.identifiers![0]!;
+    expect(writes().map((event) => event.identifiers)).toEqual([
+      [name],
+      [name],
+    ]);
+    expect(closes()).toEqual(["postgres", "f3nation_test", name, "postgres"]);
+    expect(state.events.at(-1)).toEqual({
+      kind: "close",
+      database: "postgres",
+    });
+  });
+
+  it("retains migration and client-close failures before attempting owned drop", async () => {
+    state.migrationFailure = true;
+    state.closeFixtureFailure = true;
+    await expect(createAuditDatabase()).rejects.toMatchObject({
+      errors: [
+        new Error("migration failed"),
+        new Error("fixture close failed"),
+      ],
+    });
+    const name = writes()[0]!.identifiers![0]!;
+    expect(state.events.slice(-3)).toEqual([
+      { kind: "close", database: name },
+      {
+        kind: "statement",
+        database: "postgres",
+        sql: "drop database ?",
+        identifiers: [name],
+      },
+      { kind: "close", database: "postgres" },
+    ]);
+  });
+
+  it("reports both drop and admin-close failures", async () => {
+    const owned = await createAuditDatabase();
+    state.dropFailure = true;
+    state.closeAdminFailure = true;
+    await expect(owned.cleanup()).rejects.toMatchObject({
+      errors: [new Error("drop failed"), new Error("admin close failed")],
+    });
+  });
+
+  it("attempts every teardown in dependency order after earlier failures", async () => {
+    const order: string[] = [];
+    const first = new Error("first close failed");
+    const second = new Error("second close failed");
+    await expect(
+      cleanupAuditResources([
+        () => {
+          order.push("client");
+          return Promise.reject(first);
+        },
+        () => {
+          order.push("production");
+          return Promise.reject(second);
+        },
+        () => {
+          order.push("owned database");
+          return Promise.resolve();
+        },
+      ]),
+    ).rejects.toMatchObject({ errors: [first, second] });
+    expect(order).toEqual(["client", "production", "owned database"]);
+  });
+
   it("refuses missing configuration without connecting", async () => {
     vi.stubEnv("TEST_DATABASE_URL", undefined);
     await expect(createAuditDatabase()).rejects.toThrow(
-      "Audit tests require TEST_DATABASE_URL",
+      /^Audit tests require TEST_DATABASE_URL\. Run pnpm local:setup/,
     );
     expect(state.events).toEqual([]);
   });
 
   it.each([
-    { label: "missing marker", name: "f3nation_test", marker: null },
+    {
+      label: "missing marker",
+      name: "f3nation_test",
+      marker: null,
+      reason: "disposable marker is missing or unrecognized",
+    },
     {
       label: "live name mismatch",
       name: "unrelated_test",
       marker: "f3-disposable-local-v1",
+      reason: "live database does not match TEST_DATABASE_URL",
     },
-    { label: "unrelated marker", name: "f3nation_test", marker: "other" },
-  ])("refuses $label before any create or drop", async ({ name, marker }) => {
-    state.sourceName = name;
-    state.marker = marker;
-    await expect(createAuditDatabase()).rejects.toThrow(
-      "verified disposable test database",
-    );
-    expect(writes()).toEqual([]);
-    expect(closes()).toEqual(["postgres", "f3nation_test"]);
-  });
+    {
+      label: "unrelated marker",
+      name: "f3nation_test",
+      marker: "other",
+      reason: "disposable marker is missing or unrecognized",
+    },
+  ])(
+    "refuses $label before any create or drop",
+    async ({ name, marker, reason }) => {
+      state.sourceName = name;
+      state.marker = marker;
+      await expect(createAuditDatabase()).rejects.toThrow(
+        `${reason}. Run pnpm local:setup`,
+      );
+      expect(writes()).toEqual([]);
+      expect(closes()).toEqual(["postgres", "f3nation_test"]);
+    },
+  );
 
   it("refuses a marked source without the test suffix", async () => {
     vi.stubEnv(
@@ -127,7 +278,7 @@ describe("audit test database ownership", () => {
     );
     state.sourceName = "unrelated";
     await expect(createAuditDatabase()).rejects.toThrow(
-      "verified disposable test database",
+      "TEST_DATABASE_URL must name a database ending in _test. Run pnpm local:setup",
     );
     expect(writes()).toEqual([]);
     expect(closes()).toEqual(["postgres", "unrelated"]);

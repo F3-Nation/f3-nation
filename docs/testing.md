@@ -25,14 +25,22 @@ suite that mutates data (`pnpm reset-test-db`).
 
 `pnpm --filter @acme/db test` sets test mode and loads the database package's
 `.env`. Its audit-context integration fixture reads `TEST_DATABASE_URL`,
-verifies the local target and live database name, and requires a disposable
-database ending in `_test`. Locally that source database must carry the
-`f3-disposable-local-v1` comment; CI may use its exact `f3_test` database.
-These checks do not authorize a shared database as a local fixture.
+verifies the local target and live database name, and requires a database ending
+in `_test` with the `f3-disposable-local-v1` comment. Missing configuration or a
+failed target check fails the suite rather than skipping it. Only exact
+`CI=true` with the exact `f3_test` database bypasses the marker check, because
+CI supplies an ephemeral, job-owned PostgreSQL service. All other target checks
+still apply. These checks do not authorize a shared database as a local fixture.
 
-The documented `pnpm local:setup` initializes and marks both compose-owned
-databases through the container directly, including when its volume already
-exists. Schema resets preserve the database comments.
+To prepare or repair the local source, run `pnpm local:setup` with this checkout's
+configured slot, then use its `TEST_DATABASE_URL` in `packages/db/.env`. Setup
+regenerates `.env` files from templates and backs up existing files as
+`.env.bak.<timestamp>`; restore needed custom values from those backups. See
+[local setup](LOCAL_DEV_DOCKER.md) for the slot and environment-file workflow.
+Setup initializes and marks both compose-owned development/test databases
+through the container directly on every run, including existing volumes.
+Schema resets preserve those database comments. Never mark an arbitrary
+URL-selected or shared database disposable to bypass a refusal.
 
 The fixture creates a uniquely named database, applies the existing migrations,
 and drops only that owned database during cleanup. The PostgreSQL test role

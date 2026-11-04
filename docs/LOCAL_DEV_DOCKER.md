@@ -215,8 +215,9 @@ pnpm local:setup
 
 This script does everything automatically:
 
-- Copies each directory's `.env.example` → `.env` (skips any that already exist):
-  `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, `apps/slackbot`, and `packages/env`
+- Regenerates each directory's `.env` from `.env.example`, backing up existing
+  files as `.env.bak.<timestamp>` before applying the configured slot. See
+  [the setup script](../scripts/local-setup.sh) for the directories it prepares.
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the GCS emulator buckets (`f3-public-images`, `f3-public-images-staging`, `f3nation-calendar-images`)
@@ -695,7 +696,9 @@ pnpm db:migrate:local
 ### App fails to start with env validation errors
 
 Make sure each app's `.env` file exists and has all required variables.
-Re-run the setup script — it skips directories that already have a `.env`:
+Re-run the setup script with this checkout's configured slot. It regenerates
+`.env` files from templates and backs up existing files as `.env.bak.<timestamp>`;
+restore any needed custom values from those backups:
 
 ```bash
 pnpm local:setup

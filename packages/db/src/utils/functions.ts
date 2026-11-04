@@ -9,25 +9,14 @@ import { schema } from "..";
 import { withAuditContext } from "./audit-context";
 import { withQueryTimeout } from "./query-timeout";
 
-// postgres-js has no bound on how long a query waits behind a saturated
-// connection pool -- see withQueryTimeout's docstring.
+// Bound top-level unsafe statements that retain the query-timeout wrapper;
+// native transactions, including attributed writes, have no client pool-wait
+// limit. A configured server statement_timeout bounds server execution only.
+// See withQueryTimeout and withAuditContext for the transaction constraints.
 //
-// 60s is a hang backstop, NOT a latency budget. The production database
-// already logs statements over 5s (log_min_duration_statement=5000), and
-// those logs show the api and map users routinely running 5-31s statements
-// (~180/week, mostly count() on list endpoints) -- a materially lower value
-// here would convert real, succeeding queries into failures. PgBouncer's
-// query_wait_timeout (default 120s) already bounds the wait for a *server*
-// connection; this covers the postgres-js client-side queue, which
-// PgBouncer cannot see.
-//
-// Overridable via QUERY_TIMEOUT_MS; 0 disables the wrapper entirely (set
-// on the migrate/seed/reset scripts in package.json, where long-running
-// statements are expected and a cancelled half-applied run is worse than a
-// slow one). Read via process.env (like packages/shared's constants), not
-// @acme/env: skipValidation short-circuits schema defaults in CI, which
-// would silently disable the timeout exactly where the integration tests
-// exercise it.
+// This is a hang backstop, not a latency budget. QUERY_TIMEOUT_MS=0 disables
+// the wrapper for long-running CLI statements. Read process.env directly:
+// @acme/env's skipValidation bypasses schema defaults in test environments.
 const DEFAULT_QUERY_TIMEOUT_MS = 60_000;
 // Node coerces setTimeout delays above 2^31 - 1 ms (~24.8 days) to 1ms, so
 // an oversized value would instantly time out every query — cap it.
@@ -229,6 +218,7 @@ export const createDbClient = () => {
   const { url, hostOptions } = postgresArgs(databaseUrl);
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
   const client = postgres(url, { ...sslOptions, ...poolOptions(hostOptions) });
+  // Audit must wrap the timeout: a client timeout cannot safely cancel begin.
   if (QUERY_TIMEOUT_MS > 0) withQueryTimeout(client, QUERY_TIMEOUT_MS);
   withAuditContext(client);
   return { db: drizzle(client, { schema }), close: () => client.end() };

@@ -297,6 +297,27 @@ describe("assertLocalTarget", () => {
     );
   });
 
+  it("uses a caller's diagnostic variable without exposing connection details", async () => {
+    const action = {
+      verb: "create an audit-test database",
+      help: "Use local setup.",
+      variable: "TEST_DATABASE_URL",
+    };
+    await expect(
+      assertLocalTarget(
+        "postgresql://secret:password@remote.invalid/private_test",
+        action,
+      ),
+    ).rejects.toThrow(
+      /^Refusing to create an audit-test database: TEST_DATABASE_URL in packages\/db\/.env is not a local database\. Use local setup\.$/,
+    );
+    await expect(
+      assertLocalTarget(LOCAL, action, () => Promise.resolve(true)),
+    ).rejects.toThrow(
+      /^Refusing to create an audit-test database: TEST_DATABASE_URL reaches a Cloud SQL server \(probably through a proxy on localhost\)\. Use local setup\.$/,
+    );
+  });
+
   it("allows a local database", async () => {
     await expect(
       assertLocalTarget(LOCAL, undefined, notCloudSql),

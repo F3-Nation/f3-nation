@@ -37,8 +37,8 @@ need no audit calls. Existing authorization and API responses remain unchanged.
   NULL source. Accepted API actors are integers in `1..2147483647`; zero,
   negative, fractional, nonfinite and out-of-range values are not actors.
 - **AC-3** — GIVEN active context WHEN Drizzle performs an insert, update,
-  delete or raw `execute` write THEN history records the actor and the write's
-  returned rows and values remain unchanged.
+  delete or a raw `execute` write recognized by the SQL heuristic THEN history
+  records the actor and the write's returned rows and values remain unchanged.
 - **AC-4** — GIVEN active context WHEN an explicit transaction or nested
   savepoint writes THEN its history inherits the transaction's attribution.
 - **AC-5** — GIVEN active context WHEN a transaction requests serializable
@@ -51,8 +51,10 @@ need no audit calls. Existing authorization and API responses remain unchanged.
 - **AC-8** — GIVEN concurrent writes by many actors through a small pool
   WHEN every write completes THEN every expected history row has the exact
   actor/source for its write, using NULL-safe comparisons and exact row counts.
-- **AC-9** — GIVEN a read in request context WHEN it executes outside an
-  explicit transaction THEN the hook sends no BEGIN or attribution statement.
+- **AC-9** — GIVEN a read in valid request context that does not match the
+  write heuristic WHEN it executes outside an explicit transaction THEN the
+  hook sends no BEGIN or attribution statement. A WITH read containing a
+  write keyword may match and enter a native transaction.
 - **AC-10** — GIVEN no context or a context with both fields NULL WHEN a
   query or transaction executes THEN the original client functions receive it
   without added statements or a new transaction.
@@ -60,7 +62,9 @@ need no audit calls. Existing authorization and API responses remain unchanged.
   accepts only a positive integer actor within the database integer range or
   NULL, and a source containing only lowercase ASCII letters, digits and
   hyphens or NULL. Any other value throws before a statement, including BEGIN,
-  is sent. NULL becomes an empty setting value.
+  is sent, including for reads. Native `begin` returns a rejected Promise
+  containing the validation error so `.catch()` consumers retain native error
+  delivery. NULL becomes an empty setting value.
 - **AC-12** — GIVEN active context WHEN attribution is initialized THEN one
   `unsafe()` call sends both validated `SET LOCAL` statements without bind
   parameters. No session-level setting or attribution SELECT is used.
@@ -106,8 +110,10 @@ to follow the database audit-history foundation's grants.
   constructed clients. A non-oRPC caller must establish context and use a
   hooked client; exporting the helper does not modify other clients.
 - Complete SQL parsing. The detector recognizes the declared leading write
-  forms and data-modifying CTEs. Hidden writes through functions invoked by a
-  SELECT, and other SQL forms the pattern misses, remain unattributed.
+  forms: INSERT, UPDATE, DELETE and MERGE, optionally after WITH. Hidden writes
+  through functions invoked by a SELECT, and other SQL forms the pattern misses,
+  remain unattributed. A WITH read containing a write keyword can be a false
+  positive and enter a native transaction without a client-side pool-wait limit.
 
 ## 7. Critical-path test cases
 
@@ -126,8 +132,11 @@ boundaries without adding a history UI or test endpoint.
 - Approved Staging UI verification for the application acceptance criterion.
 
 Database-package integration tests use a separate disposable test database so
-another package's global reset cannot destroy their fixtures. Existing API
-tests retain their normal reset lifecycle. No test targets a shared database.
+another package's global reset cannot destroy their fixtures. They apply the
+existing migrations and clean up only their owned database. Existing API tests
+retain their normal reset lifecycle. No test targets a shared database. See
+[database-package audit integration](../testing.md#database-package-audit-integration)
+for configuration, safety checks and setup remedies.
 
 ## 8. Observability
 
@@ -139,13 +148,22 @@ The hook depends on Drizzle's postgres-js execution boundaries: statements
 reach `unsafe`, top-level transactions reach `begin`, and nested transactions
 use savepoints. Its regression tests enforce that dependency. It is installed
 after the query-timeout wrapper so ordinary reads retain their existing
-behavior. Attributed standalone writes run inside native transactions and use
-the database role's `statement_timeout`, as explicit transactions do; BEGIN
-must not be wrapped in a client-side timeout.
+behavior when they do not match the write heuristic. Attributed standalone
+writes and false positives run inside native transactions: BEGIN's `onexecute`
+path and transaction-scoped statements bypass the client timeout. Their wait in
+the client pool is unbounded. Only a configured server `statement_timeout` can
+bound server execution; it cannot bound that pool wait. Installing the timeout
+after the audit hook could reject a begin-backed write while it later commits,
+so that installation order is unsafe.
+
+The attributed native query result deliberately exposes only `then` and
+`values()`, the two lazy shapes consumed by Drizzle; it does not implement the
+full postgres-js PendingQuery surface.
 
 Lazy Drizzle builders must be consumed within `runWithAuditContext`'s callback.
-Constructing a builder there and awaiting it after the callback has returned
-loses context. Background work inherits context when its asynchronous resource
-is created; use `auditContext.exit(...)` when that attribution is inappropriate.
+An async callback may return a builder because Promise adoption consumes it
+inside that context. A synchronous callback that returns a builder for later
+consumption loses context. Background work inherits context when its asynchronous
+resource is created; use `auditContext.exit(...)` when that attribution is inappropriate.
 An already-open transaction keeps the attribution set at its entry, including
 through savepoints; changing ambient context does not retag that transaction.

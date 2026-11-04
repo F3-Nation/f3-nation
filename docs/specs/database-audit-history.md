@@ -28,7 +28,7 @@ Bookkeeping-only changes can be ignored; sensitive values are masked.
   feedback on this policy when code is available.
 - The existing read-only PostgreSQL role should receive history read access.
   Exact role identity and deployment runner/owner must be verified before release.
-- Attribution integration remains #665 (user) and #667 (originating app).
+- User attribution is specified in [request-scoped database audit attribution](database-audit-attribution.md); originating-application population is outside the capture foundation.
 - Reference implementation only: PR #825 at commit 890bb587,
   packages/db/drizzle/0029_audit_history.sql. That PR remains unchanged.
 - Main implementation lives in packages/db custom migrations. SQL integration
@@ -450,9 +450,10 @@ migrations. Before any schema drop, automated resets verify that the actual
 database matches the configured `_test` database. Interactive resets do not require
 an `_test` name: they instead require a matching database name, a loopback URL and
 the database comment `f3-disposable-local-v1`, followed by confirmation explicitly
-covering history deletion. The marker is installed on the development database
-by `scripts/docker/init-db.sql` when Docker first initializes a volume, and by
-`pnpm local:setup` directly through the local Docker container for existing volumes.
+covering history deletion. The marker is installed on the compose-owned
+development and test databases by [the database initialization script](../../scripts/docker/init-db.sql).
+Docker runs it when initializing a volume; `pnpm local:setup` replays the same
+idempotent script through the compose-owned container on every setup run.
 A refused or failed reset exits unsuccessfully. A localhost URL alone is
 insufficient. Never mark a shared or production database disposable.
 Drizzle's existing default public-only schema filter already excludes

@@ -4,7 +4,7 @@ import type postgres from "postgres";
  * postgres-js has no option for how long a query may wait behind a
  * saturated connection pool -- `connect_timeout` only bounds opening a new
  * physical connection. This wraps `client.unsafe()`, the single chokepoint
- * every drizzle-orm postgres-js query goes through (verified against
+ * top-level drizzle-orm postgres-js statements go through (verified against
  * drizzle-orm's postgres-js/session.js: `execute`, `all`, `query`, and
  * `queryObjects` all call `client.unsafe()`), so a query that hasn't
  * settled within `timeoutMs` rejects the caller instead of hanging the
@@ -26,14 +26,11 @@ import type postgres from "postgres";
  * `begin()` is the only unsafe() caller that passes `onexecute`, which
  * makes it a precise discriminator. Statements inside `db.transaction()`
  * (issued via the transaction-scoped client `begin()` hands its callback)
- * are likewise not wrapped here; both are bounded server-side instead by
- * the role-level statement_timeout on the app database users, which
- * applies at backend start regardless of PgBouncer's transaction pooling.
- * (The server-side bound cannot be set from this client: postgres-js sends
- * `connection` options as startup parameters, which PgBouncer rejects
- * unless ignored -- its ignore_startup_parameters only lists
- * extra_float_digits -- and per-session SET does not survive transaction
- * pooling.)
+ * are likewise not wrapped here. Neither path has a client-side pool-wait
+ * limit; a configured server statement_timeout can bound server execution,
+ * but cannot bound time waiting in the client pool. Install withAuditContext
+ * after this wrapper so its begin-backed writes retain native execution:
+ * timing out their outer promise could reject a write that later commits.
  *
  * On timeout the query is cancelled best-effort, via the pool's canceller
  * directly rather than `query.cancel()`: `cancel()` returns its
