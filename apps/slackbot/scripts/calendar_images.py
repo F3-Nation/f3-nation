@@ -834,6 +834,8 @@ def generate_calendar_images(force: bool = False):
 def create_special_events_text(events: List[EventInstance], slack_settings_dict: dict, max_events: int = 10) -> str:
     text = ""
     special_days_out = slack_settings_dict.get("calendar_config_special_days_out")
+    if special_days_out == 0:
+        return ""
     if special_days_out is not None:
         events = [e for e in events if (e.start_date - current_date_cst()).days <= special_days_out]
 
@@ -873,9 +875,9 @@ def create_special_events_blocks(slack_settings_dict: dict, session=None) -> blo
         special_events = session.query(EventInstance).options(joinedload(EventInstance.org)).filter(*filters).all()
     # limit to 10 upcoming events
     special_events = sorted(special_events, key=lambda x: (x.start_date, x.start_time))[:10]
-    if len(special_events) > 0:
+    msg = create_special_events_text(special_events, slack_settings_dict)
+    if msg:
         blocks_list.append(blocks.HeaderBlock(text=":tada: Special Events:"))
-        msg = create_special_events_text(special_events, slack_settings_dict)
         blocks_list.append(blocks.SectionBlock(text=blocks.MarkdownTextObject(text=msg)))
     return blocks_list
 
