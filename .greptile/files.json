@@ -217,6 +217,11 @@
       "scope": ["apps/slackbot/**"]
     },
     {
+      "path": "docs/specs/slack-calendar-post-special-events.md",
+      "description": "Feature spec: Slack calendar post special events. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
       "path": "docs/specs/slack-f3versary-announcements.md",
       "description": "Feature spec: F3versary Announcements. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["apps/slackbot/**"]
