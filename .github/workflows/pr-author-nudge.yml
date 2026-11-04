@@ -1,0 +1,84 @@
+name: PR author nudge
+
+# Nudges, then closes, PRs that are waiting on their author (#1491). The clock
+# runs only while it's the author's turn under docs/PR_REVIEW_PROCESS.md and
+# resets on any push or author comment; the rules and timings live in
+# .github/scripts/pr-author-nudge.cjs.
+#
+# Polls on a schedule for the same reasons as ready-for-human-review-label.yml:
+# no single event covers every way a PR becomes (or stops being) the author's
+# turn, and a schedule writes to fork PRs without `pull_request_target`.
+#
+# Scheduled runs are dry runs (job summary only, nothing written) until the
+# repository variable PR_AUTHOR_NUDGE_LIVE is set to "true".
+
+on:
+  schedule:
+    # Daily, an hour after the ready-for-human-review label reconcile.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would happen without writing anything"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # check out the script
+      pull-requests: write # read PRs, comment, label and close
+      issues: write # PR comments and labels go through the issues API
+      checks: read # read check-run conclusions
+      statuses: read # read legacy commit statuses
+    steps:
+      - name: Check out the script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Nudge or close PRs waiting on their author
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          # A manual run uses its input; a scheduled run is live only once the
+          # repository variable says so.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry_run) || vars.PR_AUTHOR_NUDGE_LIVE != 'true' }}
+        with:
+          script: |
+            const { run } = require('./.github/scripts/pr-author-nudge.cjs');
+            const dryRun = process.env.DRY_RUN !== 'false';
+            const rows = await run({
+              github,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              dryRun,
+              log: core.info,
+            });
+
+            const table = [
+              ['PR', 'Author', "Author's turn", 'Clock', 'Close on/after', 'Result']
+                .map((data) => ({ data, header: true })),
+              ...rows.map((r) => [
+                `#${r.pr}`, r.author ?? '—', r.turn ?? '—', r.age ?? '—', r.closeAt ?? '—', r.outcome,
+              ]),
+            ];
+            try {
+              await core.summary
+                .addHeading(dryRun ? 'PR author nudge (dry run)' : 'PR author nudge')
+                .addTable(table)
+                .write();
+            } catch (error) {
+              core.warning(`Failed to write job summary: ${error.message}`);
+            }
+
+            const failures = rows.filter((r) => r.failed).length;
+            if (failures > 0) {
+              core.setFailed(`${failures} PR(s) failed; see the job summary. Re-running is safe.`);
+            }
