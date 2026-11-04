@@ -21,6 +21,26 @@ Use Vitest for unit and integration tests. Name test files `*.test.ts[x]` and
 place them next to the source or under `__tests__`. Reset databases before any
 suite that mutates data (`pnpm reset-test-db`).
 
+### Database-package audit integration
+
+`pnpm --filter @acme/db test` sets test mode and loads the database package's
+`.env`. Its audit-context integration fixture reads `TEST_DATABASE_URL`,
+verifies the local target and live database name, and requires a disposable
+database ending in `_test`. Locally that source database must carry the
+`f3-disposable-local-v1` comment; CI may use its exact `f3_test` database.
+These checks do not authorize a shared database as a local fixture.
+
+The documented `pnpm local:setup` initializes and marks both compose-owned
+databases through the container directly, including when its volume already
+exists. Schema resets preserve the database comments.
+
+The fixture creates a uniquely named database, applies the existing migrations,
+and drops only that owned database during cleanup. The PostgreSQL test role
+therefore needs database-creation privileges. Keeping this database separate
+from the API suite's reset database prevents parallel package tests from
+destroying each other's fixtures. The lifecycle is implemented in
+[`audit-database.ts`](../packages/db/src/__tests__/audit-database.ts).
+
 ## Writing tests that can fail
 
 A test exists to fail when the behavior it pins breaks. If it would still pass

@@ -6,6 +6,7 @@ import { env } from "@acme/env";
 import { isTest } from "@acme/shared/common/constants";
 
 import { schema } from "..";
+import { withAuditContext } from "./audit-context";
 import { withQueryTimeout } from "./query-timeout";
 
 // postgres-js has no bound on how long a query waits behind a saturated
@@ -229,6 +230,7 @@ export const createDbClient = () => {
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
   const client = postgres(url, { ...sslOptions, ...poolOptions(hostOptions) });
   if (QUERY_TIMEOUT_MS > 0) withQueryTimeout(client, QUERY_TIMEOUT_MS);
+  withAuditContext(client);
   return { db: drizzle(client, { schema }), close: () => client.end() };
 };
 

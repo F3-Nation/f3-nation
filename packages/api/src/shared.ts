@@ -5,7 +5,17 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 
 import type { Session } from "@acme/auth";
 import { getSessionFromHeaders } from "@acme/auth";
-import { and, eq, getUserRoles, gt, isNull, or, schema, sql } from "@acme/db";
+import {
+  and,
+  eq,
+  getUserRoles,
+  gt,
+  isNull,
+  or,
+  runWithAuditContext,
+  schema,
+  sql,
+} from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
@@ -150,7 +160,20 @@ const base = os.$context<BaseContext>().use(async ({ context, next }) => {
 const withSessionAndDb = base.use(async ({ context, next }) => {
   const session = await getSession({ context });
   const newContext: Context = { ...context, session, db };
-  return next({ context: newContext });
+  const userId = Number(session?.id);
+  return runWithAuditContext(
+    {
+      userId:
+        !session?.apiKey &&
+        Number.isInteger(userId) &&
+        userId > 0 &&
+        userId <= 2_147_483_647
+          ? userId
+          : null,
+      source: null,
+    },
+    () => next({ context: newContext }),
+  );
 });
 
 export const publicProcedure = base;
