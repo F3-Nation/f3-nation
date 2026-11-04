@@ -125,6 +125,16 @@ function summarize(pr, requiredContexts, nudge) {
         break;
     }
   }
+  // An author's replies in review threads don't appear in the timeline, so
+  // they're read from the threads themselves.
+  const threads = pr.reviewThreads?.nodes ?? [];
+  const lastComment = (thread) => thread.comments?.nodes?.at(-1);
+  for (const thread of threads) {
+    for (const comment of thread.comments?.nodes ?? []) {
+      if (comment.author?.login === author)
+        lastAuthorActivity = maxTs(lastAuthorActivity, ts(comment.createdAt));
+    }
+  }
   lastAuthorActivity = maxTs(lastAuthorActivity, lastPush);
 
   const reasons = [];
@@ -163,17 +173,15 @@ function summarize(pr, requiredContexts, nudge) {
     reasons.push({ kind: "conflict", since: lastHandoff });
   }
 
-  const waitingThreads = (pr.reviewThreads?.nodes ?? []).filter((thread) => {
+  const waitingThreads = threads.filter((thread) => {
     if (thread.isResolved) return false;
-    const last = thread.comments?.nodes?.[0];
+    const last = lastComment(thread);
     return last && last.author?.login !== author;
   });
   if (!pr.isDraft && waitingThreads.length) {
     reasons.push({
       kind: "threads",
-      since: minTs(
-        ...waitingThreads.map((t) => ts(t.comments.nodes[0].createdAt)),
-      ),
+      since: minTs(...waitingThreads.map((t) => ts(lastComment(t).createdAt))),
       count: waitingThreads.length,
     });
   }
@@ -326,7 +334,7 @@ const PR_FIELDS = `
     }
   }
   reviewThreads(first: 100) {
-    nodes { isResolved comments(last: 1) { nodes { createdAt author { login } } } }
+    nodes { isResolved comments(last: 20) { nodes { createdAt author { login } } } }
   }
   commits(last: 1) {
     nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {

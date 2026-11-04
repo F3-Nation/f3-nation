@@ -122,6 +122,25 @@ When a codeowner decides a PR doesn't need a local test, or when `pr-local-test`
 
 The [`address-pr-comments`](../.agents/skills/address-pr-comments/SKILL.md) skill walks your AI assistant through the open threads and plans the fixes and replies; once you approve the plan, it pushes the fixes and posts the replies. You still resolve the threads yourself.
 
+## PRs waiting on their author
+
+A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a PR is waiting on them, and closes the PR if it keeps waiting. A PR is waiting on its author when any of these is true:
+
+- It's a draft.
+- A required check is failing.
+- It has a merge conflict with `main`.
+- A review thread is unresolved and the last comment in it isn't the author's.
+- A reviewer requested changes and nothing has been pushed since.
+
+The clock runs only while one of those is true, so time a PR spends waiting on the bots or a codeowner never counts against the author. A push or a comment from the author resets it; comments from bots and reviewers don't.
+
+| PR    | Reminder | Closed  |
+| ----- | -------- | ------- |
+| Ready | 7 days   | 14 days |
+| Draft | 14 days  | 21 days |
+
+The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 7 days after it. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. Renovate and release-please PRs, and PRs labeled `keep-open`, are never reminded or closed.
+
 ## The `ready for human review` label
 
 The label marks the end of the bot feedback, not readiness for a codeowner's final review; `pnpm pr:triage` shows which stage a PR is really in. [CONTRIBUTING.md](CONTRIBUTING.md#submitting-changes) covers when it's added and removed.

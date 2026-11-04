@@ -221,3 +221,26 @@ test("the nudge comment carries its state and lists what's open", () => {
     nudgedAt: new Date(now).toISOString(),
   });
 });
+
+test("an author's reply inside a review thread resets the clock", () => {
+  // Author replied in the thread on day 6; the bot answered after and the
+  // thread is still unresolved, so it's the author's turn, counted from day 6.
+  const pr = basePr({
+    reviewThreads: {
+      nodes: [
+        {
+          isResolved: false,
+          comments: {
+            nodes: [
+              { author: { login: "coderabbitai" }, createdAt: at(1) },
+              { author: { login: "pax" }, createdAt: at(6) },
+              { author: { login: "coderabbitai" }, createdAt: at(6.01) },
+            ],
+          },
+        },
+      ],
+    },
+  });
+  assert.equal(run(pr, 12.9).action, "none");
+  assert.equal(run(pr, 13.1).action, "nudge");
+});
