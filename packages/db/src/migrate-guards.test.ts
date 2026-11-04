@@ -286,10 +286,18 @@ describe("assertLocalTarget", () => {
     expect(lookup).not.toHaveBeenCalled();
   });
 
-  it("refuses a localhost URL whose server is Cloud SQL (a proxy)", async () => {
+  it("names DATABASE_URL when the default migration target is remote", async () => {
+    await expect(
+      assertLocalTarget("postgresql://u:p@remote.invalid/f3nation"),
+    ).rejects.toThrow(
+      /^Refusing to migrate: DATABASE_URL in packages\/db\/\.env is not a local database\. pnpm db:migrate:local only migrates a local database\. Staging and prod are migrated from main, after merge, with `pnpm db:migrate:staging` or `pnpm db:migrate:prod` \(docs\/db-migrations\.md\)\.$/,
+    );
+  });
+
+  it("names DATABASE_URL when the default migration target reaches a Cloud SQL proxy", async () => {
     const lookup = vi.fn(() => Promise.resolve(true));
     await expect(assertLocalTarget(LOCAL, undefined, lookup)).rejects.toThrow(
-      /reaches a Cloud SQL server/,
+      /^Refusing to migrate: DATABASE_URL reaches a Cloud SQL server \(probably through a proxy on localhost\)\. pnpm db:migrate:local only migrates a local database\. Staging and prod are migrated from main, after merge, with `pnpm db:migrate:staging` or `pnpm db:migrate:prod` \(docs\/db-migrations\.md\)\.$/,
     );
     // Asked from the maintenance database, which exists before f3nation does.
     expect(lookup).toHaveBeenCalledWith(

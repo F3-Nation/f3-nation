@@ -203,7 +203,7 @@ export interface LocalTargetAction {
   verb: string;
   /** Configuration variable named in diagnostics; defaults to DATABASE_URL. */
   variable?: string;
-  /** Appended to every refusal: how to do it for a non-local database. */
+  /** Appended to every refusal: what the caller should do instead. */
   help: string;
 }
 

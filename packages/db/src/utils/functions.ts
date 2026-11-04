@@ -14,9 +14,10 @@ import { withQueryTimeout } from "./query-timeout";
 // limit. A configured server statement_timeout bounds server execution only.
 // See withQueryTimeout and withAuditContext for the transaction constraints.
 //
-// This is a hang backstop, not a latency budget. QUERY_TIMEOUT_MS=0 disables
-// the wrapper for long-running CLI statements. Read process.env directly:
-// @acme/env's skipValidation bypasses schema defaults in test environments.
+// Leave headroom for slow, successful list/count statements: this is a hang
+// backstop, not a latency budget. QUERY_TIMEOUT_MS=0 disables the wrapper for
+// long-running CLI statements. Read process.env directly to preserve the
+// fallback when CI or SKIP_ENV_VALIDATION makes @acme/env skip schema defaults.
 const DEFAULT_QUERY_TIMEOUT_MS = 60_000;
 // Node coerces setTimeout delays above 2^31 - 1 ms (~24.8 days) to 1ms, so
 // an oversized value would instantly time out every query — cap it.
@@ -218,7 +219,8 @@ export const createDbClient = () => {
   const { url, hostOptions } = postgresArgs(databaseUrl);
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
   const client = postgres(url, { ...sslOptions, ...poolOptions(hostOptions) });
-  // Audit must wrap the timeout: a client timeout cannot safely cancel begin.
+  // Audit must wrap the timeout: timing out a begin-backed write could reject
+  // it while its transaction later commits.
   if (QUERY_TIMEOUT_MS > 0) withQueryTimeout(client, QUERY_TIMEOUT_MS);
   withAuditContext(client);
   return { db: drizzle(client, { schema }), close: () => client.end() };

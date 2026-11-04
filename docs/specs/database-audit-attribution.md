@@ -61,10 +61,10 @@ need no audit calls. Existing authorization and API responses remain unchanged.
 - **AC-11** — GIVEN an active context WHEN settings SQL is built THEN it
   accepts only a positive integer actor within the database integer range or
   NULL, and a source containing only lowercase ASCII letters, digits and
-  hyphens or NULL. Any other value throws before a statement, including BEGIN,
-  is sent, including for reads. Native `begin` returns a rejected Promise
-  containing the validation error so `.catch()` consumers retain native error
-  delivery. NULL becomes an empty setting value.
+  hyphens or NULL. Any other value fails before a statement, including BEGIN,
+  is sent, including for reads. `unsafe` throws synchronously; native `begin`
+  returns a rejected Promise containing the validation error so `.catch()`
+  consumers retain native error delivery. NULL becomes an empty setting value.
 - **AC-12** — GIVEN active context WHEN attribution is initialized THEN one
   `unsafe()` call sends both validated `SET LOCAL` statements without bind
   parameters. No session-level setting or attribution SELECT is used.
@@ -151,7 +151,7 @@ after the query-timeout wrapper so ordinary reads retain their existing
 behavior when they do not match the write heuristic. Attributed standalone
 writes and false positives run inside native transactions: BEGIN's `onexecute`
 path and transaction-scoped statements bypass the client timeout. Their wait in
-the client pool is unbounded. Only a configured server `statement_timeout` can
+the client pool is unbounded. A configured server `statement_timeout` can
 bound server execution; it cannot bound that pool wait. Installing the timeout
 after the audit hook could reject a begin-backed write while it later commits,
 so that installation order is unsafe.
