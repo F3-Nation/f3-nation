@@ -694,9 +694,9 @@ pnpm db:migrate:local
 ### App fails to start with env validation errors
 
 Make sure each app's `.env` file exists and has all required variables.
-Re-run the setup script with this checkout's configured slot. It regenerates
-`.env` files from templates and backs up existing files as `.env.bak.<timestamp>`;
-restore any needed custom values from those backups:
+Re-run the setup script; it reuses the slot saved in the root `.env`. It
+regenerates `.env` files from templates and backs up existing files as
+`.env.bak.<timestamp>`; restore any needed custom values from those backups:
 
 ```bash
 pnpm local:setup

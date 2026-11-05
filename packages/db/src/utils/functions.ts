@@ -9,15 +9,11 @@ import { schema } from "..";
 import { withAuditContext } from "./audit-context";
 import { withQueryTimeout } from "./query-timeout";
 
-// Bound top-level unsafe statements that retain the query-timeout wrapper;
-// native transactions, including attributed writes, have no client pool-wait
-// limit. A configured server statement_timeout bounds server execution only.
-// See withQueryTimeout and withAuditContext for the transaction constraints.
-//
-// Leave headroom for slow, successful list/count statements: this is a hang
-// backstop, not a latency budget. QUERY_TIMEOUT_MS=0 disables the wrapper for
-// long-running CLI statements. Read process.env directly to preserve the
-// fallback when CI or SKIP_ENV_VALIDATION makes @acme/env skip schema defaults.
+// A hang backstop, not a latency budget: leave headroom for slow statements.
+// Native transactions are excluded; see withQueryTimeout.
+// QUERY_TIMEOUT_MS=0 lets long-running CLI work opt out.
+// Parse process.env here so this fallback also applies when environment
+// validation is skipped.
 const DEFAULT_QUERY_TIMEOUT_MS = 60_000;
 // Node coerces setTimeout delays above 2^31 - 1 ms (~24.8 days) to 1ms, so
 // an oversized value would instantly time out every query — cap it.

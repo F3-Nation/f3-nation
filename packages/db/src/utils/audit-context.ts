@@ -18,14 +18,21 @@ export function runWithAuditContext<T>(store: AuditContext, fn: () => T): T {
   return auditContext.run(store, fn);
 }
 
+// Keep this ceiling aligned with audit.log_change()'s integer actor bound.
 const MAX_AUDIT_USER_ID = 2_147_483_647;
 
 /** Normalizes a session identity to a valid database actor, or null. */
 export function toAuditUserId(value: unknown): number | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
   const id = Number(value);
   return Number.isInteger(id) && id >= 1 && id <= MAX_AUDIT_USER_ID ? id : null;
 }
 
+/**
+ * SET LOCAL cannot bind parameters, so validate before literal interpolation.
+ * Keep quote delimiters and escape characters out of the accepted actor and
+ * source grammars.
+ */
 export function auditSettingsSql({ userId, source }: AuditContext): string {
   if (
     userId !== null &&
@@ -60,7 +67,7 @@ function activeStore() {
  * Install after withQueryTimeout so unmatched statements keep its existing
  * timeout. Attributed writes (and heuristic false positives) use native begin:
  * onexecute BEGIN and transaction-scoped statements bypass that timeout. Their
- * client-side pool wait has no limit; only a configured server statement_timeout
+ * client-side pool wait has no limit; a configured server statement_timeout
  * can bound server execution. Installing the timeout afterward could reject a
  * begin-backed write while it later commits. BEGIN must retain its native
  * query/reservation path.

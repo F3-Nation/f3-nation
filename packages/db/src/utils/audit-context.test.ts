@@ -12,7 +12,7 @@ import {
   withAuditContext,
 } from "./audit-context";
 
-function recordingClient() {
+function recordingClient({ commitError }: { commitError?: Error } = {}) {
   const calls: unknown[][] = [];
   const pending = Object.assign(Promise.resolve([{ id: 7 }]), {
     values: () => Promise.resolve([[7]]),
@@ -41,6 +41,7 @@ function recordingClient() {
         ? Promise.all(result)
         : result);
       calls.push(["commit"]);
+      if (commitError) throw commitError;
       return resolved;
     },
   } as unknown as postgres.Sql;
@@ -133,6 +134,13 @@ describe("audit actor normalization", () => {
     ["2147483647", 2147483647],
     [null, null],
     [undefined, null],
+    [true, null],
+    [false, null],
+    [[1], null],
+    [[], null],
+    [{ valueOf: () => 1 }, null],
+    [Symbol("invalid"), null],
+    [1n, null],
     ["", null],
     ["invalid", null],
     [0, null],
@@ -356,6 +364,17 @@ describe("audit client boundaries", () => {
     });
     expect(calls.filter((call) => call[0] === "begin")).toHaveLength(1);
     expect(calls.at(-1)).toEqual(["commit"]);
+  });
+
+  it("settles an attributed write only after its transaction commits", async () => {
+    const commitError = new Error("commit failed");
+    const { client, calls } = recordingClient({ commitError });
+    await runWithAuditContext(store, async () => {
+      await expect(client.unsafe("insert into x values (1)")).rejects.toBe(
+        commitError,
+      );
+      expect(calls.at(-1)).toEqual(["commit"]);
+    });
   });
 
   it("keeps the result mode chosen by the first consumer during overlapping consumption", async () => {

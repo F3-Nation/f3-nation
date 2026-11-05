@@ -428,6 +428,7 @@ declare module "next-auth" {
     email: string | undefined;
     roles?: OrgRole[];
     apiKey?: ApiKeyInfo;
+    devMode?: boolean;
   }
 }
 

@@ -161,9 +161,16 @@ const base = os.$context<BaseContext>().use(async ({ context, next }) => {
 const withSessionAndDb = base.use(async ({ context, next }) => {
   const session = await getSession({ context });
   const newContext: Context = { ...context, session, db };
+  const userId = toAuditUserId(session?.id);
+  // An unmarked cookie for user 1 may be a person or a Development Mode login.
+  const ambiguousLegacyIdentity =
+    userId === 1 && session?.devMode === undefined;
   return runWithAuditContext(
     {
-      userId: session?.apiKey ? null : toAuditUserId(session?.id),
+      userId:
+        session?.apiKey || session?.devMode || ambiguousLegacyIdentity
+          ? null
+          : userId,
       source: null,
     },
     () => next({ context: newContext }),
@@ -519,6 +526,8 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
 
   return {
     id: user.id,
+    // Trusted access-token issuers do not use the cookie Development Mode provider.
+    devMode: false,
     email: user.email,
     roles,
     user: {

@@ -36,8 +36,9 @@ function barrier() {
   return { promise, resolve };
 }
 
-const sessionWithId = (id: number | string): Session => ({
+const sessionWithId = (id: unknown): Session => ({
   id: id as number,
+  devMode: false,
   email: "audit-actor@example.com",
   user: { id: String(id), email: "audit-actor@example.com", roles: [] },
   roles: [],
@@ -94,6 +95,42 @@ afterEach(async () => {
 
 describe("API request audit attribution", () => {
   it.each([
+    { name: "Development Mode", id: 1, devMode: true, actor: null },
+    { name: "legacy ambiguous user 1", id: 1, devMode: undefined, actor: null },
+    {
+      name: "legacy numeric-string user 1",
+      id: "1",
+      devMode: undefined,
+      actor: null,
+    },
+    { name: "real user 1 after sign-in", id: 1, devMode: false, actor: 1 },
+    { name: "legacy other user", id: 42, devMode: undefined, actor: 42 },
+  ])(
+    "persists $name attribution without changing the resolved identity",
+    async ({ id, devMode, actor }) => {
+      sessions.set("provenance", { ...sessionWithId(id), devMode });
+      const client = createRouterClient(
+        {
+          write: publicReadProcedure.handler(async ({ context }) => ({
+            id: await insertTag(context.db),
+            actor: context.session?.id,
+          })),
+        },
+        {
+          context: {
+            reqHeaders: new Headers({ "x-audit-request": "provenance" }),
+          },
+        },
+      );
+      const result = await client.write();
+      expect(result.actor).toBe(id);
+      expect(await tagHistory(result.id)).toEqual([
+        { changed_by: actor, changed_via: null },
+      ]);
+    },
+  );
+
+  it.each([
     { name: "lower-bound actor", id: 1, actor: 1 },
     { name: "numeric actor", id: 42, actor: 42 },
     { name: "numeric-string actor", id: "43", actor: 43 },
@@ -105,6 +142,8 @@ describe("API request audit attribution", () => {
     { name: "NaN", id: Number.NaN, actor: null },
     { name: "infinite", id: Number.POSITIVE_INFINITY, actor: null },
     { name: "nonnumeric string", id: "invalid", actor: null },
+    { name: "boolean identity", id: true, actor: null },
+    { name: "array identity", id: [1], actor: null },
     { name: "out-of-range", id: 2_147_483_648, actor: null },
   ])(
     "persists the $name attribution with NULL source",
@@ -281,7 +320,20 @@ describe("API request audit attribution", () => {
   });
 
   it("records the actor of an existing production-router mutation", async () => {
-    const session = await createAdminSession();
+    const [owner] = await db
+      .insert(schema.users)
+      .values({ email: `audit-${randomUUID()}@example.com` })
+      .returning({ id: schema.users.id });
+    if (!owner) throw new Error("Missing synthetic actor");
+    userIds.push(owner.id);
+    expect(owner.id).not.toBe(1);
+    const admin = await createAdminSession();
+    const session = {
+      ...admin,
+      id: owner.id,
+      devMode: false,
+      user: { ...admin.user, id: String(owner.id), roles: admin.roles ?? [] },
+    };
     vi.mocked(getSessionFromHeaders).mockResolvedValue(session);
     const result = await createTestClient().apiKey.create({
       name: "synthetic audit mutation",
@@ -290,6 +342,6 @@ describe("API request audit attribution", () => {
     const rows = await db.execute<Attribution>(sql`
       SELECT changed_by, changed_via FROM public_history.api_keys
       WHERE row_id = ${String(result.id)} AND op = 'I'`);
-    expect(rows).toEqual([{ changed_by: session.id, changed_via: null }]);
+    expect(rows).toEqual([{ changed_by: owner.id, changed_via: null }]);
   });
 });

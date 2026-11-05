@@ -32,10 +32,15 @@ need no audit calls. Existing authorization and API responses remain unchanged.
 - **AC-1** — GIVEN an authenticated personal session WHEN a real API procedure
   writes a tracked row THEN history records that session's positive integer
   user id, including when the session represents the id as a numeric string.
-- **AC-2** — GIVEN an API-key, anonymous, development-mock or invalid-identity
-  request WHEN it writes a tracked row THEN history records NULL actor and
-  NULL source. Accepted API actors are integers in `1..2147483647`; zero,
+- **AC-2** — GIVEN an API-key, anonymous, Development Mode, development-mock
+  or invalid-identity request WHEN it writes a tracked row THEN history records
+  NULL actor and NULL source. Accepted API actors are integers in `1..2147483647`; zero,
   negative, fractional, nonfinite and out-of-range values are not actors.
+  Session ids must be numbers or numeric strings; booleans, arrays and other
+  input shapes are not actors.
+  Development Mode provenance comes from trusted sign-in processing. A legacy
+  user-1 cookie whose provider cannot be distinguished records NULL until the
+  user signs in again. Its existing authentication and permissions are unchanged.
 - **AC-3** — GIVEN active context WHEN Drizzle performs an insert, update,
   delete or a raw `execute` write recognized by the SQL heuristic THEN history
   records the actor and the write's returned rows and values remain unchanged.
@@ -84,8 +89,9 @@ need no audit calls. Existing authorization and API responses remain unchanged.
 - **AC-17** — GIVEN the full change WHEN existing router and transport
   characterization suites run THEN they pass without handler, router or
   response-contract changes.
-- **AC-18** — GIVEN the approved Staging environment WHEN a signed-in user
-  edits a tracked entity through the UI THEN its history records that user.
+- **AC-18** — GIVEN the approved Staging environment WHEN a user signs in
+  through real email/OTP and edits a tracked entity through the UI THEN its
+  history records that user. A Development Mode sign-in records NULL instead.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -94,12 +100,12 @@ context supplies informational attribution; it grants no permission and does
 not make a supplied user id proof of authentication. History access continues
 to follow the database audit-history foundation's grants.
 
-| Action                            | Allowed                                                          | Explicitly denied                                                               |
-| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Change a source row               | Callers authorized by the existing procedure and resource checks | Callers rejected by those checks                                                |
-| Attribute a personal API write    | Resolved personal sessions with a positive integer actor         | API-key ownership, anonymous and development-mock identities as personal actors |
-| Read history                      | Roles with existing explicit history grants                      | Roles without the required history grants                                       |
-| Establish context outside the API | Trusted server code using the helper and a hooked client         | Client input as an independent authority to choose an actor                     |
+| Action                            | Allowed                                                                               | Explicitly denied                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Change a source row               | Callers authorized by the existing procedure and resource checks                      | Callers rejected by those checks                                                                 |
+| Attribute a personal API write    | Resolved personal sessions with a positive integer actor and no attribution exclusion | API-key, anonymous, Development Mode/mock, invalid and ambiguous legacy user-1 cookie identities |
+| Read history                      | Roles with existing explicit history grants                                           | Roles without the required history grants                                                        |
+| Establish context outside the API | Trusted server code using the helper and a hooked client                              | Client input as an independent authority to choose an actor                                      |
 
 ## 6. Out of scope / non-goals
 

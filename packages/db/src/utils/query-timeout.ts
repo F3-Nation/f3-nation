@@ -27,10 +27,11 @@ import type postgres from "postgres";
  * makes it a precise discriminator. Statements inside `db.transaction()`
  * (issued via the transaction-scoped client `begin()` hands its callback)
  * are likewise not wrapped here. Neither path has a client-side pool-wait
- * limit; a configured server statement_timeout can bound server execution,
- * but cannot bound time waiting in the client pool. Install withAuditContext
- * after this wrapper so its begin-backed writes retain native execution:
- * timing out their outer promise could reject a write that later commits.
+ * limit. A server statement_timeout configured separately from this wrapper
+ * can bound server execution, but not time waiting in the client pool.
+ * Install withAuditContext after this wrapper so begin-backed writes retain
+ * native execution: timing out their outer promise could reject a write that
+ * later commits.
  *
  * On timeout the query is cancelled best-effort, via the pool's canceller
  * directly rather than `query.cancel()`: `cancel()` returns its
