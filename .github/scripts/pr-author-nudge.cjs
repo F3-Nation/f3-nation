@@ -494,8 +494,9 @@ const PR_FIELDS = `
  * labels. `github` is actions/github-script's client (or the gh shim below).
  * `notify(text)` posts the codeowners' Slack heads-up. Without it a live run
  * treats the heads-up as failed: nothing is recorded, the closes wait, and the
- * rows fail. Returns `{ rows, slackNote, notes }`: the job summary rows, the
- * heads-up text, and warnings for the workflow log.
+ * rows fail. Returns `{ rows, slackNote, slackSent, notes }`: the job
+ * summary rows, the heads-up text, whether it reached Slack, and warnings for
+ * the workflow log.
  */
 async function run({
   github,
@@ -616,6 +617,9 @@ async function run({
       const pause =
         decision.action === "none" &&
         (decision.why === "not author's turn" || decision.why === "exempt") &&
+        // GitHub is still computing mergeability, so a conflict can't be
+        // ruled out yet; don't end the stretch on that.
+        !(decision.why === "not author's turn" && pr.mergeable === "UNKNOWN") &&
         nudgedAt != null &&
         (pausedAt == null || pausedAt < nudgedAt);
 
@@ -709,11 +713,13 @@ async function run({
   }
 
   const slackNote = warnMessage(warns, { owner, repo });
+  let slackSent = false;
   if (slackNote && !dryRun) {
     let error = notify ? null : new Error("no Slack webhook is configured");
     if (notify) {
       try {
         await notify(slackNote);
+        slackSent = true;
       } catch (e) {
         error = e;
       }
@@ -748,7 +754,7 @@ async function run({
       log(`#${row.pr} ${row.author}: ${row.outcome}`);
     }
   }
-  return { rows, slackNote, notes };
+  return { rows, slackNote, slackSent, notes };
 }
 
 module.exports = {

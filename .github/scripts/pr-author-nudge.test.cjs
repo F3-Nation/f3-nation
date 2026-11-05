@@ -884,3 +884,25 @@ test("without the collaborator list, outside-timing heads-ups and closes are hel
   const { rows } = await liveRun(member, 10.1);
   assert.equal(rows[0].outcome, "closed");
 });
+
+test("a reminded PR whose mergeability is still being computed isn't paused", async () => {
+  const github = fakeGithub(
+    { nudgedAt: at(5) },
+    { mergeable: "UNKNOWN", reviewThreads: { nodes: [] } },
+  );
+  const { rows } = await liveRun(github, 7);
+  assert.equal(rows[0].outcome, "not author's turn");
+  assert.equal(github.writes.length, 0);
+});
+
+test("the run reports whether the heads-up reached Slack", async () => {
+  const sent = await liveRun(fakeGithub({ nudgedAt: at(5) }), 9.1);
+  assert.equal(sent.slackSent, true);
+  const failed = await liveRun(fakeGithub({ nudgedAt: at(5) }), 9.1, {
+    notify: async () => {
+      throw new Error("invalid_token");
+    },
+  });
+  assert.equal(failed.slackSent, false);
+  assert.ok(failed.slackNote);
+});

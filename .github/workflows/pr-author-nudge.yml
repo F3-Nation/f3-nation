@@ -78,7 +78,7 @@ jobs:
                   }
                 }
               : null;
-            const { rows, slackNote, notes } = await run({
+            const { rows, slackNote, slackSent, notes } = await run({
               github,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -102,7 +102,7 @@ jobs:
                 .addTable(table);
               if (slackNote) {
                 core.summary
-                  .addHeading(dryRun || !notify ? 'Slack heads-up (not sent)' : 'Slack heads-up', 3)
+                  .addHeading(slackSent ? 'Slack heads-up' : 'Slack heads-up (not sent)', 3)
                   .addCodeBlock(slackNote);
               }
               await core.summary.write();
