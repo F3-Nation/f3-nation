@@ -7,15 +7,17 @@
 Database history identifies the person responsible for a write made during an
 authenticated API request. Shared request middleware and the database client
 propagate identity to the existing history triggers, so individual handlers
-need no audit calls. Existing authorization and API responses remain unchanged.
+need no audit calls. Existing authorization and oRPC response contracts remain
+unchanged.
 
 ## 2. Context & links
 
 - Apps affected: API procedures, including consumers that invoke the router
   in process.
 - Key code: [audit context and client hook](../../packages/db/src/utils/audit-context.ts),
-  [database client creation](../../packages/db/src/utils/functions.ts), and
-  [procedure middleware](../../packages/api/src/shared.ts).
+  [database client creation](../../packages/db/src/utils/functions.ts),
+  [procedure middleware](../../packages/api/src/shared.ts), and
+  [sign-in provenance](../../packages/auth/src/config.ts).
 - History capture and field parsing: [database audit-history foundation](database-audit-history.md).
 
 ## 3. User stories
@@ -29,9 +31,9 @@ need no audit calls. Existing authorization and API responses remain unchanged.
 
 ## 4. Acceptance criteria (testable, non-contradictory)
 
-- **AC-1** — GIVEN an authenticated personal session WHEN a real API procedure
-  writes a tracked row THEN history records that session's positive integer
-  user id, including when the session represents the id as a numeric string.
+- **AC-1** — GIVEN an authenticated personal session not excluded by AC-2 WHEN
+  a real API procedure writes a tracked row THEN history records that session's
+  positive integer user id, including when the session carries it as a numeric string.
 - **AC-2** — GIVEN an API-key, anonymous, Development Mode, development-mock
   or invalid-identity request WHEN it writes a tracked row THEN history records
   NULL actor and NULL source. Accepted API actors are integers in `1..2147483647`; zero,
@@ -110,7 +112,7 @@ to follow the database audit-history foundation's grants.
 ## 6. Out of scope / non-goals
 
 - Database migrations, trigger changes, history backfill, new history endpoints
-  or UI, and changes to authorization or response contracts.
+  or UI, and changes to authorization or oRPC response contracts.
 - Selecting an originating application: API middleware supplies NULL source.
 - Automatic attribution for Python, scripts, manual SQL, or independently
   constructed clients. A non-oRPC caller must establish context and use a
@@ -155,6 +157,10 @@ use mocked postgres.js clients and need no database. Real Drizzle over those
 mocks pins the adapter's `unsafe`, `begin`, `values()` and savepoint boundaries,
 so adapter routing changes fail the contract tests. Run them with
 `pnpm -C packages/db test`.
+
+Sign-in provenance, client-update resistance and encrypted-cookie propagation
+are covered in [`jwt-update-roles.test.ts`](../../apps/map/__tests__/jwt-update-roles.test.ts).
+Verified bearer attribution is covered in [`jwt-issuers.test.ts`](../../packages/api/src/jwt-issuers.test.ts).
 
 ## 8. Observability
 
