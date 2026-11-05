@@ -142,7 +142,7 @@ function summarize(pr, requiredContexts, nudge) {
         const who = item.author?.login;
         if (who === author) {
           // The author's own reviews. Their replies inside review threads
-          // don't show up here (seen on #1474); the thread loop below reads them.
+          // don't show up here; the thread loop below reads them.
           lastAuthorActivity = maxTs(lastAuthorActivity, at);
         } else if (who) {
           lastHandoff = maxTs(lastHandoff, at);
