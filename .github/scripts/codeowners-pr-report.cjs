@@ -264,7 +264,11 @@ function buildReport(
     const text = "Nothing is waiting on codeowners today.";
     return {
       text,
-      blocks: [{ type: "section", text: { type: "mrkdwn", text } }, ...warning],
+      blocks: [
+        { type: "section", text: { type: "mrkdwn", text } },
+        ...warning,
+        context,
+      ],
       counts,
     };
   }

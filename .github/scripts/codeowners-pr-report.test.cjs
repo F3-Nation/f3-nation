@@ -403,14 +403,20 @@ test("a PR whose url isn't a GitHub PR link is dropped", () => {
   assert.equal(result.counts.listed, 0);
 });
 
-test("all lists empty is one line", () => {
+test("all lists empty is one line, then the context with the run link", () => {
   const result = report([]);
-  assert.deepEqual(result.blocks, [
+  assert.deepEqual(result.blocks.slice(0, -1), [
     {
       type: "section",
       text: { type: "mrkdwn", text: "Nothing is waiting on codeowners today." },
     },
   ]);
+  const context = result.blocks.at(-1);
+  assert.equal(context.type, "context");
+  assert.match(
+    context.elements[0].text,
+    /<https:\/\/github\.com\/F3-Nation\/f3-nation\/actions\/runs\/1\|workflow run>/,
+  );
 });
 
 test("past the cap a list says how many more there are", () => {

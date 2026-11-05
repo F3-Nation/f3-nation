@@ -19,6 +19,7 @@
 #   CodeRabbit, Greptile, or Qodo not finished    -> waiting on AI bots (gives up after 2h)
 #   pr-review-inline not run                      -> needs /pr-review-inline
 #   every unresolved thread ends with the author  -> waiting on a reviewer's reply
+#   last local test ❌, no push since             -> waiting on unresolved threads (the author's push)
 #   any other unresolved review thread            -> waiting on unresolved threads
 #   pr-local-test not run, or last run ⏸️ or ❌     -> needs /pr-local-test
 #   otherwise, your own PR                        -> your PRs (nothing left for you to do)
@@ -34,9 +35,10 @@
 # from before the markers existed are recognized by the shape of their comments.
 #
 # A local-test report that is ⏸️ (can't recommend yet) or ❌ (don't approve yet) keeps the PR
-# waiting on /pr-local-test until a later run passes, the `local test: not needed` label is
-# added after it, or you `mark` a run after it. That label also stands in for a local test
-# that never ran.
+# waiting on /pr-local-test until a later run passes, a codeowner adds the `local test: not
+# needed` label after it, or you `mark` a run after it. A ❌ first waits on the author's push.
+# The PR author's own run neither holds nor releases the PR. That label also stands in for a
+# local test that never ran.
 set -euo pipefail
 
 BOT_TIMEOUT_SECS="${PR_TRIAGE_BOT_TIMEOUT_SECS:-7200}"
@@ -266,9 +268,11 @@ classify='
         as $localRan
       # A report that could not recommend yet (⏸️, its main check was blocked) or found a
       # problem (❌) holds the PR until something after it clears it. The skill omits that line
-      # on a PR its runner authored, so such a report there still counts as a pass.
+      # on a PR its runner authored, so the author'"'"'s own report neither holds nor releases
+      # the PR; it still counts toward $localRan above.
       # "." stands for the apostrophe, straight or curly.
-      | ([$pr.reviews.nodes[] | select(owner_marker("pr-local-test"))]
+      | ([$pr.reviews.nodes[] | select(owner_marker("pr-local-test")
+          and ((.author.login | lower_login) != ($author | lower_login)))]
           | sort_by(.submittedAt // "") | last) as $lastLocal
       | ($lastLocal.body // "") as $lastLocalBody
       | ($lastLocalBody | test("Can.t recommend yet")) as $localBlocked
@@ -503,7 +507,7 @@ HTML
     ["BOTS", "Waiting on AI bots", "CodeRabbit, Greptile and Qodo are still reviewing.", "--c-bots"],
     ["INLINE", "Needs /pr-review-inline", "Run the pr-review-inline skill on these.", "--c-inline"],
     ["THREADS", "Waiting on unresolved threads",
-      "The author needs to address or reply to open review threads.", "--c-threads"],
+      "The author needs to address or reply to open review threads, or push the fixes a local test asked for.", "--c-threads"],
     ["REPLY", "Waiting on a reviewer's reply",
       "The author replied in every open thread. Its reviewer answers or resolves it.", "--c-reply"],
     ["LOCAL", "Needs /pr-local-test", "Threads are resolved. Run the pr-local-test skill on these.", "--c-local"],

@@ -589,7 +589,7 @@ async function run({
   });
   if (!writersKnown)
     notes.push(
-      "No heads-ups or closes for those authors until collaborators can be listed.",
+      "No heads-ups or closes for authors who might be team until collaborators can be listed.",
     );
 
   const rows = [];

@@ -218,7 +218,18 @@ jq -n '
       | pushed("2026-10-22T01:30:00Z")),
     (pr(56; "failed, no push, author replied in every thread"; "pax")
       | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
-      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z")])
+      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z")]),
+    (pr(57; "codeowner author reruns the local test on their own PR"; "Luis")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z"),
+          (review("luis"; "2026-10-22T03:00:00Z"; "| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; [])
+            | .commit.oid = "pushed")]
+      | pushed("2026-10-22T02:30:00Z")),
+    (pr(58; "Greptile finished last"; "someone") | .reviews.nodes = [inline_review]
+      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[1].completedAt = "2026-10-22T09:00:00Z"),
+    (pr(59; "local test said do not approve yet"; "someone")
+      | .reviews.nodes = [inline_review, review("andy"; "2026-10-22T02:00:00Z";
+          "❌ Recommendation: Don'"'"'t approve yet\n| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; [])]
+      | pushed("2026-10-22T02:30:00Z"))
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -298,6 +309,10 @@ assert_eq "an earlier codeowner add doesn't vouch for a later non-codeowner add"
 assert_eq "a fix committed before the report but pushed after it releases the wait" "LOCAL" "$(bucket_of 55)"
 assert_eq "a failed local test with no push keeps author replies out of REPLY" "THREADS" "$(bucket_of 56)"
 assert_eq "...and notes both" "1 unresolved (andy 1); local test asked for changes; waiting on a push" "$(note_of 56)"
+assert_eq "a codeowner author's own rerun doesn't release another codeowner's ❌" "LOCAL" "$(bucket_of 57)"
+assert_eq "...and the hold is still noted" "last local test said don't approve yet" "$(note_of 57)"
+assert_eq "\"Don't approve yet\" alone holds the PR" "LOCAL" "$(bucket_of 59)"
+assert_eq "...and is noted" "last local test said don't approve yet" "$(note_of 59)"
 assert_eq "a non-codeowner's later pass doesn't release a hold" "LOCAL" "$(bucket_of 49)"
 assert_eq "...and the hold is still noted" "last local test said don't approve yet" "$(note_of 49)"
 assert_eq "an author reply past 100 threads still waits in THREADS" "THREADS" "$(bucket_of 47)"
@@ -352,6 +367,7 @@ assert_eq "turnSince ignores conversation comments and a codeowner's thread comm
 assert_eq "turnSince counts a resolved thread from its last comment" '"2026-10-22T07:00:00Z"' "$(json_field 52 .turnSince)"
 assert_eq "turnSince ignores a bot that is still running" '"2026-10-01T00:00:00Z"' "$(json_field 14 .turnSince)"
 assert_eq "turnSince counts a reopen" '"2026-10-20T00:00:00Z"' "$(json_field 53 .turnSince)"
+assert_eq "turnSince counts Greptile finishing" '"2026-10-22T09:00:00Z"' "$(json_field 58 .turnSince)"
 assert_eq "--json lists the codeowners, lowercased" '["andy","luis"]' "$(jq -c .codeowners "$tmp_dir/board.json")"
 assert_eq "--json marks approval" "true" "$(json_field 9 .approved)"
 
