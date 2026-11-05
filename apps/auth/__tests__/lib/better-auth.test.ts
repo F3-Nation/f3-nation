@@ -725,6 +725,13 @@ describe("authorize requires the openid scope (#1439)", () => {
     return params;
   }
 
+  async function expectInvalidScopeError(response: Response) {
+    expect(response.status).toBe(400);
+    expect(response.headers.get("location")).toBeNull();
+    const body = (await response.json()) as { error?: string };
+    expect(body.error).toBe("invalid_scope");
+  }
+
   function expectInvalidScopeRedirect(response: Response) {
     const location = response.headers.get("location");
     expect(location).toBeTruthy();
@@ -740,7 +747,7 @@ describe("authorize requires the openid scope (#1439)", () => {
     ["an empty scope", ""],
     ["a scope without openid", "profile email"],
     ["only offline_access", "offline_access"],
-  ])("sends %s back to the client as invalid_scope", async (_label, scope) => {
+  ])("rejects %s with a 400 invalid_scope", async (_label, scope) => {
     const { auth, sessionToken, client } = await setUp();
     const response = await auth.handler(
       new Request(
@@ -748,7 +755,7 @@ describe("authorize requires the openid scope (#1439)", () => {
         { headers: { authorization: `Bearer ${sessionToken}` } },
       ),
     );
-    expectInvalidScopeRedirect(response);
+    await expectInvalidScopeError(response);
   });
 
   it("applies the same rule to a POST authorize request", async () => {
@@ -763,7 +770,33 @@ describe("authorize requires the openid scope (#1439)", () => {
         body: authorizeParams(client.client_id, undefined).toString(),
       }),
     );
-    expectInvalidScopeRedirect(response);
+    await expectInvalidScopeError(response);
+  });
+
+  it("checks a POST's body, not its query, for the scope", async () => {
+    const { auth, sessionToken, client } = await setUp();
+    const response = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/authorize?scope=openid`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: authorizeParams(client.client_id, undefined).toString(),
+      }),
+    );
+    await expectInvalidScopeError(response);
+  });
+
+  it("rejects a POST authorize request with no body", async () => {
+    const { auth, sessionToken } = await setUp();
+    const response = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/authorize`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${sessionToken}` },
+      }),
+    );
+    await expectInvalidScopeError(response);
   });
 
   it("never redirects to an unregistered redirect_uri, even without a scope", async () => {
