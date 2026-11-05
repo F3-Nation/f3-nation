@@ -858,3 +858,29 @@ test("a push counts from when CI started on it, not the commit's local date", ()
   assert.equal(decision.action, "none");
   assert.equal(decision.clockStart, T0 + 9.5 * DAY);
 });
+
+test("without the collaborator list, outside-timing heads-ups and closes are held", async () => {
+  const unknown = Object.assign(new Error("Server Error"), { status: 502 });
+  const outside = { authorAssociation: "CONTRIBUTOR" };
+  for (const [state, nowDays, action] of [
+    [{ nudgedAt: at(3) }, 6.1, "warn"],
+    [{ nudgedAt: at(3), warnedAt: at(6.1) }, 7.1, "close"],
+  ]) {
+    const github = fakeGithub(state, outside, unknown);
+    const { rows } = await liveRun(github, nowDays);
+    assert.ok(rows[0].failed);
+    assert.equal(
+      rows[0].outcome,
+      `FAILED: ${action} held, collaborators unknown`,
+    );
+    assert.equal(github.writes.length, 0);
+  }
+  // A known member's PR isn't held: its association already says team.
+  const member = fakeGithub(
+    { nudgedAt: at(5), warnedAt: at(9.1) },
+    {},
+    unknown,
+  );
+  const { rows } = await liveRun(member, 10.1);
+  assert.equal(rows[0].outcome, "closed");
+});

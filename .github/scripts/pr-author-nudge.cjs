@@ -526,6 +526,7 @@ async function run({
   // alone would give them the outside timings.
   const notes = [];
   let writers = new Set();
+  let writersKnown = true;
   try {
     const collaborators = await github.paginate(
       "GET /repos/{owner}/{repo}/collaborators",
@@ -533,9 +534,10 @@ async function run({
     );
     writers = new Set(collaborators.map((c) => c.login));
   } catch (error) {
+    writersKnown = false;
     notes.push(
       `Couldn't list collaborators (${error.status ?? ""} ${error.message}); ` +
-        "team timings come from GitHub's author association alone.",
+        "no heads-ups or closes for authors who might be team.",
     );
   }
 
@@ -638,6 +640,15 @@ async function run({
         }
       } else if (decision.action === "none") {
         row.outcome = decision.why;
+      } else if (
+        !writersKnown &&
+        facts.tier === "outside" &&
+        (decision.action === "warn" || decision.action === "close")
+      ) {
+        // The author may be a private org member with team timings, so the
+        // shorter outside deadline can't be trusted. Held, retried next run.
+        row.outcome = `FAILED: ${decision.action} held, collaborators unknown`;
+        row.failed = true;
       } else if (dryRun) {
         row.outcome = `would ${decision.action}`;
         if (decision.action === "warn") warns.push(row);
@@ -787,7 +798,9 @@ if (require.main === module) {
         .filter(([k]) => !path.includes(`{${k}}`))
         .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
         .join("&");
-      return gh(["api", "--paginate", `${fill(path, params)}?${query}`]);
+      // --slurp wraps each page in one outer array; flatten the pages.
+      const url = `${fill(path, params)}?${query}`;
+      return gh(["api", "--paginate", "--slurp", url]).flat();
     },
   };
   run({ github, owner, repo, dryRun: true, log: () => {} })
