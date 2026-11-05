@@ -54,13 +54,15 @@ jq -n '
     isDraft: false, createdAt: "2026-10-01T00:00:00Z", reviewDecision: null, mergeable: "MERGEABLE",
     author: {login: $author},
     timelineItems: {nodes: []},
-    commits: {nodes: [{commit: {committedDate: "2026-10-01T00:00:00Z",
+    commits: {nodes: [{commit: {oid: "first", committedDate: "2026-10-01T00:00:00Z",
       statusCheckRollup: {contexts: {nodes: bots_done}}}}]},
     comments: {nodes: [qodo]},
     reviews: {nodes: []},
     reviewThreads: {nodes: []}
   };
+  # Every review is on the first commit, which stays the head until pushed().
   def review($by; $at; $body; $comments): {author: {login: $by}, submittedAt: $at, body: $body,
+    commit: {oid: "first"},
     comments: {nodes: ($comments | map({author: {login: $by}, body: ., replyTo: null}))}};
   def inline_review: review("andy"; "2026-10-22T00:00:00Z"; "";
     ["Fix this.\n<!-- pr-review-inline -->\n_written by Model_"]);
@@ -80,7 +82,7 @@ jq -n '
   def add_label_by($name; $at; $by): .labels.nodes += [{name: $name}]
     | .labelEvents.nodes += [{createdAt: $at, actor: {login: $by}, label: {name: $name}}];
   def add_label($name; $at): add_label_by($name; $at; "andy");
-  def pushed($at): .commits.nodes[0].commit.committedDate = $at;
+  def pushed($at): .commits.nodes[0].commit |= (.oid = "pushed" | .committedDate = $at);
 
   {data: {viewer: {login: "viewer"}, repository: {pullRequests: {pageInfo: {hasNextPage: false}, nodes: [
     (pr(1; "draft"; "someone") | .isDraft = true),
@@ -205,7 +207,18 @@ jq -n '
       | .reviewThreads.nodes = [thread(true; "andy")
           | .lastComment.nodes[0].createdAt = "2026-10-22T07:00:00Z"]),
     (pr(53; "reopened"; "someone")
-      | .reopened = {nodes: [{createdAt: "2026-10-20T00:00:00Z"}]})
+      | .reopened = {nodes: [{createdAt: "2026-10-20T00:00:00Z"}]}),
+    (pr(54; "failed, codeowner labeled, then a non-codeowner labeled again"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
+      | add_label("local test: not needed"; "2026-10-22T03:00:00Z")
+      | add_label_by("local test: not needed"; "2026-10-22T04:00:00Z"; "drive-by")
+      | .labels.nodes |= unique),
+    (pr(55; "failed, then pushed a fix committed before the report"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
+      | pushed("2026-10-22T01:30:00Z")),
+    (pr(56; "failed, no push, author replied in every thread"; "pax")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
+      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z")])
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -281,6 +294,10 @@ assert_eq "a failed local test is noted" "last local test said don't approve yet
 assert_eq "a failed local test with no push since waits on the author" "THREADS" "$(bucket_of 50)"
 assert_eq "...and says so" "local test asked for changes; waiting on a push" "$(note_of 50)"
 assert_eq "a non-codeowner's label doesn't clear a failed local test" "LOCAL" "$(bucket_of 48)"
+assert_eq "an earlier codeowner add doesn't vouch for a later non-codeowner add" "THREADS" "$(bucket_of 54)"
+assert_eq "a fix committed before the report but pushed after it releases the wait" "LOCAL" "$(bucket_of 55)"
+assert_eq "a failed local test with no push keeps author replies out of REPLY" "THREADS" "$(bucket_of 56)"
+assert_eq "...and notes both" "1 unresolved (andy 1); local test asked for changes; waiting on a push" "$(note_of 56)"
 assert_eq "a non-codeowner's later pass doesn't release a hold" "LOCAL" "$(bucket_of 49)"
 assert_eq "...and the hold is still noted" "last local test said don't approve yet" "$(note_of 49)"
 assert_eq "an author reply past 100 threads still waits in THREADS" "THREADS" "$(bucket_of 47)"

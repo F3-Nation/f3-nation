@@ -128,7 +128,7 @@ query($owner: String!, $name: String!, $cursor: String) {
           nodes { ... on ReopenedEvent { createdAt } }
         }
         commits(last: 1) {
-          nodes { commit { committedDate statusCheckRollup { contexts(first: 100) { nodes {
+          nodes { commit { oid committedDate statusCheckRollup { contexts(first: 100) { nodes {
             __typename
             ... on CheckRun { name status startedAt completedAt }
             ... on StatusContext { context state description createdAt }
@@ -156,7 +156,7 @@ fragment comments on IssueCommentConnection {
 }
 fragment reviews on PullRequestReviewConnection {
   nodes {
-    author { login __typename } body submittedAt
+    author { login __typename } body submittedAt commit { oid }
     comments(first: 5) { nodes { author { login __typename } body replyTo { id } } }
   }
 }'
@@ -278,18 +278,20 @@ classify='
       # held ones included, just after posting the report.
       | ([$ledgerRows[] | select(.manual and .skill == "pr-local-test") | .at | try ts catch 0]
           | max // 0) as $markedLocalAt
-      # The label counts while it is on the PR, from when a codeowner last added it. An add by
-      # anyone else, or one older than the events fetched, does not count.
+      # The label counts while it is on the PR, from its newest add, and only when a codeowner
+      # made that add. An add older than the events fetched does not count.
       | (any($pr.labels.nodes[]?; .name == $notNeededLabel)) as $hasNotNeeded
-      | ([$pr.labelEvents.nodes[]?
-          | select(.label.name == $notNeededLabel and (.actor.login | codeowner))
-          | .createdAt | ts] | max // 0) as $notNeededAt
+      | ([$pr.labelEvents.nodes[]? | select(.label.name == $notNeededLabel)]
+          | max_by(.createdAt | ts)
+          | if . != null and (.actor.login | codeowner) then .createdAt | ts else 0 end)
+        as $notNeededAt
       | ($hasNotNeeded and $notNeededAt > 0 and ($lastLocal == null or $notNeededAt > $lastLocalAt))
         as $notNeededClears
       | (($localBlocked or $localFailed) and ($markedLocalAt <= $lastLocalAt)) as $localHeld
-      # A ❌ asks the author for changes, so until they push it is their turn.
+      # A ❌ asks the author for changes, so until they push it is their turn. Each review records
+      # the commit it was made on; a commit date can predate the push that delivers it.
       | ($localHeld and $localFailed and ($notNeededClears | not)
-          and (($head.committedDate | ts) <= $lastLocalAt)) as $awaitingFixes
+          and $lastLocal.commit.oid != null and $lastLocal.commit.oid == $head.oid) as $awaitingFixes
       | (($localRan and ($localHeld | not)) or $notNeededClears) as $localTested
       # A clean inline review leaves only a "no issues" comment, and a local test always follows one.
       | [$pr.comments.nodes[] | select(owner_marker("pr-review-inline"))] as $inlineNotes
@@ -321,10 +323,11 @@ classify='
            then ["SKIP", ""]
          elif ($pendingBots | length) > 0 then ["BOTS", "waiting on \($pendingBots | join(", "))"]
          elif ($inlineReviewed | not) then ["INLINE", ""]
-         elif $allReplied then ["REPLY", "\($open | length) unresolved, author replied (\($openBy))"]
+         elif $allReplied and ($awaitingFixes | not) then ["REPLY", "\($open | length) unresolved, author replied (\($openBy))"]
          elif ($open | length) > 0 or $moreThreads then ["THREADS",
            (if ($open | length) > 0 then "\($open | length) unresolved (\($openBy))" else "" end)
            + (if $moreThreads then "; over 100 threads, check the rest on GitHub" else "" end)
+           + (if $awaitingFixes then "; local test asked for changes; waiting on a push" else "" end)
            + (if $localTested then "; both skills done" else "" end) | ltrimstr("; ")]
          elif $awaitingFixes then ["THREADS", "local test asked for changes; waiting on a push"]
          elif ($localTested | not) then
