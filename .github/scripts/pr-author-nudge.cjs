@@ -617,9 +617,9 @@ async function run({
       const pause =
         decision.action === "none" &&
         (decision.why === "not author's turn" || decision.why === "exempt") &&
-        // GitHub is still computing mergeability, so a conflict can't be
-        // ruled out yet; don't end the stretch on that.
-        !(decision.why === "not author's turn" && pr.mergeable === "UNKNOWN") &&
+        // Paused even while mergeability is UNKNOWN: if it turns out to be a
+        // conflict, the cost is a repeat reminder; not pausing could let an
+        // old reminder close the PR.
         nudgedAt != null &&
         (pausedAt == null || pausedAt < nudgedAt);
 

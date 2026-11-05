@@ -885,14 +885,16 @@ test("without the collaborator list, outside-timing heads-ups and closes are hel
   assert.equal(rows[0].outcome, "closed");
 });
 
-test("a reminded PR whose mergeability is still being computed isn't paused", async () => {
+test("a reminded PR is paused even while mergeability is unknown", async () => {
+  // A conflict hiding behind UNKNOWN costs a repeat reminder; skipping the
+  // pause could let the old reminder close the PR later.
   const github = fakeGithub(
     { nudgedAt: at(5) },
     { mergeable: "UNKNOWN", reviewThreads: { nodes: [] } },
   );
   const { rows } = await liveRun(github, 7);
-  assert.equal(rows[0].outcome, "not author's turn");
-  assert.equal(github.writes.length, 0);
+  assert.equal(rows[0].outcome, "not author's turn, paused");
+  assert.equal(github.writes.length, 1);
 });
 
 test("the run reports whether the heads-up reached Slack", async () => {
