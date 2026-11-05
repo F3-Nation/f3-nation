@@ -523,3 +523,30 @@ def test_leaderboard_chart_sorts_mixed_typed_and_untyped_attendance(monkeypatch,
     assert result == "stitched.png"
     assert (tmp_path / "month_Q_leaders.png").is_file()
     assert (tmp_path / "year_Q_leaders.png").is_file()
+
+
+def test_org_monthly_summary_renders_neon_chart(monkeypatch, tmp_path):
+    pytest.importorskip("matplotlib")
+    from PIL import Image
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(monthly_reporting, "datetime", January2025)
+    records = [
+        monthly_reporting.OrgMonthlySummary(
+            org_id=10,
+            month=datetime(year, month, 1),
+            event_count=4,
+            total_posts=40 + month,
+            total_fngs=month % 3,
+            unique_pax_count=12,
+        )
+        for year in (2023, 2024)
+        for month in range(1, 13)
+        if month != 6  # a month with no events leaves a gap in the series
+    ]
+
+    result = monthly_reporting.create_org_monthly_summary(records)
+
+    assert result == "org_monthly_attendance.png"
+    with Image.open(tmp_path / result) as image:
+        assert image.convert("RGB").getpixel((0, 0)) == (0x21, 0x29, 0x46)  # neon style's figure background

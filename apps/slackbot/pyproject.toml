@@ -59,7 +59,6 @@ dev = [
     "pytest-cov==7.1.0",
 ]
 scripts = [
-    "mplcyberpunk==0.7.6",
     "matplotlib==3.11.2",
     "playwright==1.64.1",
     "dataframe-image==0.2.7",
