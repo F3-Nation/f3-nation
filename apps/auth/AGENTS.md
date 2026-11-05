@@ -259,8 +259,8 @@ client is hostile.
 - Classify `jose` errors by `err.code`, not `name` or message (minification
   breaks names).
 - auth3 (Better Auth) is an OpenID Connect provider only. An authorize
-  request must name its scopes and include `openid`; anything else gets a
-  400 `invalid_scope` (no redirect). Never fall back to a client's registered scopes:
+  request must name its scopes and include `openid`; anything else gets
+  `invalid_scope`. Never fall back to a client's registered scopes:
   `offline_access` (a refresh token) is granted only when it is requested.
 
 ### One-time secrets and codes

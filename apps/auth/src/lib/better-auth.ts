@@ -229,18 +229,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Stands in for the scope of an authorize request that didn't ask for
+ * `openid`. No client can be registered for it (registration only accepts
+ * the provider's `scopes`), so the plugin rejects it with `invalid_scope`.
+ */
+export const OPENID_REQUIRED_SCOPE = "openid_required";
+
+/**
  * auth3 is an OpenID Connect provider only, so an authorize request must
  * name its scopes and include `openid` (OIDC Core §3.1.2.1).
  */
-function requestsOpenId(params: unknown): boolean {
-  const scope: unknown = isRecord(params) ? params.scope : undefined;
+function requestsOpenId(scope: unknown): boolean {
   return typeof scope === "string" && scope.split(" ").includes("openid");
 }
 
 /**
- * Fills the default resource and drops an empty nonce on one authorize
- * parameter object. Edits in place: a hook's returned context is merged
- * with the original as defaults, so it can't remove a key.
+ * Fills the default resource, drops an empty nonce and enforces the
+ * `openid` scope on one authorize parameter object. Edits in place: a
+ * hook's returned context is merged with the original as defaults, so it
+ * can't remove a key.
+ *
+ * Without a scope the plugin grants every scope the client is registered
+ * for, `offline_access` included, so a client would get a refresh token it
+ * never asked for. Rather than answer here, the scope is replaced with
+ * OPENID_REQUIRED_SCOPE: the plugin validates the client and redirect_uri
+ * first, then sends `invalid_scope` back to the client with its `state`.
+ * `offline_access` is therefore granted only when requested, and with every
+ * client on skipConsent, a registered and requested `offline_access` is the
+ * condition that permits it (OIDC Core §11).
  */
 function normalizeAuthorizeParams(
   params: Record<string, unknown>,
@@ -248,25 +264,7 @@ function normalizeAuthorizeParams(
 ) {
   params.resource ??= resource;
   if (params.nonce === "") delete params.nonce;
-}
-
-/**
- * The parameters the plugin will read for this authorize call. A form POST
- * to /oauth2/authorize itself is read from the body; everything else is read
- * from the query, including the consent and continue resumes, which are
- * POSTs to their own endpoints that replay the stored authorize query
- * through this same hook (the plugin's getAuthorizationRequestParameters).
- */
-function authorizeRequestParams(ctx: {
-  method?: string;
-  request?: Request;
-  body?: unknown;
-  query?: unknown;
-}): unknown {
-  const isAuthorizeEndpoint =
-    ctx.request !== undefined &&
-    new URL(ctx.request.url).pathname.endsWith("/oauth2/authorize");
-  return ctx.method === "POST" && isAuthorizeEndpoint ? ctx.body : ctx.query;
+  if (!requestsOpenId(params.scope)) params.scope = OPENID_REQUIRED_SCOPE;
 }
 
 async function findProfileForUser(
@@ -363,19 +361,6 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
           // replay the stored query) from the query, so both are covered.
           for (const params of [ctx.query, ctx.body]) {
             if (isRecord(params)) normalizeAuthorizeParams(params, resource);
-          }
-          // Without a scope the plugin grants every scope the client is
-          // registered for, `offline_access` included, so a client would get
-          // a refresh token it never asked for. A request that doesn't ask
-          // for `openid` is refused outright with a 400 rather than
-          // redirected: `offline_access` is then granted only when requested,
-          // and with every client on skipConsent, a registered and requested
-          // `offline_access` is the condition that permits it (OIDC Core §11).
-          if (!requestsOpenId(authorizeRequestParams(ctx))) {
-            throw new APIError("BAD_REQUEST", {
-              error: "invalid_scope",
-              error_description: "scope must include openid",
-            });
           }
           return;
         }
