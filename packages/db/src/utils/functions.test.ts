@@ -1,5 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 
+import type * as AuditContext from "./audit-context";
+import type * as QueryTimeout from "./query-timeout";
 import {
   createDbClient,
   getDatabaseNameFromUri,
@@ -22,7 +24,7 @@ const wrapperOrder = vi.hoisted(() => {
   return [] as string[];
 });
 vi.mock("./query-timeout", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./query-timeout")>();
+  const original = await importOriginal<typeof QueryTimeout>();
   return {
     ...original,
     withQueryTimeout: vi.fn(
@@ -34,7 +36,7 @@ vi.mock("./query-timeout", async (importOriginal) => {
   };
 });
 vi.mock("./audit-context", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./audit-context")>();
+  const original = await importOriginal<typeof AuditContext>();
   return {
     ...original,
     withAuditContext: vi.fn(
