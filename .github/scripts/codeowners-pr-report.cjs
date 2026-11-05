@@ -15,7 +15,9 @@
  *   💬 the author replied in every open thread and waits on a reviewer
  *
  * A PR that is its author's turn under pr-author-nudge.cjs is in no list, so
- * the report and the author reminders never disagree. The 🟢🟡🔴 light is how
+ * the report and the author reminders never disagree. An exempt PR (ghost or
+ * bot author, `keep-open` label) is listed even then: the nudge never
+ * reminds anyone about it. The 🟢🟡🔴 light is how
  * long the PR has been the codeowners' turn, against the author nudge's own
  * thresholds: 🟡 from the day an author would be nudged, 🔴 from the day
  * they'd be closed.
@@ -23,12 +25,7 @@
  * Pure: everything it needs comes in as arguments.
  */
 
-const {
-  DAYS,
-  DAY_MS,
-  TEAM_ASSOCIATIONS,
-  slackEscape,
-} = require("./pr-author-nudge.cjs");
+const { DAYS, DAY_MS, slackEscape } = require("./pr-author-nudge.cjs");
 
 // Per list, so one long list can't push the others past Slack's limits.
 const MAX_LINES = 15;
@@ -123,9 +120,9 @@ function place(pr, facts, codeowners, slackIds) {
     pr.bucket === "OWN" ? (pr.approved ? "MERGE" : "MANUAL") : pr.bucket;
   if (!["INLINE", "LOCAL", "MANUAL", "MERGE", "REPLY"].includes(bucket))
     return null;
-  // Facts are fetched apart from the board, so a PR opened in between has
-  // none; the board alone already says it is past the author's steps.
-  if (facts?.reasons?.length) return null;
+  // The author's turn hides a PR only when the nudge will remind them; an
+  // exempt PR (ghost, bot, keep-open) has nobody else to move it.
+  if (facts.reasons?.length && !facts.exempt) return null;
 
   const claimers = pr.codeownerAssignees ?? [];
   const claimed = claimers.length > 0;
@@ -192,14 +189,15 @@ function place(pr, facts, codeowners, slackIds) {
 /**
  * Builds the report. `board` is pr-triage's JSON, `factsByNumber` a Map of PR
  * number to `summarize()` facts. Options: `now` (ms), `slackIds` (Map of
- * lowercase login to Slack ID), `runUrl` (the workflow run). Returns
+ * lowercase login to Slack ID), `runUrl` (the workflow run), `warnings`
+ * (strings shown as ⚠️ sections, for data the report had to do without). Returns
  * `{ text, blocks, counts }`: the notification fallback, the Block Kit
  * blocks, and `{ listed, red, yellow }`.
  */
 function buildReport(
   board,
   factsByNumber,
-  { now, slackIds = new Map(), runUrl },
+  { now, slackIds = new Map(), runUrl, warnings = [] },
 ) {
   const codeowners = board.codeowners ?? [];
   const lists = Object.fromEntries(LISTS.map(([key]) => [key, []]));
@@ -207,9 +205,10 @@ function buildReport(
   for (const pr of board.prs ?? []) {
     if (!PR_URL.test(pr.url ?? "")) continue;
     const facts = factsByNumber.get(pr.number);
-    const tier =
-      facts?.tier ??
-      (TEAM_ASSOCIATIONS.has(pr.authorAssociation) ? "team" : "outside");
+    // Facts are fetched after the board, so a board PR without facts closed
+    // in between.
+    if (!facts) continue;
+    const tier = facts.tier;
     const placed = place({ ...pr, tier }, facts, codeowners, slackIds);
     if (!placed) continue;
     const since = Date.parse(pr.turnSince);
@@ -236,17 +235,17 @@ function buildReport(
     yellow: all.filter((e) => e.light === 1).length,
   };
 
-  const warning = board.truncated
-    ? [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `⚠️ There are more open PRs than triage fetched; only the oldest ${board.fetched} were checked.`,
-          },
-        },
-      ]
-    : [];
+  const warning = [
+    ...(board.truncated
+      ? [
+          `There are more open PRs than triage fetched; only the oldest ${board.fetched} were checked.`,
+        ]
+      : []),
+    ...warnings.map(slackEscape),
+  ].map((text) => ({
+    type: "section",
+    text: { type: "mrkdwn", text: `⚠️ ${text}` },
+  }));
   const context = {
     type: "context",
     elements: [
@@ -331,10 +330,17 @@ function toMarkdown({ blocks }) {
         block.type === "context"
           ? block.elements.map((e) => e.text).join(" ")
           : block.text.text;
-      return text
-        .replace(/<(https:[^|>]+)\|([^>]+)>/g, "[$2]($1)")
-        .replace(/^\*(.+?)\*/gm, "**$1**")
-        .replace(/\n/g, "  \n");
+      return (
+        text
+          // Brackets in a title would end the link text early and let the
+          // title start a link of its own.
+          .replace(
+            /<(https:[^|>]+)\|([^>]+)>/g,
+            (_, url, label) => `[${label.replace(/[\\[\]]/g, "\\$&")}](${url})`,
+          )
+          .replace(/^\*(.+?)\*/gm, "**$1**")
+          .replace(/\n/g, "  \n")
+      );
     })
     .join("\n\n");
 }

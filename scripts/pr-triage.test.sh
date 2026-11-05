@@ -77,8 +77,10 @@ jq -n '
   # A thread someone opened whose last comment is the PR author'"'"'s reply.
   def replied($by; $author; $at): thread(false; $by)
     | .lastComment.nodes = [{author: {login: $author}, createdAt: $at}];
-  def add_label($name; $at): .labels.nodes += [{name: $name}]
-    | .labelEvents.nodes += [{createdAt: $at, label: {name: $name}}];
+  def add_label_by($name; $at; $by): .labels.nodes += [{name: $name}]
+    | .labelEvents.nodes += [{createdAt: $at, actor: {login: $by}, label: {name: $name}}];
+  def add_label($name; $at): add_label_by($name; $at; "andy");
+  def pushed($at): .commits.nodes[0].commit.committedDate = $at;
 
   {data: {viewer: {login: "viewer"}, repository: {pullRequests: {pageInfo: {hasNextPage: false}, nodes: [
     (pr(1; "draft"; "someone") | .isDraft = true),
@@ -154,8 +156,9 @@ jq -n '
       | .reviews.nodes[0] |= (.author.login = "drive-by" | .comments.nodes[].author.login = "drive-by")),
     (pr(37; "pre-marker review by a non-codeowner"; "someone")
       | .reviews.nodes = [review("also-not-an-owner"; "2026-10-15T00:00:00Z"; ""; ["Old finding.\n_written by Model_"])]),
-    (pr(38; "local test failed"; "someone")
-      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]),
+    (pr(38; "local test failed, then pushed"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
+      | pushed("2026-10-22T02:30:00Z")),
     (pr(39; "failed, then rerun and passed"; "someone")
       | .reviews.nodes = [inline_review, failed_review("2026-10-22T00:30:00Z"), local_review]),
     (pr(40; "failed, then labeled not needed"; "someone")
@@ -164,9 +167,10 @@ jq -n '
     (pr(41; "blocked, then labeled not needed"; "someone")
       | .reviews.nodes = [inline_review, blocked_review("2026-10-22T02:00:00Z"; "'"'"'")]
       | add_label("local test: not needed"; "2026-10-22T03:00:00Z")),
-    (pr(42; "labeled not needed, then failed"; "someone")
+    (pr(42; "labeled not needed, then failed, then pushed"; "someone")
       | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
-      | add_label("local test: not needed"; "2026-10-22T01:00:00Z")),
+      | add_label("local test: not needed"; "2026-10-22T01:00:00Z")
+      | pushed("2026-10-22T02:30:00Z")),
     (pr(43; "never tested, labeled not needed"; "someone") | .reviews.nodes = [inline_review]
       | add_label("local test: not needed"; "2026-10-22T03:00:00Z")),
     (pr(44; "author replied in every thread"; "pax") | .reviews.nodes = [inline_review]
@@ -177,7 +181,31 @@ jq -n '
     (pr(45; "author replied in only one thread"; "pax") | .reviews.nodes = [inline_review]
       | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z"), thread(false; "luis")]),
     (pr(46; "a codeowner'"'"'s own PR"; "Luis") | .reviews.nodes = [inline_review]
-      | .assignees = {nodes: [{login: "luis"}]})
+      | .assignees = {nodes: [{login: "luis"}]}),
+    (pr(47; "author replied, over 100 threads"; "pax") | .reviews.nodes = [inline_review]
+      | .reviewThreads = {pageInfo: {hasNextPage: true},
+          nodes: [replied("andy"; "pax"; "2026-10-22T05:00:00Z")]}),
+    (pr(48; "failed, then labeled by a non-codeowner"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
+      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "drive-by")
+      | pushed("2026-10-22T02:30:00Z")),
+    (pr(49; "codeowner failed, then a non-codeowner passed"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z"),
+          review("drive-by"; "2026-10-22T03:00:00Z"; "| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; [])]
+      | pushed("2026-10-22T02:30:00Z")),
+    (pr(50; "local test failed, no push since"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]),
+    (pr(51; "author pinged in the conversation"; "someone") | .reviews.nodes = [inline_review]
+      | .comments.nodes += [
+          {author: {login: "someone"}, body: "any update?", createdAt: "2026-10-22T06:00:00Z"},
+          {author: {login: "drive-by"}, body: "+1", createdAt: "2026-10-22T08:00:00Z"}]
+      | .reviewThreads.nodes = [thread(false; "andy")
+          | .lastComment.nodes[0].createdAt = "2026-10-22T09:00:00Z"]),
+    (pr(52; "a resolved thread"; "someone") | .reviews.nodes = [inline_review]
+      | .reviewThreads.nodes = [thread(true; "andy")
+          | .lastComment.nodes[0].createdAt = "2026-10-22T07:00:00Z"]),
+    (pr(53; "reopened"; "someone")
+      | .reopened = {nodes: [{createdAt: "2026-10-20T00:00:00Z"}]})
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -248,8 +276,15 @@ assert_eq "a person whose login mentions release-please isn't skipped" "INLINE" 
 assert_eq "a non-codeowner's clean-review comment doesn't count" "INLINE" "$(bucket_of 35)"
 assert_eq "a non-codeowner's markers don't count" "INLINE" "$(bucket_of 36)"
 assert_eq "a non-codeowner's pre-marker review doesn't count" "INLINE" "$(bucket_of 37)"
-assert_eq "a failed local test holds the PR" "LOCAL" "$(bucket_of 38)"
+assert_eq "a failed local test with a push since holds the PR" "LOCAL" "$(bucket_of 38)"
 assert_eq "a failed local test is noted" "last local test said don't approve yet" "$(note_of 38)"
+assert_eq "a failed local test with no push since waits on the author" "THREADS" "$(bucket_of 50)"
+assert_eq "...and says so" "local test asked for changes; waiting on a push" "$(note_of 50)"
+assert_eq "a non-codeowner's label doesn't clear a failed local test" "LOCAL" "$(bucket_of 48)"
+assert_eq "a non-codeowner's later pass doesn't release a hold" "LOCAL" "$(bucket_of 49)"
+assert_eq "...and the hold is still noted" "last local test said don't approve yet" "$(note_of 49)"
+assert_eq "an author reply past 100 threads still waits in THREADS" "THREADS" "$(bucket_of 47)"
+assert_eq "...and says so" "1 unresolved (andy 1); over 100 threads, check the rest on GitHub" "$(note_of 47)"
 assert_eq "a rerun that passed after a failed one counts" "MANUAL" "$(bucket_of 39)"
 assert_eq "the label added after a failed local test clears it" "MANUAL" "$(bucket_of 40)"
 assert_eq "the label added after a blocked local test clears it" "MANUAL" "$(bucket_of 41)"
@@ -295,6 +330,11 @@ assert_eq "unresolvedThreads counts every open thread" "2" "$(json_field 44 .unr
 assert_eq "turnSince is the author's latest thread reply" '"2026-10-22T05:00:00Z"' "$(json_field 44 .turnSince)"
 assert_eq "turnSince is the newest skill report" '"2026-10-22T01:00:00Z"' "$(json_field 8 .turnSince)"
 assert_eq "turnSince falls back to when the PR opened" '"2026-10-01T00:00:00Z"' "$(json_field 5 .turnSince)"
+assert_eq "turnSince ignores conversation comments and a codeowner's thread comment" \
+  '"2026-10-22T00:00:00Z"' "$(json_field 51 .turnSince)"
+assert_eq "turnSince counts a resolved thread from its last comment" '"2026-10-22T07:00:00Z"' "$(json_field 52 .turnSince)"
+assert_eq "turnSince ignores a bot that is still running" '"2026-10-01T00:00:00Z"' "$(json_field 14 .turnSince)"
+assert_eq "turnSince counts a reopen" '"2026-10-20T00:00:00Z"' "$(json_field 53 .turnSince)"
 assert_eq "--json lists the codeowners, lowercased" '["andy","luis"]' "$(jq -c .codeowners "$tmp_dir/board.json")"
 assert_eq "--json marks approval" "true" "$(json_field 9 .approved)"
 

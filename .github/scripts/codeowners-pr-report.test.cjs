@@ -36,7 +36,10 @@ const pr = (number, overrides = {}) => ({
 const teamFacts = { tier: "team", reasons: [] };
 
 /** Builds a report from PRs; facts default to "not the author's turn", team. */
-function report(prs, { facts = {}, slackIds, truncated = false } = {}) {
+function report(
+  prs,
+  { facts = {}, slackIds, truncated = false, warnings } = {},
+) {
   const factsByNumber = new Map(
     prs.map((p) => [p.number, facts[p.number] ?? teamFacts]),
   );
@@ -53,6 +56,7 @@ function report(prs, { facts = {}, slackIds, truncated = false } = {}) {
       slackIds:
         slackIds ?? parseSlackIds('{"Andy":"U0ANDY","dan":"U0DAN"}').ids,
       runUrl: "https://github.com/F3-Nation/f3-nation/actions/runs/1",
+      warnings,
     },
   );
 }
@@ -213,6 +217,21 @@ test("💬 falls back to the claiming codeowner when a bot opened the threads", 
   assert.match(lineFor(reply, 1), /· 1 thread · <@U0DAN> ·/);
 });
 
+test("an unclaimed REPLY with bot-opened threads still goes to 💬", () => {
+  const result = report([
+    pr(1, {
+      bucket: "REPLY",
+      unresolvedThreads: 2,
+      threadOpeners: ["coderabbitai"],
+    }),
+  ]);
+  assert.equal(list(result, "🙋"), undefined);
+  assert.match(
+    lineFor(list(result, "💬"), 1),
+    /> · 2 threads · no codeowner assigned · 1d$/,
+  );
+});
+
 test("PRs that are the author's turn are in no list", () => {
   const result = report(
     [
@@ -230,6 +249,18 @@ test("PRs that are the author's turn are in no list", () => {
   );
   assert.equal(result.counts.listed, 0);
   assert.equal(result.text, "Nothing is waiting on codeowners today.");
+});
+
+test("an exempt PR is listed even when it is the author's turn", () => {
+  const final = list(
+    report([pr(1, { bucket: "MANUAL", codeownerAssignees: ["dan"] })], {
+      facts: {
+        1: { tier: "team", exempt: true, reasons: [{ kind: "conflict" }] },
+      },
+    }),
+    "✅",
+  );
+  assert.match(lineFor(final, 1), /<@U0DAN> · 1d$/);
 });
 
 test("buckets that aren't the codeowners' turn are left out", () => {
@@ -271,16 +302,13 @@ test("the light uses turnSince, and the tier from the facts", () => {
   assert.equal(result.counts.yellow, 2);
 });
 
-test("without facts, the tier comes from authorAssociation", () => {
+test("a board PR without facts closed after triage and is left out", () => {
   const result = buildReport(
-    {
-      codeowners: [],
-      prs: [pr(1, { turnSince: ago(3), authorAssociation: "CONTRIBUTOR" })],
-    },
+    { codeowners: [], prs: [pr(1, { bucket: "MANUAL" })] },
     new Map(),
     { now: NOW },
   );
-  assert.match(result.blocks[1].text.text, /🟡 .*\(outside contributor\)/);
+  assert.equal(result.counts.listed, 0);
 });
 
 test("lists sort red first, then oldest first", () => {
@@ -442,6 +470,23 @@ test("a cut-off triage list adds a warning", () => {
   assert.match(report([], { truncated: true }).blocks[1].text.text, /^⚠️/);
 });
 
+test("each warning is its own ⚠️ section, escaped, even with no PRs listed", () => {
+  const warnings = ["Couldn't list collaborators (403 <nope>)", "second"];
+  for (const result of [
+    report([pr(1)], { warnings }),
+    report([], { warnings }),
+  ]) {
+    const texts = result.blocks
+      .filter((b) => b.type === "section")
+      .map((b) => b.text.text)
+      .filter((t) => t.startsWith("⚠️"));
+    assert.deepEqual(texts, [
+      "⚠️ Couldn't list collaborators (403 &lt;nope&gt;)",
+      "⚠️ second",
+    ]);
+  }
+});
+
 test("the job summary renders the links as Markdown", () => {
   const markdown = toMarkdown(report([pr(1)]));
   assert.match(markdown, /^### Codeowners PR Report/);
@@ -450,4 +495,14 @@ test("the job summary renders the links as Markdown", () => {
     /\[#1 feat\(api\): change 1\]\(https:\/\/github\.com\/F3-Nation\/f3-nation\/pull\/1\)/,
   );
   assert.match(markdown, /\*\*🙋 Needs a codeowner/);
+});
+
+test("a title can't start a link of its own in the job summary", () => {
+  const markdown = toMarkdown(
+    report([pr(1, { title: "](https://phish.example) [x" })]),
+  );
+  assert.match(
+    markdown,
+    /\[#1 \\\]\(https:\/\/phish\.example\) \\\[x\]\(https:\/\/github\.com\/F3-Nation\/f3-nation\/pull\/1\)/,
+  );
 });

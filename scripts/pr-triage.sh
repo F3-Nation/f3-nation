@@ -122,7 +122,10 @@ query($owner: String!, $name: String!, $cursor: String) {
           nodes { ... on ReadyForReviewEvent { createdAt } }
         }
         labelEvents: timelineItems(last: 20, itemTypes: [LABELED_EVENT]) {
-          nodes { ... on LabeledEvent { createdAt label { name } } }
+          nodes { ... on LabeledEvent { createdAt actor { login } label { name } } }
+        }
+        reopened: timelineItems(last: 1, itemTypes: [REOPENED_EVENT]) {
+          nodes { ... on ReopenedEvent { createdAt } }
         }
         commits(last: 1) {
           nodes { commit { committedDate statusCheckRollup { contexts(first: 100) { nodes {
@@ -275,14 +278,19 @@ classify='
       # held ones included, just after posting the report.
       | ([$ledgerRows[] | select(.manual and .skill == "pr-local-test") | .at | try ts catch 0]
           | max // 0) as $markedLocalAt
-      # The label counts while it is on the PR, from when it was last added. If that add is
-      # older than the events fetched, it counts as added before any report.
-      | (any($pr.labels.nodes[]?; .name == $notNeeded)) as $hasNotNeeded
-      | ([$pr.labelEvents.nodes[]? | select(.label.name == $notNeeded) | .createdAt | ts]
-          | max // 0) as $notNeededAt
-      | ($hasNotNeeded and ($lastLocal == null or $notNeededAt > $lastLocalAt)) as $notNeeded
+      # The label counts while it is on the PR, from when a codeowner last added it. An add by
+      # anyone else, or one older than the events fetched, does not count.
+      | (any($pr.labels.nodes[]?; .name == $notNeededLabel)) as $hasNotNeeded
+      | ([$pr.labelEvents.nodes[]?
+          | select(.label.name == $notNeededLabel and (.actor.login | codeowner))
+          | .createdAt | ts] | max // 0) as $notNeededAt
+      | ($hasNotNeeded and $notNeededAt > 0 and ($lastLocal == null or $notNeededAt > $lastLocalAt))
+        as $notNeededClears
       | (($localBlocked or $localFailed) and ($markedLocalAt <= $lastLocalAt)) as $localHeld
-      | (($localRan and ($localHeld | not)) or $notNeeded) as $localTested
+      # A ❌ asks the author for changes, so until they push it is their turn.
+      | ($localHeld and $localFailed and ($notNeededClears | not)
+          and (($head.committedDate | ts) <= $lastLocalAt)) as $awaitingFixes
+      | (($localRan and ($localHeld | not)) or $notNeededClears) as $localTested
       # A clean inline review leaves only a "no issues" comment, and a local test always follows one.
       | [$pr.comments.nodes[] | select(owner_marker("pr-review-inline"))] as $inlineNotes
       | ($localRan
@@ -318,6 +326,7 @@ classify='
            (if ($open | length) > 0 then "\($open | length) unresolved (\($openBy))" else "" end)
            + (if $moreThreads then "; over 100 threads, check the rest on GitHub" else "" end)
            + (if $localTested then "; both skills done" else "" end) | ltrimstr("; ")]
+         elif $awaitingFixes then ["THREADS", "local test asked for changes; waiting on a push"]
          elif ($localTested | not) then
            ["LOCAL", (if $localHeld and $localFailed then "last local test said don'"'"'t approve yet"
                       elif $localHeld then "last local test could not recommend yet"
@@ -330,12 +339,12 @@ classify='
       | ($verdict[0] | IN("DRAFT", "SKIP") | not) as $active
       | [$pr.assignees.nodes[]?.login] as $assignees
 
-      # When the PR last became the codeowners'"'"' turn: the newest of the PR opening or being
-      # marked ready, a bot finishing, a codeowner'"'"'s skill report, a thread closing, and the
-      # author'"'"'s last push or reply. Approximate: the push is the head commit'"'"'s own date
+      # When the PR last became the codeowners'"'"' turn: the newest of the PR opening, being
+      # reopened or marked ready, a bot finishing, a codeowner'"'"'s skill report, a thread
+      # closing, and the author'"'"'s last push or thread reply. Approximate: the push is the head commit'"'"'s own date
       # (when it was made, not pushed), and GitHub keeps no time for resolving a thread, so a
       # resolved thread counts from its last comment. Both can make turnSince early, never late.
-      | ([$pr.createdAt, $readyAt, $head.committedDate,
+      | ([$pr.createdAt, $readyAt, $pr.reopened.nodes[0].createdAt, $head.committedDate,
           (if $crState == "done" then $cr.createdAt else null end),
           (if $grState == "done" then $gr.completedAt else null end),
           ($qodo[] | .createdAt),
@@ -345,8 +354,7 @@ classify='
             | .submittedAt),
           ($pr.reviewThreads.nodes[] | select(.isResolved) | .lastComment.nodes[0].createdAt),
           ($pr.reviewThreads.nodes[] | .lastComment.nodes[0]
-            | select(.author.login == $author) | .createdAt),
-          ($pr.comments.nodes[] | select(.author.login == $author) | .createdAt)]
+            | select(.author.login == $author) | .createdAt)]
         | map(ts) | max) as $turnSince
       | {
           bucket: $verdict[0],
@@ -378,7 +386,7 @@ classify='
 
 jq -e '.data.repository.pullRequests.nodes' <<<"$data" >/dev/null 2>&1 \
   || die "GitHub response had no pull request data for $repo: $(jq -c '.errors // .' <<<"$data" | head -c 300)"
-board=$(jq --arg repo "$repo" --arg cutoff "$LEGACY_CUTOFF" --arg notNeeded "$NOT_NEEDED_LABEL" \
+board=$(jq --arg repo "$repo" --arg cutoff "$LEGACY_CUTOFF" --arg notNeededLabel "$NOT_NEEDED_LABEL" \
   --argjson codeowners "$codeowners_json" --argjson ledger "$ledger_json" --argjson timeout "$BOT_TIMEOUT_SECS" \
   --argjson now "${PR_TRIAGE_NOW:-null}" "$classify" <<<"$data") \
   || die "could not classify PRs for $repo"

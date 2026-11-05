@@ -88,6 +88,8 @@ jobs:
                 now: Date.now(),
                 slackIds: ids,
                 runUrl: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                // Shown in the message too: nobody opens a scheduled run's annotations.
+                warnings: [...notes, ...(warning ? [warning] : [])],
               });
               fs.writeFileSync(
                 path.join(process.env.RUNNER_TEMP, 'slack-payload.json'),

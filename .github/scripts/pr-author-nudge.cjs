@@ -786,7 +786,6 @@ async function run({
 module.exports = {
   DAYS,
   DAY_MS,
-  TEAM_ASSOCIATIONS,
   SLACK_TIMEOUT_MS,
   MARKER,
   parseMarker,
