@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # pr-triage: sort a repo's open PRs by what a codeowner should do next.
 #
-#   scripts/pr-triage.sh [-R owner/repo] [--html [--out FILE] [--no-open]]
+#   scripts/pr-triage.sh [-R owner/repo] [--html [--out FILE] [--no-open] | --json]
 #   scripts/pr-triage.sh [-R owner/repo] mark <PR> inline|local
 #
 #   -R, --repo    repository to triage (default: F3-Nation/f3-nation)
 #   --html        write a single-page board instead of terminal text, and open it
 #   --out FILE    where to write the board (default: $TMPDIR/pr-triage-<owner>-<repo>.html)
 #   --no-open     write the board without opening it
+#   --json        print the board's data as JSON (what the Codeowners PR Report reads)
 #   mark          record a skill run by hand in your local ledger
 #
 # Needs gh (signed in with `gh auth login`) and jq. Runs on macOS, Linux and WSL.
@@ -17,17 +18,25 @@
 #   Renovate / release-please author              -> skipped
 #   CodeRabbit, Greptile, or Qodo not finished    -> waiting on AI bots (gives up after 2h)
 #   pr-review-inline not run                      -> needs /pr-review-inline
-#   any unresolved review thread                  -> waiting on unresolved threads
-#   pr-local-test not run                         -> needs /pr-local-test
+#   every unresolved thread ends with the author  -> waiting on a reviewer's reply
+#   any other unresolved review thread            -> waiting on unresolved threads
+#   pr-local-test not run, or last run ⏸️ or ❌     -> needs /pr-local-test
 #   otherwise, your own PR                        -> your PRs (nothing left for you to do)
 #   otherwise, approved                           -> approved, waiting to merge
 #   otherwise                                     -> needs codeowner review and approval
 #
-# A skill run, by anyone but a bot, is detected by its hidden marker, or by your local ledger
-# ($PR_TRIAGE_LEDGER, default ${XDG_STATE_HOME:-~/.local/state}/pr-triage/ledger.tsv). The
-# <!-- pr-review-inline --> marker is read in PR comments and inline review comments; the
-# <!-- pr-local-test --> marker in review bodies and inline review comments. Runs from before
-# the markers existed are recognized by the shape of their comments.
+# Only a codeowner's skill run moves a PR: the union of @user handles in .github/CODEOWNERS
+# ($PR_TRIAGE_CODEOWNERS overrides the file), compared case-insensitively. An @org/team entry
+# is an error. A run is detected by its hidden marker, or by your local ledger
+# ($PR_TRIAGE_LEDGER, default ${XDG_STATE_HOME:-~/.local/state}/pr-triage/ledger.tsv), which
+# always counts. The <!-- pr-review-inline --> marker is read in PR comments and inline review
+# comments; the <!-- pr-local-test --> marker in review bodies and inline review comments. Runs
+# from before the markers existed are recognized by the shape of their comments.
+#
+# A local-test report that is ⏸️ (can't recommend yet) or ❌ (don't approve yet) keeps the PR
+# waiting on /pr-local-test until a later run passes, the `local test: not needed` label is
+# added after it, or you `mark` a run after it. That label also stands in for a local test
+# that never ran.
 set -euo pipefail
 
 BOT_TIMEOUT_SECS="${PR_TRIAGE_BOT_TIMEOUT_SECS:-7200}"
@@ -38,24 +47,29 @@ LEGACY_CUTOFF="2026-10-21T00:00:00Z"
 PAGE_SIZE=10
 MAX_PAGES="${PR_TRIAGE_MAX_PAGES:-50}"
 SEP=$'\x1f'
+NOT_NEEDED_LABEL="local test: not needed"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODEOWNERS_FILE="${PR_TRIAGE_CODEOWNERS:-$script_dir/../.github/CODEOWNERS}"
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "pr-triage: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 is required. $2"; }
 
-repo="F3-Nation/f3-nation" html=false out="" open_board=true
+repo="F3-Nation/f3-nation" html=false json=false out="" open_board=true
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -R | --repo) [[ $# -ge 2 ]] || usage 1; repo="$2"; shift 2 ;;
     --html) html=true; shift ;;
     --out) [[ $# -ge 2 ]] || usage 1; out="$2"; html=true; shift 2 ;;
     --no-open) open_board=false; shift ;;
+    --json) json=true; shift ;;
     -h | --help) usage 0 ;;
     mark) break ;;
     *) usage 1 ;;
   esac
 done
 [[ "$repo" == */* ]] || die "--repo must look like owner/name"
+if $json && $html; then usage 1; fi
 
 need jq "Install it with 'brew install jq' (macOS) or 'sudo apt-get install jq' (Linux/WSL)."
 if [[ -z "${PR_TRIAGE_FIXTURE:-}" ]]; then
@@ -82,6 +96,15 @@ if [[ "${1:-}" == "mark" ]]; then
   exit 0
 fi
 
+# Every @handle on an ownership line, lowercased; `#` starts a comment anywhere on a line.
+[[ -f "$CODEOWNERS_FILE" ]] || die "can't read codeowners from $CODEOWNERS_FILE"
+codeowners=$(awk '{ for (i = 1; i <= NF; i++) { if ($i ~ /^#/) break; if ($i ~ /^@/) print tolower(substr($i, 2)) } }' \
+  "$CODEOWNERS_FILE" | sort -u)
+team=$(grep / <<<"$codeowners" | head -1 || true)
+[[ -z "$team" ]] || die "$CODEOWNERS_FILE names the team @$team; list each codeowner's own @handle instead"
+[[ -n "$codeowners" ]] || die "$CODEOWNERS_FILE lists no @handles"
+codeowners_json=$(jq -R -s -c 'split("\n") | map(select(length > 0))' <<<"$codeowners")
+
 # shellcheck disable=SC2016
 query='
 query($owner: String!, $name: String!, $cursor: String) {
@@ -91,16 +114,20 @@ query($owner: String!, $name: String!, $cursor: String) {
                  orderBy: {field: CREATED_AT, direction: ASC}) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        number title url isDraft createdAt reviewDecision mergeable
+        number title url isDraft createdAt reviewDecision mergeable authorAssociation
         author { login __typename }
         assignees(first: 10) { nodes { login } }
+        labels(first: 30) { nodes { name } }
         timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
           nodes { ... on ReadyForReviewEvent { createdAt } }
+        }
+        labelEvents: timelineItems(last: 20, itemTypes: [LABELED_EVENT]) {
+          nodes { ... on LabeledEvent { createdAt label { name } } }
         }
         commits(last: 1) {
           nodes { commit { committedDate statusCheckRollup { contexts(first: 100) { nodes {
             __typename
-            ... on CheckRun { name status startedAt }
+            ... on CheckRun { name status startedAt completedAt }
             ... on StatusContext { context state description createdAt }
           } } } } }
         }
@@ -111,14 +138,18 @@ query($owner: String!, $name: String!, $cursor: String) {
         firstReviews: reviews(first: 100) { ...reviews }
         reviewThreads(first: 100) {
           pageInfo { hasNextPage }
-          nodes { isResolved comments(first: 1) { nodes { author { login } } } }
+          nodes {
+            isResolved
+            comments(first: 1) { nodes { author { login } } }
+            lastComment: comments(last: 1) { nodes { author { login } createdAt } }
+          }
         }
       }
     }
   }
 }
 fragment comments on IssueCommentConnection {
-  nodes { author { login __typename } body }
+  nodes { author { login __typename } body createdAt }
 }
 fragment reviews on PullRequestReviewConnection {
   nodes {
@@ -169,8 +200,12 @@ classify='
   def footer: test("_written by |— _Claude Code_");
   def ts: if . == null then 0 else fromdateiso8601 end;
   def has_marker($m): (. // "") | contains("<!-- \($m) -->");
-  # Review bots quote the markers back in their own comments, so only human authors count.
-  def human_marker($m): ((.author.__typename // "") != "Bot") and (.body | has_marker($m));
+  def lower_login: (. // "") | ascii_downcase;
+  ($codeowners | map({key: ., value: true}) | from_entries) as $owners
+  | def codeowner: $owners[lower_login] == true;
+  # Only a codeowner'"'"'s run moves a PR; anyone else'"'"'s is extra input. That also leaves out
+  # review bots, which quote the markers back in their own comments.
+  def owner_marker($m): (.author.login | codeowner) and (.body | has_marker($m));
 
   ($now // now) as $now
   | .data.viewer.login as $me
@@ -178,6 +213,7 @@ classify='
   | {
     repo: $repo,
     viewer: $me,
+    codeowners: $codeowners,
     generatedAt: ($now | todate),
     truncated: $prs.pageInfo.hasNextPage,
     fetched: ($prs.nodes | length),
@@ -189,8 +225,8 @@ classify='
       | ($pr.author.login // "ghost") as $author
       | ($pr.commits.nodes[0].commit) as $head
       | ($head.statusCheckRollup.contexts.nodes // []) as $ctx
-      | ([$pr.createdAt, $pr.timelineItems.nodes[0].createdAt, $head.committedDate] | map(ts) | max)
-        as $since
+      | ($pr.timelineItems.nodes[0].createdAt) as $readyAt
+      | ([$pr.createdAt, $readyAt, $head.committedDate] | map(ts) | max) as $since
 
       # Bot state: done | running | none. A running bot is timed from when its run started;
       # one that never appeared, from when the PR became ready or got its newest commit.
@@ -202,9 +238,9 @@ classify='
       | ($ctx | map(select(.name == "Greptile Review")) | last) as $gr
       | (if $gr == null then "none" elif $gr.status == "COMPLETED" then "done" else "running" end)
         as $grState
-      | (if any($pr.comments.nodes[]; ((.author.login // "") | startswith("qodo"))
-             and ((.body // "") | contains("Code Review by Qodo"))) then "done" else "none" end)
-        as $qoState
+      | [$pr.comments.nodes[] | select(((.author.login // "") | startswith("qodo"))
+          and ((.body // "") | contains("Code Review by Qodo")))] as $qodo
+      | (if ($qodo | length) > 0 then "done" else "none" end) as $qoState
       | [["CodeRabbit", $crState, $cr.createdAt], ["Greptile", $grState, $gr.startedAt],
          ["Qodo", $qoState, null]]
       | map(select(.[1] != "done")
@@ -214,42 +250,60 @@ classify='
       | [$unfinished[] | select(.overdue | not) | .name] as $pendingBots
       | [$unfinished[] | select(.overdue) | .name] as $gaveUpOn
 
-      # Skill runs, by anyone
+      # Skill runs, by codeowners or in the local ledger
       | ($ledger | map(select(.pr == $pr.number))) as $ledgerRows
       | ($ledgerRows | map(.skill)) as $logged
-      | [$pr.reviews.nodes[] | select((.submittedAt | ts) < ($cutoff | ts))] as $legacy
+      | [$pr.reviews.nodes[] | select((.submittedAt | ts) < ($cutoff | ts))
+          | select(.author.login | codeowner)] as $legacy
+      | [$pr.reviews.nodes[] | select(owner_marker("pr-local-test")
+          or any(.comments.nodes[]; owner_marker("pr-local-test")))] as $localReports
       | (($logged | index("pr-local-test") != null)
-          or any($pr.reviews.nodes[]; human_marker("pr-local-test")
-            or any(.comments.nodes[]; human_marker("pr-local-test")))
+          or ($localReports | length) > 0
           or any($legacy[]; (.body // "") as $b | ($b | footer) and ($b | contains("|"))))
         as $localRan
-      # A report that could not recommend yet (its main check was blocked) needs another run.
-      # The skill omits that line on a PR its runner authored, so a blocked run there still counts.
+      # A report that could not recommend yet (⏸️, its main check was blocked) or found a
+      # problem (❌) holds the PR until something after it clears it. The skill omits that line
+      # on a PR its runner authored, so such a report there still counts as a pass.
       # "." stands for the apostrophe, straight or curly.
-      | ([$pr.reviews.nodes[] | select(human_marker("pr-local-test"))]
+      | ([$pr.reviews.nodes[] | select(owner_marker("pr-local-test"))]
           | sort_by(.submittedAt // "") | last) as $lastLocal
+      | ($lastLocal.body // "") as $lastLocalBody
+      | ($lastLocalBody | test("Can.t recommend yet")) as $localBlocked
+      | ($lastLocalBody | test("Needs changes before approval|Don.t approve yet")) as $localFailed
+      | ($lastLocal.submittedAt | ts) as $lastLocalAt
       # Only a hand-recorded `mark` made after that report clears it: the skill logs every run,
-      # blocked ones included, just after posting the report.
+      # held ones included, just after posting the report.
       | ([$ledgerRows[] | select(.manual and .skill == "pr-local-test") | .at | try ts catch 0]
           | max // 0) as $markedLocalAt
-      | ((($lastLocal.body // "") | test("Can.t recommend yet"))
-          and ($markedLocalAt <= ($lastLocal.submittedAt | ts))) as $localBlocked
-      | ($localRan and ($localBlocked | not)) as $localTested
+      # The label counts while it is on the PR, from when it was last added. If that add is
+      # older than the events fetched, it counts as added before any report.
+      | (any($pr.labels.nodes[]?; .name == $notNeeded)) as $hasNotNeeded
+      | ([$pr.labelEvents.nodes[]? | select(.label.name == $notNeeded) | .createdAt | ts]
+          | max // 0) as $notNeededAt
+      | ($hasNotNeeded and ($lastLocal == null or $notNeededAt > $lastLocalAt)) as $notNeeded
+      | (($localBlocked or $localFailed) and ($markedLocalAt <= $lastLocalAt)) as $localHeld
+      | (($localRan and ($localHeld | not)) or $notNeeded) as $localTested
       # A clean inline review leaves only a "no issues" comment, and a local test always follows one.
+      | [$pr.comments.nodes[] | select(owner_marker("pr-review-inline"))] as $inlineNotes
       | ($localRan
           or ($logged | index("pr-review-inline") != null)
-          or any($pr.comments.nodes[]; human_marker("pr-review-inline"))
-          or any($pr.reviews.nodes[]; any(.comments.nodes[]; human_marker("pr-review-inline")))
+          or ($inlineNotes | length) > 0
+          or any($pr.reviews.nodes[]; any(.comments.nodes[]; owner_marker("pr-review-inline")))
           or any($legacy[]; (.body // "") == "" and any(.comments.nodes[];
                .replyTo == null and (.body | footer) and (.body | has_marker("pr-local-test") | not))))
         as $inlineReviewed
 
       # Threads
-      | [$pr.reviewThreads.nodes[] | select(.isResolved | not)
-          | (.comments.nodes[0].author.login // "ghost")] as $open
+      | [$pr.reviewThreads.nodes[] | select(.isResolved | not)] as $openThreads
+      | [$openThreads[] | (.comments.nodes[0].author.login // "ghost")] as $open
       | ($open | group_by(.) | map("\(.[0]) \(length)") | join(", ")) as $openBy
       # Past the first 100 threads none can be checked, so the PR waits rather than advancing.
       | ($pr.reviewThreads.pageInfo.hasNextPage // false) as $moreThreads
+      # The same turn rule as the author nudge: a thread whose last comment is the author'"'"'s
+      # waits on a reviewer.
+      | (($open | length) > 0 and ($moreThreads | not)
+          and all($openThreads[]; (.lastComment.nodes[0].author.login // "") == $author))
+        as $allReplied
       | ($pr.reviewDecision == "APPROVED") as $approved
       | ($pr.mergeable == "CONFLICTING") as $conflicts
 
@@ -259,12 +313,15 @@ classify='
            then ["SKIP", ""]
          elif ($pendingBots | length) > 0 then ["BOTS", "waiting on \($pendingBots | join(", "))"]
          elif ($inlineReviewed | not) then ["INLINE", ""]
+         elif $allReplied then ["REPLY", "\($open | length) unresolved, author replied (\($openBy))"]
          elif ($open | length) > 0 or $moreThreads then ["THREADS",
            (if ($open | length) > 0 then "\($open | length) unresolved (\($openBy))" else "" end)
            + (if $moreThreads then "; over 100 threads, check the rest on GitHub" else "" end)
            + (if $localTested then "; both skills done" else "" end) | ltrimstr("; ")]
          elif ($localTested | not) then
-           ["LOCAL", (if $localBlocked then "last local test could not recommend yet" else "" end)]
+           ["LOCAL", (if $localHeld and $localFailed then "last local test said don'"'"'t approve yet"
+                      elif $localHeld then "last local test could not recommend yet"
+                      else "" end)]
          elif $author == $me then
            ["OWN", (if $approved then "approved" else "needs another approver" end)]
          elif $approved then ["MERGE", ""]
@@ -272,13 +329,40 @@ classify='
          end) as $verdict
       | ($verdict[0] | IN("DRAFT", "SKIP") | not) as $active
       | [$pr.assignees.nodes[]?.login] as $assignees
+
+      # When the PR last became the codeowners'"'"' turn: the newest of the PR opening or being
+      # marked ready, a bot finishing, a codeowner'"'"'s skill report, a thread closing, and the
+      # author'"'"'s last push or reply. Approximate: the push is the head commit'"'"'s own date
+      # (when it was made, not pushed), and GitHub keeps no time for resolving a thread, so a
+      # resolved thread counts from its last comment. Both can make turnSince early, never late.
+      | ([$pr.createdAt, $readyAt, $head.committedDate,
+          (if $crState == "done" then $cr.createdAt else null end),
+          (if $grState == "done" then $gr.completedAt else null end),
+          ($qodo[] | .createdAt),
+          ($localReports[] | .submittedAt),
+          ($inlineNotes[] | .createdAt),
+          ($pr.reviews.nodes[] | select(any(.comments.nodes[]; owner_marker("pr-review-inline")))
+            | .submittedAt),
+          ($pr.reviewThreads.nodes[] | select(.isResolved) | .lastComment.nodes[0].createdAt),
+          ($pr.reviewThreads.nodes[] | .lastComment.nodes[0]
+            | select(.author.login == $author) | .createdAt),
+          ($pr.comments.nodes[] | select(.author.login == $author) | .createdAt)]
+        | map(ts) | max) as $turnSince
       | {
           bucket: $verdict[0],
           number: $pr.number,
           # Newlines would split a card across lines in the terminal listing.
           title: ($pr.title | gsub("[\\r\\n]+"; " ")),
           author: $author,
+          authorAssociation: ($pr.authorAssociation // "NONE"),
+          authorIsCodeowner: ($author | codeowner),
           assignee: ($assignees | join(", ") | if . == "" then "Unassigned" else . end),
+          assignees: $assignees,
+          codeownerAssignees: [$assignees[] | select(codeowner and (lower_login != ($author | lower_login)))],
+          unresolvedThreads: ($open | length),
+          threadOpeners: ($open | unique),
+          approved: $approved,
+          turnSince: ($turnSince | todate),
           url: $pr.url,
           mine: ($author == $me),
           assignedToMe: ($assignees | index($me) != null),
@@ -294,10 +378,15 @@ classify='
 
 jq -e '.data.repository.pullRequests.nodes' <<<"$data" >/dev/null 2>&1 \
   || die "GitHub response had no pull request data for $repo: $(jq -c '.errors // .' <<<"$data" | head -c 300)"
-board=$(jq --arg repo "$repo" --arg cutoff "$LEGACY_CUTOFF" \
-  --argjson ledger "$ledger_json" --argjson timeout "$BOT_TIMEOUT_SECS" \
+board=$(jq --arg repo "$repo" --arg cutoff "$LEGACY_CUTOFF" --arg notNeeded "$NOT_NEEDED_LABEL" \
+  --argjson codeowners "$codeowners_json" --argjson ledger "$ledger_json" --argjson timeout "$BOT_TIMEOUT_SECS" \
   --argjson now "${PR_TRIAGE_NOW:-null}" "$classify" <<<"$data") \
   || die "could not classify PRs for $repo"
+
+if $json; then
+  printf '%s\n' "$board"
+  exit 0
+fi
 
 open_file() {
   local file="$1"
@@ -336,7 +425,7 @@ if $html; then
     --border: #d9dde5; --link: #1f5fbf; --chip: #e7ecf6; --chip-text: #2d4a80;
     --warn: #8a5300; --warn-bg: #fff3dc;
     --c-bots: #8f96a3; --c-inline: #6f5cc4; --c-threads: #c27c1a; --c-local: #2f86b5;
-    --c-manual: #2f9b62; --c-merge: #1f7a4a; --c-own: #7a8494;
+    --c-reply: #b5577d; --c-manual: #2f9b62; --c-merge: #1f7a4a; --c-own: #7a8494;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -404,6 +493,8 @@ HTML
     ["INLINE", "Needs /pr-review-inline", "Run the pr-review-inline skill on these.", "--c-inline"],
     ["THREADS", "Waiting on unresolved threads",
       "The author needs to address or reply to open review threads.", "--c-threads"],
+    ["REPLY", "Waiting on a reviewer's reply",
+      "The author replied in every open thread. Its reviewer answers or resolves it.", "--c-reply"],
     ["LOCAL", "Needs /pr-local-test", "Threads are resolved. Run the pr-local-test skill on these.", "--c-local"],
     ["MANUAL", "Needs codeowner approval", "Both skills are done. Review and approve.", "--c-manual"],
     ["MERGE", "Approved, waiting to merge", "Approved and ready to merge.", "--c-merge"],
@@ -535,6 +626,7 @@ section LOCAL "Run /pr-local-test"
 section INLINE "Run /pr-review-inline"
 section MANUAL "Both skills done: waiting on codeowner review and approval"
 section MERGE "Approved: waiting to merge"
+section REPLY "Waiting on a reviewer's reply"
 section THREADS "Waiting on unresolved threads"
 section BOTS "Waiting on AI bots"
 section OWN "Your PRs: your steps are done"

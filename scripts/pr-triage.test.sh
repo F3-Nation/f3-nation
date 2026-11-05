@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Regression tests for scripts/pr-triage.sh: one synthetic PR per stage, skill runs detected
-# from anyone's markers (including a clean review's "no issues" comment), the cutoff for
-# shape-based detection of runs from before the markers, the bot timeout, the viewer's own
-# PRs, and that a hostile PR title can't break out of the HTML board's data block.
+# from codeowners' markers only (including a clean review's "no issues" comment), the cutoff
+# for shape-based detection of runs from before the markers, held local tests and the
+# `local test: not needed` label, the bot timeout, the viewer's own PRs, the --json fields,
+# and that a hostile PR title can't break out of the HTML board's data block.
 # Run directly: bash scripts/pr-triage.test.sh
 set -uo pipefail
 
@@ -32,6 +33,14 @@ tmp_dir=""
 trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/pr-triage-test.XXXXXX")" || exit 1
 
+# "Andy" in a different case from the fixture's "andy", so every match is case-insensitive.
+cat >"$tmp_dir/CODEOWNERS" <<'OWNERS'
+# @not-an-owner is only mentioned in a comment
+*        @Andy @luis # @also-not-an-owner
+/apps/   @luis
+OWNERS
+export PR_TRIAGE_CODEOWNERS="$tmp_dir/CODEOWNERS"
+
 # Every PR defaults to: ready, opened long ago, all three bots finished, no skill runs,
 # no threads. Each case overrides only what it tests.
 jq -n '
@@ -52,7 +61,7 @@ jq -n '
     reviewThreads: {nodes: []}
   };
   def review($by; $at; $body; $comments): {author: {login: $by}, submittedAt: $at, body: $body,
-    comments: {nodes: ($comments | map({body: ., replyTo: null}))}};
+    comments: {nodes: ($comments | map({author: {login: $by}, body: ., replyTo: null}))}};
   def inline_review: review("andy"; "2026-10-22T00:00:00Z"; "";
     ["Fix this.\n<!-- pr-review-inline -->\n_written by Model_"]);
   def local_review: review("andy"; "2026-10-22T01:00:00Z";
@@ -60,7 +69,16 @@ jq -n '
   def blocked_review($at; $apostrophe): review("andy"; $at;
     "⏸️ **Can\($apostrophe)t recommend yet:** sign-in wasn\($apostrophe)t tested.\n| Check | Result |\n"
     + "<!-- pr-local-test -->\n_written by Model_"; []);
-  def thread($resolved; $by): {isResolved: $resolved, comments: {nodes: [{author: {login: $by}}]}};
+  def failed_review($at): review("andy"; $at;
+    "❌ **Needs changes before approval:** sign-in breaks.\n| Check | Result |\n"
+    + "<!-- pr-local-test -->\n_written by Model_"; []);
+  def thread($resolved; $by): {isResolved: $resolved, comments: {nodes: [{author: {login: $by}}]},
+    lastComment: {nodes: [{author: {login: $by}, createdAt: "2026-10-21T00:00:00Z"}]}};
+  # A thread someone opened whose last comment is the PR author'"'"'s reply.
+  def replied($by; $author; $at): thread(false; $by)
+    | .lastComment.nodes = [{author: {login: $author}, createdAt: $at}];
+  def add_label($name; $at): .labels.nodes += [{name: $name}]
+    | .labelEvents.nodes += [{createdAt: $at, label: {name: $name}}];
 
   {data: {viewer: {login: "viewer"}, repository: {pullRequests: {pageInfo: {hasNextPage: false}, nodes: [
     (pr(1; "draft"; "someone") | .isDraft = true),
@@ -128,7 +146,38 @@ jq -n '
     (pr(33; "a person whose login mentions release-please"; "release-please-fan")
       | .author.__typename = "User"),
     (pr(34; "assigned to the viewer"; "someone")
-      | .assignees = {nodes: [{login: "amy"}, {login: "viewer"}]})
+      | .assignees = {nodes: [{login: "amy"}, {login: "viewer"}]}),
+    (pr(35; "clean inline review by a non-codeowner"; "someone")
+      | .comments.nodes += [{author: {login: "not-an-owner"}, body: "No issues found.\n<!-- pr-review-inline -->"}]),
+    (pr(36; "both skills run by a non-codeowner"; "someone")
+      | .reviews.nodes = [inline_review, local_review | .author.login = "drive-by"]
+      | .reviews.nodes[0] |= (.author.login = "drive-by" | .comments.nodes[].author.login = "drive-by")),
+    (pr(37; "pre-marker review by a non-codeowner"; "someone")
+      | .reviews.nodes = [review("also-not-an-owner"; "2026-10-15T00:00:00Z"; ""; ["Old finding.\n_written by Model_"])]),
+    (pr(38; "local test failed"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]),
+    (pr(39; "failed, then rerun and passed"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T00:30:00Z"), local_review]),
+    (pr(40; "failed, then labeled not needed"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
+      | add_label("local test: not needed"; "2026-10-22T03:00:00Z")),
+    (pr(41; "blocked, then labeled not needed"; "someone")
+      | .reviews.nodes = [inline_review, blocked_review("2026-10-22T02:00:00Z"; "'"'"'")]
+      | add_label("local test: not needed"; "2026-10-22T03:00:00Z")),
+    (pr(42; "labeled not needed, then failed"; "someone")
+      | .reviews.nodes = [inline_review, failed_review("2026-10-22T02:00:00Z")]
+      | add_label("local test: not needed"; "2026-10-22T01:00:00Z")),
+    (pr(43; "never tested, labeled not needed"; "someone") | .reviews.nodes = [inline_review]
+      | add_label("local test: not needed"; "2026-10-22T03:00:00Z")),
+    (pr(44; "author replied in every thread"; "pax") | .reviews.nodes = [inline_review]
+      | .authorAssociation = "CONTRIBUTOR"
+      | .assignees = {nodes: [{login: "pax"}, {login: "ANDY"}, {login: "drive-by"}]}
+      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z"),
+          replied("coderabbitai"; "pax"; "2026-10-22T04:00:00Z")]),
+    (pr(45; "author replied in only one thread"; "pax") | .reviews.nodes = [inline_review]
+      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z"), thread(false; "luis")]),
+    (pr(46; "a codeowner'"'"'s own PR"; "Luis") | .reviews.nodes = [inline_review]
+      | .assignees = {nodes: [{login: "luis"}]})
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -157,7 +206,7 @@ assert_eq "a bot still reviewing a fresh push holds the PR" "BOTS" "$(bucket_of 
 assert_eq "a bot missing for over 2h stops blocking" "INLINE" "$(bucket_of 4)"
 assert_eq "a bot missing for over 2h is noted" "gave up waiting on Qodo" "$(note_of 4)"
 assert_eq "no skill run needs /pr-review-inline" "INLINE" "$(bucket_of 5)"
-assert_eq "another person's clean-review comment counts" "LOCAL" "$(bucket_of 6)"
+assert_eq "a codeowner's clean-review comment counts" "LOCAL" "$(bucket_of 6)"
 assert_eq "an unresolved thread waits on the author" "THREADS" "$(bucket_of 7)"
 assert_eq "thread note names who opened it" "1 unresolved (andy 1)" "$(note_of 7)"
 assert_eq "both skills done needs approval" "MANUAL" "$(bucket_of 8)"
@@ -196,6 +245,21 @@ assert_eq "a blocked report with a curly apostrophe is recognized" "LOCAL" "$(bu
 assert_eq "a release-please bot with a prefixed login is skipped" "SKIP" "$(bucket_of 32)"
 assert_eq "a person whose login mentions release-please isn't skipped" "INLINE" "$(bucket_of 33)"
 
+assert_eq "a non-codeowner's clean-review comment doesn't count" "INLINE" "$(bucket_of 35)"
+assert_eq "a non-codeowner's markers don't count" "INLINE" "$(bucket_of 36)"
+assert_eq "a non-codeowner's pre-marker review doesn't count" "INLINE" "$(bucket_of 37)"
+assert_eq "a failed local test holds the PR" "LOCAL" "$(bucket_of 38)"
+assert_eq "a failed local test is noted" "last local test said don't approve yet" "$(note_of 38)"
+assert_eq "a rerun that passed after a failed one counts" "MANUAL" "$(bucket_of 39)"
+assert_eq "the label added after a failed local test clears it" "MANUAL" "$(bucket_of 40)"
+assert_eq "the label added after a blocked local test clears it" "MANUAL" "$(bucket_of 41)"
+assert_eq "the label added before a failed local test doesn't clear it" "LOCAL" "$(bucket_of 42)"
+assert_eq "the label stands in for a local test that never ran" "MANUAL" "$(bucket_of 43)"
+assert_eq "every thread ending with the author's reply waits on a reviewer" "REPLY" "$(bucket_of 44)"
+assert_eq "a reviewer-reply note names who opened the threads" \
+  "2 unresolved, author replied (andy 1, coderabbitai 1)" "$(note_of 44)"
+assert_eq "a thread still waiting on the author keeps the PR in THREADS" "THREADS" "$(bucket_of 45)"
+
 hostile_count=$(grep -c '</script><img' "$tmp_dir/board.html")
 assert_eq "the board records Unassigned for a PR with no assignee" "Unassigned" \
   "$(board_json | jq -r '.prs[] | select(.number == 5) | .assignee')"
@@ -211,6 +275,39 @@ assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
 assert_eq "the hostile title survives escaped" "</script><img src=x onerror=alert(1)>" \
   "$(board_json | jq -r '.prs[] | select(.number == 13) | .title')"
 
+run_triage --json >"$tmp_dir/board.json" 2>"$tmp_dir/json.err"
+status=$?
+assert_eq "--json exits 0" "0" "$status"
+json_field() { jq -c --argjson n "$1" ".prs[] | select(.number == \$n) | $2" "$tmp_dir/board.json"; }
+assert_eq "--json prints the same board as --html" "$(board_json | jq -c .)" "$(jq -c . "$tmp_dir/board.json")"
+assert_eq "--json lists every assignee" '["pax","ANDY","drive-by"]' "$(json_field 44 .assignees)"
+assert_eq "codeownerAssignees keeps codeowners other than the author" '["ANDY"]' \
+  "$(json_field 44 .codeownerAssignees)"
+assert_eq "codeownerAssignees leaves out a codeowner author, in any case" '[]' \
+  "$(json_field 46 .codeownerAssignees)"
+assert_eq "authorIsCodeowner matches in any case" "true" "$(json_field 46 .authorIsCodeowner)"
+assert_eq "authorIsCodeowner is false for anyone else" "false" "$(json_field 44 .authorIsCodeowner)"
+assert_eq "authorAssociation is passed through" '"CONTRIBUTOR"' "$(json_field 44 .authorAssociation)"
+assert_eq "a missing authorAssociation reads as NONE" '"NONE"' "$(json_field 5 .authorAssociation)"
+assert_eq "threadOpeners lists who opened the unresolved threads" '["andy","coderabbitai"]' \
+  "$(json_field 44 .threadOpeners)"
+assert_eq "unresolvedThreads counts every open thread" "2" "$(json_field 44 .unresolvedThreads)"
+assert_eq "turnSince is the author's latest thread reply" '"2026-10-22T05:00:00Z"' "$(json_field 44 .turnSince)"
+assert_eq "turnSince is the newest skill report" '"2026-10-22T01:00:00Z"' "$(json_field 8 .turnSince)"
+assert_eq "turnSince falls back to when the PR opened" '"2026-10-01T00:00:00Z"' "$(json_field 5 .turnSince)"
+assert_eq "--json lists the codeowners, lowercased" '["andy","luis"]' "$(jq -c .codeowners "$tmp_dir/board.json")"
+assert_eq "--json marks approval" "true" "$(json_field 9 .approved)"
+
+printf '* @luis @F3-Nation/admins\n' >"$tmp_dir/TEAM_CODEOWNERS"
+team_err=$(PR_TRIAGE_CODEOWNERS="$tmp_dir/TEAM_CODEOWNERS" run_triage --json 2>&1 >/dev/null)
+status=$?
+assert_eq "an @org/team codeowner fails the run" "1" "$status"
+assert_eq "an @org/team codeowner is named" "1" "$(grep -c 'names the team @f3-nation/admins' <<<"$team_err")"
+PR_TRIAGE_CODEOWNERS="$tmp_dir/missing" run_triage --json >/dev/null 2>&1
+assert_eq "a missing CODEOWNERS file fails the run" "1" "$?"
+run_triage --json --html >/dev/null 2>&1
+assert_eq "--json and --html together are rejected" "1" "$?"
+
 run_triage >"$tmp_dir/text.out" 2>&1
 status=$?
 assert_eq "text mode exits 0" "0" "$status"
@@ -224,6 +321,10 @@ assert_eq "text mode lists every assignee" "         Assignee: amy, cy" \
   "$(grep -A1 '#7 ' "$tmp_dir/text.out" | tail -1)"
 assert_eq "text mode keeps a multiline title's card on one line" \
   "  #16    first line second line (someone)" "$(grep '#16 ' "$tmp_dir/text.out")"
+assert_eq "text mode lists PRs waiting on a reviewer's reply" "1" \
+  "$(grep -c "^Waiting on a reviewer's reply$" "$tmp_dir/text.out")"
+assert_eq "the board has a column for PRs waiting on a reviewer's reply" "1" \
+  "$(grep -c '\["REPLY", "Waiting on a reviewer' "$tmp_dir/board.html")"
 assert_eq "text mode counts drafts" "3 drafts ignored; skipped (Renovate/release-please): #2 #32 " \
   "$(tail -1 "$tmp_dir/text.out")"
 
