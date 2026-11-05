@@ -13,10 +13,5 @@
     "react-hooks/set-state-in-effect": {
       "count": 1
     }
-  },
-  "src/app/register/register-form.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 2
-    }
   }
 }

@@ -117,7 +117,7 @@ from the PR's Dockerfiles, claims a free port block, and creates a detached work
 - Exit code 3 with `NODE_MISSING=<v>`: the PR needs a Node version that isn't installed. Stop
   and give the install command for the user's version manager from `reference.md` → **Node**.
   Installing is enough; the user's default version stays as it is. `NODE_UNKNOWN`: ask which
-  version to use. `PNPM_MISSING`: tell the user to run `corepack enable`.
+  version to use. `PNPM_MISSING`: tell the user to run `npm install -g corepack && corepack enable`.
 - `PR_STATE` isn't `OPEN`: say so and ask before going on; on "no", clean up.
 - `WARN=` lines and a `.nvmrc` fallback note go in the plan's mismatch box.
 - `ACTIVE_RUNS` of 4 or more: say in the plan that the machine may be slow.

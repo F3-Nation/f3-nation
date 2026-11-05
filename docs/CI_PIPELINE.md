@@ -20,7 +20,7 @@ PR opened/updated
        ├─ test-coverage · pnpm test (Vitest vs postgres:18)  [required to merge]
        ├─ security-audit  pnpm audit --prod --level=high    [required to merge]
        ├─ db-schema-sync · Drizzle migration drift check    [required to merge]
-       ├─ docker-build ·· 7 app images + Slackbot scripts  [advisory]
+       ├─ docker-build ·· app + job images (matrix)        [advisory]
        ├─ recent-package-watch · npm publish-date report    [advisory, comment]
        │
        ├─ (reserved) preview-env ·· per-PR Cloud Run deploy, opt-in label
@@ -83,7 +83,7 @@ warning.
 
 Remote caching is enabled only for the five required CI checks during this
 rollout. Preview and deploy workflows continue to build without this adapter so
-their behavior is unchanged. A matching successful `test` task may be replayed
+their behavior is unchanged. A matching successful cache-enabled `test` task may be replayed
 instead of re-executed; that is standard Turbo cache behavior, so post-rollout
 validation should confirm useful hit rates and continue treating flaky tests as
 test defects rather than relying on reruns. It should also inspect Actions cache
@@ -108,12 +108,19 @@ blocklist of its own:
   hashing and affected selection. `.nvmrc` is included because every affected
   job takes its Node version from it. The CI workflow is included because
   Slackbot's Docker contract tests read it; workflow edits must select those
-  tests and invalidate their cached results.
+  tests.
   The app Dockerfiles cover the same tests' cross-app file-existence checks.
-  These conservative inputs invalidate every task's cache when they change.
+  These conservative inputs invalidate cache-enabled tasks when they change.
   Deleted app Dockerfiles additionally force full-workspace test selection:
   Turbo's package-level affected plan can otherwise omit the cross-app tests
   even though their cache key changes.
+
+Python tasks routed through [`scripts/python-task.sh`](../scripts/python-task.sh)
+disable result caching in their per-package `turbo.json`, extending the root
+configuration so shared task settings remain inherited. New wrapper tasks need
+`cache: false` in their package configuration. A successful local missing-tool
+skip must not hide checks after `uv` becomes available. These tasks
+execute whenever selected, including in CI, while unrelated tasks retain caching.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the
@@ -124,19 +131,19 @@ or unavailable affected set, but they cannot infer dependencies missing from
 the graph or detect a plausible nonempty selection that differs from the
 checked-out merge tree.
 
-| #   | Gate                   | What it runs                                                                                                                                               | What it catches                                                                                               | Merge-blocking (`main` ruleset) |
-| --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| 1   | `format-check`         | `pnpm format` (affected workspaces and dependents on PRs; full workspace on `main`)                                                                        | Prettier drift                                                                                                | ✅                              |
-| 2   | `lint`                 | `pnpm lint` (affected workspaces and dependents plus repository-wide safeguards on PRs; full workspace on `main`)                                          | ESLint violations (incl. security rules)                                                                      | ✅                              |
-| 3   | `typecheck`            | `pnpm typecheck` (affected workspaces and dependents on PRs; full workspace on `main`)                                                                     | Type errors in changed workspaces and their consumers                                                         | ✅                              |
-| 4   | `build`                | `pnpm build` (affected workspaces and dependents on PRs; full workspace on `main`)                                                                         | Build breakage in changed workspaces and their consumers                                                      | ✅                              |
-| 5   | `test-coverage`        | `pnpm test` for affected workspaces and dependents on PRs or the full workspace on `main`, plus the full API characterization suite, against `postgres:18` | Unit/integration regressions and API parity drift                                                             | ✅                              |
-| 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                                                     | Known high/critical vulns in prod deps                                                                        | ✅                              |
-| 7   | `db-schema-sync`       | Regenerates Drizzle migrations from the schema and diffs them against committed output                                                                     | Schema/migration drift                                                                                        | ✅                              |
-| 8   | `docker-build`         | Docker image builds (admin, analytics, api, auth, map, me, slackbot, slackbot-scripts; matrix, `linux/amd64`, no image push, per-image GHCR layer cache)   | Dockerfile-specific breakage, including the Slackbot scripts image's Python, system and Chromium dependencies | ❌ advisory                     |
-| 9   | `docker-cache-refresh` | Per-app Docker validation plus GHCR layer-cache export (`main` pushes only)                                                                                | Refreshes the read-only cache consumed by PR builds                                                           | ❌ advisory                     |
-| 10  | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                                                        | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                 | ❌ advisory                     |
-| —   | `pr-title.yml`         | PR title lint (`lint-title`)                                                                                                                               | Non-Conventional-Commit squash titles                                                                         | ✅ (separate workflow)          |
+| #   | Gate                   | What it runs                                                                                                                                                          | What it catches                                                                                               | Merge-blocking (`main` ruleset) |
+| --- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1   | `format-check`         | `pnpm format` (affected workspaces and dependents on PRs; full workspace on `main`)                                                                                   | Prettier drift                                                                                                | ✅                              |
+| 2   | `lint`                 | `pnpm lint` (affected workspaces and dependents plus repository-wide safeguards on PRs; full workspace on `main`)                                                     | ESLint violations (incl. security rules)                                                                      | ✅                              |
+| 3   | `typecheck`            | `pnpm typecheck` (affected workspaces and dependents on PRs; full workspace on `main`)                                                                                | Type errors in changed workspaces and their consumers                                                         | ✅                              |
+| 4   | `build`                | `pnpm build` (affected workspaces and dependents on PRs; full workspace on `main`)                                                                                    | Build breakage in changed workspaces and their consumers                                                      | ✅                              |
+| 5   | `test-coverage`        | `pnpm test` for affected workspaces and dependents on PRs or the full workspace on `main`, plus the full API characterization suite, against `postgres:18`            | Unit/integration regressions and API parity drift                                                             | ✅                              |
+| 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                                                                | Known high/critical vulns in prod deps                                                                        | ✅                              |
+| 7   | `db-schema-sync`       | Regenerates Drizzle migrations from the schema and diffs them against committed output                                                                                | Schema/migration drift                                                                                        | ✅                              |
+| 8   | `docker-build`         | Docker image builds (every app Dockerfile plus the Slackbot scripts and staging-refresh job images; matrix, `linux/amd64`, no image push, per-image GHCR layer cache) | Dockerfile-specific breakage, including the Slackbot scripts image's Python, system and Chromium dependencies | ❌ advisory                     |
+| 9   | `docker-cache-refresh` | Per-app Docker validation plus GHCR layer-cache export (`main` pushes only)                                                                                           | Refreshes the read-only cache consumed by PR builds                                                           | ❌ advisory                     |
+| 10  | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                                                                   | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                 | ❌ advisory                     |
+| —   | `pr-title.yml`         | PR title lint (`lint-title`)                                                                                                                                          | Non-Conventional-Commit squash titles                                                                         | ✅ (separate workflow)          |
 
 Local equivalents before pushing: `pnpm format`, `pnpm lint`, `pnpm typecheck`,
 `pnpm build`, `pnpm test` (see [`AGENTS.md`](../AGENTS.md#build-test-and-development-commands)).
@@ -180,7 +187,8 @@ build check is named `build-homepage` to stay distinct from CI's `build`.
   Slackbot service image: `f3-nation-ci-cache-slackbot-scripts` is refreshed by
   the existing `main`-only cache job, while PRs only import it. The cache-refresh
   matrix retains its six existing service images plus this scripts image;
-  analytics is validated in PRs but has no cache-refresh entry.
+  analytics and staging-refresh are validated in PRs but have no cache-refresh
+  entry.
 - PR builds receive only `packages: read`: they may import each app's shared
   GHCR cache but cannot update it. Only the `docker-cache-refresh` job on pushes
   to `main` receives `packages: write` and exports new layers. If login or cache
