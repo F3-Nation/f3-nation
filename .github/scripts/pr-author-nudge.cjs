@@ -96,10 +96,14 @@ function parseMarker(body) {
  * Turns one GraphQL PR node (see PR_FIELDS) into the plain facts `decide()`
  * needs. `requiredContexts` is the list of required check names on the base.
  * `nudge` is `{ id, nudgedAt, warnedAt?, pausedAt?, body? }` for the bot's
- * newest reminder, or null.
+ * newest reminder, or null. `writers` is an optional Set of logins with push
+ * access, counted as team even when GitHub reports a private org member as
+ * a CONTRIBUTOR.
  */
-function summarize(pr, requiredContexts, nudge) {
+function summarize(pr, requiredContexts, nudge, writers = new Set()) {
   const author = pr.author?.login ?? null;
+  const isTeam = (login, association) =>
+    TEAM_ASSOCIATIONS.has(association) || writers.has(login);
   const isBotAuthor = pr.author?.__typename === "Bot";
   const created = ts(pr.createdAt);
   const timeline = pr.timelineItems?.nodes ?? [];
@@ -149,7 +153,7 @@ function summarize(pr, requiredContexts, nudge) {
           // Only a team member's or a review bot's verdict puts it on the
           // author; a drive-by review from anyone else doesn't.
           const counts =
-            TEAM_ASSOCIATIONS.has(item.authorAssociation) ||
+            isTeam(who, item.authorAssociation) ||
             item.author?.__typename === "Bot";
           if (
             counts &&
@@ -188,6 +192,17 @@ function summarize(pr, requiredContexts, nudge) {
         lastAuthorActivity = maxTs(lastAuthorActivity, ts(comment.createdAt));
     }
   }
+  const contexts =
+    pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [];
+  // GitHub keeps no push time for an ordinary push, and a commit's date is
+  // when it was made locally. CI starting on the head commit is the closest
+  // stand-in for when it reached GitHub.
+  const headCiStart = minTs(
+    ...contexts
+      .filter((c) => c.__typename === "CheckRun")
+      .map((c) => ts(c.startedAt)),
+  );
+  lastPush = maxTs(lastPush, headCiStart);
   lastAuthorActivity = maxTs(lastAuthorActivity, lastPush);
 
   const reasons = [];
@@ -196,8 +211,6 @@ function summarize(pr, requiredContexts, nudge) {
     reasons.push({ kind: "draft", since: lastDraftStart ?? created });
   }
 
-  const contexts =
-    pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [];
   const failing = [];
   let failingSince = null;
   for (const name of requiredContexts) {
@@ -273,7 +286,7 @@ function summarize(pr, requiredContexts, nudge) {
     title: pr.title,
     author,
     isDraft: pr.isDraft,
-    tier: TEAM_ASSOCIATIONS.has(pr.authorAssociation) ? "team" : "outside",
+    tier: isTeam(author, pr.authorAssociation) ? "team" : "outside",
     // A deleted ("ghost") account has no author to remind; a codeowner picks
     // those up instead.
     exempt:
@@ -481,8 +494,8 @@ const PR_FIELDS = `
  * labels. `github` is actions/github-script's client (or the gh shim below).
  * `notify(text)` posts the codeowners' Slack heads-up. Without it a live run
  * treats the heads-up as failed: nothing is recorded, the closes wait, and the
- * rows fail. Returns `{ rows, slackNote }`: the job summary rows and the
- * heads-up text.
+ * rows fail. Returns `{ rows, slackNote, notes }`: the job summary rows, the
+ * heads-up text, and warnings for the workflow log.
  */
 async function run({
   github,
@@ -507,6 +520,24 @@ async function run({
     .filter((r) => r.type === "required_status_checks")
     .flatMap((r) => r.parameters?.required_status_checks ?? [])
     .map((c) => c.context);
+
+  // Everyone with push access counts as team. GitHub can report a private
+  // org member as a CONTRIBUTOR to the workflow's token, so the association
+  // alone would give them the outside timings.
+  const notes = [];
+  let writers = new Set();
+  try {
+    const collaborators = await github.paginate(
+      "GET /repos/{owner}/{repo}/collaborators",
+      { owner, repo, affiliation: "all", permission: "push", per_page: 100 },
+    );
+    writers = new Set(collaborators.map((c) => c.login));
+  } catch (error) {
+    notes.push(
+      `Couldn't list collaborators (${error.status ?? ""} ${error.message}); ` +
+        "team timings come from GitHub's author association alone.",
+    );
+  }
 
   const prs = [];
   let cursor = null;
@@ -570,7 +601,8 @@ async function run({
         (pr.baseRefName ?? DEFAULT_BRANCH) === DEFAULT_BRANCH
           ? requiredContexts
           : [];
-      const facts = summarize(pr, required, nudge);
+      const facts = summarize(pr, required, nudge, writers);
+      row.tier = facts.tier;
       const decision = decide(facts, now);
       row.turn = facts.reasons.map((r) => r.kind).join(", ") || "—";
       row.age =
@@ -705,7 +737,7 @@ async function run({
       log(`#${row.pr} ${row.author}: ${row.outcome}`);
     }
   }
-  return { rows, slackNote };
+  return { rows, slackNote, notes };
 }
 
 module.exports = {
@@ -749,16 +781,24 @@ if (require.main === module) {
         throw new Error(`local runs are dry runs only (${route})`);
       return { data: gh(["api", fill(path, params)]) };
     },
-    paginate: async (route, params) =>
-      gh(["api", "--paginate", fill(route.split(" ")[1], params)]),
+    paginate: async (route, params) => {
+      const path = route.split(" ")[1];
+      const query = Object.entries(params)
+        .filter(([k]) => !path.includes(`{${k}}`))
+        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+        .join("&");
+      return gh(["api", "--paginate", `${fill(path, params)}?${query}`]);
+    },
   };
   run({ github, owner, repo, dryRun: true, log: () => {} })
-    .then(({ rows, slackNote }) => {
+    .then(({ rows, slackNote, notes }) => {
+      for (const note of notes) console.warn(note);
       if (slackNote) console.log(`Slack heads-up (not sent):\n${slackNote}\n`);
       console.table(
         rows.map((r) => ({
           PR: `#${r.pr}`,
           author: r.author,
+          timing: r.tier,
           "author's turn": r.turn,
           clock: r.age,
           "close on/after": r.closeAt,

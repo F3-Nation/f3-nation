@@ -134,10 +134,10 @@ A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.y
 
 The clock runs only while one of those is true, so time a PR spends waiting on the bots or a codeowner doesn't count against the author. A push, a comment from the author, or reopening the PR resets it; comments from bots and reviewers don't. One exception: GitHub doesn't record when a merge conflict appears, so a conflict is counted from the PR's latest review, ready-for-review or reopen. That can bring an early reminder, but never an early close.
 
-| Author                             | Reminder | Closed  |
-| ---------------------------------- | -------- | ------- |
-| A repo member or collaborator      | 5 days   | 10 days |
-| Anyone else (outside contributors) | 3 days   | 7 days  |
+| Author                                     | Reminder | Closed  |
+| ------------------------------------------ | -------- | ------- |
+| A repo member, or anyone with write access | 5 days   | 10 days |
+| Anyone else (outside contributors)         | 3 days   | 7 days  |
 
 Drafts follow the same timings. The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 4 days (outside contributors) or 5 days (members and collaborators) after it. About a day before the close, the workflow posts the PR in the Codeowners Slack channel, so a codeowner can take it over the finish line (push to its branch) or hold it with `keep-open`; the close waits until that heads-up has been out at least 20 hours, and doesn't happen at all until the heads-up has gone out. If a reminded PR stops waiting on its author, or gets `keep-open`, that reminder no longer counts: when it's the author's turn again, the next close needs a new reminder and a new heads-up. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. PRs opened by bots and apps (Renovate, release-please and others), PRs from deleted accounts, and PRs labeled `keep-open` are never reminded or closed.
 

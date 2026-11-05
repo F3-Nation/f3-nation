@@ -78,7 +78,7 @@ jobs:
                   }
                 }
               : null;
-            const { rows, slackNote } = await run({
+            const { rows, slackNote, notes } = await run({
               github,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -86,12 +86,14 @@ jobs:
               log: core.info,
               notify,
             });
+            for (const note of notes) core.warning(note);
 
             const table = [
-              ['PR', 'Author', "Author's turn", 'Clock', 'Close on/after', 'Result']
+              ['PR', 'Author', 'Timing', "Author's turn", 'Clock', 'Close on/after', 'Result']
                 .map((data) => ({ data, header: true })),
               ...rows.map((r) => [
-                `#${r.pr}`, r.author ?? '—', r.turn ?? '—', r.age ?? '—', r.closeAt ?? '—', r.outcome,
+                `#${r.pr}`, r.author ?? '—', r.tier ?? '—', r.turn ?? '—',
+                r.age ?? '—', r.closeAt ?? '—', r.outcome,
               ]),
             ];
             try {

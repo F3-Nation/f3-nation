@@ -330,7 +330,7 @@ test("the Slack heads-up links each PR and escapes titles", () => {
 // A fake github-script client. By default: one PR with a bot thread from day 0
 // and the bot's reminder comment (day 5) carrying `nudgeState`. Pass a null
 // `nudgeState` for a PR the bot never commented on.
-function fakeGithub(nudgeState, prOverrides = {}) {
+function fakeGithub(nudgeState, prOverrides = {}, collaborators = []) {
   const writes = [];
   const botComment = {
     __typename: "IssueComment",
@@ -350,12 +350,18 @@ function fakeGithub(nudgeState, prOverrides = {}) {
   }
   return {
     writes,
-    paginate: async () => [
-      {
-        type: "required_status_checks",
-        parameters: { required_status_checks: [{ context: "ci" }] },
-      },
-    ],
+    paginate: async (route) => {
+      if (route.includes("/collaborators")) {
+        if (collaborators instanceof Error) throw collaborators;
+        return collaborators.map((login) => ({ login }));
+      }
+      return [
+        {
+          type: "required_status_checks",
+          parameters: { required_status_checks: [{ context: "ci" }] },
+        },
+      ];
+    },
     graphql: async () => ({
       repository: {
         pullRequests: {
@@ -779,4 +785,76 @@ test("a late heads-up shows the earliest close the next run will allow", () => {
   assert.equal(run(pr, 12 + 20 / 24 - 0.001, warned).action, "none");
   assert.equal(run(pr, 12 + 20 / 24, warned).action, "close");
   assert.equal(late.closeAt, T0 + 12 * DAY + 20 * 60 * 60 * 1000);
+});
+
+test("anyone with push access gets the team timings, whatever GitHub's association says", async () => {
+  const outside = { authorAssociation: "CONTRIBUTOR" };
+  const pr = basePr({
+    ...outside,
+    reviewThreads: { nodes: [thread("coderabbitai", 0)] },
+  });
+  assert.equal(summarize(pr, [], null).tier, "outside");
+  assert.equal(summarize(pr, [], null, new Set(["pax"])).tier, "team");
+
+  // A private org member shows up as a collaborator; day 4 is under the team limit.
+  const github = fakeGithub(null, outside, ["pax"]);
+  const { rows, notes } = await liveRun(github, 4, { dryRun: true });
+  assert.equal(rows[0].tier, "team");
+  assert.equal(rows[0].outcome, "author's turn, under the limit");
+  assert.deepEqual(notes, []);
+});
+
+test("if collaborators can't be listed, the run notes it and uses the association", async () => {
+  const github = fakeGithub(
+    null,
+    { authorAssociation: "CONTRIBUTOR" },
+    Object.assign(new Error("Resource not accessible by integration"), {
+      status: 403,
+    }),
+  );
+  const { rows, notes } = await liveRun(github, 4, { dryRun: true });
+  assert.equal(rows[0].tier, "outside");
+  assert.equal(rows[0].outcome, "would nudge");
+  assert.match(notes[0], /Couldn't list collaborators \(403/);
+});
+
+test("a change request from a private org member with push access counts", () => {
+  const pr = basePr({
+    timelineItems: {
+      nodes: [
+        {
+          __typename: "PullRequestReview",
+          state: "CHANGES_REQUESTED",
+          author: { login: "BigGillyStyle", __typename: "User" },
+          authorAssociation: "CONTRIBUTOR",
+          submittedAt: at(1),
+        },
+      ],
+    },
+  });
+  assert.equal(run(pr, 30).why, "not author's turn");
+  const facts = summarize(pr, ["ci"], null, new Set(["BigGillyStyle"]));
+  assert.equal(decide(facts, T0 + 8.1 * DAY).action, "nudge");
+});
+
+test("a push counts from when CI started on it, not the commit's local date", () => {
+  // A bot thread from day 1; a commit made on day 2 but pushed on day 9.5.
+  const pr = withContexts([
+    {
+      __typename: "CheckRun",
+      name: "ci",
+      conclusion: "SUCCESS",
+      startedAt: at(9.5),
+      completedAt: at(9.6),
+    },
+  ]);
+  pr.reviewThreads = { nodes: [thread("coderabbitai", 1)] };
+  pr.timelineItems = {
+    nodes: [
+      { __typename: "PullRequestCommit", commit: { committedDate: at(2) } },
+    ],
+  };
+  const decision = run(pr, 10);
+  assert.equal(decision.action, "none");
+  assert.equal(decision.clockStart, T0 + 9.5 * DAY);
 });
