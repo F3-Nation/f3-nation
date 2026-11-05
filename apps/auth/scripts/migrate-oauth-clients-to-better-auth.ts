@@ -139,12 +139,15 @@ export function buildClientRow(client: OAuthClientRow, now: Date) {
   );
   if (unsupported.length > 0) {
     throw new Error(
-      `oauth_clients.scopes for "${client.id}" has unsupported scope(s) ${unsupported.join(", ")} (auth3 supports ${SUPPORTED_OAUTH_SCOPES.join(", ")}) — fix that row before migrating.`,
+      `oauth_clients.scopes for "${client.id}" has unsupported scope(s) ` +
+        `${unsupported.join(", ")} (auth3 supports ` +
+        `${SUPPORTED_OAUTH_SCOPES.join(", ")}) — fix that row before migrating.`,
     );
   }
   if (!scopes.includes("openid")) {
     throw new Error(
-      `oauth_clients.scopes for "${client.id}" has no openid, and auth3 only serves OpenID Connect requests — fix that row before migrating.`,
+      `oauth_clients.scopes for "${client.id}" has no openid, and auth3 only ` +
+        "serves OpenID Connect requests — fix that row before migrating.",
     );
   }
   // See the file comment: no refresh token without it.
