@@ -90,6 +90,7 @@ export {
   auditContext,
   auditSettingsSql,
   runWithAuditContext,
+  toAuditUserId,
   withAuditContext,
 } from "./utils/audit-context";
 export type { AuditContext } from "./utils/audit-context";

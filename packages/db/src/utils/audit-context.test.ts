@@ -1,10 +1,14 @@
 import type postgres from "postgres";
+import { sql } from "drizzle-orm";
+import { integer, pgTable } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { describe, expect, it } from "vitest";
 
 import {
   auditContext,
   auditSettingsSql,
   runWithAuditContext,
+  toAuditUserId,
   withAuditContext,
 } from "./audit-context";
 
@@ -18,8 +22,13 @@ function recordingClient() {
       calls.push(["tx", ...args]);
       return pending;
     },
+    savepoint: async (callback: (client: unknown) => unknown) => {
+      calls.push(["savepoint"]);
+      return await callback(tx);
+    },
   };
   const client = {
+    options: { parsers: {}, serializers: {} },
     unsafe: (...args: unknown[]) => {
       calls.push(["unsafe", ...args]);
       return pending;
@@ -41,6 +50,101 @@ function recordingClient() {
 
 const store = { userId: 42, source: "web-1" };
 const settings = "set local app.user_id = '42'; set local app.source = 'web-1'";
+const probe = pgTable("audit_probe", { id: integer("id") });
+
+describe("installed Drizzle adapter contract", () => {
+  it("keeps a returning write lazy and maps unsafe values after commit", async () => {
+    const { client, calls } = recordingClient();
+    const db = drizzle(client);
+    await runWithAuditContext(store, async () => {
+      const query = db.insert(probe).values({ id: 7 }).returning();
+      expect(calls).toEqual([]);
+      expect(await query).toEqual([{ id: 7 }]);
+    });
+    expect(calls).toEqual([
+      ["begin"],
+      ["tx", settings],
+      [
+        "tx",
+        'insert into "audit_probe" ("id") values ($1) returning "id"',
+        [7],
+        { prepare: false },
+      ],
+      ["commit"],
+    ]);
+  });
+
+  it("routes raw execute through attributed unsafe without values mapping", async () => {
+    const { client, calls } = recordingClient();
+    const db = drizzle(client);
+    expect(
+      await runWithAuditContext(store, async () =>
+        db.execute(sql`update "audit_probe" set "id" = ${7}`),
+      ),
+    ).toEqual([{ id: 7 }]);
+    expect(calls).toEqual([
+      ["begin"],
+      ["tx", settings],
+      ["tx", 'update "audit_probe" set "id" = $1', [7], { prepare: false }],
+      ["commit"],
+    ]);
+  });
+
+  it("routes transaction options and nested savepoints through the attributed client", async () => {
+    const { client, calls } = recordingClient();
+    const db = drizzle(client);
+    expect(
+      await runWithAuditContext(store, () =>
+        db.transaction(
+          (tx) =>
+            tx.transaction((nested) =>
+              nested.insert(probe).values({ id: 7 }).returning(),
+            ),
+          { isolationLevel: "serializable", deferrable: true },
+        ),
+      ),
+    ).toEqual([{ id: 7 }]);
+    expect(calls).toEqual([
+      ["begin"],
+      ["tx", settings],
+      [
+        "tx",
+        "set transaction isolation level serializable deferrable",
+        [],
+        { prepare: false },
+      ],
+      ["savepoint"],
+      [
+        "tx",
+        'insert into "audit_probe" ("id") values ($1) returning "id"',
+        [7],
+        { prepare: false },
+      ],
+      ["commit"],
+    ]);
+  });
+});
+
+describe("audit actor normalization", () => {
+  it.each([
+    [1, 1],
+    ["42", 42],
+    [2147483647, 2147483647],
+    ["2147483647", 2147483647],
+    [null, null],
+    [undefined, null],
+    ["", null],
+    ["invalid", null],
+    [0, null],
+    [-1, null],
+    [1.2, null],
+    [NaN, null],
+    [Infinity, null],
+    [2147483648, null],
+  ])("normalizes %s to %s", (value, expected) => {
+    expect(toAuditUserId(value)).toBe(expected);
+  });
+});
 
 describe("audit settings", () => {
   it.each([
@@ -64,25 +168,30 @@ describe("audit settings", () => {
     },
   );
 
-  it.each([0, -1, 1.2, NaN, Infinity, 2147483648, "1", undefined])(
-    "rejects invalid actor %s before any statement",
-    async (userId) => {
-      const { client, calls } = recordingClient();
-      const invalid = { userId, source: null } as unknown as typeof store;
-      expect(() => auditSettingsSql(invalid)).toThrow(
-        /^Invalid audit user id$/,
-      );
-      await expect(
-        runWithAuditContext(invalid, async () =>
-          client.unsafe("insert into x values (1)"),
-        ),
-      ).rejects.toThrow(/^Invalid audit user id$/);
-      await expect(
-        runWithAuditContext(invalid, async () => client.begin(() => 1)),
-      ).rejects.toThrow(/^Invalid audit user id$/);
-      expect(calls).toEqual([]);
-    },
-  );
+  it.each([
+    0,
+    -1,
+    1.2,
+    NaN,
+    Infinity,
+    2147483648,
+    "1",
+    undefined,
+    Symbol("invalid"),
+  ])("rejects invalid actor %s before any statement", async (userId) => {
+    const { client, calls } = recordingClient();
+    const invalid = { userId, source: null } as unknown as typeof store;
+    expect(() => auditSettingsSql(invalid)).toThrow(/^Invalid audit user id$/);
+    await expect(
+      runWithAuditContext(invalid, async () =>
+        client.unsafe("insert into x values (1)"),
+      ),
+    ).rejects.toThrow(/^Invalid audit user id$/);
+    await expect(
+      runWithAuditContext(invalid, async () => client.begin(() => 1)),
+    ).rejects.toThrow(/^Invalid audit user id$/);
+    expect(calls).toEqual([]);
+  });
 
   it.each([
     "a\n",

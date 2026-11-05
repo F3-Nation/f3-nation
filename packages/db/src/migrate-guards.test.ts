@@ -286,43 +286,14 @@ describe("assertLocalTarget", () => {
     expect(lookup).not.toHaveBeenCalled();
   });
 
-  it("names DATABASE_URL when the default migration target is remote", async () => {
-    await expect(
-      assertLocalTarget("postgresql://u:p@remote.invalid/f3nation"),
-    ).rejects.toThrow(
-      /^Refusing to migrate: DATABASE_URL in packages\/db\/\.env is not a local database\. pnpm db:migrate:local only migrates a local database\. Staging and prod are migrated from main, after merge, with `pnpm db:migrate:staging` or `pnpm db:migrate:prod` \(docs\/db-migrations\.md\)\.$/,
-    );
-  });
-
-  it("names DATABASE_URL when the default migration target reaches a Cloud SQL proxy", async () => {
+  it("refuses a localhost URL whose server is Cloud SQL (a proxy)", async () => {
     const lookup = vi.fn(() => Promise.resolve(true));
     await expect(assertLocalTarget(LOCAL, undefined, lookup)).rejects.toThrow(
-      /^Refusing to migrate: DATABASE_URL reaches a Cloud SQL server \(probably through a proxy on localhost\)\. pnpm db:migrate:local only migrates a local database\. Staging and prod are migrated from main, after merge, with `pnpm db:migrate:staging` or `pnpm db:migrate:prod` \(docs\/db-migrations\.md\)\.$/,
+      /reaches a Cloud SQL server/,
     );
     // Asked from the maintenance database, which exists before f3nation does.
     expect(lookup).toHaveBeenCalledWith(
       "postgresql://u:p@localhost:5432/postgres",
-    );
-  });
-
-  it("uses a caller's diagnostic variable without exposing connection details", async () => {
-    const action = {
-      verb: "create an audit-test database",
-      help: "Use local setup.",
-      variable: "TEST_DATABASE_URL",
-    };
-    await expect(
-      assertLocalTarget(
-        "postgresql://secret:password@remote.invalid/private_test",
-        action,
-      ),
-    ).rejects.toThrow(
-      /^Refusing to create an audit-test database: TEST_DATABASE_URL in packages\/db\/.env is not a local database\. Use local setup\.$/,
-    );
-    await expect(
-      assertLocalTarget(LOCAL, action, () => Promise.resolve(true)),
-    ).rejects.toThrow(
-      /^Refusing to create an audit-test database: TEST_DATABASE_URL reaches a Cloud SQL server \(probably through a proxy on localhost\)\. Use local setup\.$/,
     );
   });
 

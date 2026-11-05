@@ -18,10 +18,18 @@ export function runWithAuditContext<T>(store: AuditContext, fn: () => T): T {
   return auditContext.run(store, fn);
 }
 
+const MAX_AUDIT_USER_ID = 2_147_483_647;
+
+/** Normalizes a session identity to a valid database actor, or null. */
+export function toAuditUserId(value: unknown): number | null {
+  const id = Number(value);
+  return Number.isInteger(id) && id >= 1 && id <= MAX_AUDIT_USER_ID ? id : null;
+}
+
 export function auditSettingsSql({ userId, source }: AuditContext): string {
   if (
     userId !== null &&
-    (!Number.isInteger(userId) || userId < 1 || userId > 2_147_483_647)
+    (typeof userId !== "number" || toAuditUserId(userId) !== userId)
   ) {
     throw new Error("Invalid audit user id");
   }

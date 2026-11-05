@@ -131,12 +131,23 @@ boundaries without adding a history UI or test endpoint.
   mutation, overlapping contexts and detached work.
 - Approved Staging UI verification for the application acceptance criterion.
 
-Database-package integration tests use a separate disposable test database so
-another package's global reset cannot destroy their fixtures. They apply the
-existing migrations and clean up only their owned database. Existing API tests
-retain their normal reset lifecycle. No test targets a shared database. See
-[database-package audit integration](../testing.md#database-package-audit-integration)
-for configuration, safety checks and setup remedies.
+Real-database tests live in
+[`packages/api/src/__tests__/audit-context.test.ts`](../../packages/api/src/__tests__/audit-context.test.ts),
+next to the audit-history tests. Run them through `pnpm -C packages/api test`
+with the documented local test environment. The API suite's global setup resets,
+migrates and seeds `TEST_DATABASE_URL` once per run, and its test files run
+serially. Build application clients with `createDbClient()` from
+`@acme/db/testing`; use raw postgres.js clients only for assertions requiring
+statement capture, pool control or native query behavior. Scope every source and
+history assertion to rows created by its test so other files' history cannot
+affect the result. No test targets a shared database.
+
+Database-package unit tests in
+[`audit-context.test.ts`](../../packages/db/src/utils/audit-context.test.ts)
+use mocked postgres.js clients and need no database. Real Drizzle over those
+mocks pins the adapter's `unsafe`, `begin`, `values()` and savepoint boundaries,
+so adapter routing changes fail the contract tests. Run them with
+`pnpm -C packages/db test`.
 
 ## 8. Observability
 
@@ -155,6 +166,11 @@ the client pool is unbounded. A configured server `statement_timeout` can
 bound server execution; it cannot bound that pool wait. Installing the timeout
 after the audit hook could reject a begin-backed write while it later commits,
 so that installation order is unsafe.
+
+Production rollout requires verification of the API role's effective
+`statement_timeout` and codeowner acceptance of its execution-timeout policy.
+Pool-pressure and API mutation p99 latency alert coverage must also be qualified
+before rollout. Local tests do not establish those production conditions.
 
 The attributed native query result deliberately exposes only `then` and
 `values()`, the two lazy shapes consumed by Drizzle; it does not implement the

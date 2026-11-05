@@ -21,34 +21,6 @@ Use Vitest for unit and integration tests. Name test files `*.test.ts[x]` and
 place them next to the source or under `__tests__`. Reset databases before any
 suite that mutates data (`pnpm reset-test-db`).
 
-### Database-package audit integration
-
-`pnpm --filter @acme/db test` sets test mode and loads the database package's
-`.env`. Its audit-context integration fixture reads `TEST_DATABASE_URL`,
-verifies the local target and live database name, and requires a database ending
-in `_test` with the `f3-disposable-local-v1` comment. Missing configuration or a
-failed target check fails the suite rather than skipping it. Only exact
-`CI=true` with the exact `f3_test` database bypasses the marker check, because
-CI supplies an ephemeral, job-owned PostgreSQL service. All other target checks
-still apply. These checks do not authorize a shared database as a local fixture.
-
-To prepare or repair the local source, run `pnpm local:setup` with this checkout's
-configured slot, then use its `TEST_DATABASE_URL` in `packages/db/.env`. Setup
-regenerates `.env` files from templates and backs up existing files as
-`.env.bak.<timestamp>`; restore needed custom values from those backups. See
-[local setup](LOCAL_DEV_DOCKER.md) for the slot and environment-file workflow.
-Setup initializes and marks both compose-owned development/test databases
-through the container directly on every run, including existing volumes.
-Schema resets preserve those database comments. Never mark an arbitrary
-URL-selected or shared database disposable to bypass a refusal.
-
-The fixture creates a uniquely named database, applies the existing migrations,
-and drops only that owned database during cleanup. The PostgreSQL test role
-therefore needs database-creation privileges. Keeping this database separate
-from the API suite's reset database prevents parallel package tests from
-destroying each other's fixtures. The lifecycle is implemented in
-[`audit-database.ts`](../packages/db/src/__tests__/audit-database.ts).
-
 ## Writing tests that can fail
 
 A test exists to fail when the behavior it pins breaks. If it would still pass

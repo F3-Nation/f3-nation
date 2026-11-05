@@ -450,10 +450,9 @@ migrations. Before any schema drop, automated resets verify that the actual
 database matches the configured `_test` database. Interactive resets do not require
 an `_test` name: they instead require a matching database name, a loopback URL and
 the database comment `f3-disposable-local-v1`, followed by confirmation explicitly
-covering history deletion. The marker is installed on the compose-owned
-development and test databases by [the database initialization script](../../scripts/docker/init-db.sql).
-Docker runs it when initializing a volume; `pnpm local:setup` replays the same
-idempotent script through the compose-owned container on every setup run.
+covering history deletion. The marker is installed on the development database
+by `scripts/docker/init-db.sql` when Docker first initializes a volume, and by
+`pnpm local:setup` directly through the local Docker container for existing volumes.
 A refused or failed reset exits unsuccessfully. A localhost URL alone is
 insufficient. Never mark a shared or production database disposable.
 Drizzle's existing default public-only schema filter already excludes

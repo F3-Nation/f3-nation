@@ -189,8 +189,8 @@ export const isCloudSqlServer = async (serverUrl: string): Promise<boolean> => {
 };
 
 /**
- * Database comment identifying a disposable local dataset whose contents may
- * be replaced by local development and test tooling.
+ * The database comment `pnpm local:setup` puts on the local Docker database to
+ * say it can be wiped (see reset.ts); the snapshot loader requires it too.
  */
 export const DISPOSABLE_MARKER = "f3-disposable-local-v1";
 
@@ -201,9 +201,7 @@ export const DISPOSABLE_REMEDY = `For the local Docker database, run pnpm local:
 export interface LocalTargetAction {
   /** Completes "Refusing to …", e.g. "migrate". */
   verb: string;
-  /** Configuration variable named in diagnostics; defaults to DATABASE_URL. */
-  variable?: string;
-  /** Appended to every refusal: what the caller should do instead. */
+  /** Appended to every refusal: how to do it for a non-local database. */
   help: string;
 }
 
@@ -228,7 +226,7 @@ export const assertLocalTarget = async (
 ) => {
   if (classifyHost(url) !== "local") {
     throw new Error(
-      `Refusing to ${action.verb}: ${action.variable ?? "DATABASE_URL"} in packages/db/.env is not a local database. ${action.help}`,
+      `Refusing to ${action.verb}: DATABASE_URL in packages/db/.env is not a local database. ${action.help}`,
     );
   }
   const name = pgConnectionString.parse(url).database ?? "";
@@ -239,7 +237,7 @@ export const assertLocalTarget = async (
   }
   if (await isCloudSql(maintenanceUrl(url))) {
     throw new Error(
-      `Refusing to ${action.verb}: ${action.variable ?? "DATABASE_URL"} reaches a Cloud SQL server (probably through a proxy on localhost). ${action.help}`,
+      `Refusing to ${action.verb}: DATABASE_URL reaches a Cloud SQL server (probably through a proxy on localhost). ${action.help}`,
     );
   }
 };

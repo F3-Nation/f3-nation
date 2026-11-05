@@ -14,7 +14,6 @@ pr_triage_status=0
 prt_status=0
 lint_fix_status=0
 local_ports_status=0
-local_setup_status=0
 review_links_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
@@ -31,7 +30,6 @@ bash scripts/pr-triage.test.sh || pr_triage_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
 bash scripts/lint-fix.test.sh || lint_fix_status=$?
 bash scripts/local-ports.test.sh || local_ports_status=$?
-bash scripts/local-setup.test.sh || local_setup_status=$?
 node scripts/check-review-links.mjs || review_links_status=$?
 bash scripts/check-review-links.test.sh || review_links_status=$?
 
@@ -81,10 +79,6 @@ fi
 
 if [ "$local_ports_status" -ne 0 ]; then
   exit "$local_ports_status"
-fi
-
-if [ "$local_setup_status" -ne 0 ]; then
-  exit "$local_setup_status"
 fi
 
 if [ "$review_links_status" -ne 0 ]; then

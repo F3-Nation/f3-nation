@@ -221,8 +221,6 @@ This script does everything automatically:
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the GCS emulator buckets (`f3-public-images`, `f3-public-images-staging`, `f3nation-calendar-images`)
-- Ensures the local test database exists and marks the compose-owned
-  development and test databases as disposable, including existing volumes
 - Runs all database migrations
 - Seeds the database with sample F3 org data
 
