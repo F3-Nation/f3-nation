@@ -21,13 +21,13 @@ Your app servers (Map, API, Auth) still run natively on your machine with `pnpm 
 
 Install these before starting:
 
-| Tool                       | Install                                                                                                   | Check            |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
-| **Docker Desktop**         | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)                     | `docker version` |
-| **Node.js** (see `.nvmrc`) | `nvm install`                                                                                             | `node -v`        |
-| **pnpm** v10+              | `corepack enable && corepack prepare pnpm@latest --activate`                                              | `pnpm -v`        |
-| **uv**                     | [docs.astral.sh/uv/getting-started/installation](https://docs.astral.sh/uv/getting-started/installation/) | `uv --version`   |
-| **Git**                    | [git-scm.com](https://git-scm.com)                                                                        | `git --version`  |
+| Tool                        | Install                                                                                                   | Check            |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
+| **Docker Desktop**          | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)                     | `docker version` |
+| **Node.js** (see `.nvmrc`)  | `nvm install`                                                                                             | `node -v`        |
+| **pnpm** (`packageManager`) | `npm install -g corepack && corepack enable`                                                              | `pnpm -v`        |
+| **uv**                      | [docs.astral.sh/uv/getting-started/installation](https://docs.astral.sh/uv/getting-started/installation/) | `uv --version`   |
+| **Git**                     | [git-scm.com](https://git-scm.com)                                                                        | `git --version`  |
 
 Make sure Docker Desktop is **running** before you continue.
 
@@ -584,6 +584,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv --version
 pnpm python:install
 ```
+
+A `Skipping …` message means the Python check did not run. After installing
+`uv`, rerun the check: Python tasks using the shared wrapper do not reuse Turbo
+results. This also means Python type checks run during each commit hook when
+`uv` is installed. See [CI_PIPELINE.md § Gate-by-gate](CI_PIPELINE.md#gate-by-gate) for the cache policy.
 
 ### Port already in use
 

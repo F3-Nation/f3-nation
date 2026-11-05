@@ -126,7 +126,9 @@ jq -n '
       | .reviews.nodes = [inline_review, blocked_review("2026-10-22T02:00:00Z"; "\u2019")]),
     (pr(32; "release"; "f3-nation-release-please") | .author.__typename = "Bot"),
     (pr(33; "a person whose login mentions release-please"; "release-please-fan")
-      | .author.__typename = "User")
+      | .author.__typename = "User"),
+    (pr(34; "assigned to the viewer"; "someone")
+      | .assignees = {nodes: [{login: "amy"}, {login: "viewer"}]})
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -199,6 +201,12 @@ assert_eq "the board records Unassigned for a PR with no assignee" "Unassigned" 
   "$(board_json | jq -r '.prs[] | select(.number == 5) | .assignee')"
 assert_eq "the board records every assignee" "amy, cy" \
   "$(board_json | jq -r '.prs[] | select(.number == 7) | .assignee')"
+assert_eq "a PR assigned to the viewer among others is marked assigned to them" "true" \
+  "$(board_json | jq -r '.prs[] | select(.number == 34) | .assignedToMe')"
+assert_eq "a PR assigned only to others isn't marked assigned to the viewer" "false" \
+  "$(board_json | jq -r '.prs[] | select(.number == 7) | .assignedToMe')"
+assert_eq "an unassigned PR isn't marked assigned to the viewer" "false" \
+  "$(board_json | jq -r '.prs[] | select(.number == 5) | .assignedToMe')"
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
 assert_eq "the hostile title survives escaped" "</script><img src=x onerror=alert(1)>" \
   "$(board_json | jq -r '.prs[] | select(.number == 13) | .title')"

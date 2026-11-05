@@ -271,15 +271,17 @@ classify='
          else ["MANUAL", ""]
          end) as $verdict
       | ($verdict[0] | IN("DRAFT", "SKIP") | not) as $active
+      | [$pr.assignees.nodes[]?.login] as $assignees
       | {
           bucket: $verdict[0],
           number: $pr.number,
           # Newlines would split a card across lines in the terminal listing.
           title: ($pr.title | gsub("[\\r\\n]+"; " ")),
           author: $author,
-          assignee: (([$pr.assignees.nodes[]?.login] | join(", ")) | if . == "" then "Unassigned" else . end),
+          assignee: ($assignees | join(", ") | if . == "" then "Unassigned" else . end),
           url: $pr.url,
           mine: ($author == $me),
+          assignedToMe: ($assignees | index($me) != null),
           note: ([
             (if $verdict[1] != "" then $verdict[1] else empty end),
             (if $conflicts and $active then "merge conflicts" else empty end),
@@ -351,6 +353,11 @@ if $html; then
   .meta { color: var(--muted); font-size: 13px; }
   .meta code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
   .notice { margin-top: 10px; padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .filters button { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 12px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  .filters button[aria-pressed="true"] { background: var(--chip); color: var(--chip-text);
+    border-color: var(--chip-text); font-weight: 600; }
   main { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr);
     gap: 12px; padding: 12px 16px 16px; max-width: 1800px; margin: 0 auto;
     overflow-x: auto; align-items: start; }
@@ -381,6 +388,7 @@ if $html; then
 <header>
   <h1 id="heading">PR triage</h1>
   <div class="meta" id="meta"></div>
+  <div class="filters" id="filters" role="group" aria-label="Filter by assignee"></div>
 </header>
 <main id="board"></main>
 <footer id="footer"></footer>
@@ -426,29 +434,55 @@ HTML
   }
 
   const board = document.getElementById("board");
-  for (const [bucket, name, hint, accent] of columns) {
-    const prs = data.prs.filter((pr) => pr.bucket === bucket);
-    const col = el("section", "col");
-    col.style.setProperty("--accent", `var(${accent})`);
-    const h2 = el("h2");
-    h2.append(el("span", "", name), el("span", "count", String(prs.length)));
-    col.append(h2, el("div", "hint", hint));
-    if (prs.length === 0) col.append(el("div", "empty", "Nothing here."));
-    for (const pr of prs) {
-      const card = el("article", "card");
-      const head = el("div", "title");
-      head.append(link(pr.url, "num", `#${pr.number}`), link(pr.url, "", pr.title));
-      const by = el("div", "by");
-      by.append(el("span", "", `@${pr.author}`));
-      if (pr.mine && bucket !== "OWN") by.append(el("span", "chip", "yours"));
-      const assignee = el("div", "by",
-        pr.assignee === "Unassigned" ? "Unassigned" : `Assigned: ${pr.assignee}`);
-      card.append(head, by, assignee);
-      if (pr.note) card.append(el("div", "note", pr.note));
-      col.append(card);
+  const render = (keep) => {
+    board.replaceChildren();
+    for (const [bucket, name, hint, accent] of columns) {
+      const prs = data.prs.filter((pr) => pr.bucket === bucket && keep(pr));
+      const col = el("section", "col");
+      col.style.setProperty("--accent", `var(${accent})`);
+      const h2 = el("h2");
+      h2.append(el("span", "", name), el("span", "count", String(prs.length)));
+      col.append(h2, el("div", "hint", hint));
+      if (prs.length === 0) col.append(el("div", "empty", "Nothing here."));
+      for (const pr of prs) {
+        const card = el("article", "card");
+        const head = el("div", "title");
+        head.append(link(pr.url, "num", `#${pr.number}`), link(pr.url, "", pr.title));
+        const by = el("div", "by");
+        by.append(el("span", "", `@${pr.author}`));
+        if (pr.mine && bucket !== "OWN") by.append(el("span", "chip", "yours"));
+        const assignee = el("div", "by",
+          pr.assignee === "Unassigned" ? "Unassigned" : `Assigned: ${pr.assignee}`);
+        card.append(head, by, assignee);
+        if (pr.note) card.append(el("div", "note", pr.note));
+        col.append(card);
+      }
+      board.append(col);
     }
-    board.append(col);
+  };
+
+  const filters = [
+    ["all", "All", () => true],
+    ["mine", "Assigned to me", (pr) => pr.assignedToMe],
+    ["unassigned", "Unassigned", (pr) => pr.assignee === "Unassigned"],
+  ];
+  // Drafts and skipped PRs have no column, so they'd inflate the counts on the buttons.
+  const shown = data.prs.filter((pr) => columns.some(([bucket]) => bucket === pr.bucket));
+  const filterBar = document.getElementById("filters");
+  for (const [key, label, keep] of filters) {
+    const button = el("button", "", `${label} (${shown.filter(keep).length})`);
+    button.type = "button";
+    button.dataset.filter = key;
+    button.setAttribute("aria-pressed", String(key === "all"));
+    button.addEventListener("click", () => {
+      for (const other of filterBar.children) {
+        other.setAttribute("aria-pressed", String(other === button));
+      }
+      render(keep);
+    });
+    filterBar.append(button);
   }
+  render(() => true);
 
   const drafts = data.prs.filter((pr) => pr.bucket === "DRAFT").length;
   const skipped = data.prs.filter((pr) => pr.bucket === "SKIP").map((pr) => `#${pr.number}`);
