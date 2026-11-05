@@ -671,6 +671,9 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+charts = [
+    { name = "matplotlib" },
+]
 dev = [
     { name = "debugpy" },
     { name = "mypy" },
@@ -709,6 +712,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+charts = [{ name = "matplotlib", specifier = "==3.11.2" }]
 dev = [
     { name = "debugpy", specifier = "==1.8.22" },
     { name = "mypy", specifier = "==2.4.0" },

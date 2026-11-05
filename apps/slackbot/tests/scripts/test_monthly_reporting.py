@@ -492,7 +492,6 @@ def test_monthly_summary_executes_filters_and_counts_distinct_actual_users(repor
 
 
 def test_leaderboard_chart_sorts_mixed_typed_and_untyped_attendance(monkeypatch, tmp_path):
-    pytest.importorskip("matplotlib")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(monthly_reporting, "stitch_2x2", lambda *_args, **_kwargs: "stitched.png")
     records = [
@@ -526,7 +525,6 @@ def test_leaderboard_chart_sorts_mixed_typed_and_untyped_attendance(monkeypatch,
 
 
 def test_org_monthly_summary_renders_neon_chart(monkeypatch, tmp_path):
-    pytest.importorskip("matplotlib")
     from PIL import Image
 
     monkeypatch.chdir(tmp_path)

@@ -58,8 +58,11 @@ dev = [
     "mypy==2.4.0",
     "pytest-cov==7.1.0",
 ]
-scripts = [
+charts = [
     "matplotlib==3.11.2",
+]
+scripts = [
+    {include-group = "charts"},
     "playwright==1.64.1",
     "dataframe-image==0.2.7",
     "pandas==2.3.3",
