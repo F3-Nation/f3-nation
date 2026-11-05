@@ -117,9 +117,9 @@ to follow the database audit-history foundation's grants.
 
 ## 7. Critical-path test cases
 
-Use SQL/Vitest assertions against disposable local databases for attribution
-and transaction behavior. These directly observe history and native query
-boundaries without adding a history UI or test endpoint.
+Use SQL/Vitest assertions against the API suite's reset test database for
+attribution and transaction behavior. These directly observe history and native
+query boundaries without adding a history UI or test endpoint.
 
 - Real client writes and RETURNING, raw execute, explicit transactions,
   savepoints, serializable/deferrable options and rollback.
@@ -132,7 +132,8 @@ boundaries without adding a history UI or test endpoint.
 - Approved Staging UI verification for the application acceptance criterion.
 
 Real-database tests live in
-[`packages/api/src/__tests__/audit-context.test.ts`](../../packages/api/src/__tests__/audit-context.test.ts),
+[`audit-context.test.ts`](../../packages/api/src/__tests__/audit-context.test.ts)
+and [`audit-attribution.test.ts`](../../packages/api/src/__tests__/audit-attribution.test.ts),
 next to the audit-history tests. Run them through `pnpm -C packages/api test`
 with the documented local test environment. The API suite's global setup resets,
 migrates and seeds `TEST_DATABASE_URL` once per run, and its test files run
@@ -140,7 +141,7 @@ serially. Build application clients with `createDbClient()` from
 `@acme/db/testing`; use raw postgres.js clients only for assertions requiring
 statement capture, pool control or native query behavior. Scope every source and
 history assertion to rows created by its test so other files' history cannot
-affect the result. No test targets a shared database.
+affect the result. Do not run these tests against staging or production databases.
 
 Database-package unit tests in
 [`audit-context.test.ts`](../../packages/db/src/utils/audit-context.test.ts)

@@ -89,13 +89,13 @@ describe("database audit attribution", () => {
 
   it("attributes raw Drizzle execute and resolves after commit", async () => {
     const result = await runWithAuditContext(actor, async () =>
-      db.execute(
+      production.db.execute(
         sql`insert into attendance_types(type) values (${name("raw")}) returning type`,
       ),
     );
     expect([...result]).toEqual([{ type: name("raw") }]);
     await runWithAuditContext(actor, async () =>
-      db.execute(
+      production.db.execute(
         sql`update attendance_types set description = 'raw update' where type = ${name("raw")}`,
       ),
     );
@@ -129,10 +129,10 @@ describe("database audit attribution", () => {
 
   it("records source-only context and keeps transaction-entry attribution across ambient changes", async () => {
     await runWithAuditContext({ userId: null, source: "job" }, async () =>
-      db.insert(table).values({ type: name("source-only") }),
+      production.db.insert(table).values({ type: name("source-only") }),
     );
     await runWithAuditContext(actor, () =>
-      db.transaction(async (tx) => {
+      production.db.transaction(async (tx) => {
         await runWithAuditContext({ userId: 99, source: "other" }, async () =>
           tx.insert(table).values({ type: name("ambient-change") }),
         );
@@ -153,7 +153,7 @@ describe("database audit attribution", () => {
 
   it("preserves serializable and deferrable transaction configuration", async () => {
     await runWithAuditContext(actor, () =>
-      db.transaction(
+      production.db.transaction(
         async (tx) => {
           expect([
             ...(await tx.execute(
