@@ -314,6 +314,24 @@ const OTP_VERIFYING_PATHS = new Set([
 ]);
 
 /**
+ * Hops that may append themselves to X-Forwarded-For after the client's own
+ * address. On Cloud Run the front end appends exactly one entry, the client
+ * address it saw, and nothing after it, so the only hop listed is loopback.
+ * Better Auth walks the chain from the right, skips these, and takes the
+ * first entry left over: the Cloud Run-appended client address, which the
+ * caller can't forge. The same entry as the hand-written limiters' `.at(-1)`.
+ *
+ * Without this, Better Auth trusts X-Forwarded-For only when it holds a
+ * single entry. Any caller that sends its own header makes a longer chain,
+ * so it lands in one shared per-path bucket, which anyone can fill to
+ * rate-limit everyone else in it.
+ *
+ * Behind a Google HTTPS load balancer, its address is appended too and has
+ * to be added here.
+ */
+const TRUSTED_PROXIES = ["127.0.0.1", "::1"];
+
+/**
  * The SQLSTATE of a database error, if any. DrizzleQueryError carries the
  * driver's error (with `code`) as its `cause`, so look there first.
  */
@@ -347,6 +365,9 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
     secret: options.secret,
     database: options.database,
     emailAndPassword: { enabled: false },
+    advanced: {
+      ipAddress: { trustedProxies: TRUSTED_PROXIES },
+    },
     hooks: {
       // Runs before every endpoint, so it also covers callers of the
       // BA-native /api/auth2/oauth2/* paths advertised in discovery, not just

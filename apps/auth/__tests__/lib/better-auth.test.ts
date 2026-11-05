@@ -8,6 +8,7 @@ import {
   generateKeyPair,
 } from "jose";
 import { getAuthTables } from "@better-auth/core/db";
+import { getIP } from "@better-auth/core/utils/ip";
 import { isAccessTokenPayload, verifyAccessToken } from "@f3nation/sso";
 
 import {
@@ -896,6 +897,39 @@ describe("deleteBetterAuthOAuthTokens", () => {
       deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
     ).rejects.toThrow("refresh table down");
     expect(deleteMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("client IP for Better Auth's rate limiter", () => {
+  const options = buildBetterAuthOptions({
+    baseURL: BASE_URL,
+    basePath: BASE_PATH,
+    secret: "test-only-not-a-real-secret",
+    issuer: ISSUER,
+    database: memoryAdapter({}),
+    sendVerificationOTP: () => Promise.resolve(),
+    findF3UserId: () => Promise.resolve(null),
+    claimOtpAttempt: () => Promise.resolve(true),
+    isNationAdmin: () => Promise.resolve(false),
+    findF3Profile: findOnboardedProfile,
+    allowClientAction: () => Promise.resolve(true),
+  });
+
+  it("keys on the Cloud Run-appended hop, not a forged leading entry", () => {
+    for (const forged of ["6.6.6.6", "127.0.0.1", "not-an-ip"]) {
+      expect(
+        getIP(
+          new Headers({ "x-forwarded-for": `${forged}, 203.0.113.7` }),
+          options,
+        ),
+      ).toBe("203.0.113.7");
+    }
+  });
+
+  it("still keys on a single-entry header", () => {
+    expect(
+      getIP(new Headers({ "x-forwarded-for": "203.0.113.7" }), options),
+    ).toBe("203.0.113.7");
   });
 });
 
