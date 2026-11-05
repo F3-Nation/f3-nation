@@ -1,15 +1,21 @@
 "use strict";
 
 /**
- * Logic for .github/workflows/pr-author-nudge.yml (#1491).
+ * Logic for .github/workflows/pr-author-nudge.yml.
  *
  * Nudges, then closes, PRs that are waiting on their author. The clock runs
  * only while it's the author's turn under docs/PR_REVIEW_PROCESS.md: the PR is
  * a draft, a required check is failing, it conflicts with its base, a review
  * thread is waiting on the author, or a reviewer requested changes and nothing
- * has been pushed since. While the PR waits on bots or codeowners the clock is
- * paused, and any push or author comment resets it. Bot comments and reviewer
- * pings don't.
+ * has been pushed since. While the PR waits on bots or codeowners the clock
+ * doesn't run; it restarts from the earliest open item (or the author's last
+ * activity, if later). Any push, author comment or reopen resets it. Bot
+ * comments and reviewer pings don't.
+ *
+ * When a PR that was already reminded stops being the author's turn (or gets
+ * `keep-open`), the run records `pausedAt` in the reminder's marker. The next
+ * stretch starts after it, so an old reminder or heads-up never counts toward
+ * a later close.
  *
  * About a day before a close, the run posts the PRs about to close to the
  * Codeowners Slack channel (one message per run, see `warnMessage()`), so a
@@ -30,9 +36,9 @@ const KEEP_OPEN_LABEL = "keep-open";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Days of the author's turn before the nudge and before the close, by who the
-// author is to the repo (agreed in #monorepo, 11/3). Drafts follow the same
-// timings. The close also needs a nudge posted at least (close - nudge) days
-// earlier in the same stretch, so nobody is closed without that much warning.
+// author is to the repo. Drafts follow the same timings. The close also needs
+// a nudge posted at least (close - nudge) days earlier in the same stretch, so
+// nobody is closed without that much warning.
 const DAYS = {
   team: { nudge: 5, close: 10 }, // owners, members and collaborators
   outside: { nudge: 3, close: 7 }, // everyone else, including forks
@@ -45,7 +51,8 @@ const WARN_LEAD_MS = DAY_MS;
 const WARN_MIN_MS = 20 * 60 * 60 * 1000;
 const TEAM_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
-// Authors whose PRs are never nudged. GraphQL logins carry no `[bot]` suffix.
+// Authors whose PRs are never nudged, on top of every bot or app author.
+// GraphQL logins carry no `[bot]` suffix.
 const EXEMPT_AUTHORS = ["renovate", "f3-nation-release-please"];
 
 const FAILING_CONCLUSIONS = new Set([
@@ -56,6 +63,12 @@ const FAILING_CONCLUSIONS = new Set([
   "STARTUP_FAILURE",
 ]);
 const FAILING_STATES = new Set(["FAILURE", "ERROR"]);
+// Required checks are read from this branch's rules; PRs into any other base
+// are judged without them.
+const DEFAULT_BRANCH = "main";
+// A stalled Slack webhook fails the heads-up (retried next run) instead of
+// holding the job.
+const SLACK_TIMEOUT_MS = 30 * 1000;
 
 const ts = (iso) => (iso ? Date.parse(iso) : null);
 const maxTs = (...values) => {
@@ -82,8 +95,8 @@ function parseMarker(body) {
 /**
  * Turns one GraphQL PR node (see PR_FIELDS) into the plain facts `decide()`
  * needs. `requiredContexts` is the list of required check names on the base.
- * `nudge` is `{ id, nudgedAt, warnedAt?, body? }` for the bot's existing
- * comment, or null.
+ * `nudge` is `{ id, nudgedAt, warnedAt?, pausedAt?, body? }` for the bot's
+ * newest reminder, or null.
  */
 function summarize(pr, requiredContexts, nudge) {
   const author = pr.author?.login ?? null;
@@ -111,10 +124,14 @@ function summarize(pr, requiredContexts, nudge) {
           lastAuthorActivity = maxTs(lastAuthorActivity, ts(item.createdAt));
         break;
       case "ReadyForReviewEvent":
-      case "ReopenedEvent":
         lastHandoff = maxTs(lastHandoff, ts(item.createdAt));
         if (item.actor?.login === author)
           lastAuthorActivity = maxTs(lastAuthorActivity, ts(item.createdAt));
+        break;
+      case "ReopenedEvent":
+        // Whoever reopens it, a reopened PR starts a fresh clock.
+        lastHandoff = maxTs(lastHandoff, ts(item.createdAt));
+        lastAuthorActivity = maxTs(lastAuthorActivity, ts(item.createdAt));
         break;
       case "IssueComment":
         if (item.author?.login === author)
@@ -124,7 +141,8 @@ function summarize(pr, requiredContexts, nudge) {
         const at = ts(item.submittedAt);
         const who = item.author?.login;
         if (who === author) {
-          // Replies to review threads arrive as the author's own reviews.
+          // The author's own reviews. Their replies inside review threads
+          // don't show up here (seen on #1474); the thread loop below reads them.
           lastAuthorActivity = maxTs(lastAuthorActivity, at);
         } else if (who) {
           lastHandoff = maxTs(lastHandoff, at);
@@ -144,6 +162,17 @@ function summarize(pr, requiredContexts, nudge) {
   // they're read from the threads themselves.
   const threads = pr.reviewThreads?.nodes ?? [];
   const lastComment = (thread) => thread.comments?.nodes?.at(-1);
+  // A thread waits on the author from the first comment after their last
+  // reply, so a bot commenting again in it doesn't move the clock.
+  const waitingSince = (thread) => {
+    const comments = thread.comments?.nodes ?? [];
+    let start = null;
+    for (const comment of comments) {
+      if (comment.author?.login === author) start = null;
+      else start ??= ts(comment.createdAt);
+    }
+    return start;
+  };
   for (const thread of threads) {
     for (const comment of thread.comments?.nodes ?? []) {
       if (comment.author?.login === author)
@@ -163,19 +192,27 @@ function summarize(pr, requiredContexts, nudge) {
   const failing = [];
   let failingSince = null;
   for (const name of requiredContexts) {
-    const runs = contexts
-      .filter((c) => (c.name ?? c.context) === name)
-      .map((c) => ({
-        failed:
-          c.__typename === "CheckRun"
-            ? FAILING_CONCLUSIONS.has(c.conclusion)
-            : FAILING_STATES.has(c.state),
-        at: ts(c.completedAt ?? c.createdAt),
-      }))
-      .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
-    if (runs[0]?.failed) {
+    // The newest check run and the newest legacy status are judged apart, so
+    // a pass in one API can't hide a failure in the other.
+    const latest = ["CheckRun", "StatusContext"].map(
+      (kind) =>
+        contexts
+          .filter(
+            (c) => c.__typename === kind && (c.name ?? c.context) === name,
+          )
+          .map((c) => ({
+            failed:
+              kind === "CheckRun"
+                ? FAILING_CONCLUSIONS.has(c.conclusion)
+                : FAILING_STATES.has(c.state),
+            at: ts(c.completedAt ?? c.createdAt),
+          }))
+          .sort((a, b) => (b.at ?? 0) - (a.at ?? 0))[0],
+    );
+    const failed = latest.filter((r) => r?.failed);
+    if (failed.length) {
       failing.push(name);
-      failingSince = minTs(failingSince, runs[0].at);
+      failingSince = minTs(failingSince, ...failed.map((r) => r.at));
     }
   }
   if (!pr.isDraft && failing.length) {
@@ -185,7 +222,11 @@ function summarize(pr, requiredContexts, nudge) {
   if (!pr.isDraft && pr.mergeable === "CONFLICTING") {
     // GitHub records no time for a conflict appearing; the latest handoff is
     // the closest honest stand-in, and the close still waits on a nudge.
-    reasons.push({ kind: "conflict", since: lastHandoff });
+    reasons.push({
+      kind: "conflict",
+      since: lastHandoff,
+      base: pr.baseRefName ?? DEFAULT_BRANCH,
+    });
   }
 
   const waitingThreads = threads.filter((thread) => {
@@ -196,7 +237,7 @@ function summarize(pr, requiredContexts, nudge) {
   if (!pr.isDraft && waitingThreads.length) {
     reasons.push({
       kind: "threads",
-      since: minTs(...waitingThreads.map((t) => ts(lastComment(t).createdAt))),
+      since: minTs(...waitingThreads.map(waitingSince)),
       count: waitingThreads.length,
     });
   }
@@ -221,7 +262,10 @@ function summarize(pr, requiredContexts, nudge) {
     author,
     isDraft: pr.isDraft,
     tier: TEAM_ASSOCIATIONS.has(pr.authorAssociation) ? "team" : "outside",
+    // A deleted ("ghost") account has no author to remind; a codeowner picks
+    // those up instead.
     exempt:
+      author == null ||
       isBotAuthor ||
       EXEMPT_AUTHORS.includes(author) ||
       labels.includes(KEEP_OPEN_LABEL),
@@ -243,7 +287,12 @@ function decide(facts, now) {
 
   const days = DAYS[facts.tier];
   const turnStart = minTs(...facts.reasons.map((r) => r.since));
-  const clockStart = maxTs(turnStart, facts.lastAuthorActivity);
+  // A recorded pause ends the stretch the old reminder belonged to.
+  const clockStart = maxTs(
+    turnStart,
+    facts.lastAuthorActivity,
+    ts(facts.nudge?.pausedAt),
+  );
   const ageDays = (now - clockStart) / DAY_MS;
   const nudgedAt = ts(facts.nudge?.nudgedAt);
   const nudgedThisStretch = nudgedAt != null && nudgedAt >= clockStart;
@@ -311,7 +360,7 @@ function describeReasons(reasons) {
       case "checks":
         return `Required ${r.names.length === 1 ? "check" : "checks"} failing: ${r.names.map((n) => `\`${n}\``).join(", ")}.`;
       case "conflict":
-        return "It has a merge conflict with `main`.";
+        return `It has a merge conflict with \`${r.base ?? DEFAULT_BRANCH}\`.`;
       case "threads":
         return `${plural(r.count, "review thread")} ${r.count === 1 ? "is" : "are"} waiting on you: reply to each (say what you changed or why not), then resolve it.`;
       case "changes":
@@ -347,7 +396,10 @@ function warnMessage(warns, { owner, repo }) {
   if (!warns.length) return null;
   const lines = warns.map((r) => {
     const url = `https://github.com/${owner}/${repo}/pull/${r.pr}`;
-    return `• <${url}|#${r.pr} ${slackEscape(r.title ?? "")}> by ${slackEscape(r.author ?? "unknown")}: waiting on them ${r.age} (${r.turn}), closes on/after ${r.closeAt}`;
+    const link = `<${url}|#${r.pr} ${slackEscape(r.title ?? "")}>`;
+    const who = slackEscape(r.author ?? "unknown");
+    const status = `waiting on them ${r.age} (${r.turn}), closes on/after ${r.closeAt}`;
+    return `• ${link} by ${who}: ${status}`;
   });
   return [
     `:hourglass: ${warns.length === 1 ? "This PR" : `These ${warns.length} PRs`} will auto-close in about a day. ${warns.length === 1 ? "It has" : "They have"} been waiting on the author since the reminder:`,
@@ -373,7 +425,7 @@ function nudgeBody(facts, decision, now) {
 
 function closeBody(facts, decision) {
   return [
-    `Closing this PR: it has waited on @${facts.author} for ${plural(Math.floor(decision.ageDays), "day")} since the reminder above.`,
+    `Closing this PR: it has waited on @${facts.author} for ${plural(Math.floor(decision.ageDays), "day")}, with nothing changed since the reminder above.`,
     "",
     "Reopen it whenever you pick it back up. A maintainer may also finish the work in a new PR and credit you with a `Co-authored-by` trailer.",
   ].join("\n");
@@ -383,7 +435,7 @@ function closeBody(facts, decision) {
 // pages risk GitHub's ~10s GraphQL limit (same finding as scripts/pr-triage.sh).
 const PAGE_SIZE = 10;
 const PR_FIELDS = `
-  number title isDraft createdAt mergeable authorAssociation
+  number title isDraft createdAt mergeable authorAssociation baseRefName
   author { login __typename }
   labels(first: 30) { nodes { name } }
   timelineItems(last: 100, itemTypes: [PULL_REQUEST_COMMIT, HEAD_REF_FORCE_PUSHED_EVENT,
@@ -414,9 +466,10 @@ const PR_FIELDS = `
 /**
  * Fetches every open PR, decides, and (unless dryRun) comments, closes and
  * labels. `github` is actions/github-script's client (or the gh shim below).
- * `notify(text)` posts the codeowners' Slack heads-up; without it the
- * heads-up is recorded as sent anyway, so closes keep to schedule.
- * Returns `{ rows, slackNote }`: the job summary rows and the heads-up text.
+ * `notify(text)` posts the codeowners' Slack heads-up. Without it a live run
+ * treats the heads-up as failed: nothing is recorded, the closes wait, and the
+ * rows fail. Returns `{ rows, slackNote }`: the job summary rows and the
+ * heads-up text.
  */
 async function run({
   github,
@@ -433,7 +486,7 @@ async function run({
     {
       owner,
       repo,
-      branch: "main",
+      branch: DEFAULT_BRANCH,
       per_page: 100,
     },
   );
@@ -476,6 +529,7 @@ async function run({
       const botComments = (pr.timelineItems?.nodes ?? []).filter(
         (n) => n.__typename === "IssueComment" && n.author?.login === botLogin,
       );
+      // The newest reminder holds the current state.
       let nudge = null;
       for (const c of botComments.reverse()) {
         const { data } = await github.request(
@@ -492,20 +546,52 @@ async function run({
             id: c.databaseId,
             nudgedAt: state.nudgedAt,
             warnedAt: state.warnedAt,
+            pausedAt: state.pausedAt,
             body: data.body,
           };
           break;
         }
       }
 
-      const facts = summarize(pr, requiredContexts, nudge);
+      const required =
+        (pr.baseRefName ?? DEFAULT_BRANCH) === DEFAULT_BRANCH
+          ? requiredContexts
+          : [];
+      const facts = summarize(pr, required, nudge);
       const decision = decide(facts, now);
       row.turn = facts.reasons.map((r) => r.kind).join(", ") || "—";
       row.age =
         decision.ageDays != null ? `${decision.ageDays.toFixed(1)}d` : "—";
       row.closeAt = decision.closeAt ? day(decision.closeAt) : "—";
 
-      if (decision.action === "none") {
+      const nudgedAt = ts(nudge?.nudgedAt);
+      const pausedAt = ts(nudge?.pausedAt);
+      const pause =
+        decision.action === "none" &&
+        (decision.why === "not author's turn" || decision.why === "exempt") &&
+        nudgedAt != null &&
+        (pausedAt == null || pausedAt < nudgedAt);
+
+      if (pause) {
+        // Once per stretch: the old reminder and heads-up stop counting.
+        row.outcome = dryRun ? `${decision.why}, would pause` : decision.why;
+        if (!dryRun) {
+          await github.request(
+            "PATCH /repos/{owner}/{repo}/issues/comments/{id}",
+            {
+              owner,
+              repo,
+              id: nudge.id,
+              body: withState(nudge.body, {
+                nudgedAt: nudge.nudgedAt,
+                warnedAt: nudge.warnedAt,
+                pausedAt: new Date(now).toISOString(),
+              }),
+            },
+          );
+          row.outcome = `${decision.why}, paused`;
+        }
+      } else if (decision.action === "none") {
         row.outcome = decision.why;
       } else if (dryRun) {
         row.outcome = `would ${decision.action}`;
@@ -516,28 +602,16 @@ async function run({
         row.nudge = nudge;
         warns.push(row);
       } else if (decision.action === "nudge") {
-        const body = nudgeBody(facts, decision, now);
-        if (nudge) {
-          await github.request(
-            "PATCH /repos/{owner}/{repo}/issues/comments/{id}",
-            {
-              owner,
-              repo,
-              id: nudge.id,
-              body,
-            },
-          );
-        } else {
-          await github.request(
-            "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
-            {
-              owner,
-              repo,
-              issue_number: pr.number,
-              body,
-            },
-          );
-        }
+        // Always a new comment: editing an old one wouldn't notify the author.
+        await github.request(
+          "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+          {
+            owner,
+            repo,
+            issue_number: pr.number,
+            body: nudgeBody(facts, decision, now),
+          },
+        );
         row.outcome = "nudged";
       } else {
         await github.request(
@@ -580,12 +654,10 @@ async function run({
 
   const slackNote = warnMessage(warns, { owner, repo });
   if (slackNote && !dryRun) {
-    let sent = false;
-    let error = null;
+    let error = notify ? null : new Error("no Slack webhook is configured");
     if (notify) {
       try {
         await notify(slackNote);
-        sent = true;
       } catch (e) {
         error = e;
       }
@@ -611,9 +683,7 @@ async function run({
               }),
             },
           );
-          row.outcome = sent
-            ? "warned in Slack"
-            : "warn recorded (no Slack webhook)";
+          row.outcome = "warned in Slack";
         } catch (e) {
           row.outcome = `FAILED: ${e.status ?? ""} ${e.message}`;
           row.failed = true;
@@ -627,6 +697,7 @@ async function run({
 
 module.exports = {
   DAYS,
+  SLACK_TIMEOUT_MS,
   MARKER,
   parseMarker,
   summarize,

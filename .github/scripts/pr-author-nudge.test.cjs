@@ -223,7 +223,7 @@ test("changes requested counts until the author pushes", () => {
   assert.equal(run(pushed, 30).why, "not author's turn");
 });
 
-test("Renovate, release-please, bots and keep-open are exempt", () => {
+test("Renovate, release-please, bots, deleted accounts and keep-open are exempt", () => {
   const stale = { reviewThreads: { nodes: [thread("coderabbitai", 0)] } };
   assert.equal(
     run(
@@ -247,6 +247,7 @@ test("Renovate, release-please, bots and keep-open are exempt", () => {
       .why,
     "exempt",
   );
+  assert.equal(run(basePr({ ...stale, author: null }), 30).why, "exempt");
 });
 
 test("the nudge comment carries its state and lists what's open", () => {
@@ -325,22 +326,27 @@ test("the Slack heads-up links each PR and escapes titles", () => {
   assert.match(text, /keep-open/);
 });
 
-// A fake github-script client: one stale PR with a nudge comment from day 5.
-function fakeGithub(nudgeState) {
+// A fake github-script client. By default: one PR with a bot thread from day 0
+// and the bot's reminder comment (day 5) carrying `nudgeState`. Pass a null
+// `nudgeState` for a PR the bot never commented on.
+function fakeGithub(nudgeState, prOverrides = {}) {
   const writes = [];
+  const botComment = {
+    __typename: "IssueComment",
+    databaseId: 77,
+    createdAt: at(5),
+    author: { login: "github-actions" },
+  };
   const pr = basePr({
     reviewThreads: { nodes: [thread("coderabbitai", 0)] },
-    timelineItems: {
-      nodes: [
-        {
-          __typename: "IssueComment",
-          databaseId: 77,
-          createdAt: at(5),
-          author: { login: "github-actions" },
-        },
-      ],
-    },
+    timelineItems: { nodes: nudgeState ? [botComment] : [] },
+    ...prOverrides,
   });
+  if (nudgeState && prOverrides.timelineItems) {
+    pr.timelineItems = {
+      nodes: [botComment, ...prOverrides.timelineItems.nodes],
+    };
+  }
   return {
     writes,
     paginate: async () => [
@@ -368,6 +374,18 @@ function fakeGithub(nudgeState) {
     },
   };
 }
+
+const liveRun = (github, nowDays, extra = {}) =>
+  runAll({
+    github,
+    owner: "F3-Nation",
+    repo: "f3-nation",
+    dryRun: false,
+    now: T0 + nowDays * DAY,
+    log: () => {},
+    notify: async () => {},
+    ...extra,
+  });
 
 test("a live run sends one heads-up, then records it in the marker", async () => {
   const github = fakeGithub({ nudgedAt: at(5) });
@@ -422,4 +440,288 @@ test("a dry run builds the heads-up but writes nothing", async () => {
   assert.equal(rows[0].outcome, "would warn");
   assert.match(slackNote, /#1 fix\(api\): thing/);
   assert.equal(github.writes.length, 0);
+});
+
+test("without a Slack webhook a live run records nothing, so the close waits", async () => {
+  const github = fakeGithub({ nudgedAt: at(5) });
+  const { rows } = await liveRun(github, 9.1, { notify: null });
+  assert.ok(rows[0].failed);
+  assert.match(rows[0].outcome, /no Slack webhook/);
+  assert.equal(github.writes.length, 0);
+});
+
+test("a live close comments, labels stale, then closes", async () => {
+  const github = fakeGithub({ nudgedAt: at(5), warnedAt: at(9.1) });
+  const { rows } = await liveRun(github, 10.1);
+  assert.equal(rows[0].outcome, "closed");
+  assert.deepEqual(
+    github.writes.map((w) => w.route),
+    [
+      "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+      "POST /repos/{owner}/{repo}/issues/{issue_number}/labels",
+      "PATCH /repos/{owner}/{repo}/pulls/{pull_number}",
+    ],
+  );
+  assert.match(github.writes[0].params.body, /^Closing this PR/);
+  assert.match(github.writes[0].params.body, /with nothing changed since/);
+  assert.deepEqual(github.writes[1].params.labels, ["stale"]);
+  assert.equal(github.writes[2].params.state, "closed");
+});
+
+test("a first live nudge posts one comment carrying its state", async () => {
+  const github = fakeGithub(null);
+  const { rows } = await liveRun(github, 6);
+  assert.equal(rows[0].outcome, "nudged");
+  assert.equal(github.writes.length, 1);
+  assert.equal(
+    github.writes[0].route,
+    "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+  );
+  assert.equal(
+    parseMarker(github.writes[0].params.body).nudgedAt,
+    new Date(T0 + 6 * DAY).toISOString(),
+  );
+});
+
+test("a repeat nudge posts a new comment, so the author is notified again", async () => {
+  // Reminded on day 5, the author pushed on day 6, and the thread is still open.
+  const github = fakeGithub(
+    { nudgedAt: at(5) },
+    {
+      timelineItems: {
+        nodes: [{ __typename: "HeadRefForcePushedEvent", createdAt: at(6) }],
+      },
+    },
+  );
+  const { rows } = await liveRun(github, 11.1);
+  assert.equal(rows[0].outcome, "nudged");
+  assert.equal(github.writes.length, 1);
+  assert.match(
+    github.writes[0].route,
+    /^POST .*\/issues\/\{issue_number\}\/comments$/,
+  );
+  assert.match(github.writes[0].params.body, /@pax/);
+});
+
+test("a dry run reports nudges and closes but writes nothing", async () => {
+  for (const [state, nowDays, outcome] of [
+    [null, 6, "would nudge"],
+    [{ nudgedAt: at(5), warnedAt: at(9.1) }, 10.1, "would close"],
+    [{ nudgedAt: at(5) }, 12, "not author's turn, would pause"],
+  ]) {
+    const overrides =
+      outcome === "not author's turn, would pause"
+        ? { reviewThreads: { nodes: [] } }
+        : {};
+    const github = fakeGithub(state, overrides);
+    const { rows } = await liveRun(github, nowDays, { dryRun: true });
+    assert.equal(rows[0].outcome, outcome);
+    assert.equal(github.writes.length, 0);
+  }
+});
+
+test("a reminded PR that stops being the author's turn records a pause, once", async () => {
+  const github = fakeGithub(
+    { nudgedAt: at(5), warnedAt: at(9) },
+    { reviewThreads: { nodes: [thread("coderabbitai", 0, true)] } },
+  );
+  const { rows } = await liveRun(github, 9.5);
+  assert.equal(rows[0].outcome, "not author's turn, paused");
+  assert.equal(github.writes.length, 1);
+  assert.match(github.writes[0].route, /^PATCH .*comments/);
+  assert.deepEqual(parseMarker(github.writes[0].params.body), {
+    nudgedAt: at(5),
+    warnedAt: at(9),
+    pausedAt: new Date(T0 + 9.5 * DAY).toISOString(),
+  });
+
+  const again = fakeGithub(
+    { nudgedAt: at(5), warnedAt: at(9), pausedAt: at(9.5) },
+    { reviewThreads: { nodes: [thread("coderabbitai", 0, true)] } },
+  );
+  await liveRun(again, 12);
+  assert.equal(again.writes.length, 0);
+});
+
+test("keep-open on a reminded PR records a pause too", async () => {
+  const github = fakeGithub(
+    { nudgedAt: at(5), warnedAt: at(9) },
+    { labels: { nodes: [{ name: "keep-open" }] } },
+  );
+  const { rows } = await liveRun(github, 9.5);
+  assert.equal(rows[0].outcome, "exempt, paused");
+  assert.ok(parseMarker(github.writes[0].params.body).pausedAt);
+});
+
+test("after a pause, an old reminder and heads-up don't count toward a close", () => {
+  // Reminded day 5, warned day 9, paused day 10 (keep-open added, or the
+  // reviewer resolved the thread). On day 25 it's the author's turn again.
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 0.1)] },
+  });
+  const paused = { id: 9, nudgedAt: at(5), warnedAt: at(9), pausedAt: at(10) };
+  assert.equal(run(pr, 25, paused).action, "nudge");
+  const conflicted = basePr({ mergeable: "CONFLICTING" });
+  assert.equal(run(conflicted, 25, paused).action, "nudge");
+  // Without the pause it would have closed straight away.
+  assert.equal(run(pr, 25, { ...paused, pausedAt: undefined }).action, "close");
+});
+
+test("a reopen by anyone starts a fresh clock", () => {
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 0)] },
+    timelineItems: {
+      nodes: [
+        {
+          __typename: "ReopenedEvent",
+          createdAt: at(12),
+          actor: { login: "BigGillyStyle" },
+        },
+      ],
+    },
+  });
+  const old = { id: 9, nudgedAt: at(5), warnedAt: at(9) };
+  assert.equal(run(pr, 12.5, old).action, "none");
+  assert.equal(run(pr, 17.1, old).action, "nudge");
+});
+
+test("a force-push resets the clock", () => {
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 1)] },
+    timelineItems: {
+      nodes: [{ __typename: "HeadRefForcePushedEvent", createdAt: at(6) }],
+    },
+  });
+  assert.equal(run(pr, 10.9).action, "none");
+  assert.equal(run(pr, 11.1).action, "nudge");
+});
+
+test("the author's own review resets the clock", () => {
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 1)] },
+    timelineItems: {
+      nodes: [
+        {
+          __typename: "PullRequestReview",
+          submittedAt: at(6),
+          state: "COMMENTED",
+          author: { login: "pax" },
+        },
+      ],
+    },
+  });
+  assert.equal(run(pr, 10.9).action, "none");
+  assert.equal(run(pr, 11.1).action, "nudge");
+});
+
+test("a bot commenting again in an unanswered thread doesn't move the clock", () => {
+  const pr = basePr({
+    reviewThreads: {
+      nodes: [
+        {
+          isResolved: false,
+          comments: {
+            nodes: [
+              { author: { login: "coderabbitai" }, createdAt: at(1) },
+              { author: { login: "coderabbitai" }, createdAt: at(4) },
+            ],
+          },
+        },
+      ],
+    },
+  });
+  assert.equal(run(pr, 6.1).action, "nudge");
+});
+
+test("a merge conflict is the author's turn and names the base branch", () => {
+  const pr = basePr({ mergeable: "CONFLICTING", baseRefName: "develop" });
+  const facts = summarize(pr, ["ci"], null);
+  assert.equal(facts.reasons[0].kind, "conflict");
+  assert.equal(run(pr, 4.9).action, "none");
+  const decision = run(pr, 5.1);
+  assert.equal(decision.action, "nudge");
+  assert.match(
+    nudgeBody(facts, decision, T0 + 5.1 * DAY),
+    /conflict with `develop`/,
+  );
+});
+
+test("a failing required legacy status is the author's turn", () => {
+  const pr = basePr({
+    commits: {
+      nodes: [
+        {
+          commit: {
+            statusCheckRollup: {
+              contexts: {
+                nodes: [
+                  {
+                    __typename: "StatusContext",
+                    context: "ci",
+                    state: "FAILURE",
+                    createdAt: at(1),
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    },
+  });
+  assert.equal(run(pr, 5.9).action, "none");
+  assert.equal(run(pr, 6.1).action, "nudge");
+});
+
+const withContexts = (nodes) =>
+  basePr({
+    commits: {
+      nodes: [{ commit: { statusCheckRollup: { contexts: { nodes } } } }],
+    },
+  });
+const checkRun = (conclusion, days) => ({
+  __typename: "CheckRun",
+  name: "ci",
+  conclusion,
+  completedAt: at(days),
+});
+
+test("the newest run of a check wins", () => {
+  const fixed = withContexts([checkRun("FAILURE", 2), checkRun("SUCCESS", 3)]);
+  assert.equal(run(fixed, 30).why, "not author's turn");
+  const broke = withContexts([checkRun("SUCCESS", 2), checkRun("FAILURE", 3)]);
+  assert.equal(run(broke, 8.1).action, "nudge");
+});
+
+test("a passing legacy status doesn't hide a failing check run of the same name", () => {
+  const pr = withContexts([
+    checkRun("FAILURE", 2),
+    {
+      __typename: "StatusContext",
+      context: "ci",
+      state: "SUCCESS",
+      createdAt: at(3),
+    },
+  ]);
+  assert.equal(run(pr, 7.1).action, "nudge");
+});
+
+test("a PR into another branch isn't judged by main's required checks", async () => {
+  const github = fakeGithub(null, {
+    baseRefName: "release",
+    reviewThreads: { nodes: [] },
+    commits: {
+      nodes: [
+        {
+          commit: {
+            statusCheckRollup: {
+              contexts: { nodes: [checkRun("FAILURE", 1)] },
+            },
+          },
+        },
+      ],
+    },
+  });
+  const { rows } = await liveRun(github, 30, { dryRun: true });
+  assert.equal(rows[0].outcome, "not author's turn");
 });
