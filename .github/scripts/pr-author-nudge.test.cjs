@@ -207,7 +207,8 @@ test("changes requested counts until the author pushes", () => {
   const review = {
     __typename: "PullRequestReview",
     state: "CHANGES_REQUESTED",
-    author: { login: "evanpetzoldt" },
+    author: { login: "evanpetzoldt", __typename: "User" },
+    authorAssociation: "MEMBER",
     submittedAt: at(1),
   };
   const pr = basePr({ timelineItems: { nodes: [review] } });
@@ -724,4 +725,58 @@ test("a PR into another branch isn't judged by main's required checks", async ()
   });
   const { rows } = await liveRun(github, 30, { dryRun: true });
   assert.equal(rows[0].outcome, "not author's turn");
+});
+
+test("only a team member's or a bot's change request is the author's turn", () => {
+  const review = (author, authorAssociation) => ({
+    __typename: "PullRequestReview",
+    state: "CHANGES_REQUESTED",
+    author,
+    authorAssociation,
+    submittedAt: at(1),
+  });
+  const drive = basePr({
+    timelineItems: {
+      nodes: [review({ login: "passerby", __typename: "User" }, "NONE")],
+    },
+  });
+  assert.equal(run(drive, 30).why, "not author's turn");
+  const bot = basePr({
+    timelineItems: {
+      nodes: [review({ login: "coderabbitai", __typename: "Bot" }, "NONE")],
+    },
+  });
+  assert.equal(run(bot, 8.1).action, "nudge");
+});
+
+test("a rerun still in progress replaces the failed run", () => {
+  const pr = withContexts([
+    {
+      __typename: "CheckRun",
+      name: "ci",
+      conclusion: "FAILURE",
+      startedAt: at(1.9),
+      completedAt: at(2),
+    },
+    {
+      __typename: "CheckRun",
+      name: "ci",
+      conclusion: null,
+      startedAt: at(3),
+      completedAt: null,
+    },
+  ]);
+  assert.equal(run(pr, 30).why, "not author's turn");
+});
+
+test("a late heads-up shows the earliest close the next run will allow", () => {
+  const pr = basePr({ reviewThreads: { nodes: [thread("coderabbitai", 0)] } });
+  const nudge = { id: 9, nudgedAt: at(5) };
+  const late = run(pr, 12, nudge);
+  assert.equal(late.action, "warn");
+  const warned = { ...nudge, warnedAt: at(12) };
+  // The first moment the close is allowed is exactly the advertised one.
+  assert.equal(run(pr, 12 + 20 / 24 - 0.001, warned).action, "none");
+  assert.equal(run(pr, 12 + 20 / 24, warned).action, "close");
+  assert.equal(late.closeAt, T0 + 12 * DAY + 20 * 60 * 60 * 1000);
 });

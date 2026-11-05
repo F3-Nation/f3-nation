@@ -146,7 +146,16 @@ function summarize(pr, requiredContexts, nudge) {
           lastAuthorActivity = maxTs(lastAuthorActivity, at);
         } else if (who) {
           lastHandoff = maxTs(lastHandoff, at);
-          if (item.state !== "COMMENTED" && item.state !== "PENDING") {
+          // Only a team member's or a review bot's verdict puts it on the
+          // author; a drive-by review from anyone else doesn't.
+          const counts =
+            TEAM_ASSOCIATIONS.has(item.authorAssociation) ||
+            item.author?.__typename === "Bot";
+          if (
+            counts &&
+            item.state !== "COMMENTED" &&
+            item.state !== "PENDING"
+          ) {
             const prev = latestReviewByReviewer.get(who);
             if (!prev || at > prev.at)
               latestReviewByReviewer.set(who, { state: item.state, at });
@@ -206,8 +215,11 @@ function summarize(pr, requiredContexts, nudge) {
                 ? FAILING_CONCLUSIONS.has(c.conclusion)
                 : FAILING_STATES.has(c.state),
             at: ts(c.completedAt ?? c.createdAt),
+            // A rerun still in progress has no completion time yet, so runs
+            // are ordered by when they started.
+            order: ts(c.startedAt ?? c.completedAt ?? c.createdAt),
           }))
-          .sort((a, b) => (b.at ?? 0) - (a.at ?? 0))[0],
+          .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))[0],
     );
     const failed = latest.filter((r) => r?.failed);
     if (failed.length) {
@@ -317,7 +329,8 @@ function decide(facts, now) {
       why: "author's turn",
       clockStart,
       ageDays,
-      closeAt: Math.max(closeAt, now + WARN_LEAD_MS),
+      // The earliest a close can follow this heads-up, as the close sees it.
+      closeAt: Math.max(closeAt, now + WARN_MIN_MS),
     };
   }
   if (warnedThisStretch && now >= closeAt) {
@@ -449,7 +462,7 @@ const PR_FIELDS = `
       ... on ConvertToDraftEvent { createdAt actor { login } }
       ... on ReopenedEvent { createdAt actor { login } }
       ... on IssueComment { databaseId createdAt author { login } }
-      ... on PullRequestReview { submittedAt state author { login } }
+      ... on PullRequestReview { submittedAt state authorAssociation author { login __typename } }
     }
   }
   reviewThreads(first: 100) {
@@ -458,7 +471,7 @@ const PR_FIELDS = `
   commits(last: 1) {
     nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
       __typename
-      ... on CheckRun { name conclusion completedAt }
+      ... on CheckRun { name conclusion startedAt completedAt }
       ... on StatusContext { context state createdAt }
     } } } } }
   }`;

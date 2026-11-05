@@ -15,9 +15,10 @@ name: PR author nudge
 # About a day before PRs close, a live run posts them to the Codeowners Slack
 # channel through the incoming webhook in the SLACK_CODEOWNERS_WEBHOOK_URL
 # secret, so a codeowner can finish one or hold it with `keep-open`. A close
-# waits until that heads-up has gone out: without the secret, or when Slack
-# fails, nothing closes and the job fails. A dry run shows the message in the
-# job summary instead of posting it.
+# waits until its heads-up has gone out: without the secret, or when Slack
+# fails, PRs due a heads-up stay open and the job fails. PRs warned on an
+# earlier run still close on schedule. A dry run shows the message in the job
+# summary instead of posting it.
 
 on:
   schedule:
