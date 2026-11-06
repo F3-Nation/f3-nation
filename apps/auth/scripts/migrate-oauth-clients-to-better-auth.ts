@@ -199,7 +199,7 @@ function scopeProblem(clientId: string, scopes: string[]): string | null {
  */
 export function assertSupportedScopes(
   rows: { clientId: string; scopes: string[] }[],
-) {
+): void {
   const problems = rows
     .map((row) => scopeProblem(row.clientId, row.scopes))
     .filter((problem): problem is string => problem !== null);
