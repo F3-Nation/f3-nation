@@ -100,8 +100,9 @@ DEFAULT_IMAGE_SCALE = 3
 
 
 # The neon style and glow effect below are adapted from mplcyberpunk 0.7.6 (MIT, Dominik Haitz).
-# They live here because mplcyberpunk registers its style through matplotlib.style.core helpers that
-# matplotlib 3.11 removed, so importing it raises AttributeError.
+# They live here because mplcyberpunk calls matplotlib.style.core.read_style_directory and
+# update_nested_dict at import time, and matplotlib 3.11 no longer provides them in
+# matplotlib.style.core, so importing mplcyberpunk raises AttributeError.
 #
 # mplcyberpunk license notice for the adapted code:
 #
