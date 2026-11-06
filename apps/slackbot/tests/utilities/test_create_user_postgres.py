@@ -522,8 +522,8 @@ def test_slack_identity_migration_preserves_survivors_and_nonduplicates(isolated
             )
         _insert_identity(connection, 10, "U_LINKED")
         _insert_identity(connection, 11, "U_LINKED", user_id=1)
-        _insert_identity(connection, 20, "U_LOWEST_LINKED", user_id=1)
         _insert_identity(connection, 21, "U_LOWEST_LINKED", user_id=1)
+        _insert_identity(connection, 20, "U_LOWEST_LINKED", user_id=1)
         _insert_identity(connection, 30, "U_DONOR", user_id=1)
         _insert_identity(
             connection,
@@ -538,8 +538,8 @@ def test_slack_identity_migration_preserves_survivors_and_nonduplicates(isolated
         _insert_identity(connection, 40, "U_UNLINKED_DATA")
         _insert_identity(connection, 41, "U_UNLINKED_DATA", meta="[]")
         _insert_identity(connection, 42, "U_UNLINKED_DATA")
-        _insert_identity(connection, 50, "U_UNLINKED_EMPTY")
         _insert_identity(connection, 51, "U_UNLINKED_EMPTY")
+        _insert_identity(connection, 50, "U_UNLINKED_EMPTY")
         _insert_identity(connection, 60, "U_LINKED_DATA", user_id=1)
         _insert_identity(connection, 61, "U_LINKED_DATA", user_id=1, strava_refresh_token="synthetic-only")
         _insert_identity(connection, 70, "U_OTHER_ACCOUNT", user_id=1)

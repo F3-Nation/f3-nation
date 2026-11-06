@@ -5,8 +5,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Enum, Float, Integer, String, Table, create_engine
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Enum, Float, Integer, String, Table, create_engine, event
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session, registry
+from sqlalchemy.sql import visitors
+from sqlalchemy.sql.elements import Over
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -159,7 +162,7 @@ def query_data(monkeypatch):
         ]
     )
     session.commit()
-    yield SimpleNamespace(session=session, models=SimpleNamespace(**models), settings=settings)
+    yield SimpleNamespace(session=session, engine=engine, models=SimpleNamespace(**models), settings=settings)
     session.close()
     engine.dispose()
     mapper_registry.dispose()
@@ -213,11 +216,17 @@ def pull_items(module):
             id="nonnull-timestamp-before-null",
         ),
         pytest.param(
-            [{"id": 20}, {"id": 21, "slack_id": "U_TIED", "user_name": "Tied Q"}],
+            [
+                {"id": 21, "slack_id": "U_TIED", "user_name": "Tied Q"},
+                {"id": 20, "user_name": "Selected Slack Q", "avatar_url": SLACK_AVATAR},
+            ],
             id="equal-timestamps-lowest-id",
         ),
         pytest.param(
-            [{"slack_updated": None}, {"id": 11, "slack_id": "U_NULL_TIED", "slack_updated": None}],
+            [
+                {"id": 11, "slack_id": "U_NULL_TIED", "slack_updated": None},
+                {"slack_updated": None, "user_name": "Selected Slack Q", "avatar_url": SLACK_AVATAR},
+            ],
             id="all-null-timestamps-lowest-id",
         ),
     ],
@@ -237,6 +246,32 @@ def test_queries_select_one_identity_for_f3_user_and_workspace(query_data, modul
         assert item.slack_avatar_url == SLACK_AVATAR
     else:
         assert item.q_name == "Synthetic F3 Q"
+
+
+@pytest.mark.parametrize("module", [preblast_reminders, auto_preblast_send], ids=["reminder", "automatic"])
+def test_actual_identity_ranking_uses_postgres_null_and_id_ordering(query_data, module):
+    add_identities(query_data, {}, {"id": 11, "slack_id": "U_NULL", "slack_updated": None})
+    statements = []
+
+    def capture_statement(_connection, clauseelement, _multiparams, _params, _execution_options):
+        statements.append(clauseelement)
+
+    event.listen(query_data.engine, "before_execute", capture_statement)
+    try:
+        items = pull_items(module)
+    finally:
+        event.remove(query_data.engine, "before_execute", capture_statement)
+
+    assert [item.slack_user_id for item in items] == ["U_SELECTED"]
+    dialect = postgresql.dialect()
+    identity_orders = [
+        str(node.order_by.compile(dialect=dialect))
+        for statement in statements
+        for node in visitors.iterate(statement)
+        if isinstance(node, Over)
+        and str(node.partition_by.compile(dialect=dialect)) == "slack_users.user_id, slack_users.slack_team_id"
+    ]
+    assert set(identity_orders) == {"slack_users.slack_updated DESC NULLS LAST, slack_users.id ASC"}
 
 
 @pytest.mark.parametrize("module", [preblast_reminders, auto_preblast_send], ids=["reminder", "automatic"])

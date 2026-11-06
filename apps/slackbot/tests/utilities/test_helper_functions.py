@@ -1,9 +1,15 @@
+import io
+import json
+import logging
 import os
 import sys
 from copy import copy
 from types import SimpleNamespace
 
 import pytest
+from google.cloud.logging_v2.handlers import StructuredLogHandler
+from slack_sdk.errors import SlackApiError
+from sqlalchemy.exc import OperationalError
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from utilities import helper_functions
@@ -601,6 +607,156 @@ def test_production_get_user_raises_when_slack_lookup_fails_for_an_uncached_user
         helper_functions.get_user(
             "U_NEW", SimpleNamespace(org_id=1, team_id="T_PROD"), SimpleNamespace(users_info=users_info), None
         )
+
+
+@pytest.mark.parametrize(
+    "slack_error,expected_code",
+    [
+        ("invalid_auth", "invalid_auth"),
+        ("token_revoked", "token_revoked"),
+        ("ratelimited", "ratelimited"),
+        ("missing_scope", "missing_scope"),
+        ("user_not_found", "user_not_found"),
+        ("account_inactive", "account_inactive"),
+        ("not_authed", "not_authed"),
+        ("unknown_error", "other"),
+        ("private-member@f3local.dev fabricated-token U_PRIVATE SQL parameters", "other"),
+        ({"private": "private-member@f3local.dev"}, "other"),
+        (["fabricated-token"], "other"),
+        (None, "other"),
+        (123, "other"),
+    ],
+    ids=[
+        "auth",
+        "revoked",
+        "rate",
+        "scope",
+        "missing",
+        "inactive",
+        "unauthenticated",
+        "unknown",
+        "private",
+        "map",
+        "list",
+        "null",
+        "number",
+    ],
+)
+def test_cached_link_failure_logs_safe_context_for_both_handlers(monkeypatch, caplog, slack_error, expected_code):
+    error = SlackApiError(
+        "fabricated-token private-member@f3local.dev U_PRIVATE SQL parameters",
+        response={"error": slack_error, "user": {"id": "U_PRIVATE", "name": "Private Member"}},
+    )
+    _assert_cached_failure_logs(monkeypatch, caplog, error, "SlackApiError", expected_code, fail_at="slack")
+
+
+def test_cached_database_failure_logs_class_without_sql_or_parameters(monkeypatch, caplog):
+    error = OperationalError(
+        "SELECT private_email FROM users WHERE slack_id = 'U_PRIVATE'",
+        {"email": "private-member@f3local.dev", "token": "fabricated-token"},
+        RuntimeError("Private Member SQL parameters"),
+    )
+    _assert_cached_failure_logs(monkeypatch, caplog, error, "OperationalError", "other", fail_at="database")
+
+
+@pytest.mark.parametrize("team_id", ["T" * 65, "T_PRIVATE\nprivate-member@f3local.dev"])
+def test_cached_failure_bounds_untrusted_team_context(monkeypatch, caplog, team_id):
+    _assert_cached_failure_logs(
+        monkeypatch,
+        caplog,
+        RuntimeError("fabricated-token"),
+        "RuntimeError",
+        "other",
+        fail_at="database",
+        team_id=team_id,
+        expected_team="other",
+    )
+
+
+def _assert_cached_failure_logs(
+    monkeypatch,
+    caplog,
+    error,
+    expected_type,
+    expected_code,
+    *,
+    fail_at,
+    team_id="T_DIAGNOSTIC",
+    expected_team="T_DIAGNOSTIC",
+):
+    cache = helper_functions.SLACK_USERS
+    previous = cache.copy()
+    cached = SimpleNamespace(slack_id="U_PRIVATE", user_id=None, is_bot=False, email="private-member@f3local.dev")
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+
+    def unexpected_boundary(*_args, **_kwargs):
+        pytest.fail("unexpected database or Slack boundary")
+
+    monkeypatch.setattr(helper_functions, "session_scope", unexpected_boundary)
+    monkeypatch.setattr(helper_functions, "update_local_slack_users", unexpected_boundary)
+    for method in ("find_records", "find_first_record", "find_join_records2", "update_record", "create_record"):
+        monkeypatch.setattr(helper_functions.DbManager, method, unexpected_boundary)
+
+    def users_info(**_kwargs):
+        if fail_at == "slack":
+            raise error
+        return {"user": {"id": "U_PRIVATE", "profile": {}}}
+
+    def create_user(*_args, **_kwargs):
+        if fail_at == "database":
+            raise error
+        unexpected_boundary()
+
+    monkeypatch.setattr(helper_functions, "create_user", create_user)
+    cache.clear()
+    cache[(team_id, "U_PRIVATE")] = cached
+    try:
+        with caplog.at_level(logging.WARNING, logger=helper_functions.__name__):
+            result = helper_functions.get_user(
+                "U_PRIVATE", SimpleNamespace(org_id=1, team_id=team_id), SimpleNamespace(users_info=users_info), None
+            )
+        assert result is cached
+        assert cache[(team_id, "U_PRIVATE")] is cached
+        assert helper_functions.SLACK_USERS is cache
+        record = next(record for record in caplog.records if record.name == helper_functions.__name__)
+        assert record.json_fields == {
+            "event": "slack.identity.cached_link_failed",
+            "team_id": expected_team,
+            "error_type": expected_type,
+            "slack_error": expected_code,
+        }
+        expected_message = (
+            f"slack.identity.cached_link_failed team_id={expected_team} "
+            f"error_type={expected_type} slack_error={expected_code}"
+        )
+        stream = io.StringIO()
+        local_handler = logging.StreamHandler(stream)
+        structured_handler = StructuredLogHandler()
+        try:
+            local_handler.handle(record)
+            assert stream.getvalue().strip() == expected_message
+            assert structured_handler.filter(record)
+            serialized = structured_handler.format(record)
+        finally:
+            local_handler.close()
+            structured_handler.close()
+        payload = json.loads(serialized)
+        assert payload["message"] == expected_message
+        assert {key: payload[key] for key in record.json_fields} == record.json_fields
+        assert record.exc_info is None and record.stack_info is None
+        recorded = json.dumps(record.__dict__, default=str)
+        for private in (
+            "fabricated-token",
+            "private-member@f3local.dev",
+            "U_PRIVATE",
+            "Private Member",
+            "SQL parameters",
+            "SELECT private_email",
+        ):
+            assert private not in stream.getvalue() + serialized + recorded + caplog.text
+    finally:
+        cache.clear()
+        cache.update(previous)
 
 
 def test_nonproduction_populate_users_does_not_enumerate_members(monkeypatch):

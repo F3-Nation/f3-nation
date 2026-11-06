@@ -1,9 +1,14 @@
+import io
+import json
+import logging
 import os
 import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from google.cloud.logging_v2.handlers import StructuredLogHandler
+from slack_sdk.errors import SlackApiError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -146,3 +151,73 @@ def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplo
     assert creations == [(member, 3, "T_THIRD")]
     output = capsys.readouterr().out + caplog.text
     assert "USHARED" not in output and "Fabricated Name" not in output and "fabricated-token" not in output
+
+
+@pytest.mark.parametrize(
+    "error_code,expected_code",
+    [
+        ("missing_scope", "missing_scope"),
+        ("private-member@f3local.dev fabricated-token", "other"),
+        ({"private": "U_PRIVATE"}, "other"),
+    ],
+    ids=["known", "private", "malformed"],
+)
+def test_sync_failure_logs_safe_context_and_continues(monkeypatch, caplog, error_code, expected_code):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    monkeypatch.setattr(update_slack_users.DbManager, "find_records", lambda **_kwargs: [])
+    spaces = [
+        (SimpleNamespace(team_id=team, settings={"bot_token": "fabricated-token"}), SimpleNamespace(org_id=1))
+        for team in ("T_DIAGNOSTIC", "T_NEXT")
+    ]
+    monkeypatch.setattr(update_slack_users.DbManager, "find_join_records2", lambda *_args, **_kwargs: spaces)
+
+    def unexpected_boundary(*_args, **_kwargs):
+        pytest.fail("unexpected database or Slack boundary")
+
+    monkeypatch.setattr(update_slack_users, "get_session", unexpected_boundary)
+    monkeypatch.setattr(update_slack_users, "create_user", unexpected_boundary)
+    monkeypatch.setattr(update_slack_users.DbManager, "update_record", unexpected_boundary)
+    completed = []
+
+    def users_list():
+        if not completed:
+            completed.append("failed")
+            raise SlackApiError(
+                "Private Member private-member@f3local.dev U_PRIVATE fabricated-token",
+                response={"error": error_code, "members": [{"id": "U_PRIVATE", "name": "Private Member"}]},
+            )
+        completed.append("continued")
+        return {"members": []}
+
+    monkeypatch.setattr(update_slack_users, "WebClient", lambda **_kwargs: SimpleNamespace(users_list=users_list))
+    with caplog.at_level(logging.ERROR, logger=update_slack_users.__name__):
+        assert update_slack_users.update_slack_users() is None
+    assert completed == ["failed", "continued"]
+    record = next(record for record in caplog.records if record.name == update_slack_users.__name__)
+    assert record.json_fields == {
+        "event": "slack.identity.sync_failed",
+        "team_id": "T_DIAGNOSTIC",
+        "error_type": "SlackApiError",
+        "slack_error": expected_code,
+    }
+    expected_message = (
+        f"slack.identity.sync_failed team_id=T_DIAGNOSTIC error_type=SlackApiError slack_error={expected_code}"
+    )
+    stream = io.StringIO()
+    local_handler = logging.StreamHandler(stream)
+    structured_handler = StructuredLogHandler()
+    try:
+        local_handler.handle(record)
+        assert stream.getvalue().strip() == expected_message
+        assert structured_handler.filter(record)
+        serialized = structured_handler.format(record)
+    finally:
+        local_handler.close()
+        structured_handler.close()
+    payload = json.loads(serialized)
+    assert payload["message"] == expected_message
+    assert {key: payload[key] for key in record.json_fields} == record.json_fields
+    assert record.exc_info is None and record.stack_info is None
+    recorded = json.dumps(record.__dict__, default=str)
+    for private in ("fabricated-token", "private-member@f3local.dev", "U_PRIVATE", "Private Member"):
+        assert private not in stream.getvalue() + serialized + recorded + caplog.text

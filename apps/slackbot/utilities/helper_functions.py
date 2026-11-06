@@ -27,6 +27,7 @@ from f3_data_models.models import (
 )
 from f3_data_models.utils import DbManager, session_scope
 from slack_bolt.oauth.oauth_settings import OAuthSettings
+from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth.installation_store import FileInstallationStore
 from slack_sdk.oauth.state_store import FileOAuthStateStore
 from slack_sdk.web import SlackResponse, WebClient
@@ -242,6 +243,26 @@ def get_user_names(
         return names
 
 
+def slack_identity_error_context(team_id: str, error: Exception) -> dict[str, str]:
+    slack_error = safe_get(error.response, "error") if isinstance(error, SlackApiError) else None
+    if slack_error not in (
+        "invalid_auth",
+        "token_revoked",
+        "ratelimited",
+        "missing_scope",
+        "user_not_found",
+        "account_inactive",
+        "not_authed",
+    ):
+        slack_error = "other"
+    error_type = type(error).__name__
+    return {
+        "team_id": team_id if isinstance(team_id, str) and re.fullmatch(r"T[A-Z0-9_]{1,63}", team_id) else "other",
+        "error_type": error_type if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", error_type) else "Exception",
+        "slack_error": slack_error,
+    }
+
+
 def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient, logger: Logger) -> SlackUser:
     if not slack_user_id:
         raise ValueError("Slack user ID is required")
@@ -266,16 +287,23 @@ def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient
             user_info = client.users_info(user=slack_user_id)
             # Slack may send "profile": null, which setdefault would keep.
             profile = user_info["user"]["profile"] = user_info["user"].get("profile") or {}
-            # Slack can leave out a member's email (e.g. Slack Connect); without one, create_user keys him like a
-            # bot and makes a new F3 user instead of matching his existing one.
+            # Carry a cached non-bot member’s email into identity resolution when Slack omits it,
+            # preserving email-based matching.
             if user and not safe_get(user, "is_bot") and safe_get(user, "email") and not safe_get(profile, "email"):
                 profile["email"] = safe_get(user, "email")
             slack_user_record = create_user(user_info["user"], region_record.org_id, team_id=team_id)
-        except Exception:
+        except Exception as error:
             if user:
                 # A Slack or database failure here must not break requests that used to get this cached row.
                 # It is still unlinked, so callers must cope with user_id being None.
-                logging.getLogger(__name__).warning("slack.identity.cached_link_failed")
+                context = slack_identity_error_context(team_id, error)
+                logging.getLogger(__name__).warning(
+                    "slack.identity.cached_link_failed team_id=%s error_type=%s slack_error=%s",
+                    context["team_id"],
+                    context["error_type"],
+                    context["slack_error"],
+                    extra={"json_fields": {"event": "slack.identity.cached_link_failed", **context}},
+                )
                 return user
             raise
 

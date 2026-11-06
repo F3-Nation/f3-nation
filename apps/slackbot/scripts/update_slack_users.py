@@ -11,7 +11,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from utilities.constants import is_production_deployment
-from utilities.helper_functions import create_user, is_deactivated_slack_user, safe_get
+from utilities.helper_functions import create_user, is_deactivated_slack_user, safe_get, slack_identity_error_context
 
 
 def update_slack_users(force=False):
@@ -72,8 +72,15 @@ def update_slack_users(force=False):
 
             print("Slack users updated successfully.")
 
-        except SlackApiError:
-            logging.getLogger(__name__).error("slack.identity.sync_failed")
+        except SlackApiError as error:
+            context = slack_identity_error_context(slack_space.team_id, error)
+            logging.getLogger(__name__).error(
+                "slack.identity.sync_failed team_id=%s error_type=%s slack_error=%s",
+                context["team_id"],
+                context["error_type"],
+                context["slack_error"],
+                extra={"json_fields": {"event": "slack.identity.sync_failed", **context}},
+            )
             continue
 
 
