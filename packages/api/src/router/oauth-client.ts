@@ -3,6 +3,7 @@ import { SafeUrlSchema } from "@better-auth/core/utils/redirect-uri";
 import { z } from "zod";
 
 import { authSchema, desc, eq, sql } from "@acme/db";
+import { SUPPORTED_OAUTH_SCOPES } from "@acme/shared/common/oauth-scopes";
 
 import { nationAdminProcedure } from "../shared";
 
@@ -41,22 +42,12 @@ import { nationAdminProcedure } from "../shared";
  */
 
 /**
- * The scopes apps/auth's Better Auth `oauthProvider` advertises
- * (SUPPORTED_OAUTH_SCOPES in apps/auth/src/lib/oauth-client-reference.ts,
- * which packages/api can't import). Keep the two lists in sync. A client
- * registered with anything else can't use it: the plugin only issues
- * scopes it supports, and auth3 rejects an authorize request
- * without `openid`. Without this allowlist an admin could register
- * a meaningless scope, including the reserved `openid_required` marker
- * apps/auth uses internally to force invalid_scope.
+ * A client registered with a scope auth3 doesn't serve can't use it: the
+ * plugin only issues scopes it supports, and auth3 rejects an authorize
+ * request without `openid`. The allowlist also keeps an admin from
+ * registering the reserved `openid_required` marker apps/auth uses
+ * internally to force invalid_scope.
  */
-const SUPPORTED_OAUTH_SCOPES = [
-  "openid",
-  "profile",
-  "email",
-  "offline_access",
-] as const;
-
 const clientScopesSchema = z
   .array(z.enum(SUPPORTED_OAUTH_SCOPES))
   .min(1)

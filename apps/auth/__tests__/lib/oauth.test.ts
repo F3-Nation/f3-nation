@@ -2,7 +2,10 @@ import crypto from "crypto";
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import { isValidRedirectUri } from "../../scripts/add-client";
+import {
+  isValidRedirectUri,
+  parseClientScopes,
+} from "../../scripts/add-client";
 
 // ---------------------------------------------------------------------------
 // db mock — a chainable object that resolves to a queued value no matter
@@ -1110,5 +1113,32 @@ describe("isValidRedirectUri", () => {
 
   it("rejects custom schemes entirely for confidential clients", () => {
     expect(isValidRedirectUri("com.example.app:/callback", false)).toBe(false);
+  });
+});
+
+describe("parseClientScopes", () => {
+  it("accepts the supported scopes and drops repeats", () => {
+    expect(
+      parseClientScopes("openid  profile email openid offline_access"),
+    ).toEqual({
+      ok: true,
+      scopes: "openid profile email offline_access",
+    });
+  });
+
+  it.each(["openid admin", "openid openid_required", "openid read:users"])(
+    "refuses an unsupported scope in %s",
+    (raw) => {
+      const result = parseClientScopes(raw);
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.error).toContain(raw.split(" ")[1]);
+    },
+  );
+
+  it.each(["profile email", "", "   "])("refuses %j without openid", (raw) => {
+    expect(parseClientScopes(raw)).toEqual({
+      ok: false,
+      error: "Scopes must include openid: auth3 only serves OpenID Connect.",
+    });
   });
 });

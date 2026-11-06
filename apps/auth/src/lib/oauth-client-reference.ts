@@ -6,14 +6,7 @@
 // oauth_clients migration script, which has to stamp it on the rows it copies.
 export const F3_NATION_CLIENT_REFERENCE_ID = "f3-nation";
 
-// The scopes auth3's oauthProvider advertises and will issue. Shared by
-// better-auth.ts (the plugin's `scopes` option) and the oauth_clients
-// migration script, which refuses legacy rows asking for anything else.
-// packages/api's oauth-client router keeps its own copy for the admin PATCH
-// (it can't import from apps/auth); keep the two in sync.
-export const SUPPORTED_OAUTH_SCOPES = [
-  "openid",
-  "profile",
-  "email",
-  "offline_access",
-] as const;
+// The scopes auth3's oauthProvider advertises and will issue. The list lives
+// in @acme/shared so packages/api's admin PATCH checks the same one;
+// re-exported here for better-auth.ts and the apps/auth scripts.
+export { SUPPORTED_OAUTH_SCOPES } from "@acme/shared/common/oauth-scopes";
