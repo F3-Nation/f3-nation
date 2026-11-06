@@ -1,17 +1,18 @@
 name: Codeowners PR report
 
-# Posts the Codeowners PR Report to the Codeowners Slack channel each weekday
+# Posts the Codeowners PR Report to the #monorepo Slack channel each weekday
 # morning: the open PRs a codeowner can act on today, grouped by the next step,
 # each with a light for how long it has waited. Stages come from
 # scripts/pr-triage.sh; whose turn a PR is, and the light's thresholds, come
-# from .github/scripts/pr-author-nudge.cjs, so a PR waiting on its author is
-# never listed. .github/scripts/codeowners-pr-report.cjs builds the message.
+# from .github/scripts/pr-author-nudge.cjs, so a PR the nudge will remind its
+# author about isn't listed. .github/scripts/codeowners-pr-report.cjs builds
+# the message.
 #
-# Posts through the incoming webhook in the SLACK_CODEOWNERS_WEBHOOK_URL
-# secret, the same one pr-author-nudge.yml uses. The repository variable
-# CODEOWNERS_SLACK_IDS (JSON of GitHub login to Slack member ID) turns
-# assignees and thread openers into Slack mentions; unmapped logins show as
-# plain text. A manual run is a dry run by default: the message goes to the
+# Posts through the incoming webhook in the SLACK_MONOREPO_WEBHOOK_URL secret;
+# pr-author-nudge.yml's heads-ups go to the Codeowners channel through their
+# own webhook. The repository variable CODEOWNERS_SLACK_IDS (JSON of GitHub
+# login to Slack member ID) turns assignees and thread openers into Slack
+# mentions; unmapped logins show as plain text. A manual run is a dry run by default: the message goes to the
 # job summary only. Every run writes it there.
 
 on:
@@ -115,11 +116,11 @@ jobs:
       - name: Post to Slack
         if: steps.report.outputs.dry_run == 'false'
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_CODEOWNERS_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_MONOREPO_WEBHOOK_URL }}
         run: |
           set -euo pipefail
           if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
-            echo "::error::SLACK_CODEOWNERS_WEBHOOK_URL isn't set, so the report can't be posted."
+            echo "::error::SLACK_MONOREPO_WEBHOOK_URL isn't set, so the report can't be posted."
             exit 1
           fi
           response="$(mktemp)"

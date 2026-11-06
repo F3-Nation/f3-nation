@@ -32,7 +32,7 @@ Run `pnpm pr:triage` to see every open PR sorted by what it needs next: waiting 
 
 It needs the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`) and `jq`, and works on macOS, Linux and WSL. Drafts and Renovate and release-please PRs are left out. `scripts/pr-triage.sh --help` lists the options.
 
-`scripts/pr-triage.sh --json` prints the same data as JSON. The Codeowners PR Report reads it: a workflow ([`codeowners-pr-report.yml`](../.github/workflows/codeowners-pr-report.yml)) posts the PRs a codeowner can act on to the Codeowners Slack channel each weekday morning, as described in [How to tell it's your turn](PR_REVIEW_PROCESS.md#how-to-tell-its-your-turn). Its Slack mentions come from the `CODEOWNERS_SLACK_IDS` repository variable, a JSON object of GitHub login to Slack member ID; a codeowner missing from it shows as plain text.
+`scripts/pr-triage.sh --json` prints the same data as JSON. The Codeowners PR Report reads it: a workflow ([`codeowners-pr-report.yml`](../.github/workflows/codeowners-pr-report.yml)) posts the PRs a codeowner can act on to the #monorepo Slack channel each weekday morning, as described in [How to tell it's your turn](PR_REVIEW_PROCESS.md#how-to-tell-its-your-turn). Its Slack mentions come from the `CODEOWNERS_SLACK_IDS` repository variable, a JSON object of GitHub login to Slack member ID; a codeowner missing from it shows as plain text.
 
 ## Use of AI
 
