@@ -196,6 +196,9 @@ def test_nonproduction_unknown_user_is_synthetic_and_repeatable(monkeypatch):
     assert slack_user.email == user.email
     assert slack_user.avatar_url is None
     assert slack_user.slack_team_id == "T_SYNTH"
+    assert slack_user.is_admin is False
+    assert slack_user.is_owner is False
+    assert slack_user.is_bot is False
     assert len(session.records) == 2
     assert user in session.expunged
     assert slack_user in session.expunged
@@ -274,6 +277,9 @@ def test_nonproduction_direct_create_links_unlinked_row_without_email_matching(m
         user_name="Retained profile",
         avatar_url="https://example.invalid/avatar",
         slack_team_id="T_STORED",
+        is_admin=True,
+        is_owner=True,
+        is_bot=True,
     )
     session = _use_fake_nonproduction_db(monkeypatch, {"record": old_slack_user})
 
@@ -300,6 +306,9 @@ def test_nonproduction_direct_create_links_unlinked_row_without_email_matching(m
     assert result.user_name == f"F3 {user.id}"
     assert result.avatar_url is None
     assert result.slack_team_id == "T_STORED"
+    assert result.is_admin is True
+    assert result.is_owner is True
+    assert result.is_bot is True
     assert result.user_id == user.id
     assert result.email == user.email
     assert result.user_name == f"F3 {user.id}"

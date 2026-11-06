@@ -381,8 +381,8 @@ def create_user(slack_user_info: dict, home_region_id: int | None = None, team_i
             if slack_user_record.user_id is None:
                 slack_user_record.user_id = user_record.id
                 if not constants.is_production_deployment():
-                    for field, value in identity_fields.items():
-                        setattr(slack_user_record, field, value)
+                    for field in ("email", "user_name", "avatar_url"):
+                        setattr(slack_user_record, field, identity_fields[field])
             session.flush()
             session.expunge(user_record)
 

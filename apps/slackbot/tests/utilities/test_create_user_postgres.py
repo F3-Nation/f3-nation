@@ -92,7 +92,7 @@ def isolated_postgres(monkeypatch):
             subprocess.run(["docker", "rm", "--force", container_id], check=True, capture_output=True, text=True)
 
 
-def _assert_single_synthetic_link(engine, slack_id, slack_user_id, expected_user_id=None):
+def _assert_single_synthetic_link(engine, slack_id, slack_user_id, expected_user_id=None, expected_flags=False):
     with Session(engine) as session:
         slack_rows = session.scalars(select(SlackUser).where(SlackUser.slack_id == slack_id)).all()
         user_rows = session.scalars(select(User).where(User.id == slack_user_id)).all()
@@ -110,6 +110,9 @@ def _assert_single_synthetic_link(engine, slack_id, slack_user_id, expected_user
         assert slack_user.email == user.email
         assert slack_user.user_name == f"F3 {user.id}"
         assert slack_user.avatar_url is None
+        assert slack_user.is_admin is expected_flags
+        assert slack_user.is_owner is expected_flags
+        assert slack_user.is_bot is expected_flags
         return slack_user, user
 
 
@@ -144,7 +147,7 @@ def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False, 
                     """INSERT INTO slack_users
                        (slack_id, user_name, email, is_admin, is_owner, is_bot, user_id, avatar_url, slack_team_id,
                         strava_access_token, meta)
-                       VALUES (:slack_id, :name, :email, false, false, false, NULL, :avatar, :team,
+                       VALUES (:slack_id, :name, :email, true, true, true, NULL, :avatar, :team,
                                'fabricated-orphan-token', '{"sentinel":"orphan"}')
                        RETURNING id"""
                 ),
@@ -238,6 +241,9 @@ def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False, 
             assert identities[0].id == first.id
             assert identities[0].user_id == users[0].id == first.user_id
             assert users[0].email == "fabricated.concurrent@example.invalid"
+            assert identities[0].is_admin is initial_orphan
+            assert identities[0].is_owner is initial_orphan
+            assert identities[0].is_bot is initial_orphan
             if initial_orphan:
                 assert identities[0].strava_access_token == "fabricated-orphan-token"
                 assert identities[0].meta == {"sentinel": "orphan"}
@@ -247,6 +253,7 @@ def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False, 
         slack_id,
         first.user_id,
         expected_user_id=first.user_id,
+        expected_flags=initial_orphan,
     )
     assert persisted.email != payload["profile"]["email"]
     assert persisted.user_name != payload["profile"]["real_name"]
