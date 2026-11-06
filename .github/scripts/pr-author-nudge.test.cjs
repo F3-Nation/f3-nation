@@ -35,9 +35,16 @@ const basePr = (overrides = {}) => ({
   ...overrides,
 });
 
-const thread = (who, days, isResolved = false) => ({
+const BOTS = new Set(["coderabbitai", "greptile-apps", "copilot"]);
+// A review-thread comment as GraphQL returns it. Humans default to members.
+const comment = (who, days, authorAssociation) => ({
+  author: { login: who, __typename: BOTS.has(who) ? "Bot" : "User" },
+  authorAssociation: authorAssociation ?? (BOTS.has(who) ? "NONE" : "MEMBER"),
+  createdAt: at(days),
+});
+const thread = (who, days, isResolved = false, association) => ({
   isResolved,
-  comments: { nodes: [{ author: { login: who }, createdAt: at(days) }] },
+  comments: { nodes: [comment(who, days, association)] },
 });
 
 const run = (pr, nowDays, nudge = null, required = ["ci"]) =>
@@ -143,15 +150,76 @@ test("a nudge from an earlier stretch doesn't count toward closing", () => {
   assert.equal(run(pr, 15.1, oldNudge).action, "nudge");
 });
 
-test("drafts follow the same timings", () => {
+test("drafts are the author's turn but are never nudged, warned or closed", () => {
   const pr = basePr({ isDraft: true });
-  assert.equal(run(pr, 4.9).action, "none");
-  assert.equal(run(pr, 5.1).action, "nudge");
-  assert.equal(run(pr, 9.2, { nudgedAt: at(5.1) }).action, "warn");
-  assert.equal(
-    run(pr, 10.2, { nudgedAt: at(5.1), warnedAt: at(9.2) }).action,
-    "close",
+  // Still the author's turn, so the codeowners' report leaves it out.
+  assert.deepEqual(
+    summarize(pr, ["ci"], null).reasons.map((r) => r.kind),
+    ["draft"],
   );
+  assert.equal(run(pr, 60).why, "draft");
+  assert.equal(run(pr, 60, { nudgedAt: at(5.1) }).action, "none");
+  assert.equal(
+    run(pr, 60, { nudgedAt: at(5.1), warnedAt: at(9.2) }).action,
+    "none",
+  );
+});
+
+test("a drive-by commenter's thread doesn't start the clock", () => {
+  for (const association of ["NONE", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR"]) {
+    const pr = basePr({
+      reviewThreads: { nodes: [thread("passerby", 1, false, association)] },
+    });
+    assert.equal(run(pr, 30).why, "not author's turn", association);
+  }
+});
+
+test("a drive-by reply doesn't move a team thread's clock, or restart it after the author", () => {
+  const teamThenDriveBy = basePr({
+    reviewThreads: {
+      nodes: [
+        {
+          isResolved: false,
+          comments: {
+            nodes: [
+              comment("BigGillyStyle", 1),
+              comment("passerby", 3, "NONE"),
+            ],
+          },
+        },
+      ],
+    },
+  });
+  assert.equal(run(teamThenDriveBy, 6.1).action, "nudge");
+
+  const answeredThenDriveBy = basePr({
+    reviewThreads: {
+      nodes: [
+        {
+          isResolved: false,
+          comments: {
+            nodes: [
+              comment("BigGillyStyle", 1),
+              comment("pax", 2),
+              comment("passerby", 3, "NONE"),
+            ],
+          },
+        },
+      ],
+    },
+  });
+  assert.equal(run(answeredThenDriveBy, 30).why, "not author's turn");
+});
+
+test("a commenter with push access counts even when GitHub calls them a contributor", () => {
+  const pr = basePr({
+    reviewThreads: {
+      nodes: [thread("BigGillyStyle", 1, false, "CONTRIBUTOR")],
+    },
+  });
+  assert.equal(run(pr, 30).why, "not author's turn");
+  const facts = summarize(pr, ["ci"], null, new Set(["BigGillyStyle"]));
+  assert.equal(decide(facts, T0 + 6.1 * DAY).action, "nudge");
 });
 
 test("outside contributors: nudge at 3 days, close at 7", () => {
@@ -278,9 +346,9 @@ test("an author's reply inside a review thread resets the clock", () => {
           isResolved: false,
           comments: {
             nodes: [
-              { author: { login: "coderabbitai" }, createdAt: at(1) },
-              { author: { login: "pax" }, createdAt: at(6) },
-              { author: { login: "coderabbitai" }, createdAt: at(6.01) },
+              comment("coderabbitai", 1),
+              comment("pax", 6),
+              comment("coderabbitai", 6.01),
             ],
           },
         },
@@ -628,10 +696,7 @@ test("a bot commenting again in an unanswered thread doesn't move the clock", ()
         {
           isResolved: false,
           comments: {
-            nodes: [
-              { author: { login: "coderabbitai" }, createdAt: at(1) },
-              { author: { login: "coderabbitai" }, createdAt: at(4) },
-            ],
+            nodes: [comment("coderabbitai", 1), comment("coderabbitai", 4)],
           },
         },
       ],
@@ -907,4 +972,182 @@ test("the run reports whether the heads-up reached Slack", async () => {
   });
   assert.equal(failed.slackSent, false);
   assert.ok(failed.slackNote);
+});
+
+test("a reminded PR moved back to draft records a pause", async () => {
+  const github = fakeGithub({ nudgedAt: at(5) }, { isDraft: true });
+  const { rows } = await liveRun(github, 9.5);
+  assert.equal(rows[0].outcome, "draft, paused");
+  assert.equal(github.writes.length, 1);
+  assert.match(github.writes[0].params.body, /"pausedAt"/);
+});
+
+test("a commit dated in the future can't hold the PR open", () => {
+  // A bot thread from day 1; the head commit says 2099 but reached GitHub on
+  // day 2, when its first check suite was created.
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 1)] },
+    timelineItems: {
+      nodes: [
+        {
+          __typename: "PullRequestCommit",
+          commit: { committedDate: "2099-01-01T00:00:00Z" },
+        },
+      ],
+    },
+    commits: {
+      nodes: [
+        {
+          commit: {
+            checkSuites: {
+              nodes: [{ createdAt: at(2) }, { createdAt: at(2.1) }],
+            },
+            statusCheckRollup: { contexts: { nodes: [] } },
+          },
+        },
+      ],
+    },
+  });
+  const decision = run(pr, 7.1);
+  assert.equal(decision.clockStart, T0 + 2 * DAY);
+  assert.equal(decision.action, "nudge");
+});
+
+test("without anything GitHub recorded, a commit date counts unless it's in the future", () => {
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 1)] },
+    timelineItems: {
+      nodes: [
+        { __typename: "PullRequestCommit", commit: { committedDate: at(3) } },
+      ],
+    },
+  });
+  const now = T0 + 9 * DAY;
+  const clockAt = (p) =>
+    decide(summarize(p, [], null, new Set(), now), now).clockStart;
+  assert.equal(clockAt(pr), T0 + 3 * DAY);
+  // Dated 2099: ignored, so the clock runs from the thread.
+  pr.timelineItems.nodes[0].commit.committedDate = "2099-01-01T00:00:00Z";
+  assert.equal(clockAt(pr), T0 + DAY);
+});
+
+// Several PRs for one run: each with a bot thread from day `since`, reminded
+// on `nudgedAt` days (null for none) and warned on `warnedAt` days.
+function fakeBacklog(specs) {
+  const writes = [];
+  const prs = specs.map(({ since, nudgedAt, warnedAt }, i) =>
+    basePr({
+      number: 100 + i,
+      reviewThreads: { nodes: [thread("coderabbitai", since)] },
+      timelineItems: {
+        nodes:
+          nudgedAt == null
+            ? []
+            : [
+                {
+                  __typename: "IssueComment",
+                  databaseId: 1000 + i,
+                  createdAt: at(nudgedAt),
+                  author: { login: "github-actions" },
+                },
+              ],
+      },
+    }),
+  );
+  const state = (i) => ({
+    nudgedAt: at(specs[i].nudgedAt),
+    ...(specs[i].warnedAt == null ? {} : { warnedAt: at(specs[i].warnedAt) }),
+  });
+  return {
+    writes,
+    paginate: async (route) =>
+      route.includes("/collaborators")
+        ? []
+        : [
+            {
+              type: "required_status_checks",
+              parameters: { required_status_checks: [{ context: "ci" }] },
+            },
+          ],
+    graphql: async () => ({
+      repository: {
+        pullRequests: { pageInfo: { hasNextPage: false }, nodes: prs },
+      },
+    }),
+    request: async (route, params) => {
+      if (route.startsWith("GET")) {
+        const i = params.id - 1000;
+        return { data: { body: `${MARKER} ${JSON.stringify(state(i))} -->` } };
+      }
+      writes.push({ route, params });
+      return { data: {} };
+    },
+  };
+}
+
+test("one run nudges at most the limit, longest-waiting first", async () => {
+  // Five PRs due a nudge; the ones waiting longest are #102 and #104.
+  const github = fakeBacklog([
+    { since: 3 },
+    { since: 2 },
+    { since: 0 },
+    { since: 4 },
+    { since: 1 },
+  ]);
+  const { rows } = await liveRun(github, 20, {
+    limits: { nudge: 2, warn: 3, close: 3 },
+  });
+  const outcome = Object.fromEntries(rows.map((r) => [r.pr, r.outcome]));
+  assert.equal(outcome[102], "nudged");
+  assert.equal(outcome[104], "nudged");
+  for (const pr of [100, 101, 103]) {
+    assert.equal(outcome[pr], "nudge held for a later run (limit 2 per run)");
+  }
+  assert.ok(rows.every((r) => !r.failed));
+  assert.equal(github.writes.length, 2);
+});
+
+test("closes and heads-ups are limited per run too, dry runs included", async () => {
+  const github = fakeBacklog([
+    { since: 0, nudgedAt: 5, warnedAt: 9.1 },
+    { since: 0.5, nudgedAt: 5.5, warnedAt: 9.6 },
+    { since: 0, nudgedAt: 5 },
+    { since: 0.5, nudgedAt: 5.5 },
+  ]);
+  const limits = { nudge: 5, warn: 1, close: 1 };
+  const dry = await liveRun(github, 20, { dryRun: true, limits });
+  assert.deepEqual(
+    dry.rows.map((r) => r.outcome),
+    [
+      "would close",
+      "close held for a later run (limit 1 per run)",
+      "would warn",
+      "warn held for a later run (limit 1 per run)",
+    ],
+  );
+  assert.equal(github.writes.length, 0);
+
+  const live = await liveRun(github, 20, { limits });
+  assert.deepEqual(
+    live.rows.map((r) => r.outcome),
+    [
+      "closed",
+      "close held for a later run (limit 1 per run)",
+      "warned in Slack",
+      "warn held for a later run (limit 1 per run)",
+    ],
+  );
+  assert.match(live.slackNote, /This PR will auto-close/);
+});
+
+test("the default limits keep the first live run small", async () => {
+  const { MAX_PER_RUN } = require("./pr-author-nudge.cjs");
+  const github = fakeBacklog(
+    Array.from({ length: 12 }, (_, i) => ({ since: i / 10 })),
+  );
+  const { rows } = await liveRun(github, 30);
+  assert.equal(
+    rows.filter((r) => r.outcome === "nudged").length,
+    MAX_PER_RUN.nudge,
+  );
 });

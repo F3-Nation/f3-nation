@@ -4,13 +4,15 @@
  * Logic for .github/workflows/pr-author-nudge.yml.
  *
  * Nudges, then closes, PRs that are waiting on their author. The clock runs
- * only while it's the author's turn under docs/PR_REVIEW_PROCESS.md: the PR is
- * a draft, a required check is failing, it conflicts with its base, a review
- * thread is waiting on the author, or a reviewer requested changes and nothing
- * has been pushed since. While the PR waits on bots or codeowners the clock
- * doesn't run; it restarts from the earliest open item (or the author's last
- * activity, if later). Any push, author comment or reopen resets it. Bot
- * comments and reviewer pings don't.
+ * only while it's the author's turn under docs/PR_REVIEW_PROCESS.md: a
+ * required check is failing, it conflicts with its base, a team member's or a
+ * bot's review thread is waiting on the author, or a reviewer requested
+ * changes and nothing has been pushed since. Drafts count as the author's turn
+ * (so reports leave them out) but are never nudged or closed: a draft is work
+ * in progress, not a PR waiting on review. While the PR waits on bots or
+ * codeowners the clock doesn't run; it restarts from the earliest open item
+ * (or the author's last activity, if later). Any push, author comment or
+ * reopen resets it. Bot comments and reviewer pings don't.
  *
  * When a PR that was already reminded stops being the author's turn (or gets
  * `keep-open`), the run records `pausedAt` in the reminder's marker. The next
@@ -36,7 +38,7 @@ const KEEP_OPEN_LABEL = "keep-open";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Days of the author's turn before the nudge and before the close, by who the
-// author is to the repo. Drafts follow the same timings. The close also needs
+// author is to the repo. Drafts are never nudged or closed. The close also needs
 // a nudge posted at least (close - nudge) days earlier in the same stretch, so
 // nobody is closed without that much warning.
 const DAYS = {
@@ -50,6 +52,12 @@ const DAYS = {
 const WARN_LEAD_MS = DAY_MS;
 const WARN_MIN_MS = 20 * 60 * 60 * 1000;
 const TEAM_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+
+// The most PRs one run nudges, warns about or closes. The first live run (or
+// one after a long outage) would otherwise remind the whole backlog at once,
+// and those PRs would then all close together. The PRs that have waited
+// longest go first; the rest are held for a later run.
+const MAX_PER_RUN = { nudge: 5, warn: 3, close: 3 };
 
 // Authors whose PRs are never nudged, on top of every bot or app author.
 // GraphQL logins carry no `[bot]` suffix.
@@ -98,9 +106,15 @@ function parseMarker(body) {
  * `nudge` is `{ id, nudgedAt, warnedAt?, pausedAt?, body? }` for the bot's
  * newest reminder, or null. `writers` is an optional Set of logins with push
  * access, counted as team even when GitHub reports a private org member as
- * a CONTRIBUTOR.
+ * a CONTRIBUTOR. Commit dates after `now` (ms) are ignored.
  */
-function summarize(pr, requiredContexts, nudge, writers = new Set()) {
+function summarize(
+  pr,
+  requiredContexts,
+  nudge,
+  writers = new Set(),
+  now = Date.now(),
+) {
   const author = pr.author?.login ?? null;
   const isTeam = (login, association) =>
     TEAM_ASSOCIATIONS.has(association) || writers.has(login);
@@ -109,6 +123,7 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
   const timeline = pr.timelineItems?.nodes ?? [];
 
   let lastPush = null; // any push, by anyone: work is happening
+  let lastCommitDate = null; // whatever the commit's author set; see below
   let lastAuthorActivity = created;
   let lastDraftStart = pr.isDraft ? created : null;
   let lastHandoff = created; // latest event that put the PR in front of someone
@@ -116,9 +131,13 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
 
   for (const item of timeline) {
     switch (item.__typename) {
-      case "PullRequestCommit":
-        lastPush = maxTs(lastPush, ts(item.commit?.committedDate));
+      case "PullRequestCommit": {
+        // A date after now is made up, so it's ignored.
+        const date = ts(item.commit?.committedDate);
+        if (date != null && date <= now)
+          lastCommitDate = maxTs(lastCommitDate, date);
         break;
+      }
       case "HeadRefForcePushedEvent":
         lastPush = maxTs(lastPush, ts(item.createdAt));
         break;
@@ -174,15 +193,19 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
   // An author's replies in review threads don't appear in the timeline, so
   // they're read from the threads themselves.
   const threads = pr.reviewThreads?.nodes ?? [];
-  const lastComment = (thread) => thread.comments?.nodes?.at(-1);
-  // A thread waits on the author from the first comment after their last
-  // reply, so a bot commenting again in it doesn't move the clock.
+  // Only a team member's or a bot's comment puts a thread on the author, the
+  // same rule as for reviews: a drive-by commenter can't start the clock.
+  const commentCounts = (comment) =>
+    isTeam(comment.author?.login, comment.authorAssociation) ||
+    comment.author?.__typename === "Bot";
+  // A thread waits on the author from the first counted comment after their
+  // last reply, so a bot commenting again in it doesn't move the clock.
   const waitingSince = (thread) => {
     const comments = thread.comments?.nodes ?? [];
     let start = null;
     for (const comment of comments) {
       if (comment.author?.login === author) start = null;
-      else start ??= ts(comment.createdAt);
+      else if (commentCounts(comment)) start ??= ts(comment.createdAt);
     }
     return start;
   };
@@ -192,17 +215,21 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
         lastAuthorActivity = maxTs(lastAuthorActivity, ts(comment.createdAt));
     }
   }
-  const contexts =
-    pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [];
+  const headCommit = pr.commits?.nodes?.[0]?.commit;
+  const contexts = headCommit?.statusCheckRollup?.contexts?.nodes ?? [];
   // GitHub keeps no push time for an ordinary push, and a commit's date is
-  // when it was made locally. CI starting on the head commit is the closest
-  // stand-in for when it reached GitHub.
-  const headCiStart = minTs(
+  // whatever its author set: a commit dated 2099 would hold the PR open
+  // forever. GitHub's own clock is used instead: the first check suite or CI
+  // run on the head commit, created when it reached GitHub (fork PRs waiting
+  // on workflow approval get suites too). Commit dates count only when GitHub
+  // recorded nothing for the head commit.
+  const headArrival = minTs(
+    ...(headCommit?.checkSuites?.nodes ?? []).map((s) => ts(s.createdAt)),
     ...contexts
       .filter((c) => c.__typename === "CheckRun")
       .map((c) => ts(c.startedAt)),
   );
-  lastPush = maxTs(lastPush, headCiStart);
+  lastPush = maxTs(lastPush, headArrival ?? lastCommitDate);
   lastAuthorActivity = maxTs(lastAuthorActivity, lastPush);
 
   const reasons = [];
@@ -254,11 +281,9 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
     });
   }
 
-  const waitingThreads = threads.filter((thread) => {
-    if (thread.isResolved) return false;
-    const last = lastComment(thread);
-    return last && last.author?.login !== author;
-  });
+  const waitingThreads = threads.filter(
+    (thread) => !thread.isResolved && waitingSince(thread) != null,
+  );
   if (!pr.isDraft && waitingThreads.length) {
     reasons.push({
       kind: "threads",
@@ -307,6 +332,8 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
  */
 function decide(facts, now) {
   if (facts.exempt) return { action: "none", why: "exempt" };
+  // Work in progress: the author isn't keeping anyone waiting.
+  if (facts.isDraft) return { action: "none", why: "draft" };
   if (!facts.reasons.length)
     return { action: "none", why: "not author's turn" };
 
@@ -479,14 +506,19 @@ const PR_FIELDS = `
     }
   }
   reviewThreads(first: 100) {
-    nodes { isResolved comments(last: 20) { nodes { createdAt author { login } } } }
+    nodes { isResolved comments(last: 20) { nodes {
+      createdAt authorAssociation author { login __typename }
+    } } }
   }
   commits(last: 1) {
-    nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
-      __typename
-      ... on CheckRun { name conclusion startedAt completedAt }
-      ... on StatusContext { context state createdAt }
-    } } } } }
+    nodes { commit {
+      checkSuites(first: 20) { nodes { createdAt } }
+      statusCheckRollup { contexts(first: 100) { nodes {
+        __typename
+        ... on CheckRun { name conclusion startedAt completedAt }
+        ... on StatusContext { context state createdAt }
+      } } }
+    } }
   }`;
 
 /**
@@ -496,7 +528,7 @@ const PR_FIELDS = `
  * `notes` are warnings for the workflow log. Exported so every report that
  * asks whose turn a PR is answers it with the same rules as the nudge.
  */
-async function collectFacts({ github, owner, repo }) {
+async function collectFacts({ github, owner, repo, now = Date.now() }) {
   const rules = await github.paginate(
     "GET /repos/{owner}/{repo}/rules/branches/{branch}",
     {
@@ -559,6 +591,7 @@ async function collectFacts({ github, owner, repo }) {
         : [],
       nudge,
       writers,
+      now,
     );
   return { prs, factsFor, writersKnown, notes };
 }
@@ -568,7 +601,10 @@ async function collectFacts({ github, owner, repo }) {
  * labels. `github` is actions/github-script's client (or the gh shim below).
  * `notify(text)` posts the codeowners' Slack heads-up. Without it a live run
  * treats the heads-up as failed: nothing is recorded, the closes wait, and the
- * rows fail. Returns `{ rows, slackNote, slackSent, notes }`: the job
+ * rows fail. `limits` caps the nudges, heads-ups and closes in one run
+ * (MAX_PER_RUN by default); dry runs count against it too, so their report
+ * matches what a live run would do. Returns `{ rows, slackNote, slackSent,
+ * notes }`: the job
  * summary rows, the heads-up text, whether it reached Slack, and warnings for
  * the workflow log.
  */
@@ -581,19 +617,22 @@ async function run({
   botLogin = "github-actions",
   log = console.log,
   notify = null,
+  limits = MAX_PER_RUN,
 }) {
   const { prs, factsFor, writersKnown, notes } = await collectFacts({
     github,
     owner,
     repo,
+    now,
   });
   if (!writersKnown)
     notes.push(
       "No heads-ups or closes for authors who might be team until collaborators can be listed.",
     );
 
-  const rows = [];
-  const warns = [];
+  // First read and decide every PR, so the per-run limits go to the PRs that
+  // have waited longest; then act.
+  const entries = [];
   for (const pr of prs) {
     const row = {
       pr: pr.number,
@@ -642,13 +681,48 @@ async function run({
       const pausedAt = ts(nudge?.pausedAt);
       const pause =
         decision.action === "none" &&
-        (decision.why === "not author's turn" || decision.why === "exempt") &&
+        ["not author's turn", "exempt", "draft"].includes(decision.why) &&
         // Paused even while mergeability is UNKNOWN: if it turns out to be a
         // conflict, the cost is a repeat reminder; not pausing could let an
         // old reminder close the PR.
         nudgedAt != null &&
         (pausedAt == null || pausedAt < nudgedAt);
+      entries.push({ pr, row, facts, decision, nudge, pause });
+    } catch (error) {
+      row.outcome = `FAILED: ${error.status ?? ""} ${error.message}`;
+      row.failed = true;
+      entries.push({ pr, row });
+    }
+  }
 
+  // Outside-tier heads-ups and closes are held anyway while collaborators are
+  // unknown, so they don't take a slot.
+  const heldUnknown = (e) =>
+    !writersKnown &&
+    e.facts.tier === "outside" &&
+    (e.decision.action === "warn" || e.decision.action === "close");
+  for (const action of Object.keys(MAX_PER_RUN)) {
+    const limit = limits[action] ?? Infinity;
+    entries
+      .filter(
+        (e) => !e.row.failed && e.decision.action === action && !heldUnknown(e),
+      )
+      .sort((a, b) => a.decision.clockStart - b.decision.clockStart)
+      .slice(limit)
+      .forEach((e) => {
+        e.overLimit = limit;
+      });
+  }
+
+  const rows = [];
+  const warns = [];
+  for (const { pr, row, facts, decision, nudge, pause, overLimit } of entries) {
+    rows.push(row);
+    if (row.failed) {
+      log(`#${row.pr} ${row.author}: ${row.outcome}`);
+      continue;
+    }
+    try {
       if (pause) {
         // Once per stretch: the old reminder and heads-up stop counting.
         row.outcome = dryRun ? `${decision.why}, would pause` : decision.why;
@@ -670,15 +744,14 @@ async function run({
         }
       } else if (decision.action === "none") {
         row.outcome = decision.why;
-      } else if (
-        !writersKnown &&
-        facts.tier === "outside" &&
-        (decision.action === "warn" || decision.action === "close")
-      ) {
+      } else if (heldUnknown({ facts, decision })) {
         // The author may be a private org member with team timings, so the
         // shorter outside deadline can't be trusted. Held, retried next run.
         row.outcome = `FAILED: ${decision.action} held, collaborators unknown`;
         row.failed = true;
+      } else if (overLimit != null) {
+        // Not a failure: the next run picks it up, oldest first.
+        row.outcome = `${decision.action} held for a later run (limit ${overLimit} per run)`;
       } else if (dryRun) {
         row.outcome = `would ${decision.action}`;
         if (decision.action === "warn") warns.push(row);
@@ -735,7 +808,6 @@ async function run({
     }
     if (row.outcome !== "warning")
       log(`#${row.pr} ${row.author}: ${row.outcome}`);
-    rows.push(row);
   }
 
   const slackNote = warnMessage(warns, { owner, repo });
@@ -786,6 +858,7 @@ async function run({
 module.exports = {
   DAYS,
   DAY_MS,
+  MAX_PER_RUN,
   SLACK_TIMEOUT_MS,
   MARKER,
   parseMarker,

@@ -130,22 +130,23 @@ The [`address-pr-comments`](../.agents/skills/address-pr-comments/SKILL.md) skil
 
 ## PRs waiting on their author
 
-A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a PR is waiting on them, and closes the PR if it keeps waiting. A PR is waiting on its author when any of these is true:
+A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a ready-for-review PR is waiting on them, and closes the PR if it keeps waiting. A PR is waiting on its author when any of these is true:
 
-- It's a draft.
 - A required check is failing.
 - It has a merge conflict with its base branch.
-- A review thread is unresolved and the last comment in it isn't the author's.
-- A reviewer requested changes and nothing has been pushed since.
+- A review thread is unresolved, and a codeowner, collaborator or review bot has commented in it since the author's last reply. A comment from anyone else doesn't count.
+- A team member or review bot requested changes and nothing has been pushed since.
 
-The clock runs only while one of those is true, so time a PR spends waiting on the bots or a codeowner doesn't count against the author. A push, a comment from the author, or reopening the PR resets it; comments from bots and reviewers don't. One exception: GitHub doesn't record when a merge conflict appears, so a conflict is counted from the PR's latest review, ready-for-review or reopen. That can bring an early reminder, but never an early close.
+Drafts are never reminded or closed: a draft is work in progress, so the author isn't keeping anyone waiting. Moving a reminded PR back to Draft stops its clock like any other pause.
+
+The clock runs only while one of those is true, so time a PR spends waiting on the bots or a codeowner doesn't count against the author. A push, a comment from the author, or reopening the PR resets it; comments from bots and reviewers don't. A push counts from when it reached GitHub (the first check run or check suite on the new head commit), not from the date inside the commit, which the author can set to anything. One exception: GitHub doesn't record when a merge conflict appears, so a conflict is counted from the PR's latest review, ready-for-review or reopen. That can bring an early reminder, but never an early close.
 
 | Author                                     | Reminder | Closed  |
 | ------------------------------------------ | -------- | ------- |
 | A repo member, or anyone with write access | 5 days   | 10 days |
 | Anyone else (outside contributors)         | 3 days   | 7 days  |
 
-Drafts follow the same timings. The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 4 days (outside contributors) or 5 days (members and collaborators) after it. About a day before the close, the workflow posts the PR in the Codeowners Slack channel, so a codeowner can take it over the finish line (push to its branch) or hold it with `keep-open`; the close waits until that heads-up has been out at least 20 hours, and doesn't happen at all until the heads-up has gone out. If a reminded PR stops waiting on its author, or gets `keep-open`, that reminder no longer counts: when it's the author's turn again, the next close needs a new reminder and a new heads-up. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. PRs opened by bots and apps (Renovate, release-please and others), PRs from deleted accounts, and PRs labeled `keep-open` are never reminded or closed.
+The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 4 days (outside contributors) or 5 days (members and collaborators) after it. About a day before the close, the workflow posts the PR in the Codeowners Slack channel, so a codeowner can take it over the finish line (push to its branch) or hold it with `keep-open`; the close waits until that heads-up has been out at least 20 hours, and doesn't happen at all until the heads-up has gone out. If a reminded PR stops waiting on its author, or gets `keep-open`, that reminder no longer counts: when it's the author's turn again, the next close needs a new reminder and a new heads-up. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. PRs opened by bots and apps (Renovate, release-please and others), PRs from deleted accounts, and PRs labeled `keep-open` are never reminded or closed. One run reminds at most 5 PRs and posts or closes at most 3, starting with the PRs that have waited longest; the rest wait for a later day, so a backlog is worked through gradually instead of all at once.
 
 ## The `ready for human review` label
 

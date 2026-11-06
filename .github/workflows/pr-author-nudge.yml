@@ -19,6 +19,10 @@ name: PR author nudge
 # fails, PRs due a heads-up stay open and the job fails. PRs warned on an
 # earlier run still close on schedule. A dry run shows the message in the job
 # summary instead of posting it.
+#
+# One run nudges, warns about or closes only a few PRs (MAX_PER_RUN in the
+# script), longest-waiting first, so the first live run doesn't hit the whole
+# backlog at once.
 
 on:
   schedule:
