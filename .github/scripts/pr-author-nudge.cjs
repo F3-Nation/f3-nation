@@ -490,24 +490,13 @@ const PR_FIELDS = `
   }`;
 
 /**
- * Fetches every open PR, decides, and (unless dryRun) comments, closes and
- * labels. `github` is actions/github-script's client (or the gh shim below).
- * `notify(text)` posts the codeowners' Slack heads-up. Without it a live run
- * treats the heads-up as failed: nothing is recorded, the closes wait, and the
- * rows fail. Returns `{ rows, slackNote, slackSent, notes }`: the job
- * summary rows, the heads-up text, whether it reached Slack, and warnings for
- * the workflow log.
+ * Reads what `summarize()` needs for every open PR: the PR nodes, the required
+ * checks on the default branch, and who has push access. Writes nothing.
+ * Returns `{ prs, factsFor(pr, nudge = null), writersKnown, notes }`, where
+ * `notes` are warnings for the workflow log. Exported so every report that
+ * asks whose turn a PR is answers it with the same rules as the nudge.
  */
-async function run({
-  github,
-  owner,
-  repo,
-  dryRun,
-  now = Date.now(),
-  botLogin = "github-actions",
-  log = console.log,
-  notify = null,
-}) {
+async function collectFacts({ github, owner, repo }) {
   const rules = await github.paginate(
     "GET /repos/{owner}/{repo}/rules/branches/{branch}",
     {
@@ -538,7 +527,7 @@ async function run({
     writersKnown = false;
     notes.push(
       `Couldn't list collaborators (${error.status ?? ""} ${error.message}); ` +
-        "no heads-ups or closes for authors who might be team.",
+        "authors who might be team are judged as outside contributors.",
     );
   }
 
@@ -561,6 +550,47 @@ async function run({
     if (!connection.pageInfo.hasNextPage) break;
     cursor = connection.pageInfo.endCursor;
   }
+
+  const factsFor = (pr, nudge = null) =>
+    summarize(
+      pr,
+      (pr.baseRefName ?? DEFAULT_BRANCH) === DEFAULT_BRANCH
+        ? requiredContexts
+        : [],
+      nudge,
+      writers,
+    );
+  return { prs, factsFor, writersKnown, notes };
+}
+
+/**
+ * Fetches every open PR, decides, and (unless dryRun) comments, closes and
+ * labels. `github` is actions/github-script's client (or the gh shim below).
+ * `notify(text)` posts the codeowners' Slack heads-up. Without it a live run
+ * treats the heads-up as failed: nothing is recorded, the closes wait, and the
+ * rows fail. Returns `{ rows, slackNote, slackSent, notes }`: the job
+ * summary rows, the heads-up text, whether it reached Slack, and warnings for
+ * the workflow log.
+ */
+async function run({
+  github,
+  owner,
+  repo,
+  dryRun,
+  now = Date.now(),
+  botLogin = "github-actions",
+  log = console.log,
+  notify = null,
+}) {
+  const { prs, factsFor, writersKnown, notes } = await collectFacts({
+    github,
+    owner,
+    repo,
+  });
+  if (!writersKnown)
+    notes.push(
+      "No heads-ups or closes for authors who might be team until collaborators can be listed.",
+    );
 
   const rows = [];
   const warns = [];
@@ -600,11 +630,7 @@ async function run({
         }
       }
 
-      const required =
-        (pr.baseRefName ?? DEFAULT_BRANCH) === DEFAULT_BRANCH
-          ? requiredContexts
-          : [];
-      const facts = summarize(pr, required, nudge, writers);
+      const facts = factsFor(pr, nudge);
       row.tier = facts.tier;
       const decision = decide(facts, now);
       row.turn = facts.reasons.map((r) => r.kind).join(", ") || "—";
@@ -759,9 +785,12 @@ async function run({
 
 module.exports = {
   DAYS,
+  DAY_MS,
   SLACK_TIMEOUT_MS,
   MARKER,
   parseMarker,
+  slackEscape,
+  collectFacts,
   summarize,
   decide,
   describeReasons,
