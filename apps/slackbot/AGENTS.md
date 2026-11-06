@@ -67,6 +67,8 @@ HTTP.
   don't trust modal options built earlier.
 - Update `slack_spaces.settings` with targeted writes, not a whole-blob
   read-modify-write.
+- Post to the channel a region saved in its settings; use the default channel
+  only when none is saved.
 - Outside production, users the bot creates get the staging email sink
   address and no phone number. Don't email or announce on behalf of an
   existing user using data someone else typed.
