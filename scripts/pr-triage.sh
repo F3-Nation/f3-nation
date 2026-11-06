@@ -18,8 +18,8 @@
 #   Renovate / release-please author              -> skipped
 #   CodeRabbit, Greptile, or Qodo not finished    -> waiting on AI bots (gives up after 2h)
 #   pr-review-inline not run                      -> needs /pr-review-inline
-#   every unresolved thread ends with the author  -> waiting on a reviewer's reply
 #   last local test ❌, no push since             -> waiting on unresolved threads (the author's push)
+#   every unresolved thread ends with the author  -> waiting on a reviewer's reply
 #   any other unresolved review thread            -> waiting on unresolved threads
 #   pr-local-test not run, or last run ⏸️ or ❌     -> needs /pr-local-test
 #   otherwise, your own PR                        -> your PRs (nothing left for you to do)
