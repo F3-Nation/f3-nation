@@ -237,6 +237,11 @@
       "scope": ["apps/slackbot/**"]
     },
     {
+      "path": "docs/specs/slackbot-workspace-identities.md",
+      "description": "Feature spec: Slack identities within a workspace, concurrent creation and scheduled workout messages. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**", "packages/db/**", "packages/db-python/**"]
+    },
+    {
       "path": "docs/specs/territory-org-type.md",
       "description": "Feature spec: Territory organization type. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": [
