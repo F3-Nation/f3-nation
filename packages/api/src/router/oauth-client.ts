@@ -46,7 +46,7 @@ import { nationAdminProcedure } from "../shared";
  * which packages/api can't import). Keep the two lists in sync. A client
  * registered with anything else can't use it: the plugin only issues
  * scopes it supports, and auth3 rejects an authorize request
- * without `openid` (#1439). Without this allowlist an admin could register
+ * without `openid`. Without this allowlist an admin could register
  * a meaningless scope, including the reserved `openid_required` marker
  * apps/auth uses internally to force invalid_scope.
  */

@@ -42,15 +42,15 @@ const OauthClientFormSchema = z.object({
   offlineAccess: z.boolean(),
 });
 
+type ClientScopes = NonNullable<
+  RouterInputs["oauthClient"]["update"]["scopes"]
+>;
+
 // One URI per line, trimmed, blanks dropped. No validation here — the
 // server's SafeUrlSchema (packages/api/src/router/oauth-client.ts) is the
 // actual gate: it rejects dangerous schemes, fragments, and non-loopback
 // http, while still allowing a custom scheme for native/mobile clients
 // (RFC 8252 §7.1).
-type ClientScopes = NonNullable<
-  RouterInputs["oauthClient"]["update"]["scopes"]
->;
-
 function parseRedirectUris(value: string): string[] {
   return value
     .split("\n")

@@ -76,6 +76,14 @@ function createOtherOrgAdminSession(): Session {
   };
 }
 
+async function storedScopes(clientId: string) {
+  const [row] = await db
+    .select({ scopes: authSchema.betterAuthOauthClient.scopes })
+    .from(authSchema.betterAuthOauthClient)
+    .where(eq(authSchema.betterAuthOauthClient.clientId, clientId));
+  return row?.scopes;
+}
+
 async function insertTestClient(overrides: {
   clientId: string;
   clientSecret?: string | null;
@@ -328,6 +336,7 @@ describe("oauth-client router", () => {
           scopes: scopes as ("openid" | "profile")[],
         }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(await storedScopes(clientId)).toEqual(["openid"]);
     });
 
     it("accepts every supported scope", async () => {
@@ -344,6 +353,12 @@ describe("oauth-client router", () => {
       });
 
       expect(result.client.scopes).toEqual([
+        "openid",
+        "profile",
+        "email",
+        "offline_access",
+      ]);
+      expect(await storedScopes(clientId)).toEqual([
         "openid",
         "profile",
         "email",
