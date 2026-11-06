@@ -4,12 +4,15 @@ import type { router } from "@acme/api";
 
 type Outputs = InferRouterOutputs<typeof router>["regionPages"];
 
-export type Region = Outputs["regions"][number];
+/** A region as its own page returns it (includes the contact email). */
+export type Region = NonNullable<Outputs["region"]>["region"];
+/** A region as the directory list returns it (no email). */
+export type RegionListItem = Outputs["regions"][number];
 export type Workout = NonNullable<Outputs["region"]>["workouts"][number];
 
 /** Only what the directory list renders or searches; keeps the page payload small. */
 export type RegionSummary = Pick<
-  Region,
+  RegionListItem,
   | "name"
   | "slug"
   | "city"
@@ -31,7 +34,7 @@ export const toRegionSummary = ({
   latitude,
   longitude,
   workoutCount,
-}: Region): RegionSummary => ({
+}: RegionListItem): RegionSummary => ({
   name,
   slug,
   city,
