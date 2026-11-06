@@ -817,3 +817,74 @@ def test_production_pair_insert_preserves_importer_winning_link(isolated_postgre
     with Session(isolated_postgres) as session:
         rows = session.scalars(select(SlackUser)).all()
         assert len(rows) == 1 and rows[0].id == result.id and rows[0].user_id == winner_id
+
+
+def test_production_existing_workspace_identity_is_unchanged_when_member_joins_another(isolated_postgres, monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    first = helper_functions.create_user(
+        {
+            "id": "U_SERIAL_TEAMS",
+            "updated": 11,
+            "is_admin": True,
+            "is_owner": True,
+            "profile": {
+                "email": "Shared.Member@example.invalid",
+                "display_name": "Workspace A Member",
+                "real_name": "Workspace A Real Name",
+                "image_192": "https://example.invalid/workspace-a-avatar.png",
+            },
+        },
+        team_id="T_SERIAL_A",
+    )
+    with Session(isolated_postgres) as session:
+        identity = session.get(SlackUser, first.id)
+        identity.strava_access_token = "fabricated-workspace-a-access"
+        identity.strava_refresh_token = "fabricated-workspace-a-refresh"
+        identity.strava_expires_at = datetime(2026, 2, 3, 4, 5, 6)
+        identity.strava_athlete_id = 9012
+        identity.meta = {"sentinel": "workspace-a", "nested": {"retained": True}}
+        identity.created = datetime(2026, 1, 1, 1, 2, 3)
+        identity.updated = datetime(2026, 1, 2, 2, 3, 4)
+        user = session.get(User, first.user_id)
+        user.f3_name = "Existing F3 Profile"
+        user.first_name = "Fabricated Existing First"
+        user.last_name = "Fabricated Existing Last"
+        user.avatar_url = "https://example.invalid/existing-f3-avatar.png"
+        session.commit()
+    first_before = _identity_rows(isolated_postgres)[first.id]
+    with isolated_postgres.connect() as connection:
+        user_before = dict(connection.execute(select(User.__table__)).mappings().one())
+
+    second = helper_functions.create_user(
+        {
+            "id": "U_SERIAL_TEAMS",
+            "updated": 22,
+            "profile": {
+                "email": "SHARED.MEMBER@EXAMPLE.invalid",
+                "display_name": "Workspace B Member",
+                "real_name": "Workspace B Real Name",
+                "image_192": "https://example.invalid/workspace-b-avatar.png",
+            },
+        },
+        team_id="T_SERIAL_B",
+    )
+
+    assert second.id != first.id
+    assert second.user_id == first.user_id
+    assert second.slack_team_id == "T_SERIAL_B" and second.slack_id == "U_SERIAL_TEAMS"
+    assert second.user_name == "Workspace B Member"
+    assert second.avatar_url == "https://example.invalid/workspace-b-avatar.png"
+    assert second.slack_updated == 22 and second.is_admin is False and second.is_owner is False
+    assert inspect(second).detached
+    identities = _identity_rows(isolated_postgres)
+    assert len(identities) == 2
+    assert identities[first.id] == first_before
+    assert {(row["slack_team_id"], row["slack_id"], row["user_id"]) for row in identities.values()} == {
+        ("T_SERIAL_A", "U_SERIAL_TEAMS", first.user_id),
+        ("T_SERIAL_B", "U_SERIAL_TEAMS", first.user_id),
+    }
+    with isolated_postgres.connect() as connection:
+        assert [dict(row) for row in connection.execute(select(User.__table__)).mappings()] == [user_before]
+    assert set(helper_functions.SLACK_USERS) == {("T_SERIAL_A", "U_SERIAL_TEAMS"), ("T_SERIAL_B", "U_SERIAL_TEAMS")}
+    assert helper_functions.SLACK_USERS[("T_SERIAL_A", "U_SERIAL_TEAMS")] is first
+    assert helper_functions.SLACK_USERS[("T_SERIAL_B", "U_SERIAL_TEAMS")] is second
