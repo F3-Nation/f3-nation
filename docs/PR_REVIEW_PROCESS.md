@@ -2,7 +2,7 @@
 
 A pull request goes through these review stages on its way to `main`: automated AI review, a deeper AI review run by a codeowner, a hands-on local test, and a codeowner's approval. After each stage, the author addresses whatever feedback it raised before the PR moves on. Most of the reviewing is done by AI, so the codeowners — all volunteers — spend their time on a PR that has already been checked, fixed, and tested. Small PRs may skip some stages; see [Small PRs](#small-prs).
 
-Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the review and test skills. `pr-local-test` runs the PR's code on your own machine, and both skills' results carry weight in the final review, so someone accountable for the code runs them. Anyone else is welcome to run them too, as extra input. If you're an author who isn't a codeowner, your part is opening the PR, marking it ready, and addressing the feedback, including resolving the review threads.
+Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the review and test skills. `pr-local-test` runs the PR's code on your own machine, and both skills' results carry weight in the final review, so someone accountable for the code runs them. Anyone else is welcome to run them too, as extra input, but only a codeowner's run moves the PR to its next stage in the Codeowners PR Report. `pnpm pr:triage` also counts runs recorded in your own local ledger. If you're an author who isn't a codeowner, your part is opening the PR, marking it ready, and addressing the feedback, including resolving the review threads.
 
 ## The flow
 
@@ -52,6 +52,12 @@ The bots run on free open-source quotas, so they don't review every push. CodeRa
 ### How to tell it's your turn
 
 Anyone can run `pnpm pr:triage`, author or codeowner. It sorts every open PR by the stage it's waiting on, so you can pick up whatever needs you, including your own PRs that are waiting on you. [Finding PRs that need you](CONTRIBUTING.md#finding-prs-that-need-you) covers its setup and options.
+
+Codeowners also get the **Codeowners PR Report** in the #monorepo Slack channel each weekday morning. It lists only the PRs a codeowner can act on that day, in four groups: nobody has claimed it yet, it needs `pr-local-test`, it needs final review, approval and merge, or its author replied in every open thread and is waiting on a reviewer. A PR waiting on its author isn't listed; those get the author reminders in [PRs waiting on their author](#prs-waiting-on-their-author). The exception is a PR those reminders skip (a deleted author account, a bot author other than Renovate and release-please, or the `keep-open` label): nobody else moves it, so the report lists it. Each PR has a light for how long it has been the codeowners' turn, on the same timings as those reminders: 🟡 from the day an author would be reminded, 🔴 from the day an author's PR would close. Click through to a PR and take it, or reply in the report's thread to hand one off or ask for help.
+
+### Claiming a PR
+
+**A codeowner claims a PR by assigning themselves** on GitHub, and the next report shows it under their name. `pr-review-inline` and `pr-local-test` do this for you, except on your own PR. A PR counts as claimed once a codeowner other than its author is assigned; until then, it shows in the report as needing a codeowner. When you take over a PR someone else claimed, add yourself rather than removing them, and say so in the PR.
 
 ## Running the review and test skills
 
@@ -105,11 +111,11 @@ When the PR's author is a codeowner, have a different codeowner run at least one
 
 ## After the local test
 
-When a codeowner decides a PR doesn't need a local test, or when `pr-local-test` recommends approval, the PR goes to a codeowner's final review.
+When `pr-local-test` recommends approval, the PR goes to a codeowner's final review. When a codeowner decides a PR doesn't need a local test, they add the **`local test: not needed`** label, which moves it to final review the same way.
 
 ⏸️ **Can't recommend yet** means something kept the test from finishing — a review thread still open, a check it couldn't run, a merge status it couldn't confirm — not a problem in the code. Clear what it names. Whether `pr-local-test` runs again afterward is the reviewer's call: a check it couldn't run needs another run before it counts, while threads that were only open may just need resolving.
 
-❌ **Don't approve yet** means the PR caused a problem: its results say what has to change, and the author makes those fixes. Whether `pr-local-test` runs again afterward is the reviewer's call: a re-run is worth it when the fixes change how the app behaves, and not when a reviewer can confirm them by reading the diff. A large rework goes back through `pr-review-inline` first, since the earlier review no longer covers the code that's there now. `pnpm pr:triage` doesn't send a PR back to a skill that has already run, except a local test that couldn't recommend yet, which goes back to the local-test queue. So the codeowner who asked for the fixes watches for the author's push.
+❌ **Don't approve yet** means the PR caused a problem: its results say what has to change, and the author makes those fixes. Whether `pr-local-test` runs again afterward is the reviewer's call: a re-run is worth it when the fixes change how the app behaves, and not when a reviewer can confirm them by reading the diff. A large rework goes back through `pr-review-inline` first, since the earlier review no longer covers the code that's there now. After ❌, `pnpm pr:triage` and the Codeowners PR Report treat the PR as waiting on its author until they push. After that push, or after ⏸️, they keep the PR waiting on `pr-local-test` until a codeowner's later run recommends approval, or a codeowner adds the `local test: not needed` label after the report, for fixes a reviewer can confirm from the diff. The label only counts when it's added after the report it clears, so it can't hide a problem found later. Neither tool sends a PR back to `pr-review-inline`, so the codeowner who asked for a large rework watches for the author's push.
 
 ## Addressing feedback
 
@@ -147,4 +153,4 @@ The label marks the end of the bot feedback, not readiness for a codeowner's fin
 
 ## Small PRs
 
-A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline` without `--deep` and no local test, and another might be approved and merged directly.
+A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline` without `--deep` and no local test, and another might be approved and merged directly. To skip the local test, add the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.
