@@ -10,6 +10,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pandas as pd
+
+# DataFrame.style imports pandas' Styler, which imports matplotlib when it is
+# installed, and matplotlib's first import builds its font cache from every
+# system font. Paying that here keeps it out of the threaded tests' timeouts.
+import pandas.io.formats.style  # noqa: F401
 import pytest
 import pytz
 from slack_sdk.errors import SlackApiError
