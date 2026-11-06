@@ -948,7 +948,7 @@ def send_preblast(
     # Username / icon
     if body:
         slack_id = q_slack_id or slack_user_id
-        q_name, q_url = get_user_names([slack_id], logger, client, return_urls=True)
+        q_name, q_url = get_user_names([slack_id], logger, client, return_urls=True, team_id=region_record.team_id)
         q_name = (q_name or [""])[0]
         q_url = q_url[0] if q_url else None
         username = f"{q_name} (via F3 Nation)"
@@ -1379,7 +1379,9 @@ def handle_event_preblast_action(
             ]
             _insert_preblast_image(blocks, preblast_info.event_record.meta)
 
-            q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
+            q_name, q_url = get_user_names(
+                [slack_user_id], logger, client, return_urls=True, team_id=region_record.team_id
+            )
             q_name = (q_name or [""])[0]
             q_url = q_url[0] if q_url else None
             preblast_channel = get_preblast_channel(region_record, preblast_info)
@@ -1487,7 +1489,9 @@ def handle_event_preblast_action(
             blocks = list(preblast_info.preblast_blocks) + [b.as_form_field() for b in button_blocks]
             _insert_preblast_image(blocks, preblast_info.event_record.meta)
 
-            q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
+            q_name, q_url = get_user_names(
+                [slack_user_id], logger, client, return_urls=True, team_id=region_record.team_id
+            )
             q_name = (q_name or [""])[0]
             q_url = q_url[0] if q_url else None
             preblast_channel = get_preblast_channel(region_record, preblast_info)

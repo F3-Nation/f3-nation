@@ -1,15 +1,18 @@
 import hashlib
+import json
 import os
 import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from f3_data_models import utils as data_model_utils
 from f3_data_models.models import Base, SlackUser, User
-from sqlalchemy import create_engine, event, select, text
+from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -118,8 +121,8 @@ def test_direct_create_user_serial_calls_commit_and_return_synthetic_identity(is
         "image_192": "https://example.invalid/fabricated-serial.png",
     }
 
-    first = helper_functions.create_user({"id": slack_id, "profile": profile}, home_region_id=None)
-    second = helper_functions.create_user({"id": slack_id, "profile": profile}, home_region_id=None)
+    first = helper_functions.create_user({"id": slack_id, "profile": profile}, team_id="T_SERIAL")
+    second = helper_functions.create_user({"id": slack_id, "profile": profile}, team_id="T_SERIAL")
 
     assert first.id == second.id
     assert first.slack_id == second.slack_id == slack_id
@@ -131,15 +134,18 @@ def test_direct_create_user_serial_calls_commit_and_return_synthetic_identity(is
     assert user.home_region_id is None
 
 
-def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False):
+def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False, production=False):
+    team_id = "T_ORIGINAL_ORPHAN" if initial_orphan else "T_CONCURRENT"
     original_slack_user_id = None
     if initial_orphan:
         with isolated_postgres.begin() as connection:
             result = connection.execute(
                 text(
                     """INSERT INTO slack_users
-                       (slack_id, user_name, email, is_admin, is_owner, is_bot, user_id, avatar_url, slack_team_id)
-                       VALUES (:slack_id, :name, :email, false, false, false, NULL, :avatar, :team)
+                       (slack_id, user_name, email, is_admin, is_owner, is_bot, user_id, avatar_url, slack_team_id,
+                        strava_access_token, meta)
+                       VALUES (:slack_id, :name, :email, false, false, false, NULL, :avatar, :team,
+                               'fabricated-orphan-token', '{"sentinel":"orphan"}')
                        RETURNING id"""
                 ),
                 {
@@ -156,7 +162,8 @@ def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False):
     release_lock_holder = threading.Event()
     second_started = threading.Event()
     first_statement_seen = False
-    lock_key = int.from_bytes(hashlib.sha256(slack_id.encode("utf-8")).digest()[:8], "big", signed=True)
+    pair = json.dumps([team_id, slack_id], separators=(",", ":"))
+    lock_key = int.from_bytes(hashlib.sha256(pair.encode("utf-8")).digest()[:8], "big", signed=True)
 
     def after_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
         nonlocal first_statement_seen
@@ -177,12 +184,12 @@ def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False):
     }
     try:
         with ThreadPoolExecutor(max_workers=2) as executor:
-            first_future = executor.submit(helper_functions.create_user, payload, None)
+            first_future = executor.submit(helper_functions.create_user, payload, None, team_id)
             assert lock_acquired.wait(timeout=5), "first call did not acquire advisory lock"
 
             def second_call():
                 second_started.set()
-                return helper_functions.create_user(payload, None)
+                return helper_functions.create_user(payload, None, team_id)
 
             second_future = executor.submit(second_call)
             assert second_started.wait(timeout=5)
@@ -221,6 +228,20 @@ def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False):
 
     assert first.id == second.id
     assert first.user_id == second.user_id
+    assert inspect(first).detached and inspect(second).detached
+    assert first.slack_team_id == second.slack_team_id == team_id
+    if production:
+        with Session(isolated_postgres) as session:
+            identities = session.scalars(select(SlackUser)).all()
+            users = session.scalars(select(User)).all()
+            assert len(identities) == len(users) == 1
+            assert identities[0].id == first.id
+            assert identities[0].user_id == users[0].id == first.user_id
+            assert users[0].email == "fabricated.concurrent@example.invalid"
+            if initial_orphan:
+                assert identities[0].strava_access_token == "fabricated-orphan-token"
+                assert identities[0].meta == {"sentinel": "orphan"}
+        return
     persisted, user = _assert_single_synthetic_link(
         isolated_postgres,
         slack_id,
@@ -234,6 +255,8 @@ def _assert_contended_create(isolated_postgres, slack_id, initial_orphan=False):
     if original_slack_user_id is not None:
         assert persisted.id == original_slack_user_id
         assert persisted.slack_team_id == "T_ORIGINAL_ORPHAN"
+        assert persisted.strava_access_token == "fabricated-orphan-token"
+        assert persisted.meta == {"sentinel": "orphan"}
 
 
 def test_concurrent_direct_create_user_for_absent_slack_user(isolated_postgres):
@@ -242,6 +265,147 @@ def test_concurrent_direct_create_user_for_absent_slack_user(isolated_postgres):
 
 def test_concurrent_direct_create_user_links_committed_orphan(isolated_postgres):
     _assert_contended_create(isolated_postgres, "U_TEST_ORPHAN_1101", initial_orphan=True)
+
+
+@pytest.mark.parametrize("orphan", [False, True])
+def test_production_same_pair_concurrent_creation(isolated_postgres, monkeypatch, orphan):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    _assert_contended_create(isolated_postgres, "U_PRODUCTION_CONCURRENT", initial_orphan=orphan, production=True)
+
+
+def test_production_distinct_pairs_concurrently_share_case_insensitive_email(isolated_postgres, monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    inserted = threading.Event()
+    release = threading.Event()
+
+    def hold_first_insert(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.startswith("INSERT INTO users ") and not inserted.is_set():
+            inserted.set()
+            if not release.wait(timeout=10):
+                raise TimeoutError("test did not release uncommitted email insert")
+
+    def create(team, email):
+        return helper_functions.create_user(
+            {"id": "U_SHARED", "profile": {"email": email, "display_name": team}}, None, team
+        )
+
+    event.listen(isolated_postgres, "after_cursor_execute", hold_first_insert)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            try:
+                first_future = executor.submit(create, "T_FIRST", "Same@example.invalid")
+                assert inserted.wait(timeout=5), "first worker did not insert an uncommitted User"
+                second_future = executor.submit(create, "T_SECOND", "same@EXAMPLE.invalid")
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    with isolated_postgres.connect() as observer:
+                        waiting = observer.execute(
+                            text(
+                                "SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid "
+                                "WHERE l.locktype = 'transactionid' AND NOT l.granted "
+                                "AND a.datname = current_database() AND a.wait_event_type = 'Lock' "
+                                "AND a.query LIKE 'INSERT INTO users %'"
+                            )
+                        ).first()
+                    if waiting:
+                        break
+                    if second_future.done():
+                        pytest.fail("second worker completed without waiting on the uncommitted email")
+                    time.sleep(0.05)
+                else:
+                    pytest.fail("no PostgreSQL transaction-lock waiter for the conflicting email insert")
+            finally:
+                release.set()
+            first = first_future.result(timeout=10)
+            second = second_future.result(timeout=10)
+    finally:
+        release.set()
+        event.remove(isolated_postgres, "after_cursor_execute", hold_first_insert)
+    assert first.id != second.id
+    assert first.user_id == second.user_id
+    assert inspect(first).detached and inspect(second).detached
+    with Session(isolated_postgres) as session:
+        assert len(session.scalars(select(User)).all()) == 1
+        assert {(row.slack_team_id, row.slack_id, row.user_id) for row in session.scalars(select(SlackUser))} == {
+            ("T_FIRST", "U_SHARED", first.user_id),
+            ("T_SECOND", "U_SHARED", first.user_id),
+        }
+
+
+@pytest.mark.parametrize("linked", [False, True])
+def test_production_preserves_stored_identity_and_integrations(isolated_postgres, monkeypatch, linked):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    with Session(isolated_postgres) as session:
+        user = User(email="stored@example.invalid", f3_name="Stored F3", avatar_url="stored-f3-avatar")
+        session.add(user)
+        session.flush()
+        user_id = user.id
+        identity = SlackUser(
+            slack_id="U_STORED",
+            slack_team_id="T_STORED",
+            email=user.email,
+            user_id=user.id if linked else None,
+            user_name="Stored Slack",
+            avatar_url="stored-avatar",
+            is_admin=False,
+            is_owner=False,
+            is_bot=False,
+            strava_access_token="fabricated-access",
+            strava_refresh_token="fabricated-refresh",
+            strava_expires_at=datetime(2026, 1, 2, 3, 4, 5),
+            strava_athlete_id=5678,
+            meta={"sentinel": "retained"},
+        )
+        session.add(identity)
+        session.commit()
+        identity_id = identity.id
+    for profile in [None, {"email": "changed@example.invalid"}] if linked else [None]:
+        result = helper_functions.create_user({"id": "U_STORED", "profile": profile}, team_id="T_STORED")
+        assert result.id == identity_id and result.user_id == user_id
+        assert inspect(result).detached
+        assert result.user_name == "Stored Slack" and result.avatar_url == "stored-avatar"
+        assert result.strava_access_token == "fabricated-access"
+        assert result.strava_refresh_token == "fabricated-refresh"
+        assert result.strava_expires_at == datetime(2026, 1, 2, 3, 4, 5) and result.strava_athlete_id == 5678
+        assert result.meta == {"sentinel": "retained"}
+    with Session(isolated_postgres) as session:
+        assert len(session.scalars(select(User)).all()) == 1
+        assert session.get(SlackUser, identity_id).user_id == user_id
+
+
+def test_bulk_import_repeated_pairs_preserve_links_and_integrations(isolated_postgres, monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    member = {
+        "id": "U_IMPORT",
+        "updated": 17,
+        "profile": {
+            "email": "import@example.invalid",
+            "display_name": "Import Name",
+            "real_name": "Import Real",
+            "image_192": "import-avatar",
+        },
+    }
+    client = SimpleNamespace(users_list=lambda: {"members": [member, {**member, "id": "USLACKBOT"}]})
+    for _ in range(2):
+        helper_functions.populate_users(client, "T_IMPORT")
+    with Session(isolated_postgres) as session:
+        rows = session.scalars(select(SlackUser)).all()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row.slack_updated == 17 and row.user_id is not None
+        identity_id, user_id = row.id, row.user_id
+        row.strava_access_token = "fabricated-import-token"
+        row.meta = {"sentinel": "import"}
+        session.commit()
+    helper_functions.populate_users(client, "T_IMPORT")
+    helper_functions.populate_users(client, "T_OTHER")
+    with Session(isolated_postgres) as session:
+        rows = session.scalars(select(SlackUser)).all()
+        assert len(rows) == 2
+        retained = session.get(SlackUser, identity_id)
+        assert retained.user_id == user_id and retained.strava_access_token == "fabricated-import-token"
+        assert retained.meta == {"sentinel": "import"}
+        assert {row.slack_team_id for row in rows} == {"T_IMPORT", "T_OTHER"}
 
 
 IDENTITY_CONSTRAINT = "uq_slack_users_slack_id_team_id"
@@ -560,3 +724,96 @@ def test_slack_identity_restore_rehearsal(isolated_postgres):
         assert not _identity_constraint_exists(engine)
         with connection.begin():
             connection.exec_driver_sql("DROP TABLE pg_temp.slack_users_restore")
+
+
+@pytest.mark.parametrize("production", [False, True])
+def test_failed_commit_rolls_back_all_identity_writes_and_cache(isolated_postgres, monkeypatch, production):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: production)
+    retained = SimpleNamespace(user_id=9)
+    helper_functions.SLACK_USERS[("T_OTHER", "U_RETAINED")] = retained
+
+    def reject_commit(_session):
+        raise RuntimeError("fabricated commit failure")
+
+    event.listen(Session, "before_commit", reject_commit)
+    try:
+        with pytest.raises(RuntimeError, match="fabricated commit failure"):
+            helper_functions.create_user(
+                {"id": "U_ROLLBACK", "profile": {"email": "rollback@example.invalid", "display_name": "Rollback"}},
+                team_id="T_ROLLBACK",
+            )
+    finally:
+        event.remove(Session, "before_commit", reject_commit)
+    assert helper_functions.SLACK_USERS == {("T_OTHER", "U_RETAINED"): retained}
+    with Session(isolated_postgres) as session:
+        assert session.scalars(select(User)).all() == []
+        assert session.scalars(select(SlackUser)).all() == []
+
+
+def test_nonproduction_same_slack_account_has_independent_workspace_links(isolated_postgres):
+    first = helper_functions.create_user({"id": "U_MULTI"}, team_id="T_FIRST")
+    second = helper_functions.create_user({"id": "U_MULTI"}, team_id="T_SECOND")
+    assert first.id != second.id and first.user_id != second.user_id
+    assert first.slack_team_id == "T_FIRST" and second.slack_team_id == "T_SECOND"
+    with Session(isolated_postgres) as session:
+        assert len(session.scalars(select(User)).all()) == 2
+        assert len(session.scalars(select(SlackUser)).all()) == 2
+
+
+@pytest.mark.parametrize("bot", [False, True])
+def test_production_new_no_email_identity_retains_existing_fallback(isolated_postgres, monkeypatch, bot):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    result = helper_functions.create_user(
+        {
+            "id": "U_NO_EMAIL",
+            "is_bot": bot,
+            "updated": 12,
+            "profile": {"display_name": "Display", "real_name": "Real", "image_192": "profile-avatar"},
+        },
+        team_id="T_NO_EMAIL",
+    )
+    assert result.email == "u_no_email" and result.is_bot is bot
+    assert result.user_name == "Display" and result.avatar_url == "profile-avatar" and result.slack_updated == 12
+    with Session(isolated_postgres) as session:
+        user = session.get(User, result.user_id)
+        assert user.email == "u_no_email" and user.f3_name == "Display"
+
+
+def test_production_pair_insert_preserves_importer_winning_link(isolated_postgres, monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    with Session(isolated_postgres) as session:
+        winner = User(email="winner@example.invalid", f3_name="Winner")
+        session.add(winner)
+        session.commit()
+        winner_id = winner.id
+    inserted = False
+
+    def importer_wins(_conn, _cursor, statement, _parameters, _context, _executemany):
+        nonlocal inserted
+        if statement.startswith("INSERT INTO slack_users ") and not inserted:
+            inserted = True
+            with isolated_postgres.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO slack_users (slack_id, slack_team_id, user_id, user_name, email, "
+                        "strava_access_token, meta, is_admin, is_owner, is_bot) "
+                        "VALUES ('U_WINNER', 'T_WINNER', :user_id, 'Importer Winner', 'winner@example.invalid', "
+                        "'fabricated-winner', "
+                        "CAST(:meta AS jsonb), false, false, false)"
+                    ),
+                    {"user_id": winner_id, "meta": json.dumps({"sentinel": True})},
+                )
+
+    event.listen(isolated_postgres, "before_cursor_execute", importer_wins)
+    try:
+        result = helper_functions.create_user(
+            {"id": "U_WINNER", "profile": {"email": "request@example.invalid", "display_name": "Request"}},
+            team_id="T_WINNER",
+        )
+    finally:
+        event.remove(isolated_postgres, "before_cursor_execute", importer_wins)
+    assert inserted and result.user_id == winner_id and result.user_name == "Importer Winner"
+    assert result.strava_access_token == "fabricated-winner" and result.meta == {"sentinel": True}
+    with Session(isolated_postgres) as session:
+        rows = session.scalars(select(SlackUser)).all()
+        assert len(rows) == 1 and rows[0].id == result.id and rows[0].user_id == winner_id

@@ -23,7 +23,7 @@ def update_slack_users(force=False):
         return
 
     all_slack_users = DbManager.find_records(cls=SlackUser, filters=[True])
-    slack_user_dict = {user.slack_id: user for user in all_slack_users}
+    slack_user_dict = {(user.slack_team_id, user.slack_id): user for user in all_slack_users}
     all_slack_spaces: list[tuple[SlackSpace, Org_x_SlackSpace]] = DbManager.find_join_records2(
         SlackSpace,
         Org_x_SlackSpace,
@@ -49,10 +49,12 @@ def update_slack_users(force=False):
                 if is_deactivated_slack_user(user):
                     continue  # Skip deactivated accounts
 
-                slack_user = slack_user_dict.get(user["id"])
+                pair = (slack_space.team_id, user["id"])
+                slack_user = slack_user_dict.get(pair)
                 if not safe_get(slack_user, "user_id"):
-                    print(f"Creating new Slack user {user['id']} ({user.get('name')})")
-                    slack_user = create_user(user, region_org_record.org_id)
+                    logging.getLogger(__name__).info("slack.identity.sync_create")
+                    slack_user = create_user(user, region_org_record.org_id, team_id=slack_space.team_id)
+                    slack_user_dict[pair] = slack_user
                 elif slack_user.slack_updated and slack_user.slack_updated >= user["updated"] and not force:
                     continue
                 else:
@@ -70,8 +72,8 @@ def update_slack_users(force=False):
 
             print("Slack users updated successfully.")
 
-        except SlackApiError as e:
-            print(f"Error updating Slack users for {slack_space.workspace_name}: {e.response['error']}")
+        except SlackApiError:
+            logging.getLogger(__name__).error("slack.identity.sync_failed")
             continue
 
 

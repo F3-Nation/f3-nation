@@ -67,8 +67,8 @@ def test_script_validates_environment_before_running_jobs(monkeypatch):
 
 def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
     monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
-    slack_user = SimpleNamespace(id=17, slack_id="UFAKE001", user_id=42, slack_updated=1)
-    slack_space = SimpleNamespace(settings={"bot_token": "fabricated-token"})
+    slack_user = SimpleNamespace(id=17, slack_id="UFAKE001", slack_team_id="T_ACTIVE", user_id=42, slack_updated=1)
+    slack_space = SimpleNamespace(team_id="T_ACTIVE", settings={"bot_token": "fabricated-token"})
     org_space = SimpleNamespace(org_id=3)
     monkeypatch.setattr(update_slack_users.DbManager, "find_records", Mock(return_value=[slack_user]))
     monkeypatch.setattr(
@@ -107,3 +107,42 @@ def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
     fields_by_name = {column.key: value for column, value in fields.items()}
     assert fields_by_name["user_name"] == "Fabricated Display"
     assert fields_by_name["avatar_url"] == "https://example.invalid/fabricated-avatar.png"
+
+
+def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplog, capsys):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    rows = [
+        SimpleNamespace(id=10, slack_id="USHARED", slack_team_id="T_FIRST", user_id=1, slack_updated=1),
+        SimpleNamespace(id=20, slack_id="USHARED", slack_team_id="T_SECOND", user_id=2, slack_updated=1),
+    ]
+    monkeypatch.setattr(update_slack_users.DbManager, "find_records", lambda **_k: rows)
+    spaces = [
+        (SimpleNamespace(team_id=team, settings={"bot_token": "fabricated-token"}), SimpleNamespace(org_id=org))
+        for team, org in [("T_FIRST", 1), ("T_SECOND", 2), ("T_THIRD", 3), ("T_THIRD", 3)]
+    ]
+    monkeypatch.setattr(update_slack_users.DbManager, "find_join_records2", lambda *_a, **_k: spaces)
+    member = {
+        "id": "USHARED",
+        "is_bot": False,
+        "updated": 2,
+        "name": "Fabricated Name",
+        "profile": {"display_name": "Updated Name", "image_512": "updated-avatar"},
+    }
+    monkeypatch.setattr(
+        update_slack_users, "WebClient", lambda **_k: SimpleNamespace(users_list=lambda: {"members": [member, member]})
+    )
+    updates = []
+    monkeypatch.setattr(update_slack_users.DbManager, "update_record", lambda *a: updates.append(a))
+    creations = []
+
+    def create(info, org_id, *, team_id):
+        creations.append((info, org_id, team_id))
+        return SimpleNamespace(id=30, slack_id="USHARED", slack_team_id=team_id, user_id=3, slack_updated=2)
+
+    monkeypatch.setattr(update_slack_users, "create_user", create)
+    caplog.set_level("INFO")
+    update_slack_users.update_slack_users()
+    assert {args[1] for args in updates} == {10, 20}
+    assert creations == [(member, 3, "T_THIRD")]
+    output = capsys.readouterr().out + caplog.text
+    assert "USHARED" not in output and "Fabricated Name" not in output and "fabricated-token" not in output

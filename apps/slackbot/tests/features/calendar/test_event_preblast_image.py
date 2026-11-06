@@ -475,7 +475,7 @@ SEND_PREBLAST_BLOCKS = [
 ]
 
 
-def _send(meta, mode, warning=None, preblast_ts=None, client=None, channel="C_AO", preblast_blocks=None):
+def _send(meta, mode, warning=None, preblast_ts=None, client=None, channel="C_AO", preblast_blocks=None, names=None):
     if client is None:
         client = MagicMock()
         client.chat_postMessage.return_value = {"ts": "1761800000.000100"}
@@ -493,7 +493,7 @@ def _send(meta, mode, warning=None, preblast_ts=None, client=None, channel="C_AO
         patch.object(event_preblast, "build_preblast_info", return_value=info),
         patch.object(event_preblast, "_build_preblast_service", return_value=svc),
         patch.object(event_preblast, "get_preblast_channel", return_value=channel),
-        patch.object(event_preblast, "get_user_names", return_value=(["Q"], ["https://img/q.png"])),
+        patch.object(event_preblast, "get_user_names", side_effect=names, return_value=(["Q"], ["https://img/q.png"])),
         patch.object(event_preblast, "post_bot_log") as bot_log,
         patch.object(event_preblast, "update_submission_wait_view") as wait_view,
     ):
@@ -817,3 +817,22 @@ def test_hc_refresh_retries_without_photo_when_slack_rejects_it(body_factory):
 
     assert client.chat_update.call_count == 2
     assert _image_blocks(client.chat_update.call_args_list[1].kwargs["blocks"]) == []
+
+
+def test_send_preblast_uses_workspace_name_and_avatar(monkeypatch):
+    from types import SimpleNamespace
+
+    from utilities import helper_functions
+
+    monkeypatch.setattr(helper_functions, "session_scope", lambda: pytest.fail("caller-only test must not access DB"))
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: pytest.fail("no DB"))
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS.update(
+        {
+            ("T_OTHER", "U_Q"): SimpleNamespace(user_name="Other Q", avatar_url="other-avatar"),
+            ("T1", "U_Q"): SimpleNamespace(user_name="Active Q", avatar_url="active-avatar"),
+        }
+    )
+    client, _, _ = _send({}, PostMode.POST_NEW, names=helper_functions.get_user_names)
+    assert client.chat_postMessage.call_args.kwargs["username"] == "Active Q (via F3 Nation)"
+    assert client.chat_postMessage.call_args.kwargs["icon_url"] == "active-avatar"
