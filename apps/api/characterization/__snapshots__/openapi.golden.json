@@ -11732,9 +11732,17 @@
                     "type": "array"
                   },
                   "scopes": {
+                    "description": "Scopes the client may request. Each must be one of openid, profile, email, offline_access, and openid is required.",
                     "items": {
+                      "enum": [
+                        "openid",
+                        "profile",
+                        "email",
+                        "offline_access"
+                      ],
                       "type": "string"
                     },
+                    "minItems": 1,
                     "type": "array"
                   }
                 },

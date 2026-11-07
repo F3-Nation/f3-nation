@@ -18,6 +18,8 @@ import postgres from "postgres";
 
 import * as _schema from "@acme/db/schema/schema";
 
+import { SUPPORTED_OAUTH_SCOPES } from "../src/lib/oauth-client-reference";
+
 // CJS/ESM interop: when loaded as CJS, named exports are under .default
 const { oauthClients } = (
   "default" in _schema ? _schema.default : _schema
@@ -82,6 +84,36 @@ export function isValidRedirectUri(uri: string, isPublic: boolean): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Normalizes a space-separated scope string (repeats dropped, order kept) and
+ * checks it against what auth3 serves: only SUPPORTED_OAUTH_SCOPES, and
+ * openid is required. The same rule the admin PATCH and the oauth_clients
+ * migration apply, so a client saved here migrates to auth3 unchanged.
+ */
+export function parseClientScopes(
+  raw: string,
+): { ok: true; scopes: string } | { ok: false; error: string } {
+  const scopes = [...new Set(raw.split(/\s+/).filter(Boolean))];
+  const unsupported = scopes.filter(
+    (scope) => !(SUPPORTED_OAUTH_SCOPES as readonly string[]).includes(scope),
+  );
+  if (unsupported.length > 0) {
+    return {
+      ok: false,
+      error:
+        `Unsupported scope(s): ${unsupported.join(", ")}. ` +
+        `Use only ${SUPPORTED_OAUTH_SCOPES.join(", ")}.`,
+    };
+  }
+  if (!scopes.includes("openid")) {
+    return {
+      ok: false,
+      error: "Scopes must include openid: auth3 only serves OpenID Connect.",
+    };
+  }
+  return { ok: true, scopes: scopes.join(" ") };
 }
 
 // ---------------------------------------------------------------------------
@@ -287,6 +319,15 @@ async function main() {
     const rawScopes = await ask("Scopes [openid profile email]: ");
     scopes = rawScopes.trim() || "openid profile email";
   }
+
+  // Checked after both branches so an update that keeps a legacy value is
+  // caught too: enter supported scopes at the prompt to fix it.
+  const parsedScopes = parseClientScopes(scopes);
+  if (!parsedScopes.ok) {
+    console.error(parsedScopes.error);
+    process.exit(1);
+  }
+  scopes = parsedScopes.scopes;
 
   // Generate new secret and hash it. Public clients get a random unusable
   // hash (never revealed): the column is NOT NULL, but token exchange for
