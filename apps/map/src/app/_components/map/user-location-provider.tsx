@@ -12,6 +12,7 @@ import {
 import { isDevelopment, RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { setView } from "~/utils/set-view";
+import { getUserLocationZoom } from "~/utils/user-location-zoom";
 import { mapStore } from "~/utils/store/map";
 
 const UserLocationContext = createContext<{
@@ -116,7 +117,7 @@ export const UserLocationProvider = ({ children }: { children: ReactNode }) => {
         setView({
           lat: position.latitude,
           lng: position.longitude,
-          zoom: 15,
+          zoom: getUserLocationZoom(window.location.search),
           options: { onlyIfNotMovedMap: true },
         });
       }

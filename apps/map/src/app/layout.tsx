@@ -74,7 +74,7 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
 const ElementProvider = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <TooltipProvider delayDuration={100}>{children}</TooltipProvider>
       <Toaster />
       <ShadCnContainer />
