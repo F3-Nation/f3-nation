@@ -35,7 +35,7 @@ assert_eq() {
 tmp_dir=""
 trap 'if [ -n "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi' EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/issue-fields-test.XXXXXX")" || exit 1
-mkdir "$tmp_dir/bin"
+mkdir "$tmp_dir/bin" || exit 1
 export REQUEST_LOG="$tmp_dir/requests.jsonl"
 export FAKE_DIR="$tmp_dir"
 export GH_REPO="acme/repo"
@@ -76,7 +76,8 @@ jq -n '
 # real gh, it exits 1 when it returns an `errors` body. Flag files in FAKE_DIR:
 # fail-lookup (lookups error), missing-<n> (issue n doesn't exist),
 # fail-mutation-<id> (field writes to that issue error), empty-response
-# (mutations return nothing).
+# (mutations return nothing), stuck-cursor (every page after the first repeats
+# the first page's cursor and says more pages follow).
 cat >"$tmp_dir/bin/gh" <<'FAKE'
 #!/usr/bin/env bash
 body=$(cat)
@@ -91,7 +92,13 @@ case "$query" in
       echo "fake gh: too many issue-list requests" >&2
       exit 1
     fi
-    if [ "$(var c)" = null ]; then jq -c '.[0]' "$FAKE_DIR/pages.json"; else jq -c '.[1]' "$FAKE_DIR/pages.json"; fi ;;
+    if [ "$(var c)" = null ]; then
+      jq -c '.[0]' "$FAKE_DIR/pages.json"
+    elif [ -f "$FAKE_DIR/stuck-cursor" ]; then
+      jq -c '.[0]' "$FAKE_DIR/pages.json"
+    else
+      jq -c '.[1]' "$FAKE_DIR/pages.json"
+    fi ;;
   *"issue(number:\$n){ number"*)
     jq -c --argjson n "$(var n)" \
       '{data: {repository: {issue: ([.[].data.repository.issues.nodes[] | select(.number == $n)][0])}}}' \
@@ -116,7 +123,10 @@ case "$query" in
   *) echo "fake gh: unexpected query: $query" >&2; exit 1 ;;
 esac
 FAKE
-chmod +x "$tmp_dir/bin/gh"
+chmod +x "$tmp_dir/bin/gh" || {
+  echo "FAIL: cannot make the fake gh executable"
+  exit 1
+}
 export PATH="$tmp_dir/bin:$PATH"
 
 reset_log() { : >"$REQUEST_LOG"; }
@@ -242,6 +252,16 @@ reset_log
 assert_eq "untriaged skips fully triaged issues on every page" "2
 3" "$(bash "$fields" untriaged | jq -r .number)"
 assert_eq "untriaged requests each page once" "2" "$(grep -c 'issues(first' "$REQUEST_LOG")"
+
+# untriaged: a page that says more follow but repeats the cursor fails at once.
+reset_log
+touch "$tmp_dir/stuck-cursor"
+stuck_err=$(bash "$fields" untriaged 2>&1 >/dev/null)
+stuck_status=$?
+rm -f "$tmp_dir/stuck-cursor"
+assert_eq "untriaged fails when the cursor doesn't advance" "1" "$stuck_status"
+assert_eq "untriaged names the stuck cursor" "1" "$(contains "pagination did not advance (endCursor 'c1')" "$stuck_err")"
+assert_eq "untriaged stops after the repeated page" "2" "$(grep -c 'issues(first' "$REQUEST_LOG")"
 
 if [ "$failures" -gt 0 ]; then
   echo "${failures} issue-fields test(s) failed"

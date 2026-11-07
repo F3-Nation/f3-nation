@@ -119,7 +119,7 @@ cmd_get() {
 }
 
 cmd_untriaged() {
-  local cursor="" page
+  local cursor="" next page
   while :; do
     page=$(jq -n --arg o "$OWNER" --arg r "$NAME" --arg c "$cursor" --arg sel "$ISSUE_SELECTION" '{
       query: ("query($o:String!,$r:String!,$c:String){ repository(owner:$o,name:$r){ issues(first:50,after:$c,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){ pageInfo{ hasNextPage endCursor } nodes{ " + $sel + " } } } }"),
@@ -127,7 +127,11 @@ cmd_untriaged() {
     }' | graphql)
     printf '%s' "$page" | jq -c --argjson limit "$BODY_LIMIT" ".data.repository.issues.nodes[] | $ISSUE_PROJECTION | select(.type == null or .priority == null or .effort == null or (.app | length) == 0)"
     [ "$(printf '%s' "$page" | jq -r '.data.repository.issues.pageInfo.hasNextPage')" = true ] || break
-    cursor=$(printf '%s' "$page" | jq -r '.data.repository.issues.pageInfo.endCursor')
+    next=$(printf '%s' "$page" | jq -r '.data.repository.issues.pageInfo.endCursor // ""')
+    if [ -z "$next" ] || [ "$next" = "$cursor" ]; then
+      die "pagination did not advance (endCursor '$next')"
+    fi
+    cursor=$next
   done
 }
 

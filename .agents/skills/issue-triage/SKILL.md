@@ -20,7 +20,9 @@ lists the valid ones.
 
 - **Fill gaps; don't overwrite.** Propose only the values an issue is missing.
   If an existing value looks wrong, say so in the proposal, and change it only
-  when the user agrees.
+  when the user agrees. Right before writing, re-read the issues with `get`
+  and drop any proposed value the issue has gained since, unless the user
+  approved replacing it.
 - **Propose before writing.** Show each issue's values with a one-line reason
   each, and write only after the user approves. Exception: the user asked you
   to set the values outright (for example, on an issue you just filed for them).
@@ -148,6 +150,9 @@ each change is mechanical. An Epic's Effort covers all its sub-issues.
 ## The backlog
 
 1. `bash $S options`, then `bash $S untriaged > <scratch>/untriaged.jsonl`.
+   `untriaged` lists issues missing any of the four values; when the user asks
+   about one field, keep only the issues missing it, e.g.
+   `jq -c 'select(.priority == null)'` (for App, `select(.app == [])`).
 2. For more than about 20 issues, split the file and give each part to a
    subagent along with this file; each returns TSV rows. Tell them to leave
    cells empty for values the issue already has.
