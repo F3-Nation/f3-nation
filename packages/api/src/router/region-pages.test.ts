@@ -16,7 +16,7 @@ import {
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
-import { clearMapDataCache } from "../lib/map-data-cache";
+import { cachedMapData, clearMapDataCache } from "../lib/map-data-cache";
 
 describe("Region Pages Router", () => {
   const createdEventIds: number[] = [];
@@ -372,6 +372,16 @@ describe("Region Pages Router", () => {
       expect(listed).toBeDefined();
       expect(listed).not.toHaveProperty("email");
       for (const r of regions) expect(r).not.toHaveProperty("email");
+
+      // The cached list must not hold emails either; the output schema
+      // alone would hide them from the response.
+      const cached = await cachedMapData<Record<string, unknown>[]>(
+        "regionPages.regions",
+        () => Promise.reject(new Error("expected a cache hit")),
+      );
+      const cachedRegion = cached.find((r) => r.id === String(region.id));
+      expect(cachedRegion).toMatchObject({ id: String(region.id) });
+      expect(cachedRegion).not.toHaveProperty("email");
 
       // The region's own page still shows its contact email.
       const page = await client.regionPages.region({

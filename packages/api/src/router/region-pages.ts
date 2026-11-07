@@ -204,7 +204,8 @@ export const regionPagesRouter = os.router({
 
         return uniqueBySlug(regions)
           .map((org) => {
-            // Strip before caching so the email never sits in the shared list.
+            // The output schema already drops email; strip it here too so the
+            // cached directory list never holds it.
             const { email: _email, ...region } = toRegionPageRegion(
               org,
               workoutsByRegion.get(String(org.id)) ?? [],
