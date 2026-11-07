@@ -150,7 +150,7 @@ Coverage is printed in the terminal and saved to `coverage/coverage.json`, with
 its measurement database at `coverage/.coverage`. These generated files are
 ignored by Git and included in Turbo's existing test outputs.
 
-For a focused test run without collecting coverage, run `uv run pytest` with a
+For a focused test run without collecting coverage, run `uv run --group charts pytest` with a
 test path from this directory. Use the `pnpm` test task above to verify the
 coverage gate used by CI.
 
