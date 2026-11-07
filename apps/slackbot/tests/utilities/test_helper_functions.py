@@ -655,9 +655,18 @@ def test_cached_database_failure_logs_class_without_sql_or_parameters(monkeypatc
     error = OperationalError(
         "SELECT private_email FROM users WHERE slack_id = 'U_PRIVATE'",
         {"email": "private-member@f3local.dev", "token": "fabricated-token"},
-        RuntimeError("Private Member SQL parameters"),
+        SimpleNamespace(pgcode="23505", diag=SimpleNamespace(constraint_name="uq_slack_users_slack_id_team_id")),
     )
-    _assert_cached_failure_logs(monkeypatch, caplog, error, "OperationalError", "other", fail_at="database")
+    _assert_cached_failure_logs(
+        monkeypatch,
+        caplog,
+        error,
+        "OperationalError",
+        "none",
+        fail_at="database",
+        expected_sqlstate="23505",
+        expected_constraint="uq_slack_users_slack_id_team_id",
+    )
 
 
 @pytest.mark.parametrize("team_id", ["T" * 65, "T_PRIVATE\nprivate-member@f3local.dev"])
@@ -667,7 +676,7 @@ def test_cached_failure_bounds_untrusted_team_context(monkeypatch, caplog, team_
         caplog,
         RuntimeError("fabricated-token"),
         "RuntimeError",
-        "other",
+        "none",
         fail_at="database",
         team_id=team_id,
         expected_team="other",
@@ -684,6 +693,8 @@ def _assert_cached_failure_logs(
     fail_at,
     team_id="T_DIAGNOSTIC",
     expected_team="T_DIAGNOSTIC",
+    expected_sqlstate="none",
+    expected_constraint="none",
 ):
     cache = helper_functions.SLACK_USERS
     previous = cache.copy()
@@ -725,10 +736,14 @@ def _assert_cached_failure_logs(
             "team_id": expected_team,
             "error_type": expected_type,
             "slack_error": expected_code,
+            "sqlstate": expected_sqlstate,
+            "constraint": expected_constraint,
         }
+        assert record.levelno == (logging.WARNING if isinstance(error, SlackApiError) else logging.ERROR)
         expected_message = (
             f"slack.identity.cached_link_failed team_id={expected_team} "
-            f"error_type={expected_type} slack_error={expected_code}"
+            f"error_type={expected_type} slack_error={expected_code} "
+            f"sqlstate={expected_sqlstate} constraint={expected_constraint}"
         )
         stream = io.StringIO()
         local_handler = logging.StreamHandler(stream)
@@ -999,3 +1014,107 @@ def test_identity_error_context_survives_response_inspection_failure():
         "error_type": "SlackApiError",
         "slack_error": "other",
     }
+
+
+class _ProductionSession(_FakeSession):
+    def __init__(self, existing=None, user=None):
+        super().__init__(existing)
+        self.database_user = user
+        self.user_inserts = []
+
+    def execute(self, statement, parameters=None):
+        if getattr(statement, "is_insert", False) and statement.table.name == "users":
+            values = statement.compile().params
+            self.user_inserts.append(values)
+            if self.database_user is None:
+                self.database_user = helper_functions.User(id=42, **values)
+            return
+        return super().execute(statement, parameters)
+
+    def scalars(self, query):
+        if query.column_descriptions[0]["entity"] is helper_functions.User:
+            assert query.compile().params["email_1"] == self.database_user.email
+            return SimpleNamespace(one=lambda: self.database_user)
+        return super().scalars(query)
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_production_identity_insert_and_cached_email_normalization(monkeypatch, cached):
+    existing = (
+        helper_functions.SlackUser(
+            id=12, slack_id="U_P", slack_team_id="T_P", user_id=None, is_bot=False, email="Member@Example.invalid"
+        )
+        if cached
+        else None
+    )
+    user = helper_functions.User(id=42, email="member@example.invalid") if cached else None
+    session = _ProductionSession(existing, user)
+    monkeypatch.setattr(helper_functions, "session_scope", lambda: session)
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    profile = {"display_name": "D", "image_192": "a"}
+    if not cached:
+        profile["email"] = "New@Example.invalid"
+    result = helper_functions.create_user({"id": "U_P", "updated": 7, "profile": profile}, team_id="T_P")
+    assert result.user_id == 42
+    assert result.user_id == session.database_user.id
+    assert len(session.user_inserts) == 1
+    assert session.user_inserts[0]["email"] == ("member@example.invalid" if cached else "new@example.invalid")
+    assert helper_functions.SLACK_USERS[("T_P", "U_P")] is result
+    if not cached:
+        assert result.slack_updated == 7
+        assert result.user_name == "D" and result.avatar_url == "a"
+
+
+def test_production_populate_links_no_email_member_by_lowercased_id_fallback(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    member = {
+        "id": "U_NOEMAIL",
+        "is_bot": True,
+        "updated": 1,
+        "profile": {"display_name": "B", "real_name": "", "image_192": None},
+    }
+    batches = []
+    monkeypatch.setattr(helper_functions.DbManager, "create_or_ignore", lambda model, rows: batches.append(rows))
+    monkeypatch.setattr(
+        helper_functions.DbManager, "find_records", lambda *_a, **_k: [SimpleNamespace(id=74, email="U_NOEMAIL")]
+    )
+    monkeypatch.setattr(helper_functions, "update_local_slack_users", lambda: None)
+    helper_functions.populate_users(SimpleNamespace(users_list=lambda: {"members": [member]}), "T_ACTIVE")
+    assert {(row.slack_team_id, row.slack_id, row.user_id) for row in batches[1]} == {("T_ACTIVE", "U_NOEMAIL", 74)}
+
+
+@pytest.mark.parametrize("team", [None, ""])
+def test_production_populate_rejects_missing_team_before_enumeration(monkeypatch, team):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    client = SimpleNamespace(users_list=lambda: pytest.fail("enumerated members without a team"))
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: pytest.fail("database read"))
+    with pytest.raises(ValueError, match="Slack team ID"):
+        helper_functions.populate_users(client, team)
+
+
+@pytest.mark.parametrize("diagnostic", ["unsafe", "throws"])
+def test_cached_database_diagnostic_extraction_cannot_leak_or_raise(monkeypatch, caplog, diagnostic):
+    class BrokenDiagnostic:
+        @property
+        def pgcode(self):
+            raise ValueError("private-member@f3local.dev")
+
+    orig = (
+        BrokenDiagnostic()
+        if diagnostic == "throws"
+        else SimpleNamespace(
+            pgcode="private-member@f3local.dev", diag=SimpleNamespace(constraint_name="private-member@f3local.dev")
+        )
+    )
+    error = OperationalError("SELECT private_email", {}, orig)
+    _assert_cached_failure_logs(
+        monkeypatch,
+        caplog,
+        error,
+        "OperationalError",
+        "none",
+        fail_at="database",
+        expected_sqlstate="none" if diagnostic == "throws" else "other",
+        expected_constraint="none" if diagnostic == "throws" else "other",
+    )

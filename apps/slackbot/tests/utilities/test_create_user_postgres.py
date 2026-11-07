@@ -19,7 +19,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from utilities import helper_functions
 
-POSTGRES_IMAGE = "postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
+POSTGRES_IMAGE = os.environ.get(
+    "SLACKBOT_POSTGRES_IMAGE",
+    "postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280",
+)
 pytestmark = pytest.mark.skipif(
     os.environ.get("SLACKBOT_POSTGRES_TESTS") != "1",
     reason="set SLACKBOT_POSTGRES_TESTS=1 to run disposable-Postgres integration tests",
@@ -78,6 +81,9 @@ def isolated_postgres(monkeypatch):
             connection.execute(text("CREATE EXTENSION citext"))
             # The helper only needs the referenced key; avoid creating the full application schema.
             connection.execute(text("CREATE TABLE orgs (id integer PRIMARY KEY)"))
+        with engine.begin() as connection:
+            connection.exec_driver_sql("CREATE TABLE slack_spaces (id integer PRIMARY KEY, team_id text NOT NULL)")
+            connection.exec_driver_sql("CREATE TABLE orgs_x_slack_spaces (org_id integer, slack_space_id integer)")
         Base.metadata.tables["users"].create(engine)
         Base.metadata.tables["slack_users"].create(engine)
 
@@ -489,7 +495,7 @@ def _identity_rows(engine):
 def _apply_identity_migration(connection):
     for statement in IDENTITY_MIGRATION.read_text().split("--> statement-breakpoint"):
         if statement.strip():
-            connection.exec_driver_sql(statement)
+            connection.exec_driver_sql(statement, execution_options={"no_parameters": True})
 
 
 def _identity_constraint_exists(engine):
@@ -615,6 +621,8 @@ def test_slack_identity_migration_rejects_ambiguous_groups_atomically(isolated_p
         _apply_identity_migration(connection)
     assert error.value.orig.pgcode == "P0001"
     assert error.value.orig.diag.message_primary == "Slack identity reconciliation requires manual resolution"
+    assert error.value.orig.diag.message_detail == "1 ambiguous (slack_id, slack_team_id) groups"
+    assert "distinct user_id" in error.value.orig.diag.message_hint
     assert _identity_rows(engine) == before
     assert not _identity_constraint_exists(engine)
 
@@ -698,13 +706,20 @@ def test_slack_identity_migration_later_failure_rolls_back_repair_and_constraint
         )
 
 
-def test_slack_identity_restore_rehearsal(isolated_postgres):
+@pytest.mark.parametrize("legacy", [False, True])
+def test_slack_identity_restore_rehearsal(isolated_postgres, legacy):
     engine = isolated_postgres
     _legacy_slack_users(engine)
     with engine.begin() as connection:
         _insert_identity(connection, 1, "U_RESTORE", user_id=1)
         _insert_identity(connection, 2, "U_RESTORE", strava_refresh_token="synthetic-donor", meta="null")
         _insert_identity(connection, 3, "U_CONTROL", meta='{"keep":true}')
+        if legacy:
+            connection.exec_driver_sql("INSERT INTO orgs VALUES (10)")
+            connection.exec_driver_sql("UPDATE users SET home_region_id=10 WHERE id=1")
+            connection.exec_driver_sql("INSERT INTO slack_spaces VALUES (1,'T_REGION')")
+            connection.exec_driver_sql("INSERT INTO orgs_x_slack_spaces VALUES (10,1)")
+            _insert_identity(connection, 4, "U_LEGACY_RESTORE", user_id=1, slack_team_id="NOT FOUND")
     before = _identity_rows(engine)
     # Keep synthetic preimages across the migration commit on the same session.
     # Release recovery instead requires a verified durable backup of every affected row.
@@ -712,7 +727,7 @@ def test_slack_identity_restore_rehearsal(isolated_postgres):
         with connection.begin():
             connection.exec_driver_sql(
                 "CREATE TEMP TABLE slack_users_restore ON COMMIT PRESERVE ROWS AS "
-                "SELECT * FROM public.slack_users WHERE slack_id = 'U_RESTORE'"
+                "SELECT * FROM public.slack_users WHERE slack_id IN ('U_RESTORE', 'U_LEGACY_RESTORE')"
             )
         with connection.begin():
             _apply_identity_migration(connection)
@@ -723,8 +738,7 @@ def test_slack_identity_restore_rehearsal(isolated_postgres):
             connection.exec_driver_sql(f"ALTER TABLE public.slack_users DROP CONSTRAINT {IDENTITY_CONSTRAINT}")
             connection.exec_driver_sql(
                 "DELETE FROM public.slack_users AS current_row USING pg_temp.slack_users_restore AS original_row "
-                "WHERE current_row.slack_id = original_row.slack_id "
-                "AND current_row.slack_team_id = original_row.slack_team_id"
+                "WHERE current_row.id = original_row.id"
             )
             connection.exec_driver_sql("INSERT INTO public.slack_users SELECT * FROM pg_temp.slack_users_restore")
         assert _identity_rows(engine) == before
@@ -904,8 +918,11 @@ def test_identity_migration_requires_effective_owner_privileges(isolated_postgre
         connection.exec_driver_sql("CREATE ROLE identity_migration_owner NOLOGIN")
         connection.exec_driver_sql("CREATE ROLE identity_migration_runner NOLOGIN INHERIT")
         connection.exec_driver_sql("ALTER TABLE public.slack_users OWNER TO identity_migration_owner")
-        connection.exec_driver_sql("GRANT USAGE ON SCHEMA public TO identity_migration_runner")
+        connection.exec_driver_sql("GRANT USAGE, CREATE ON SCHEMA public TO identity_migration_runner")
         connection.exec_driver_sql("GRANT ALL ON public.slack_users TO identity_migration_runner")
+        connection.exec_driver_sql(
+            "GRANT SELECT ON public.users, public.slack_spaces, public.orgs_x_slack_spaces TO identity_migration_runner"
+        )
         if inherits_owner:
             connection.exec_driver_sql("GRANT identity_migration_owner TO identity_migration_runner")
     if inherits_owner:
@@ -921,3 +938,131 @@ def test_identity_migration_requires_effective_owner_privileges(isolated_postgre
             "Slack identity migration requires table-owner privileges on public.slack_users"
         )
         assert not _identity_constraint_exists(isolated_postgres)
+
+
+@pytest.mark.parametrize("trigger_mode", [None, "O", "D", "R", "A"])
+def test_migration_rehomes_legacy_identity_and_preserves_link(isolated_postgres, monkeypatch, trigger_mode):
+    engine = isolated_postgres
+    _legacy_slack_users(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("INSERT INTO orgs VALUES (10)")
+        connection.exec_driver_sql("UPDATE users SET home_region_id = 10 WHERE id = 1")
+        connection.exec_driver_sql("INSERT INTO slack_spaces VALUES (1, 'T_REGION')")
+        connection.exec_driver_sql("INSERT INTO orgs_x_slack_spaces VALUES (10, 1)")
+        if trigger_mode is None:
+            connection.exec_driver_sql("DROP TRIGGER set_updated_slack_users ON public.slack_users")
+        else:
+            action = {"O": "ENABLE", "D": "DISABLE", "R": "ENABLE REPLICA", "A": "ENABLE ALWAYS"}[trigger_mode]
+            connection.exec_driver_sql(f"ALTER TABLE slack_users {action} TRIGGER set_updated_slack_users")
+        _insert_identity(
+            connection,
+            10,
+            "U_LEGACY",
+            user_id=1,
+            slack_team_id="NOT FOUND",
+            strava_athlete_id=123,
+            strava_access_token="synthetic-access",
+            meta='{"keep":true}',
+        )
+    before = _identity_rows(engine)
+    with engine.begin() as connection:
+        _apply_identity_migration(connection)
+    expected = before[10].copy()
+    expected["slack_team_id"] = "T_REGION"
+    assert _identity_rows(engine) == {10: expected}
+    with engine.connect() as connection:
+        assert (
+            connection.exec_driver_sql(
+                "SELECT tgenabled FROM pg_trigger WHERE tgrelid='slack_users'::regclass "
+                "AND tgname='set_updated_slack_users'"
+            ).scalar_one_or_none()
+            == trigger_mode
+        )
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    result = helper_functions.create_user({"id": "U_LEGACY", "profile": {}}, team_id="T_REGION")
+    assert result.user_id == 1 and result.strava_athlete_id == 123
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT count(*) FROM users").scalar_one() == 2
+
+
+@pytest.mark.parametrize("kind", ["missing-map", "ambiguous-map", "occupied-target", "unlinked"])
+def test_migration_refuses_uncertain_legacy_mapping_atomically(isolated_postgres, kind):
+    engine = isolated_postgres
+    _legacy_slack_users(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("INSERT INTO orgs VALUES (10)")
+        connection.exec_driver_sql("UPDATE users SET home_region_id=10 WHERE id=1")
+        connection.exec_driver_sql("INSERT INTO slack_spaces VALUES (1,'T_REGION'), (2,'T_OTHER')")
+        if kind != "missing-map":
+            connection.exec_driver_sql("INSERT INTO orgs_x_slack_spaces VALUES (10,1)")
+        if kind == "ambiguous-map":
+            connection.exec_driver_sql("INSERT INTO orgs_x_slack_spaces VALUES (10,2)")
+        _insert_identity(
+            connection,
+            10,
+            "U_LEGACY",
+            user_id=None if kind == "unlinked" else 1,
+            slack_team_id="NOT FOUND",
+            strava_athlete_id=123,
+        )
+        if kind == "occupied-target":
+            _insert_identity(connection, 11, "U_LEGACY", user_id=1, slack_team_id="T_REGION")
+        _insert_identity(connection, 20, "U_SAFE", user_id=2)
+        _insert_identity(connection, 21, "U_SAFE")
+    before = _identity_rows(engine)
+    with pytest.raises(DBAPIError) as error, engine.begin() as connection:
+        _apply_identity_migration(connection)
+    assert error.value.orig.diag.message_primary == "Slack legacy workspace reconciliation requires manual resolution"
+    assert error.value.orig.diag.message_detail == "1 unresolved legacy identities"
+    assert "workspace" in error.value.orig.diag.message_hint
+    assert _identity_rows(engine) == before
+    assert not _identity_constraint_exists(engine)
+
+
+def test_legacy_rehome_rolls_back_on_later_failure(isolated_postgres):
+    engine = isolated_postgres
+    _legacy_slack_users(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("INSERT INTO orgs VALUES (10)")
+        connection.exec_driver_sql("UPDATE users SET home_region_id=10 WHERE id=1")
+        connection.exec_driver_sql("INSERT INTO slack_spaces VALUES (1,'T_REGION')")
+        connection.exec_driver_sql("INSERT INTO orgs_x_slack_spaces VALUES (10,1)")
+        _insert_identity(connection, 10, "U_LEGACY", user_id=1, slack_team_id="NOT FOUND")
+    before = _identity_rows(engine)
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        _apply_identity_migration(connection)
+        connection.exec_driver_sql("SELECT 1/0")
+    assert _identity_rows(engine) == before
+    assert not _identity_constraint_exists(engine)
+
+
+def test_identity_migration_blocks_writers_until_commit(isolated_postgres):
+    engine = isolated_postgres
+    _legacy_slack_users(engine)
+    statements = IDENTITY_MIGRATION.read_text().split("--> statement-breakpoint")
+    with engine.begin() as migration:
+        for statement in statements[:3]:
+            migration.exec_driver_sql(statement, execution_options={"no_parameters": True})
+        with pytest.raises(DBAPIError) as error, engine.begin() as writer:
+            writer.exec_driver_sql("SET LOCAL lock_timeout = '100ms'")
+            _insert_identity(writer, 1, "U_BLOCKED")
+        assert error.value.orig.pgcode == "55P03"
+        for statement in statements[3:]:
+            if statement.strip():
+                migration.exec_driver_sql(statement, execution_options={"no_parameters": True})
+    with engine.begin() as writer:
+        _insert_identity(writer, 1, "U_AFTER_COMMIT")
+    assert _identity_rows(engine)[1]["slack_id"] == "U_AFTER_COMMIT"
+
+
+def test_identity_migration_times_out_on_active_writer(isolated_postgres):
+    engine = isolated_postgres
+    _legacy_slack_users(engine)
+    with engine.begin() as writer:
+        _insert_identity(writer, 1, "U_ACTIVE")
+        with pytest.raises(DBAPIError) as error, engine.begin() as migration:
+            migration.exec_driver_sql("SET LOCAL statement_timeout = '5s'")
+            _apply_identity_migration(migration)
+        assert error.value.orig.pgcode == "55P03"
+    assert not _identity_constraint_exists(engine)
+    assert _identity_rows(engine)[1]["slack_id"] == "U_ACTIVE"

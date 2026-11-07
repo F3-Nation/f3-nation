@@ -43,6 +43,7 @@ def update_slack_users(force=False):
                 response = client.users_list(cursor=response["response_metadata"]["next_cursor"])
                 users.extend(response["members"])
 
+            created = 0
             for user in users:
                 if user["is_bot"] or user["id"] == "USLACKBOT":
                     continue  # Skip bots and the Slackbot
@@ -52,9 +53,9 @@ def update_slack_users(force=False):
                 pair = (slack_space.team_id, user["id"])
                 slack_user = slack_user_dict.get(pair)
                 if not safe_get(slack_user, "user_id"):
-                    logging.getLogger(__name__).info("slack.identity.sync_create")
                     slack_user = create_user(user, region_org_record.org_id, team_id=slack_space.team_id)
                     slack_user_dict[pair] = slack_user
+                    created += 1
                 elif slack_user.slack_updated and slack_user.slack_updated >= user["updated"] and not force:
                     continue
                 else:
@@ -70,7 +71,13 @@ def update_slack_users(force=False):
                     }
                     DbManager.update_record(SlackUser, slack_user.id, update_fields)
 
-            print("Slack users updated successfully.")
+            team_id = slack_identity_error_context(slack_space.team_id, Exception())["team_id"]
+            logging.getLogger(__name__).info(
+                "slack.identity.sync_summary team_id=%s created=%s",
+                team_id,
+                created,
+                extra={"json_fields": {"event": "slack.identity.sync_summary", "team_id": team_id, "created": created}},
+            )
 
         except SlackApiError as error:
             context = slack_identity_error_context(slack_space.team_id, error)

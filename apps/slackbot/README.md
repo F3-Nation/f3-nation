@@ -280,3 +280,17 @@ the current service or job does not retrofit older revisions/templates. These
 are operator-run commands for manual changes/rollback, not an automated
 cleanup. The app does not automatically delete synthetic users or clean up
 historical profile data.
+
+### Scheduled-job logging
+
+The hourly entrypoint uses Cloud Logging JSON records in deployment and a stream
+handler in local development, with `LOG_LEVEL` selecting INFO or DEBUG. Slack
+member synchronization records one summary per workspace pass, including the
+number of identities created or linked, without member profile fields. Cached
+identity-link failures retain the cached row and report bounded SQLSTATE and
+allowlisted constraint diagnostics for database errors.
+
+The disposable identity PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`.
+`SLACKBOT_POSTGRES_IMAGE` optionally overrides their pinned local PostgreSQL
+image; CI supplies the same mirrored image as its database service. Every test
+container is removed by its fixture.

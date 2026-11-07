@@ -267,8 +267,35 @@ def slack_identity_error_context(team_id: str, error: Exception) -> dict[str, st
     return {
         "team_id": team_id if isinstance(team_id, str) and re.fullmatch(r"T[A-Z0-9_]{1,63}", team_id) else "other",
         "error_type": error_type if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", error_type) else "Exception",
-        "slack_error": slack_error,
+        "slack_error": slack_error if isinstance(error, SlackApiError) else "none",
     }
+
+
+def _identity_database_error_context(error: Exception) -> dict[str, str]:
+    context = {"sqlstate": "none", "constraint": "none"}
+    try:
+        original = getattr(error, "orig", None)
+        state = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+        constraint = getattr(getattr(original, "diag", None), "constraint_name", None)
+        if state is not None:
+            context["sqlstate"] = state if isinstance(state, str) and re.fullmatch(r"[A-Z0-9]{5}", state) else "other"
+        if constraint is not None:
+            context["constraint"] = (
+                constraint
+                if constraint
+                in (
+                    "uq_slack_users_slack_id_team_id",
+                    "users_email_key",
+                    "slack_users_user_id_fkey",
+                    "slack_users_pkey",
+                    "users_pkey",
+                )
+                else "other"
+            )
+    except Exception:
+        # Driver diagnostics are best effort and must not defeat cached-user recovery.
+        pass
+    return context
 
 
 def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient, logger: Logger) -> SlackUser:
@@ -304,12 +331,17 @@ def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient
             if user:
                 # A Slack or database failure here must not break requests that used to get this cached row.
                 # It is still unlinked, so callers must cope with user_id being None.
-                context = slack_identity_error_context(team_id, error)
-                logging.getLogger(__name__).warning(
-                    "slack.identity.cached_link_failed team_id=%s error_type=%s slack_error=%s",
+                context = {**slack_identity_error_context(team_id, error), **_identity_database_error_context(error)}
+                level = logging.WARNING if isinstance(error, SlackApiError) else logging.ERROR
+                logging.getLogger(__name__).log(
+                    level,
+                    "slack.identity.cached_link_failed team_id=%s error_type=%s "
+                    "slack_error=%s sqlstate=%s constraint=%s",
                     context["team_id"],
                     context["error_type"],
                     context["slack_error"],
+                    context["sqlstate"],
+                    context["constraint"],
                     extra={"json_fields": {"event": "slack.identity.cached_link_failed", **context}},
                 )
                 return user

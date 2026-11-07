@@ -76,8 +76,8 @@ has two distinct Slack accounts there.
   THEN it keeps a linked row first, then a data-bearing row, then lowest ID.
   It transfers the sole donor's complete four-field Strava bundle and metadata
   when needed, deletes only extra rows in that pair, and leaves every
-  nonduplicate row unchanged. Other survivor fields, including timestamps,
-  retain their original values. Distinct Slack accounts are not merged.
+  nonduplicate row unchanged except for the legacy workspace repair in AC-13.
+  Other survivor fields, including timestamps, retain their original values. Distinct Slack accounts are not merged.
 - **AC-11** — GIVEN successful reconciliation WHEN the migration commits THEN
   PostgreSQL enforces `uq_slack_users_slack_id_team_id` on
   `(slack_id, slack_team_id)`, with matching Drizzle and Python declarations.
@@ -89,6 +89,15 @@ has two distinct Slack accounts there.
   including survivors, retained beyond the migration session, and accounts for
   both merged fields and the constraint. Synthetic local recovery tests must
   demonstrate restoration of the original rows and removal of the constraint.
+
+- **AC-13** — GIVEN identities stored with the placeholder workspace `NOT FOUND`
+  WHEN reconciliation runs THEN each linked identity is re-homed only when its
+  user's home region maps to exactly one distinct non-placeholder workspace
+  and the destination account/workspace pair is absent. All other fields,
+  including timestamps and integration data, are preserved. Any legacy row
+  without a safe mapping (including an unlinked row or occupied destination)
+  aborts the entire migration with aggregate-only diagnostics. The original
+  trigger mode is preserved. Recovery backups include these re-homed rows.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -123,7 +132,12 @@ Existing Slack interaction authorization and F3-user matching continue to apply.
 
 ## 8. Observability
 
-- Reconciliation errors use fixed messages without identifiers or row values.
+- Reconciliation errors use fixed messages and aggregate conflict counts with
+  corrective hints, without identifiers or row values.
+- Cached identity-link failures distinguish Slack warnings from non-Slack errors
+  and include only bounded SQLSTATE and allowlisted constraint diagnostics.
+- The hourly entrypoint configures structured logging for deployment and stream
+  logging locally. Member sync emits workspace summaries with creation counts.
 - Identity changes do not add profile data, credentials or personal identifiers
   to logs or public review artifacts.
 - Existing delivery eligibility and error handling remain observable through

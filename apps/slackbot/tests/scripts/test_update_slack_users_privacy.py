@@ -150,6 +150,16 @@ def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplo
     update_slack_users.update_slack_users()
     assert {args[1] for args in updates} == {10, 20}
     assert creations == [(member, 3, "T_THIRD")]
+    summaries = [
+        record
+        for record in caplog.records
+        if getattr(record, "json_fields", {}).get("event") == "slack.identity.sync_summary"
+    ]
+    assert [record.json_fields for record in summaries] == [
+        {"event": "slack.identity.sync_summary", "team_id": team, "created": count}
+        for team, count in [("T_FIRST", 0), ("T_SECOND", 0), ("T_THIRD", 1), ("T_THIRD", 0)]
+    ]
+    assert all(f"created={record.json_fields['created']}" in record.getMessage() for record in summaries)
     output = capsys.readouterr().out + caplog.text
     assert "USHARED" not in output and "Fabricated Name" not in output and "fabricated-token" not in output
 
