@@ -21,6 +21,7 @@
     "migrate:local": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/migrate.ts",
     "migrate:staging": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 node -r esbuild-register src/migrate-remote.ts staging",
     "migrate:prod": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 node -r esbuild-register src/migrate-remote.ts prod",
+    "migrate:check": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 node -r esbuild-register src/migrate-check.ts",
     "reset": "QUERY_TIMEOUT_MS=0 pnpm with-env tsx ./src/reset.ts",
     "studio": "pnpm with-env drizzle-kit studio",
     "drop": "pnpm with-env drizzle-kit drop",
