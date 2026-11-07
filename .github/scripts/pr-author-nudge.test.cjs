@@ -35,6 +35,18 @@ const basePr = (overrides = {}) => ({
   ...overrides,
 });
 
+// The head commit as GitHub saw it arrive: its first check suite's time.
+const pushedAt = (days) => ({
+  nodes: [
+    {
+      commit: {
+        checkSuites: { nodes: [{ createdAt: at(days) }] },
+        statusCheckRollup: { contexts: { nodes: [] } },
+      },
+    },
+  ],
+});
+
 const BOTS = new Set(["coderabbitai", "greptile-apps", "copilot"]);
 // A review-thread comment as GraphQL returns it. Humans default to members.
 const comment = (who, days, authorAssociation) => ({
@@ -139,11 +151,7 @@ test("a late warning pushes the close out by at least 20 hours", () => {
 test("a nudge from an earlier stretch doesn't count toward closing", () => {
   const pr = basePr({
     reviewThreads: { nodes: [thread("coderabbitai", 0)] },
-    timelineItems: {
-      nodes: [
-        { __typename: "PullRequestCommit", commit: { committedDate: at(10) } },
-      ],
-    },
+    commits: pushedAt(10),
   });
   const oldNudge = { id: 9, nudgedAt: at(8) };
   assert.equal(run(pr, 14.9, oldNudge).action, "none");
@@ -282,12 +290,8 @@ test("changes requested counts until the author pushes", () => {
   const pr = basePr({ timelineItems: { nodes: [review] } });
   assert.equal(run(pr, 8.1).action, "nudge");
   const pushed = basePr({
-    timelineItems: {
-      nodes: [
-        review,
-        { __typename: "PullRequestCommit", commit: { committedDate: at(2) } },
-      ],
-    },
+    timelineItems: { nodes: [review] },
+    commits: pushedAt(2),
   });
   assert.equal(run(pushed, 30).why, "not author's turn");
 });
@@ -1013,7 +1017,20 @@ test("a commit dated in the future can't hold the PR open", () => {
   assert.equal(decision.action, "nudge");
 });
 
-test("without anything GitHub recorded, a commit date counts unless it's in the future", () => {
+test("GitHub's arrival time wins over a later commit date that is already past", () => {
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 1)] },
+    timelineItems: {
+      nodes: [
+        { __typename: "PullRequestCommit", commit: { committedDate: at(6) } },
+      ],
+    },
+    commits: pushedAt(2),
+  });
+  assert.equal(run(pr, 9).clockStart, T0 + 2 * DAY);
+});
+
+test("with nothing GitHub recorded, a commit date doesn't count as a push", () => {
   const pr = basePr({
     reviewThreads: { nodes: [thread("coderabbitai", 1)] },
     timelineItems: {
@@ -1022,13 +1039,7 @@ test("without anything GitHub recorded, a commit date counts unless it's in the 
       ],
     },
   });
-  const now = T0 + 9 * DAY;
-  const clockAt = (p) =>
-    decide(summarize(p, [], null, new Set(), now), now).clockStart;
-  assert.equal(clockAt(pr), T0 + 3 * DAY);
-  // Dated 2099: ignored, so the clock runs from the thread.
-  pr.timelineItems.nodes[0].commit.committedDate = "2099-01-01T00:00:00Z";
-  assert.equal(clockAt(pr), T0 + DAY);
+  assert.equal(run(pr, 9).clockStart, T0 + DAY);
 });
 
 // Several PRs for one run: each with a bot thread from day `since`, reminded
@@ -1149,5 +1160,76 @@ test("the default limits keep the first live run small", async () => {
   assert.equal(
     rows.filter((r) => r.outcome === "nudged").length,
     MAX_PER_RUN.nudge,
+  );
+});
+
+test("marking a draft ready restarts the clock, whoever does it", () => {
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("BigGillyStyle", 0)] },
+    timelineItems: {
+      nodes: [
+        {
+          __typename: "ConvertToDraftEvent",
+          createdAt: at(0),
+          actor: { login: "pax" },
+        },
+        {
+          __typename: "ReadyForReviewEvent",
+          createdAt: at(30),
+          actor: { login: "taterhead247" },
+        },
+      ],
+    },
+  });
+  const decision = run(pr, 31);
+  assert.equal(decision.action, "none");
+  assert.equal(decision.clockStart, T0 + 30 * DAY);
+});
+
+test("a limit left out of `limits` keeps its default", async () => {
+  const { MAX_PER_RUN } = require("./pr-author-nudge.cjs");
+  const github = fakeBacklog(
+    Array.from({ length: 6 }, (_, i) => ({
+      since: i / 10,
+      nudgedAt: 5 + i / 10,
+      warnedAt: 9.1 + i / 10,
+    })),
+  );
+  const { rows } = await liveRun(github, 30, { limits: { nudge: 1 } });
+  assert.equal(
+    rows.filter((r) => r.outcome === "closed").length,
+    MAX_PER_RUN.close,
+  );
+});
+
+test("PRs held for unknown collaborators don't take the run's slots", async () => {
+  // Two outside PRs due a close have waited longest; a team PR due a close
+  // comes after them. Collaborators can't be listed, so the outside ones are
+  // held and the team PR gets the single slot.
+  const github = fakeBacklog([
+    { since: 0, nudgedAt: 3, warnedAt: 6.1 },
+    { since: 0.1, nudgedAt: 3.1, warnedAt: 6.2 },
+    { since: 1, nudgedAt: 6, warnedAt: 10.1 },
+  ]);
+  const page = await github.graphql();
+  const prs = page.repository.pullRequests.nodes;
+  prs[0].authorAssociation = "CONTRIBUTOR";
+  prs[1].authorAssociation = "CONTRIBUTOR";
+  github.graphql = async () => page;
+  github.paginate = async (route) => {
+    if (route.includes("/collaborators"))
+      throw Object.assign(new Error("Server Error"), { status: 502 });
+    return [];
+  };
+  const { rows } = await liveRun(github, 20, {
+    limits: { nudge: 1, warn: 1, close: 1 },
+  });
+  assert.deepEqual(
+    rows.map((r) => r.outcome),
+    [
+      "FAILED: close held, collaborators unknown",
+      "FAILED: close held, collaborators unknown",
+      "closed",
+    ],
   );
 });

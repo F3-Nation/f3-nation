@@ -5,14 +5,15 @@
  *
  * Nudges, then closes, PRs that are waiting on their author. The clock runs
  * only while it's the author's turn under docs/PR_REVIEW_PROCESS.md: a
- * required check is failing, it conflicts with its base, a team member's or a
- * bot's review thread is waiting on the author, or a reviewer requested
- * changes and nothing has been pushed since. Drafts count as the author's turn
- * (so reports leave them out) but are never nudged or closed: a draft is work
- * in progress, not a PR waiting on review. While the PR waits on bots or
- * codeowners the clock doesn't run; it restarts from the earliest open item
- * (or the author's last activity, if later). Any push, author comment or
- * reopen resets it. Bot comments and reviewer pings don't.
+ * required check is failing, it conflicts with its base, a team member or a
+ * bot has commented in an unresolved review thread since the author's last
+ * reply, or a team member or a bot requested changes and nothing has been
+ * pushed since. A draft gets a "draft" reason (shown in the job summary) but
+ * is never nudged or closed: a draft is work in progress, not a PR waiting
+ * on review. While the PR waits on bots or codeowners the clock doesn't run;
+ * it restarts from the earliest open item (or the author's last activity, if
+ * later). Any push, author comment, ready-for-review or reopen resets it. Bot
+ * comments and reviewer pings don't.
  *
  * When a PR that was already reminded stops being the author's turn (or gets
  * `keep-open`), the run records `pausedAt` in the reminder's marker. The next
@@ -56,7 +57,8 @@ const TEAM_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 // The most PRs one run nudges, warns about or closes. The first live run (or
 // one after a long outage) would otherwise remind the whole backlog at once,
 // and those PRs would then all close together. The PRs that have waited
-// longest go first; the rest are held for a later run.
+// longest go first; the rest are held for a later run. docs/PR_REVIEW_PROCESS.md
+// states these numbers, so update it when they change.
 const MAX_PER_RUN = { nudge: 5, warn: 3, close: 3 };
 
 // Authors whose PRs are never nudged, on top of every bot or app author.
@@ -106,15 +108,9 @@ function parseMarker(body) {
  * `nudge` is `{ id, nudgedAt, warnedAt?, pausedAt?, body? }` for the bot's
  * newest reminder, or null. `writers` is an optional Set of logins with push
  * access, counted as team even when GitHub reports a private org member as
- * a CONTRIBUTOR. Commit dates after `now` (ms) are ignored.
+ * a CONTRIBUTOR.
  */
-function summarize(
-  pr,
-  requiredContexts,
-  nudge,
-  writers = new Set(),
-  now = Date.now(),
-) {
+function summarize(pr, requiredContexts, nudge, writers = new Set()) {
   const author = pr.author?.login ?? null;
   const isTeam = (login, association) =>
     TEAM_ASSOCIATIONS.has(association) || writers.has(login);
@@ -123,7 +119,6 @@ function summarize(
   const timeline = pr.timelineItems?.nodes ?? [];
 
   let lastPush = null; // any push, by anyone: work is happening
-  let lastCommitDate = null; // whatever the commit's author set; see below
   let lastAuthorActivity = created;
   let lastDraftStart = pr.isDraft ? created : null;
   let lastHandoff = created; // latest event that put the PR in front of someone
@@ -131,13 +126,6 @@ function summarize(
 
   for (const item of timeline) {
     switch (item.__typename) {
-      case "PullRequestCommit": {
-        // A date after now is made up, so it's ignored.
-        const date = ts(item.commit?.committedDate);
-        if (date != null && date <= now)
-          lastCommitDate = maxTs(lastCommitDate, date);
-        break;
-      }
       case "HeadRefForcePushedEvent":
         lastPush = maxTs(lastPush, ts(item.createdAt));
         break;
@@ -147,9 +135,10 @@ function summarize(
           lastAuthorActivity = maxTs(lastAuthorActivity, ts(item.createdAt));
         break;
       case "ReadyForReviewEvent":
+        // Draft time isn't the author's turn: whoever marks it ready, the
+        // clock starts again from here.
         lastHandoff = maxTs(lastHandoff, ts(item.createdAt));
-        if (item.actor?.login === author)
-          lastAuthorActivity = maxTs(lastAuthorActivity, ts(item.createdAt));
+        lastAuthorActivity = maxTs(lastAuthorActivity, ts(item.createdAt));
         break;
       case "ReopenedEvent":
         // Whoever reopens it, a reopened PR starts a fresh clock.
@@ -221,15 +210,14 @@ function summarize(
   // whatever its author set: a commit dated 2099 would hold the PR open
   // forever. GitHub's own clock is used instead: the first check suite or CI
   // run on the head commit, created when it reached GitHub (fork PRs waiting
-  // on workflow approval get suites too). Commit dates count only when GitHub
-  // recorded nothing for the head commit.
+  // on workflow approval get suites too). Commit dates never count.
   const headArrival = minTs(
     ...(headCommit?.checkSuites?.nodes ?? []).map((s) => ts(s.createdAt)),
     ...contexts
       .filter((c) => c.__typename === "CheckRun")
       .map((c) => ts(c.startedAt)),
   );
-  lastPush = maxTs(lastPush, headArrival ?? lastCommitDate);
+  lastPush = maxTs(lastPush, headArrival);
   lastAuthorActivity = maxTs(lastAuthorActivity, lastPush);
 
   const reasons = [];
@@ -408,8 +396,6 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 function describeReasons(reasons) {
   return reasons.map((r) => {
     switch (r.kind) {
-      case "draft":
-        return "It's still a draft. Mark it **Ready for review** once CI passes and it's ready for others to look at.";
       case "checks":
         return `Required ${r.names.length === 1 ? "check" : "checks"} failing: ${r.names.map((n) => `\`${n}\``).join(", ")}.`;
       case "conflict":
@@ -491,12 +477,11 @@ const PR_FIELDS = `
   number title isDraft createdAt mergeable authorAssociation baseRefName
   author { login __typename }
   labels(first: 30) { nodes { name } }
-  timelineItems(last: 100, itemTypes: [PULL_REQUEST_COMMIT, HEAD_REF_FORCE_PUSHED_EVENT,
+  timelineItems(last: 100, itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT,
       READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, REOPENED_EVENT, ISSUE_COMMENT,
       PULL_REQUEST_REVIEW]) {
     nodes {
       __typename
-      ... on PullRequestCommit { commit { committedDate } }
       ... on HeadRefForcePushedEvent { createdAt }
       ... on ReadyForReviewEvent { createdAt actor { login } }
       ... on ConvertToDraftEvent { createdAt actor { login } }
@@ -528,7 +513,7 @@ const PR_FIELDS = `
  * `notes` are warnings for the workflow log. Exported so every report that
  * asks whose turn a PR is answers it with the same rules as the nudge.
  */
-async function collectFacts({ github, owner, repo, now = Date.now() }) {
+async function collectFacts({ github, owner, repo }) {
   const rules = await github.paginate(
     "GET /repos/{owner}/{repo}/rules/branches/{branch}",
     {
@@ -591,7 +576,6 @@ async function collectFacts({ github, owner, repo, now = Date.now() }) {
         : [],
       nudge,
       writers,
-      now,
     );
   return { prs, factsFor, writersKnown, notes };
 }
@@ -603,10 +587,10 @@ async function collectFacts({ github, owner, repo, now = Date.now() }) {
  * treats the heads-up as failed: nothing is recorded, the closes wait, and the
  * rows fail. `limits` caps the nudges, heads-ups and closes in one run
  * (MAX_PER_RUN by default); dry runs count against it too, so their report
- * matches what a live run would do. Returns `{ rows, slackNote, slackSent,
- * notes }`: the job
- * summary rows, the heads-up text, whether it reached Slack, and warnings for
- * the workflow log.
+ * matches what a live run would do; an action left out of `limits` keeps its
+ * default. Returns `{ rows, slackNote, slackSent, notes }`: the job summary
+ * rows, the heads-up text, whether it reached Slack, and warnings for the
+ * workflow log.
  */
 async function run({
   github,
@@ -623,7 +607,6 @@ async function run({
     github,
     owner,
     repo,
-    now,
   });
   if (!writersKnown)
     notes.push(
@@ -702,7 +685,7 @@ async function run({
     e.facts.tier === "outside" &&
     (e.decision.action === "warn" || e.decision.action === "close");
   for (const action of Object.keys(MAX_PER_RUN)) {
-    const limit = limits[action] ?? Infinity;
+    const limit = limits[action] ?? MAX_PER_RUN[action];
     entries
       .filter(
         (e) => !e.row.failed && e.decision.action === action && !heldUnknown(e),
