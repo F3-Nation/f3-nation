@@ -42,7 +42,7 @@ export default function ErrorComponent() {
         <div>
           <p>You do not have permission to sign in.</p>
           <p>
-            <a href="/auth/signin" className="hover:underline">
+            <a href="/auth/sign-in" className="hover:underline">
               Sign in
             </a>
           </p>
@@ -58,7 +58,7 @@ export default function ErrorComponent() {
         </div>
       ),
       signin: (
-        <a href="/auth/signin" className="hover:underline">
+        <a href="/auth/sign-in" className="hover:underline">
           Sign in
         </a>
       ),
