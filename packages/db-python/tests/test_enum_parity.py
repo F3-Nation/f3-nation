@@ -55,6 +55,20 @@ def _latest_snapshot() -> Dict:
     return json.loads((DRIZZLE_META_DIR / f"{latest['idx']:04d}_snapshot.json").read_text())
 
 
+def test_slack_user_workspace_identity_constraint_matches_postgres() -> None:
+    name = "uq_slack_users_slack_id_team_id"
+    columns = ["slack_id", "slack_team_id"]
+    constraints = _latest_snapshot()["tables"]["public.slack_users"]["uniqueConstraints"]
+    assert name in constraints
+    assert constraints[name]["columns"] == columns
+    model_constraints = {
+        constraint.name: [column.name for column in constraint.columns]
+        for constraint in models.SlackUser.__table__.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert model_constraints.get(name) == columns
+
+
 def postgres_enums() -> Dict[str, List[str]]:
     """Map every Postgres enum name to its values, in declaration order."""
     return {definition["name"]: list(definition["values"]) for definition in _latest_snapshot()["enums"].values()}

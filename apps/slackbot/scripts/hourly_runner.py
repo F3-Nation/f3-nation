@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 
@@ -6,6 +7,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import argparse
 
 import requests
+from google.cloud.logging_v2.handlers import StructuredLogHandler, setup_logging
 
 # from features import canvas
 from scripts import (
@@ -22,8 +24,21 @@ from scripts import (
     q_lineups,
     update_slack_users,
 )
+from utilities.constants import LOCAL_DEVELOPMENT
 
 APP_URL = os.getenv("APP_URL", "http://localhost:8080")
+
+
+def configure_logging():
+    level = logging.DEBUG if os.environ.get("LOG_LEVEL", "INFO").upper() == "DEBUG" else logging.INFO
+    if LOCAL_DEVELOPMENT:
+        logging.basicConfig(level=level, handlers=[logging.StreamHandler()], force=True)
+    else:
+        root = logging.getLogger()
+        for handler in root.handlers[:]:
+            root.removeHandler(handler)
+            handler.close()
+        setup_logging(StructuredLogHandler(), log_level=level)
 
 
 def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, reporting_org_id: int | None = None):
@@ -118,6 +133,7 @@ def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, repo
 
 
 if __name__ == "__main__":
+    configure_logging()
     parser = argparse.ArgumentParser(description="Run hourly scripts")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--skip-reporting", action="store_true")

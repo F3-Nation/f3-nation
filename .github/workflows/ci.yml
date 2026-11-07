@@ -443,6 +443,14 @@ jobs:
       - name: Set mock GCS credentials
         run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
       - run: pnpm test ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
+      # The authenticated service pull above already supplies this image to
+      # Docker; the disposable fixture uses the same digest and its own database.
+      - name: Verify Slack identity migration and concurrency
+        working-directory: apps/slackbot
+        run: uv run pytest tests/utilities/test_create_user_postgres.py
+        env:
+          SLACKBOT_POSTGRES_TESTS: "1"
+          SLACKBOT_POSTGRES_IMAGE: ghcr.io/f3-nation/f3-nation-ci-postgres@sha256:55d810d8c285ca9aa56d4b8594f31e2b09b300ed64c9b072980216d33fb6f449
       # The apps/api characterization matrix, dispatched in-process through the
       # Hono app. Runs in this job, sequentially after pnpm test and never
       # concurrent with it, because both suites mutate f3_test. Needs no extra

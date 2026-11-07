@@ -16,7 +16,8 @@ def test_nonproduction_user_form_persists_submitted_fields_only_for_linked_user_
 ):
     monkeypatch.setattr(constants, "is_production_deployment", lambda: False, raising=False)
     slack_user = SimpleNamespace(user_id=42, slack_id="U_NONPROD_PROFILE")
-    monkeypatch.setattr(helper_functions, "SLACK_USERS", {slack_user.slack_id: slack_user})
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS[("T_NONPROD", slack_user.slack_id)] = slack_user
     form_values = {
         user.USER_FORM_USERNAME: "Fabricated Test Pax",
         user.USER_FORM_HOME_REGION: 17,

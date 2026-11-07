@@ -284,3 +284,31 @@ def test_approve_failure_feedback_skips_missing_channel_or_user(monkeypatch):
     connect.handle_approve_connection(body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="TADMIN"))
 
     factory.assert_not_called()
+
+
+def test_approve_unlinked_requester_does_not_connect_workspace(monkeypatch):
+    from utilities.helper_functions import UnlinkedSlackIdentityError
+
+    requester_space = SimpleNamespace(bot_token="test-token", settings={"team_id": "TREQUESTER", "org_id": 1}, id=12)
+    monkeypatch.setattr(connect, "_get_requester_slack_space", lambda team: requester_space)
+    db_manager = MagicMock()
+    db_manager.get.return_value = SimpleNamespace(id=7)
+    monkeypatch.setattr(connect, "DbManager", db_manager)
+    get_user = MagicMock(side_effect=UnlinkedSlackIdentityError())
+    monkeypatch.setattr(connect, "get_user", get_user)
+    client_factory = MagicMock()
+    monkeypatch.setattr(connect, "WebClient", client_factory)
+    body = {
+        "message": {"metadata": {"event_payload": {"team_id": "TREQUESTER", "user_id": "U_REQUESTER", "region_id": 7}}}
+    }
+
+    with pytest.raises(UnlinkedSlackIdentityError):
+        connect.handle_approve_connection(body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="TADMIN"))
+
+    assert get_user.call_args.args[0] == "U_REQUESTER"
+    assert get_user.call_args.args[1].org_id == 7
+    assert get_user.call_args.args[1].team_id == "TREQUESTER"
+    assert get_user.call_args.args[2] is client_factory.return_value
+    db_manager.create_record.assert_not_called()
+    db_manager.update_records.assert_not_called()
+    client_factory.return_value.chat_postMessage.assert_not_called()
