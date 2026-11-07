@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Shared wrapper for Python-backed pnpm/turbo tasks (currently the Slack bot;
-# any future Python package can route through this too).
+# Shared wrapper for Python-backed pnpm/turbo tasks and the Python pre-commit hook.
 #
 # - Skips cleanly (exit 0, one line) when `uv` isn't installed locally, so
 #   contributors without Python installed can still run `pnpm lint`/`pnpm test`.
 # - Never skips in CI: if `uv` is missing while `CI` is set, fails loudly
 #   instead, so the gate can never be silently switched off.
+# - Turbo tasks using this wrapper must set cache: false in their package's
+#   turbo.json extending the root config. This keeps shared
+#   task settings while preventing replay of a missing-uv skip after installation.
 # - Strips the ESLint/Prettier cache flags (`--cache`, `--cache-location <path>`,
 #   a bare `--`) that turbo's root `lint`, `lint:fix`, and `format:fix` scripts
 #   append to every task in the graph. Python tools reject them. Only strips them from the trailing

@@ -1,15 +1,36 @@
 import type { JWT } from "next-auth/jwt";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { encode } from "next-auth/jwt";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import type { OrgRole } from "@acme/shared/app/types";
+import type * as Auth from "@acme/auth";
+import type * as AdapterModule from "@acme/auth/lib/md-pg-drizzzle-adapter";
+import { ProviderId } from "@acme/shared/common/enums";
 
 // The jwt callback re-reads roles through the auth adapter. config.ts imports
 // the adapter relatively; vitest resolves both specifiers to the same file, so
 // this mock is what the callback sees.
 const getUser = vi.fn();
-vi.mock("@acme/auth/lib/md-pg-drizzzle-adapter", () => ({
-  MDPGDrizzleAdapter: () => ({ getUser }),
-}));
+vi.mock("@acme/auth/lib/md-pg-drizzzle-adapter", async (importOriginal) => {
+  const actual = await importOriginal<typeof AdapterModule>();
+  return {
+    ...actual,
+    MDPGDrizzleAdapter: (
+      ...args: Parameters<typeof actual.MDPGDrizzleAdapter>
+    ) => ({
+      ...actual.MDPGDrizzleAdapter(...args),
+      getUser,
+    }),
+  };
+});
 
 const EDITOR: OrgRole = { orgId: 42, orgName: "Anytown", roleName: "editor" };
 const FORGED_ADMIN: OrgRole = {
@@ -21,6 +42,7 @@ const FORGED_ADMIN: OrgRole = {
 type JwtCallback = (params: {
   token: JWT;
   user?: unknown;
+  account?: { provider: string };
   trigger?: "signIn" | "signUp" | "update";
   session?: unknown;
 }) => Promise<JWT | null>;
@@ -43,6 +65,8 @@ const token = (overrides: Partial<JWT> = {}): JWT =>
     rolesVersion: 1,
     ...overrides,
   }) as JWT;
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("jwt callback on trigger=update", () => {
   // The first import transforms the whole auth and db module graph, which can
@@ -203,4 +227,75 @@ describe("jwt callback on a pre-marker token", () => {
 
     expect(result).toBeNull();
   });
+});
+
+describe("development identity provenance", () => {
+  beforeEach(() => getUser.mockReset());
+
+  it.each([
+    [ProviderId.DEV_MODE, false, true],
+    [ProviderId.EMAIL, true, false],
+    [ProviderId.OTP, true, false],
+  ])(
+    "derives the marker from the trusted %s sign-in provider",
+    async (provider, previous, expected) => {
+      const jwt = await loadJwtCallback();
+      const result = await jwt({
+        token: token({ devMode: previous }),
+        user: { id: "1", email: "pax@example.com", roles: [EDITOR] },
+        account: { provider },
+        trigger: "signIn",
+      });
+      expect(result?.devMode).toBe(expected);
+      expect(result?.id).toBe("1");
+    },
+  );
+
+  it.each([true, false])(
+    "preserves signed provenance %s on reads and ignores client updates",
+    async (devMode) => {
+      getUser.mockResolvedValue({ id: 7, roles: [EDITOR] });
+      const jwt = await loadJwtCallback();
+      const current = token({ devMode });
+      expect((await jwt({ token: current }))?.devMode).toBe(devMode);
+      expect(
+        (
+          await jwt({
+            token: current,
+            trigger: "update",
+            session: { devMode: !devMode },
+          })
+        )?.devMode,
+      ).toBe(devMode);
+    },
+  );
+
+  it.each([true, false, undefined])(
+    "preserves marker %s through real encrypted-cookie resolution",
+    async (devMode) => {
+      await loadJwtCallback();
+      const { authConfig } = await import("@acme/auth/config");
+      const secret = "synthetic-cookie-provenance-test-secret";
+      authConfig.secret = secret;
+      authConfig.trustHost = true;
+      const { getSessionFromHeaders } =
+        await vi.importActual<typeof Auth>("@acme/auth");
+      const cookieName = authConfig.cookies!.sessionToken!.name!;
+      const encoded = await encode({
+        secret,
+        salt: cookieName,
+        token: token({ id: "1", devMode }),
+      });
+      const session = await getSessionFromHeaders(
+        new Headers({
+          host: "localhost:3000",
+          "x-forwarded-proto": "http",
+          cookie: `${cookieName}=${encoded}`,
+        }),
+      );
+      expect(session?.id).toBe("1");
+      expect(session?.devMode).toBe(devMode);
+      expect(getUser).not.toHaveBeenCalled();
+    },
+  );
 });

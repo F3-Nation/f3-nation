@@ -19,7 +19,7 @@ Your app servers (Map, API, Auth) still run natively on your machine with `pnpm 
 
 ## Prerequisites
 
-Install these before starting:
+Install these before starting; `uv` is required only for Python work:
 
 | Tool                        | Install                                                                                                   | Check            |
 | --------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
@@ -149,10 +149,12 @@ You will need a code editor in order to edit code! The instructions assume you w
 
 </details>
 
-<details>
-<summary>uv: Python package manager for Slackbot</summary>
+<a id="uv-python-package-manager-for-slackbot"></a>
 
-The Slackbot app is a Python app in `apps/slackbot`. The repository root tries to run `uv sync` during `pnpm install` via the `postinstall` script. If `uv` is not installed yet, `pnpm install` will continue with a warning and skip syncing the Slackbot Python dependencies.
+<details>
+<summary>uv: Python workspace dependencies and checks</summary>
+
+The Python workspace members are defined in the root [`pyproject.toml`](../pyproject.toml). During `pnpm install`, the root `postinstall` script runs `uv sync --all-packages` when `uv` is available. Without `uv`, installation continues with a warning and skips syncing Python dependencies.
 
 On macOS or Linux/WSL:
 
@@ -166,7 +168,14 @@ Close and reopen your terminal, then verify:
 uv --version
 ```
 
-After installing `uv`, run `pnpm python:install` to sync the Slackbot Python dependencies.
+After installing `uv`, run `pnpm python:install` from the repository root to sync
+all Python workspace dependencies.
+
+`uv` is optional for contributors who do not touch Python: without it, the
+Python checks reached by the root pnpm commands print a skip message locally
+and the other workspaces are still checked. A skipped check did not run. See
+[How Python is checked](../apps/slackbot/AGENTS.md#how-python-is-checked) for
+CI behavior and task wiring.
 
 Python workspaces share Ruff settings from the root [`pyproject.toml`](../pyproject.toml).
 Each member explicitly extends that file in its own `pyproject.toml`, which also
@@ -201,11 +210,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone https://github.com/F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
-uv --version       # optional here; needed for apps/slackbot
+uv --version       # optional unless working on Python
 pnpm install
 ```
 
-`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm python:install`.
+For Python dependency setup and checks, see [uv installation](#uv-python-package-manager-for-slackbot).
 
 ### 2. Run the one-time setup script
 
@@ -215,8 +224,9 @@ pnpm local:setup
 
 This script does everything automatically:
 
-- Copies each directory's `.env.example` → `.env` (skips any that already exist):
-  `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, `apps/slackbot`, and `packages/env`
+- Regenerates each directory's `.env` from `.env.example`, backing up existing
+  files as `.env.bak.<timestamp>` before applying the configured slot. See
+  [the setup script](../scripts/local-setup.sh) for the directories it prepares.
 - Starts the four Docker containers
 - Waits for Postgres to be ready
 - Creates the GCS emulator buckets (`f3-public-images`, `f3-public-images-staging`, `f3nation-calendar-images`)
@@ -288,11 +298,11 @@ The following commands will set up the base environment. If any commands fail, l
 git clone git@github.com:F3-Nation/f3-nation.git
 cd f3-nation
 nvm install        # installs the Node version in .nvmrc
-uv --version       # optional here; needed for apps/slackbot
+uv --version       # optional unless working on Python
 pnpm install
 ```
 
-`pnpm install` runs `uv sync` automatically for the Python Slackbot app when `uv` is available. If `uv --version` fails, install `uv`, then run `pnpm python:install`.
+For Python dependency setup and checks, see [uv installation](#uv-python-package-manager-for-slackbot).
 
 ## Daily workflow
 
@@ -575,15 +585,27 @@ The `-v` flag removes the named volumes (`postgres_data`, `gcs_data`). Next time
 
 ## Troubleshooting
 
-### Slackbot dependencies were skipped because `uv` is missing
+### Python workspace dependencies were skipped because `uv` is missing
 
-Install `uv`, then sync the Slackbot Python dependencies:
+Install `uv`:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Close and reopen your terminal so the installer's shell-profile changes take
+effect, then return to the repository root. Verify `uv` is on `PATH` and sync all
+Python workspace dependencies:
+
+```bash
 uv --version
 pnpm python:install
 ```
+
+A `Skipping …` message means the Python check did not run. After installing
+`uv`, rerun the check: Python tasks using the shared wrapper do not reuse Turbo
+results. This also means Python type checks run during each commit hook when
+`uv` is installed. See [CI_PIPELINE.md § Gate-by-gate](CI_PIPELINE.md#gate-by-gate) for the cache policy.
 
 ### Port already in use
 
@@ -688,7 +710,9 @@ pnpm db:migrate:local
 ### App fails to start with env validation errors
 
 Make sure each app's `.env` file exists and has all required variables.
-Re-run the setup script — it skips directories that already have a `.env`:
+Re-run the setup script; it reuses the slot saved in the root `.env`. It
+regenerates `.env` files from templates and backs up existing files as
+`.env.bak.<timestamp>`; restore any needed custom values from those backups:
 
 ```bash
 pnpm local:setup

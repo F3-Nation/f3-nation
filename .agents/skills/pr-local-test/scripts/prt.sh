@@ -16,6 +16,10 @@
 #   bash prt.sh down-db <run-dir>           delete this run's containers + data (then setup)
 #   bash prt.sh down <run-dir> [--keep-drafts]
 #   bash prt.sh list                        every run on this machine, with liveness
+#
+# When changing this script: never follow a symlink from the PR's checkout when
+# copying or writing files, and never let an inherited DATABASE_* setting reach
+# a run, which would point the sandbox at a remote database.
 set -euo pipefail
 
 ROOT="${PRT_ROOT:-/tmp/pr-local-test}" # PRT_ROOT is a test hook
