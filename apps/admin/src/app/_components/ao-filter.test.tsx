@@ -170,6 +170,89 @@ describe("AOSFilter", () => {
     ).toEqual(["", "Depot · ID 11", "DEPOT · ID 12", "Hornet"]);
   });
 
+  it("treats names that differ only by surrounding whitespace as repeats", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: [
+        { id: 11, name: "Depot", parentId: 1, parentOrgName: "Wichita" },
+        { id: 12, name: "Depot ", parentId: 1, parentOrgName: "Wichita" },
+      ],
+      total: 2,
+    });
+    renderFilter();
+
+    await screen.findByText("Depot · ID 11");
+    expect(
+      Object.fromEntries(
+        screen
+          .getAllByRole("option")
+          .map((option) => [option.getAttribute("value"), option.textContent]),
+      ),
+    ).toEqual({ "": "", "11": "Depot · ID 11", "12": "Depot · ID 12" });
+  });
+
+  it("sorts IDs in labels as numbers", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: [
+        { id: 100, name: "Depot", parentId: 1, parentOrgName: "Wichita" },
+        { id: 12, name: "Depot", parentId: 1, parentOrgName: "Wichita" },
+      ],
+      total: 2,
+    });
+    renderFilter();
+
+    await screen.findByText("Depot · ID 12");
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["", "Depot · ID 12", "Depot · ID 100"]);
+  });
+
+  it("adds the ID when different parents share a name", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: [
+        { id: 11, name: "Depot", parentId: 1, parentOrgName: "Wichita" },
+        { id: 51, name: "Depot", parentId: 5, parentOrgName: "Wichita" },
+        { id: 21, name: "Depot", parentId: 2, parentOrgName: "Omaha" },
+      ],
+      total: 3,
+    });
+    const { onAoSelect } = renderFilter();
+
+    await screen.findByText("Depot · Wichita · ID 51");
+    expect(
+      screen
+        .getAllByRole("option")
+        .map((option) => [option.getAttribute("value"), option.textContent]),
+    ).toEqual([
+      ["", ""],
+      ["21", "Depot · Omaha"],
+      ["11", "Depot · Wichita · ID 11"],
+      ["51", "Depot · Wichita · ID 51"],
+    ]);
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "51" },
+    });
+    expect(onAoSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 51, parentId: 5 }),
+    );
+  });
+
+  it("adds the ID when same-named AOs have no parent name", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: [
+        { id: 11, name: "Depot", parentId: 1, parentOrgName: null },
+        { id: 21, name: "Depot", parentId: 2, parentOrgName: null },
+      ],
+      total: 2,
+    });
+    renderFilter();
+
+    await screen.findByText("Depot · ID 11");
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["", "Depot · ID 11", "Depot · ID 21"]);
+  });
+
   it("keeps the region and ID in the collapsed selected value", async () => {
     mocks.realCombobox = true;
     mocks.all.mockResolvedValue({ orgs: depotAos, total: depotAos.length });

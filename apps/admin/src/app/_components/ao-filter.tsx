@@ -5,35 +5,40 @@ import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 type AO = RouterOutputs["org"]["all"]["orgs"][number];
 
-const nameKey = (name: string) => name.trim().toLowerCase();
+const labelKey = (label: string) => label.toLowerCase();
 
 /**
- * Labels each AO so that distinct AOs never share a label. The parent org
- * (usually the region) is added when the choices span more than one parent,
- * and AOs whose name repeats within one parent also get their ID, since
- * `org.all` returns no location or schedule to tell them apart. The combobox
- * searches and shows the selected value from the label, so this context is
- * searchable and stays visible after selection.
+ * Labels each AO so that distinct AOs never share a label: the parent org is
+ * added when the choices span more than one parent, and the ID (the only
+ * field that is always unique) when the label would still repeat. The
+ * combobox searches and shows the selected value from the label, so this
+ * context is searchable and stays visible after selection.
  */
 function buildAoOptions(aos: AO[]) {
   const spansParents = new Set(aos.map((ao) => ao.parentId)).size > 1;
-  const siblingKey = (ao: AO) => `${ao.parentId}:${nameKey(ao.name)}`;
-  const siblingNameCounts = new Map<string, number>();
-  for (const ao of aos) {
-    const key = siblingKey(ao);
-    siblingNameCounts.set(key, (siblingNameCounts.get(key) ?? 0) + 1);
+  const labelled = aos.map((ao) => {
+    const parts = [ao.name.trim()];
+    const parentName = ao.parentOrgName?.trim();
+    if (spansParents && parentName) parts.push(parentName);
+    return { ao, base: parts.join(" · ") };
+  });
+  const labelCounts = new Map<string, number>();
+  for (const { base } of labelled) {
+    const key = labelKey(base);
+    labelCounts.set(key, (labelCounts.get(key) ?? 0) + 1);
   }
 
-  return aos
-    .map((ao) => {
-      const parts = [ao.name];
-      if (spansParents && ao.parentOrgName) parts.push(ao.parentOrgName);
-      if ((siblingNameCounts.get(siblingKey(ao)) ?? 0) > 1) {
-        parts.push(`ID ${ao.id}`);
-      }
-      return { label: parts.join(" · "), value: ao.id.toString() };
+  return labelled
+    .map(({ ao, base }) => {
+      const repeats = (labelCounts.get(labelKey(base)) ?? 0) > 1;
+      return {
+        label: repeats ? `${base} · ID ${ao.id}` : base,
+        value: ao.id.toString(),
+      };
     })
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true }),
+    );
 }
 
 export const AOSFilter = ({
