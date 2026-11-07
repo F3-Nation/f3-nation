@@ -133,8 +133,8 @@ export const AdminNavLinks = ({
     ...orgAdminTypes.map((orgType) => {
       const display = orgTypeDisplay[orgType];
       return {
-        // Served by the dynamic `[orgSegment]` route, which typedRoutes
-        // can't check against a runtime string.
+        // Bare `Route` admits only static routes; these links go to the
+        // dynamic `[orgSegment]` route, so the href is asserted.
         href: `/${display.routeSegment}` as Route,
         icon: orgIcons[display.icon],
         label: display.pluralLabel,
