@@ -56,7 +56,7 @@ describe("env skipValidation", () => {
 });
 
 // F3_API_BASE_URL is required and must be a URL, so a missing or malformed
-// value fails at startup instead of on the first upstream request.
+// value fails when `env` is first imported, not on the first upstream request.
 describe("env F3_API_BASE_URL validation", () => {
   beforeEach(() => {
     vi.resetModules();
