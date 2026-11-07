@@ -57,7 +57,10 @@ import { eq } from "drizzle-orm";
 // own dynamic `await import("~/lib/db")` below for the actual runtime import.
 import type { db as authDbType } from "~/lib/db";
 import { logError, logInfo, logWarn } from "~/lib/logging";
-import { F3_NATION_CLIENT_REFERENCE_ID } from "~/lib/oauth-client-reference";
+import {
+  F3_NATION_CLIENT_REFERENCE_ID,
+  SUPPORTED_OAUTH_SCOPES,
+} from "~/lib/oauth-client-reference";
 
 import { getUserRoles } from "@acme/db";
 import {
@@ -520,7 +523,7 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
           shouldRedirect: async ({ user }) =>
             !(await findProfileForUser(options, user.id))?.onboardingCompleted,
         },
-        scopes: ["openid", "profile", "email", "offline_access"],
+        scopes: [...SUPPORTED_OAUTH_SCOPES],
         accessTokenExpiresIn: 3600, // matches ACCESS_TOKEN_TTL in apps/auth/src/lib/oauth.ts
         idTokenExpiresIn: 3600, // matches signIdToken's ACCESS_TOKEN_TTL lifetime in lib/oauth.ts
         // Merged over Better Auth's own claims, which read better_auth_user.
