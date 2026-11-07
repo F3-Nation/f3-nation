@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/me@2.4.0...me@2.4.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **me:** resolve 7 suppressed react-hooks lint violations ([#1376](https://github.com/F3-Nation/f3-nation/issues/1376)) ([6079e7e](https://github.com/F3-Nation/f3-nation/commit/6079e7ea4fa4b86e03d1ebbd3c5aecb65317321a))
+* **slackbot:** preserve punctuation in welcome email subjects ([#1438](https://github.com/F3-Nation/f3-nation/issues/1438)) ([56c9f2b](https://github.com/F3-Nation/f3-nation/commit/56c9f2b0ac47ce182f01cd5a604db1e6c4f72e06))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.17.0
+    * @acme/shared bumped to 0.7.0
+    * @acme/ui bumped to 0.3.1
+
 ## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/me@2.3.1...me@2.4.0) (2026-10-29)
 
 

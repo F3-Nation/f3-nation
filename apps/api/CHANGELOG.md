@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.13.1](https://github.com/F3-Nation/f3-nation/compare/api@6.13.0...api@6.13.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **api:** limit OAuth client scopes to the ones auth3 serves ([#1475](https://github.com/F3-Nation/f3-nation/issues/1475)) ([580fd27](https://github.com/F3-Nation/f3-nation/commit/580fd276880e859ce1092eae41dc0d8f494eb862))
+* **api:** stop returning region emails from the public region list ([#1508](https://github.com/F3-Nation/f3-nation/issues/1508)) ([9184cdf](https://github.com/F3-Nation/f3-nation/commit/9184cdf5430d26fb7c804d23775207752e78c473))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.17.0
+    * @acme/shared bumped to 0.7.0
+  * devDependencies
+    * @acme/db bumped to 0.11.0
+
 ## [6.13.0](https://github.com/F3-Nation/f3-nation/compare/api@6.12.1...api@6.13.0) (2026-10-29)
 
 

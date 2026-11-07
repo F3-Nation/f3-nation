@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.11.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.10.0...admin@2.11.0) (2026-11-07)
+
+
+### Features
+
+* **admin:** turn on typedRoutes ([#1579](https://github.com/F3-Nation/f3-nation/issues/1579)) ([6826a21](https://github.com/F3-Nation/f3-nation/commit/6826a21ec868a9f6e1837ad400abec44beeabc6e))
+
+
+### Bug Fixes
+
+* **admin:** show region context in the Events AO filter ([#1578](https://github.com/F3-Nation/f3-nation/issues/1578)) ([864014b](https://github.com/F3-Nation/f3-nation/commit/864014b91d0c1d6066e6cbab290158e80feae92a))
+* **api:** limit OAuth client scopes to the ones auth3 serves ([#1475](https://github.com/F3-Nation/f3-nation/issues/1475)) ([580fd27](https://github.com/F3-Nation/f3-nation/commit/580fd276880e859ce1092eae41dc0d8f494eb862))
+* **ui,admin:** keep ControlledSelect controlled before form reset ([#1451](https://github.com/F3-Nation/f3-nation/issues/1451)) ([c3ee39a](https://github.com/F3-Nation/f3-nation/commit/c3ee39a1c8b8ece167baf90c8a3b1f4a4e2bbebd))
+* **ui:** resolve react-hooks lint violations in packages/ui ([#1378](https://github.com/F3-Nation/f3-nation/issues/1378)) ([c0a1f85](https://github.com/F3-Nation/f3-nation/commit/c0a1f852c43e51368bafffdbac6f43999f6d64e9))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.17.0
+    * @acme/shared bumped to 0.7.0
+    * @acme/ui bumped to 0.3.1
+    * @acme/validators bumped to 0.5.3
+
 ## [2.10.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.9.1...admin@2.10.0) (2026-10-29)
 
 

@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## [2.12.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.11.0...slackbot@2.12.0) (2026-11-07)
+
+
+### Features
+
+* **slackbot:** store files in the local GCS emulator in local dev ([#1425](https://github.com/F3-Nation/f3-nation/issues/1425)) ([d128b0f](https://github.com/F3-Nation/f3-nation/commit/d128b0ffb1873b279229c5e3ca20d07319379a6e))
+* **slackbot:** store preblast photos in event image storage ([#1419](https://github.com/F3-Nation/f3-nation/issues/1419)) ([921281d](https://github.com/F3-Nation/f3-nation/commit/921281da43576703d1e74c119eaa875fde851246))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#1465](https://github.com/F3-Nation/f3-nation/issues/1465)) ([a416306](https://github.com/F3-Nation/f3-nation/commit/a41630638e8eb83c27fdb50246c3ed34ebad91b8))
+* **deps:** update python dependencies (non-major) ([#1472](https://github.com/F3-Nation/f3-nation/issues/1472)) ([ffa307e](https://github.com/F3-Nation/f3-nation/commit/ffa307e7db7136fa86784f01b464fb9abed63646))
+* **repo:** prevent cached Python missing-tool skips ([#1459](https://github.com/F3-Nation/f3-nation/issues/1459)) ([8726631](https://github.com/F3-Nation/f3-nation/commit/872663132125e957eb28dbc3e1794a7e0f996a88))
+* **slackbot,repo:** move local health port off region-pages' 3006 ([#1426](https://github.com/F3-Nation/f3-nation/issues/1426)) ([45c16c3](https://github.com/F3-Nation/f3-nation/commit/45c16c3501a0feff4b21713bbc5c0d35c5906486))
+* **slackbot:** omit empty calendar special-event sections ([#1477](https://github.com/F3-Nation/f3-nation/issues/1477)) ([f2a5f7f](https://github.com/F3-Nation/f3-nation/commit/f2a5f7f0c2a21b12420ea24079d1e1813e4adfe8))
+* **slackbot:** preserve punctuation in welcome email subjects ([#1438](https://github.com/F3-Nation/f3-nation/issues/1438)) ([56c9f2b](https://github.com/F3-Nation/f3-nation/commit/56c9f2b0ac47ce182f01cd5a604db1e6c4f72e06))
+* **slackbot:** prevent duplicate Q messages with workspace identities ([#1505](https://github.com/F3-Nation/f3-nation/issues/1505)) ([2b0ceff](https://github.com/F3-Nation/f3-nation/commit/2b0ceff18aa832a34a77903a7dc173bff03d2168))
+* **slackbot:** prevent race condition timeout in calendar refresh test ([#1489](https://github.com/F3-Nation/f3-nation/issues/1489)) ([08151ba](https://github.com/F3-Nation/f3-nation/commit/08151baee0f5e28ee863cc3232382b9d325e759f))
+* **slackbot:** render monthly summary charts without mplcyberpunk ([#1503](https://github.com/F3-Nation/f3-nation/issues/1503)) ([e42792c](https://github.com/F3-Nation/f3-nation/commit/e42792c590c174a29b093281dac11040883f51f5))
+
 ## [2.11.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.10.0...slackbot@2.11.0) (2026-10-29)
 
 
