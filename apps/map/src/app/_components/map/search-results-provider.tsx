@@ -19,6 +19,8 @@ import type {
 import { useFilteredMapResults } from "./filtered-map-results-provider";
 import { buildF3LocationSearchResults } from "./search-results";
 
+const NO_GEO_RESULTS: GeoMapSearchResult[] = [];
+
 const TextSearchResultsContext = createContext<{
   f3RegionResults: F3RegionMapSearchResult[];
   f3LocationResults: F3LocationMapSearchResult[];
@@ -73,7 +75,10 @@ export const TextSearchResultsProvider = ({
   const { isMobileWidth } = useIsMobileWidth();
   const { filteredLocationMarkers } = useFilteredMapResults();
 
-  const [geoResults, setGeoResults] = useState<GeoMapSearchResult[]>([]);
+  const [geoState, setGeoState] = useState<{
+    query: string;
+    results: GeoMapSearchResult[];
+  }>({ query: "", results: NO_GEO_RESULTS });
 
   const f3RegionResults = useMemo(() => {
     if (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) return [];
@@ -121,15 +126,16 @@ export const TextSearchResultsProvider = ({
       return;
     }
 
-    // Use debounced autocomplete to reduce API calls
+    let active = true;
     const cleanup = debouncedPlacesAutocomplete(
       text,
       mapStore.get("center"),
       mapStore.get("zoom"),
       (results) => {
-        setGeoResults(
-          // Query predictions have no place to navigate to.
-          results.flatMap(({ placePrediction }) =>
+        if (!active) return;
+        setGeoState({
+          query: text,
+          results: results.flatMap(({ placePrediction }) =>
             placePrediction
               ? [
                   {
@@ -150,17 +156,21 @@ export const TextSearchResultsProvider = ({
                 ]
               : [],
           ),
-        );
+        });
       },
     );
 
-    return cleanup;
+    return () => {
+      active = false;
+      cleanup();
+    };
   }, [text]);
 
-  const visibleGeoResults = useMemo(
-    () => (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS ? [] : geoResults),
-    [geoResults, text],
-  );
+  const visibleGeoResults =
+    text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS ||
+    geoState.query !== text
+      ? NO_GEO_RESULTS
+      : geoState.results;
 
   const combinedResults = useMemo(() => {
     if (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) return [];

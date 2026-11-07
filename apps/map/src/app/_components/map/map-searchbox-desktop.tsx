@@ -184,6 +184,7 @@ export function MapSearchBox({
           </PopoverTrigger>
           <PopoverContent
             data-testid={TestId.MAP_SEARCHBOX_POPOVER_CONTENT_DESKTOP}
+            onEscapeKeyDown={() => setIsFocused(false)}
             onOpenAutoFocus={(e) => e.preventDefault()}
             className={cn("h-[400px] overflow-scroll p-0")}
             style={{
