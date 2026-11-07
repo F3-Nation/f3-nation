@@ -29,8 +29,16 @@ const basePr = (overrides = {}) => ({
   labels: { nodes: [] },
   timelineItems: { nodes: [] },
   reviewThreads: { nodes: [] },
+  // GitHub saw the head commit arrive when the PR was opened.
   commits: {
-    nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [] } } } }],
+    nodes: [
+      {
+        commit: {
+          checkSuites: { nodes: [{ createdAt: at(0) }] },
+          statusCheckRollup: { contexts: { nodes: [] } },
+        },
+      },
+    ],
   },
   ...overrides,
 });
@@ -1232,4 +1240,21 @@ test("PRs held for unknown collaborators don't take the run's slots", async () =
       "closed",
     ],
   );
+});
+
+test("with no push time for the head commit, reminders go out but heads-ups and closes wait", () => {
+  const pr = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 1)] },
+    commits: {
+      nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [] } } } }],
+    },
+  });
+  assert.equal(run(pr, 6.1).action, "nudge");
+  const nudged = { id: 9, nudgedAt: at(6.1) };
+  assert.equal(run(pr, 30, nudged).why, "push time unknown");
+  const warned = { ...nudged, warnedAt: at(10.2) };
+  assert.equal(run(pr, 30, warned).why, "push time unknown");
+  // Once GitHub records the head commit, the close goes ahead as usual.
+  pr.commits = pushedAt(0);
+  assert.equal(run(pr, 30, warned).action, "close");
 });

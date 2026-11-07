@@ -210,7 +210,9 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
   // whatever its author set: a commit dated 2099 would hold the PR open
   // forever. GitHub's own clock is used instead: the first check suite or CI
   // run on the head commit, created when it reached GitHub (fork PRs waiting
-  // on workflow approval get suites too). Commit dates never count.
+  // on workflow approval get suites too). Commit dates never count. A head
+  // commit with neither (a `[skip ci]` push, say) may have just been pushed,
+  // so `decide()` won't warn about or close that PR until one shows up.
   const headArrival = minTs(
     ...(headCommit?.checkSuites?.nodes ?? []).map((s) => ts(s.createdAt)),
     ...contexts
@@ -309,6 +311,7 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
       labels.includes(KEEP_OPEN_LABEL),
     reasons,
     lastAuthorActivity,
+    pushTimeKnown: headArrival != null,
     nudge,
   };
 }
@@ -347,6 +350,19 @@ function decide(facts, now) {
       )
     : null;
 
+  // The head commit's push time is unknown, so the author may have pushed
+  // since: no heads-up or close. Reminders still go out; a push or comment
+  // from the author answers them.
+  const holdClose = facts.pushTimeKnown === false && nudgedThisStretch;
+  if (holdClose && now >= closeAt - WARN_LEAD_MS) {
+    return {
+      action: "none",
+      why: "push time unknown",
+      clockStart,
+      ageDays,
+      closeAt,
+    };
+  }
   if (
     nudgedThisStretch &&
     !warnedThisStretch &&
