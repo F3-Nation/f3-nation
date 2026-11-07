@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth/server";
 import { getMyProfile, updateMyProfile } from "@/lib/api/client";
 import type { UserMeta } from "@/lib/types";
 import { logError } from "@/lib/logging";
+import { env } from "@/env";
 import { storage } from "@/lib/storage";
 
 const profileUpdateSchema = z.strictObject({
@@ -69,7 +70,7 @@ export async function GET() {
       "me.profile_api.fetch_failed",
       {
         sessionUserId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
+        apiBaseUrl: env.F3_API_BASE_URL,
       },
       err,
     );
@@ -136,7 +137,7 @@ export async function PATCH(request: NextRequest) {
       "me.profile_api.update_failed",
       {
         sessionUserId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
+        apiBaseUrl: env.F3_API_BASE_URL,
       },
       err,
     );

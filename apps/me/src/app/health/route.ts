@@ -15,6 +15,8 @@ function getServiceVersion(): string {
 }
 
 async function checkUpstreamApi(): Promise<CheckRunnerResult> {
+  // Read the API URL raw instead of through env so a missing or
+  // invalid URL can be properly reported through the health check.
   const apiBaseUrl = process.env.F3_API_BASE_URL;
 
   if (!apiBaseUrl) {
