@@ -234,7 +234,8 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
-  // A newly loaded org drops any logo picked for the previous one.
+  // Drop any picked logo whenever org.byId returns a new org object (first
+  // load, or a refetch with changed data), matching the form.reset effect.
   const [loadedOrg, setLoadedOrg] = useState(org);
   if (org !== loadedOrg) {
     setLoadedOrg(org);
@@ -326,6 +327,11 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const partialSaveMessage = (step: "upload" | "update") =>
     `This ${label} was created, but ${step === "upload" ? "uploading its logo" : "saving its remaining changes"} failed.`;
   const savedRecoveryMessage = `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`;
+  const retryMessage =
+    saveRecovery && typeof saveRecovery === "object"
+      ? `${partialSaveMessage(saveRecovery.step)} ${saveRecovery.detail} ` +
+        `Your entries are kept. Save Changes will retry the same ${label} (ID ${saveRecovery.orgId}).`
+      : null;
   const crupdateOrg = useMutation(
     orpc.org.crupdate.mutationOptions(
       config.logoPosition ? {} : { onSuccess, onError },
@@ -898,7 +904,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                       ? `This ${label} may have been created, but its ID was not returned. Close this form, reload the page, and check the organization list before trying again. Saving is disabled to avoid creating a duplicate.`
                       : saveRecovery === "saved"
                         ? savedRecoveryMessage
-                        : `${partialSaveMessage(saveRecovery.step)} ${saveRecovery.detail} Your entries are kept. Save Changes will retry the same ${label} (ID ${saveRecovery.orgId}).`}
+                        : retryMessage}
                   </p>
                 )}
                 <div

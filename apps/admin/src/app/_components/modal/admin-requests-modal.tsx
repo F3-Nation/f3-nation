@@ -275,7 +275,9 @@ export default function AdminRequestsModal({
     setSelectedAoLogoPreviewUrl(previewUrl);
   };
 
-  // A newly loaded request drops any logo picked for the previous one.
+  // Drop any picked AO logo whenever request.byId returns a new request
+  // object (another request, or a refetch with changed data), matching the
+  // form.reset effect. Keep it while no request is loaded.
   const [loadedRequest, setLoadedRequest] = useState(request);
   if (request !== loadedRequest) {
     setLoadedRequest(request);
