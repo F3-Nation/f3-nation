@@ -8,6 +8,7 @@ import {
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminOauthClientsModal from "~/app/_components/modal/admin-oauth-clients-modal";
+import { ORPCError } from "~/orpc/react";
 
 // jsdom has no ResizeObserver; Radix's Checkbox/Dialog primitives need one.
 beforeAll(() => {
@@ -27,13 +28,23 @@ beforeAll(() => {
   );
 });
 
-const { useQueryMock, updateMutateAsync, closeModalMock, isPendingMock } =
-  vi.hoisted(() => ({
-    useQueryMock: vi.fn(),
-    updateMutateAsync: vi.fn<(variables: unknown) => Promise<unknown>>(),
-    closeModalMock: vi.fn(),
-    isPendingMock: vi.fn(() => false),
-  }));
+const {
+  useQueryMock,
+  updateMutateAsync,
+  closeModalMock,
+  isPendingMock,
+  toastErrorMock,
+} = vi.hoisted(() => ({
+  useQueryMock: vi.fn(),
+  updateMutateAsync: vi.fn<(variables: unknown) => Promise<unknown>>(),
+  closeModalMock: vi.fn(),
+  isPendingMock: vi.fn(() => false),
+  toastErrorMock: vi.fn(),
+}));
+
+vi.mock("@acme/ui/toast", () => ({
+  toast: { success: vi.fn(), error: toastErrorMock },
+}));
 
 interface MutationOptions {
   onSuccess?: (result: unknown, variables: unknown) => unknown;
@@ -44,7 +55,8 @@ interface MutationOptions {
 // passed to mutationOptions() when mutateAsync settles — the modal's actual
 // toast/closeModal side effects live inside those callbacks, so the mock has
 // to run them too, not just record that mutateAsync was called.
-vi.mock("~/orpc/react", () => ({
+vi.mock("~/orpc/react", async () => ({
+  ORPCError: (await import("@orpc/client")).ORPCError,
   invalidateQueries: vi.fn(),
   useQuery: useQueryMock,
   useMutation: (options: MutationOptions) => ({
@@ -657,5 +669,78 @@ describe("AdminOauthClientsModal", () => {
       expect(updateMutateAsync).toHaveBeenCalled();
     });
     expect(closeModalMock).not.toHaveBeenCalled();
+  });
+
+  describe("failure toast", () => {
+    const legacyClient = {
+      clientId: "legacy-client",
+      name: "Legacy",
+      redirectUris: ["https://legacy.example.com/callback"],
+      scopes: ["openid", "profile", "custom:read"],
+      isPublic: false,
+    };
+
+    it("says why when a save with an unsupported stored scope is refused", async () => {
+      useQueryMock.mockReturnValue({ data: { clients: [legacyClient] } });
+      updateMutateAsync.mockRejectedValue(
+        new ORPCError("BAD_REQUEST", { message: "Input validation failed" }),
+      );
+
+      render(<AdminOauthClientsModal data={{ clientId: "legacy-client" }} />);
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: /offline_access scope/i }),
+      );
+      fireEvent.click(screen.getByText("Save changes"));
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          "This client has scopes auth3 doesn't support, so offline_access " +
+            "can't be changed here. Fix its scopes first.",
+        );
+      });
+      expect(updateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scopes: ["openid", "profile", "custom:read", "offline_access"],
+        }),
+      );
+    });
+
+    it("keeps the generic toast when the refused save sent supported scopes only", async () => {
+      useQueryMock.mockReturnValue({
+        data: { clients: [{ ...legacyClient, scopes: ["openid"] }] },
+      });
+      updateMutateAsync.mockRejectedValue(
+        new ORPCError("BAD_REQUEST", { message: "Input validation failed" }),
+      );
+
+      render(<AdminOauthClientsModal data={{ clientId: "legacy-client" }} />);
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: /offline_access scope/i }),
+      );
+      fireEvent.click(screen.getByText("Save changes"));
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          "Unable to update OAuth client",
+        );
+      });
+    });
+
+    it("keeps the generic toast when a non-validation error hits a legacy client", async () => {
+      useQueryMock.mockReturnValue({ data: { clients: [legacyClient] } });
+      updateMutateAsync.mockRejectedValue(new Error("network error"));
+
+      render(<AdminOauthClientsModal data={{ clientId: "legacy-client" }} />);
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: /offline_access scope/i }),
+      );
+      fireEvent.click(screen.getByText("Save changes"));
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          "Unable to update OAuth client",
+        );
+      });
+    });
   });
 });
