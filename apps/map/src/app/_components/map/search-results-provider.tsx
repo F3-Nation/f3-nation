@@ -42,9 +42,10 @@ export const TextSearchResultsProvider = ({
   const text = searchStore.use.text();
 
   const [searchEngaged, setSearchEngaged] = useState(false);
-  useEffect(() => {
-    if (text.length > 0) setSearchEngaged(true);
-  }, [text]);
+
+  if (text.length > 0 && !searchEngaged) {
+    setSearchEngaged(true);
+  }
 
   const { data: regionsResponse } = useQuery(
     orpc.map.location.regionsWithLocation.queryOptions({
@@ -73,18 +74,11 @@ export const TextSearchResultsProvider = ({
   const { filteredLocationMarkers } = useFilteredMapResults();
 
   const [geoResults, setGeoResults] = useState<GeoMapSearchResult[]>([]);
-  const [f3LocationResults, setF3LocationResults] = useState<
-    F3LocationMapSearchResult[]
-  >([]);
-  const [f3RegionResults, setF3RegionResults] = useState<
-    F3RegionMapSearchResult[]
-  >([]);
 
-  useEffect(() => {
-    if (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) return;
-    // Use refs to prevent this from running on every center / zoom updated
+  const f3RegionResults = useMemo(() => {
+    if (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) return [];
 
-    const _f3RegionResults =
+    return (
       regions
         ?.map((region) => ({
           key: `region-${region.id}`,
@@ -100,20 +94,32 @@ export const TextSearchResultsProvider = ({
             item: null,
           },
         }))
-        .filter(({ header }) => {
-          return header.toLowerCase().includes(text.toLowerCase());
-        }) ?? [];
-
-    setF3RegionResults(_f3RegionResults);
-
-    setF3LocationResults(
-      buildF3LocationSearchResults({
-        locationMarkers: filteredLocationMarkers,
-        text,
-        eventIdToRegionNameLookup,
-        locationIdToRegionNameLookup,
-      }),
+        .filter(({ header }) =>
+          header.toLowerCase().includes(text.toLowerCase()),
+        ) ?? []
     );
+  }, [regions, text]);
+
+  const f3LocationResults = useMemo(() => {
+    if (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) return [];
+
+    return buildF3LocationSearchResults({
+      locationMarkers: filteredLocationMarkers,
+      text,
+      eventIdToRegionNameLookup,
+      locationIdToRegionNameLookup,
+    });
+  }, [
+    filteredLocationMarkers,
+    text,
+    eventIdToRegionNameLookup,
+    locationIdToRegionNameLookup,
+  ]);
+
+  useEffect(() => {
+    if (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) {
+      return;
+    }
 
     // Use debounced autocomplete to reduce API calls
     const cleanup = debouncedPlacesAutocomplete(
@@ -148,38 +154,42 @@ export const TextSearchResultsProvider = ({
       },
     );
 
-    // Cleanup on unmount or when text changes
     return cleanup;
-  }, [
-    filteredLocationMarkers,
-    regions,
-    text,
-    eventIdToRegionNameLookup,
-    locationIdToRegionNameLookup,
-  ]);
+  }, [text]);
 
-  const combinedResults = useMemo(
-    () =>
-      isMobileWidth
-        ? [
-            ...f3LocationResults.slice(0, 10),
-            ...f3RegionResults.slice(0, 10),
-            ...geoResults.slice(0, 10),
-          ]
-        : [
-            ...geoResults.slice(0, 10),
-            ...f3LocationResults.slice(0, 10),
-            ...f3RegionResults.slice(0, 10),
-          ],
-    [f3LocationResults, f3RegionResults, geoResults, isMobileWidth],
+  const visibleGeoResults = useMemo(
+    () => (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS ? [] : geoResults),
+    [geoResults, text],
   );
+
+  const combinedResults = useMemo(() => {
+    if (text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) return [];
+
+    return isMobileWidth
+      ? [
+          ...f3LocationResults.slice(0, 10),
+          ...f3RegionResults.slice(0, 10),
+          ...visibleGeoResults.slice(0, 10),
+        ]
+      : [
+          ...visibleGeoResults.slice(0, 10),
+          ...f3LocationResults.slice(0, 10),
+          ...f3RegionResults.slice(0, 10),
+        ];
+  }, [
+    f3LocationResults,
+    f3RegionResults,
+    visibleGeoResults,
+    isMobileWidth,
+    text,
+  ]);
 
   return (
     <TextSearchResultsContext.Provider
       value={{
         f3RegionResults,
         f3LocationResults,
-        geoResults,
+        geoResults: visibleGeoResults,
         combinedResults,
       }}
     >

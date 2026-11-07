@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Search, XCircle } from "lucide-react";
 
 import {
@@ -19,7 +19,6 @@ import { Spinner } from "@acme/ui/spinner";
 
 import { orpc, useQuery } from "~/orpc/react";
 import { useOnKeyPress } from "~/utils/hooks/use-on-key-press";
-import { useKeyPress } from "~/utils/key-press/hook";
 import { onClickPlaceRowMap } from "~/utils/on-click-place-row-map";
 import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
 import { mapStore } from "~/utils/store/map";
@@ -58,16 +57,11 @@ export function MapSearchBox({
   const [focusedIndex, setFocusedIndex] = useState(0);
   const shouldRedirectOnResult = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { pressedKeys } = useKeyPress();
   const checkboxContainerRef = useRef<HTMLInputElement>(null);
 
   const { ref: inputRef } = useOnKeyPress<HTMLInputElement>({
     keys: ["Enter"],
-    cb: (key) => {
-      if (key === "Enter") {
-        onSubmit();
-      }
-    },
+    cb: () => onSubmit(),
   });
 
   const onSubmit = useCallback(() => {
@@ -86,12 +80,6 @@ export function MapSearchBox({
       }
     }
   }, [combinedResults, focusedIndex, inputRef]);
-
-  useEffect(() => {
-    if (pressedKeys.has("Escape")) {
-      setIsFocused(false);
-    }
-  }, [pressedKeys]);
 
   return (
     <div
@@ -117,6 +105,8 @@ export function MapSearchBox({
                   } else if (e.key === "ArrowUp") {
                     setFocusedIndex((prev) => Math.max(prev - 1, 0));
                     e.preventDefault();
+                  } else if (e.key === "Escape") {
+                    setIsFocused(false);
                   }
                 }}
                 ref={(node) => {
