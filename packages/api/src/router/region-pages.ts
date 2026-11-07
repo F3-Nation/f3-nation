@@ -60,6 +60,14 @@ const regionSchema = z.object({
   workoutCount: z.number().describe("Public workouts in the region"),
 });
 
+/**
+ * Directory entry. Leaves out `email`: the list is anonymous and returns every
+ * region at once, so including it would hand out the whole region mailing list
+ * in one call. A region's own page (`regionPages.region`) still shows its
+ * contact email.
+ */
+const regionListItemSchema = regionSchema.omit({ email: true });
+
 /** Active regions whose ancestor chain is also active, ordered by id. */
 const selectActiveRegions = (db: Context["db"]) =>
   db
@@ -175,7 +183,7 @@ export const regionPagesRouter = os.router({
       description:
         "All active regions with their public workout count and an area (city/state and map center) derived from their workouts. Ordered by name.",
     })
-    .output(z.array(regionSchema))
+    .output(z.array(regionListItemSchema))
     .handler(({ context: ctx }) =>
       // Always cached (not mapDataFor): honoring the spoofable orpc-ssg
       // client header here would let any caller force this nationwide
@@ -195,9 +203,15 @@ export const regionPagesRouter = os.router({
         }
 
         return uniqueBySlug(regions)
-          .map((org) =>
-            toRegionPageRegion(org, workoutsByRegion.get(String(org.id)) ?? []),
-          )
+          .map((org) => {
+            // The output schema already drops email; strip it here too so the
+            // cached directory list never holds it.
+            const { email: _email, ...region } = toRegionPageRegion(
+              org,
+              workoutsByRegion.get(String(org.id)) ?? [],
+            );
+            return region;
+          })
           .sort((a, b) => a.name.localeCompare(b.name));
       }),
     ),

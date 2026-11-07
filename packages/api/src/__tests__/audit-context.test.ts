@@ -1,0 +1,393 @@
+import { eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { randomUUID } from "node:crypto";
+
+import {
+  auditContext,
+  runWithAuditContext,
+  schema,
+  withAuditContext,
+} from "@acme/db";
+import { createDbClient, withQueryTimeout } from "@acme/db/testing";
+import { env } from "@acme/env";
+
+const prefix = `audit-context-${randomUUID()}-`;
+const name = (label: string) => `${prefix}${label}`;
+
+const table = schema.attendanceTypes;
+const actor = { userId: 41, source: null };
+let production: ReturnType<typeof createDbClient>;
+let client: postgres.Sql;
+let db: ReturnType<typeof drizzle>;
+const statements: string[] = [];
+
+beforeAll(() => {
+  production = createDbClient();
+  client = postgres(env.TEST_DATABASE_URL!, {
+    max: 2,
+    prepare: false,
+    onnotice: () => undefined,
+    debug: (_connection, query) => statements.push(query),
+  });
+  withAuditContext(client);
+  db = drizzle(client);
+});
+
+afterAll(async () => {
+  try {
+    await client`delete from attendance_types where type like ${prefix + "%"}`;
+  } finally {
+    await Promise.all([production.close(), client.end()]);
+  }
+});
+
+async function history(type: string) {
+  return client<
+    { op: string; changed_by: number | null; changed_via: string | null }[]
+  >`
+    select op, changed_by, changed_via from public_history.attendance_types
+    where coalesce(new_row, old_row)->>'type' = ${name(type)} order by id`;
+}
+
+describe("database audit attribution", () => {
+  it("installs attribution in createDbClient and preserves INSERT UPDATE DELETE returning", async () => {
+    const inserted = await runWithAuditContext(actor, async () =>
+      production.db
+        .insert(table)
+        .values({ type: name("factory") })
+        .returning({ id: table.id, type: table.type }),
+    );
+    expect(inserted.map((row) => row.type)).toEqual([name("factory")]);
+    const id = inserted[0]!.id;
+    expect(id).toBeGreaterThan(0);
+    expect(
+      await runWithAuditContext(actor, async () =>
+        production.db
+          .update(table)
+          .set({ description: "changed" })
+          .where(eq(table.id, id))
+          .returning({ id: table.id, description: table.description }),
+      ),
+    ).toEqual([{ id, description: "changed" }]);
+    expect(
+      await runWithAuditContext(actor, async () =>
+        production.db
+          .delete(table)
+          .where(eq(table.id, id))
+          .returning({ id: table.id }),
+      ),
+    ).toEqual([{ id }]);
+    expect(await history("factory")).toEqual([
+      { op: "I", changed_by: 41, changed_via: null },
+      { op: "U", changed_by: 41, changed_via: null },
+      { op: "D", changed_by: 41, changed_via: null },
+    ]);
+  });
+
+  it("attributes raw Drizzle execute and resolves after commit", async () => {
+    const result = await runWithAuditContext(actor, async () =>
+      production.db.execute(
+        sql`insert into attendance_types(type) values (${name("raw")}) returning type`,
+      ),
+    );
+    expect([...result]).toEqual([{ type: name("raw") }]);
+    await runWithAuditContext(actor, async () =>
+      production.db.execute(
+        sql`update attendance_types set description = 'raw update' where type = ${name("raw")}`,
+      ),
+    );
+    expect(await history("raw")).toEqual([
+      { op: "I", changed_by: 41, changed_via: null },
+      { op: "U", changed_by: 41, changed_via: null },
+    ]);
+  });
+
+  it("attributes transactions and nested savepoints through the installed adapter", async () => {
+    statements.length = 0;
+    expect(
+      await runWithAuditContext(actor, () =>
+        db.transaction(async (tx) => {
+          await tx.insert(table).values({ type: name("outer") });
+          return tx.transaction(async (nested) => {
+            await nested.insert(table).values({ type: name("nested") });
+            return 23;
+          });
+        }),
+      ),
+    ).toBe(23);
+    expect(statements.some((query) => /^savepoint /i.test(query))).toBe(true);
+    expect(await history("outer")).toEqual([
+      { op: "I", changed_by: 41, changed_via: null },
+    ]);
+    expect(await history("nested")).toEqual([
+      { op: "I", changed_by: 41, changed_via: null },
+    ]);
+  });
+
+  it("records source-only context and keeps transaction-entry attribution across ambient changes", async () => {
+    await runWithAuditContext({ userId: null, source: "job" }, async () =>
+      production.db.insert(table).values({ type: name("source-only") }),
+    );
+    await runWithAuditContext(actor, () =>
+      production.db.transaction(async (tx) => {
+        await runWithAuditContext({ userId: 99, source: "other" }, async () =>
+          tx.insert(table).values({ type: name("ambient-change") }),
+        );
+        await auditContext.exit(async () =>
+          tx.insert(table).values({ type: name("ambient-exit") }),
+        );
+      }),
+    );
+    expect(await history("source-only")).toEqual([
+      { op: "I", changed_by: null, changed_via: "job" },
+    ]);
+    for (const type of ["ambient-change", "ambient-exit"]) {
+      expect(await history(type)).toEqual([
+        { op: "I", changed_by: 41, changed_via: null },
+      ]);
+    }
+  });
+
+  it("preserves serializable and deferrable transaction configuration", async () => {
+    await runWithAuditContext(actor, () =>
+      production.db.transaction(
+        async (tx) => {
+          expect([
+            ...(await tx.execute(
+              sql`select current_setting('transaction_isolation') as isolation, current_setting('transaction_deferrable') as deferrable`,
+            )),
+          ]).toEqual([{ isolation: "serializable", deferrable: "on" }]);
+          await tx.insert(table).values({ type: name("serializable") });
+        },
+        { isolationLevel: "serializable", deferrable: true },
+      ),
+    );
+    expect(await history("serializable")).toEqual([
+      { op: "I", changed_by: 41, changed_via: null },
+    ]);
+  });
+
+  it("rolls back both source and history and clears pooled attribution after commit and rollback", async () => {
+    const single = postgres(env.TEST_DATABASE_URL!, { max: 1, prepare: false });
+    withAuditContext(single);
+    const singleDb = drizzle(single);
+    try {
+      const [first] = await single<
+        { pid: number }[]
+      >`select pg_backend_pid() as pid`;
+      await runWithAuditContext({ userId: 54, source: "committed" }, async () =>
+        singleDb.insert(table).values({ type: name("committed") }),
+      );
+      await singleDb.insert(table).values({ type: name("after-commit") });
+      await expect(
+        runWithAuditContext({ userId: 55, source: "rolled-back" }, () =>
+          singleDb.transaction(async (tx) => {
+            await tx.insert(table).values({ type: name("rolled-back") });
+            tx.rollback();
+          }),
+        ),
+      ).rejects.toThrow("Rollback");
+      await singleDb.insert(table).values({ type: name("after-rollback") });
+      expect(
+        await singleDb
+          .select({ type: table.type })
+          .from(table)
+          .where(eq(table.type, name("rolled-back"))),
+      ).toEqual([]);
+      expect(await history("rolled-back")).toEqual([]);
+      expect(await history("committed")).toEqual([
+        { op: "I", changed_by: 54, changed_via: "committed" },
+      ]);
+      expect(await history("after-commit")).toEqual([
+        { op: "I", changed_by: null, changed_via: null },
+      ]);
+      expect(await history("after-rollback")).toEqual([
+        { op: "I", changed_by: null, changed_via: null },
+      ]);
+      const [last] = await single<
+        { pid: number }[]
+      >`select pg_backend_pid() as pid`;
+      expect(first?.pid).toEqual(expect.any(Number));
+      expect(last?.pid).toBe(first?.pid);
+    } finally {
+      await single.end();
+    }
+  });
+
+  it("isolates 200 writes by 50 users over two pooled connections with complete NULL-safe verification", async () => {
+    await Promise.all(
+      Array.from({ length: 200 }, (_, index) => {
+        const userId = (index % 50) + 1;
+        return runWithAuditContext({ userId, source: `u${userId}` }, async () =>
+          db.insert(table).values({
+            type: name(`concurrent-${index}`),
+            description: String(userId),
+          }),
+        );
+      }),
+    );
+    const [result] = await client<
+      { count: number; distinct_writes: number; mismatches: number }[]
+    >`
+      select count(*)::int as count,
+        count(distinct new_row->>'type')::int as distinct_writes,
+        count(*) filter (where
+          changed_by is distinct from (new_row->>'description')::int
+          or changed_via is distinct from 'u' || (new_row->>'description'))::int as mismatches
+      from public_history.attendance_types where new_row->>'type' like ${name("concurrent-%")}`;
+    expect(result).toEqual({ count: 200, distinct_writes: 200, mismatches: 0 });
+    const [source] = await client<
+      { count: number }[]
+    >`select count(*)::int as count from attendance_types where type like ${name("concurrent-%")}`;
+    expect(source).toEqual({ count: 200 });
+  });
+
+  it("sends no BEGIN or settings for reads and inactive writes", async () => {
+    await client`select 1`;
+    statements.length = 0;
+    await runWithAuditContext(actor, async () =>
+      db.select({ type: table.type }).from(table).limit(1),
+    );
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatch(/^select /i);
+    statements.length = 0;
+    await runWithAuditContext({ userId: null, source: null }, async () =>
+      db.insert(table).values({ type: name("inactive") }),
+    );
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatch(/^insert /i);
+    expect(await history("inactive")).toEqual([
+      { op: "I", changed_by: null, changed_via: null },
+    ]);
+  });
+
+  it("rejects invalid context before any statement including BEGIN", async () => {
+    statements.length = 0;
+    for (const [context, message] of [
+      [{ userId: 2147483648, source: null }, "Invalid audit user id"],
+      [{ userId: 4, source: "api\n" }, "Invalid audit source"],
+    ] as const) {
+      await expect(
+        runWithAuditContext(context, async () =>
+          db.insert(table).values({ type: name("invalid") }),
+        ),
+      ).rejects.toMatchObject({ cause: { message } });
+      const rejected = runWithAuditContext(context, () =>
+        db.transaction(() => Promise.resolve(1)),
+      );
+      expect(rejected).toBeInstanceOf(Promise);
+      const error: unknown = await rejected.catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).toMatchObject({ message });
+    }
+    expect(statements).toEqual([]);
+    expect(await history("invalid")).toEqual([]);
+  });
+
+  it("keeps builders lazy and supports returning a builder from an async context callback", async () => {
+    statements.length = 0;
+    await runWithAuditContext(actor, async () => {
+      const builder = db
+        .insert(table)
+        .values({ type: name("lazy") })
+        .returning({ type: table.type });
+      expect(statements).toEqual([]);
+      return builder;
+    });
+    expect(await history("lazy")).toEqual([
+      { op: "I", changed_by: 41, changed_via: null },
+    ]);
+  });
+
+  it("executes a native lazy query once across values and then consumers", async () => {
+    statements.length = 0;
+    await runWithAuditContext(actor, async () => {
+      const query = client.unsafe(
+        "insert into attendance_types(type) values ($1) returning type",
+        [name("native-once")],
+      );
+      const values = query.values();
+      expect(statements).toEqual([]);
+      expect([...(await values)]).toEqual([[name("native-once")]]);
+      expect([...(await query)]).toEqual([[name("native-once")]]);
+      expect([...(await values)]).toEqual([[name("native-once")]]);
+    });
+    expect(
+      statements.filter((statement) => /^insert /i.test(statement)),
+    ).toHaveLength(1);
+    expect(statements.at(-1)).toBe("commit");
+    expect(await history("native-once")).toEqual([
+      { op: "I", changed_by: 41, changed_via: null },
+    ]);
+  });
+
+  it("memoizes a rejected native write without retrying it", async () => {
+    statements.length = 0;
+    await runWithAuditContext(actor, async () => {
+      const query = client.unsafe(
+        "insert into attendance_types(type) values (null)",
+      );
+      await expect(query).rejects.toMatchObject({ code: "23502" });
+      await expect(query.values()).rejects.toMatchObject({ code: "23502" });
+    });
+    expect(
+      statements.filter((statement) => /^insert /i.test(statement)),
+    ).toHaveLength(1);
+    expect(statements.at(-1)).toBe("rollback");
+  });
+
+  it("preserves native begin options and immediate array callback execution", async () => {
+    const result = await runWithAuditContext(actor, () =>
+      client.begin(
+        "isolation level serializable read write deferrable",
+        (tx) => [
+          tx.unsafe(
+            "insert into attendance_types(type) values ($1) returning type",
+            [name("native-array")],
+          ),
+          tx.unsafe(
+            "select current_setting('transaction_isolation') as isolation, current_setting('transaction_deferrable') as deferrable",
+          ),
+        ],
+      ),
+    );
+    expect(result.map((rows) => [...rows])).toEqual([
+      [{ type: name("native-array") }],
+      [{ isolation: "serializable", deferrable: "on" }],
+    ]);
+    expect(await history("native-array")).toEqual([
+      { op: "I", changed_by: 41, changed_via: null },
+    ]);
+  });
+
+  it("composes with query timeouts while BEGIN and transaction writes retain native execution", async () => {
+    const bounded = postgres(env.TEST_DATABASE_URL!, {
+      max: 1,
+      prepare: false,
+    });
+    withQueryTimeout(bounded, 30);
+    withAuditContext(bounded);
+    try {
+      await bounded`select 1`;
+      await expect(
+        runWithAuditContext(actor, async () =>
+          bounded.unsafe("select pg_sleep(0.2)"),
+        ),
+      ).rejects.toThrow(/pool-wait\/execution timeout/);
+      await runWithAuditContext(actor, async () =>
+        bounded.unsafe(
+          "insert into attendance_types(type) select $1 from pg_sleep(0.1)",
+          [name("timeout-composition")],
+        ),
+      );
+      expect(await history("timeout-composition")).toEqual([
+        { op: "I", changed_by: 41, changed_via: null },
+      ]);
+    } finally {
+      await bounded.end();
+    }
+  });
+});

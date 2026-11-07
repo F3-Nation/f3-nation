@@ -10,6 +10,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pandas as pd
+
+# DataFrame.style imports pandas' Styler, which imports matplotlib when it is
+# installed, and matplotlib's first import builds its font cache from every
+# system font. Paying that here keeps it out of the threaded tests' timeouts.
+import pandas.io.formats.style  # noqa: F401
 import pytest
 import pytz
 from slack_sdk.errors import SlackApiError
@@ -244,7 +249,7 @@ def calendar_generation(monkeypatch):
     def export(style, filename, **kwargs):
         exports.append((filename, style.data.copy()))
 
-    def run(rows, at, force=False):
+    def run(rows, at, force=False, special_events=None):
         nonlocal now, pending
         pending = None
         now = at
@@ -255,8 +260,11 @@ def calendar_generation(monkeypatch):
             [(SimpleNamespace(id=1, name="Test region"), None, space)],
             rows,
             [],
+            *([special_events] if special_events is not None else []),
             rows,
         ]
+        if special_events is not None:
+            query.options.return_value = query
         calendar_images.generate_calendar_images(force=force)
         return list(exports)
 
@@ -545,6 +553,113 @@ def test_cleanup_revalidates_when_refresh_publishes_between_commit_and_relock(
     assert (f"calendar_image_{week}" in settings) == (not refresh_commit_fails)
     assert f"/mnt/calendar-images/{existing}" not in state.files
     assert all(owner == lock_owner for owner, action, lock_owner in state.operations if action != "rollback")
+
+
+@pytest.mark.parametrize("use_session", [False, True])
+@pytest.mark.parametrize(
+    ("cutoff", "days_ahead", "included"),
+    [
+        (14, [], []),
+        (14, [30], []),
+        (14, [15, 14, 1], [1, 14]),
+        (None, [30], [30]),
+        (None, list(range(11, -1, -1)), list(range(10))),
+        ("missing", [30], [30]),
+        (0, [0, 1], []),
+    ],
+)
+def test_special_event_blocks_only_include_displayable_events(monkeypatch, use_session, cutoff, days_ahead, included):
+    today = date(2026, 9, 30)
+    monkeypatch.setattr(calendar_images, "current_date_cst", lambda: today)
+    events = [
+        SimpleNamespace(
+            name=f"Event day {day}",
+            start_date=today + timedelta(days=day),
+            start_time="0530",
+            org=SimpleNamespace(name="Synthetic AO"),
+            preblast_ts=None,
+        )
+        for day in days_ahead
+    ]
+    settings = {"org_id": 1}
+    if cutoff != "missing":
+        settings["calendar_config_special_days_out"] = cutoff
+    session = MagicMock() if use_session else None
+    if session is not None:
+        session.query.return_value.options.return_value.filter.return_value.all.return_value = events
+    else:
+        monkeypatch.setattr(calendar_images.DbManager, "find_records", lambda **kwargs: events)
+
+    result = [block.to_dict() for block in calendar_images.create_special_events_blocks(settings, session)]
+
+    if not included:
+        assert result == []
+    else:
+        assert [block["type"] for block in result] == ["header", "section"]
+        expected = "".join(
+            f"{index}. *Event day {day}* - {(today + timedelta(days=day)).strftime('%A, %B %d')}"
+            " - 0530 @ Synthetic AO\n"
+            for index, day in enumerate(included, 1)
+        )
+        assert result[1]["text"] == {"type": "mrkdwn", "text": expected}
+
+
+def test_special_event_blocks_order_by_date_then_start_time(monkeypatch):
+    today = date(2026, 9, 30)
+    monkeypatch.setattr(calendar_images, "current_date_cst", lambda: today)
+    org = SimpleNamespace(name="Synthetic AO")
+    later = [
+        SimpleNamespace(
+            name=f"Late {i}", start_date=today + timedelta(days=1), start_time="0600", org=org, preblast_ts=None
+        )
+        for i in range(10)
+    ]
+    early = SimpleNamespace(
+        name="Early", start_date=today + timedelta(days=1), start_time="0500", org=org, preblast_ts=None
+    )
+    earliest_date = SimpleNamespace(name="Today", start_date=today, start_time="0700", org=org, preblast_ts=None)
+    monkeypatch.setattr(calendar_images.DbManager, "find_records", lambda **kwargs: [*later, early, earliest_date])
+
+    result = [block.to_dict() for block in calendar_images.create_special_events_blocks({"org_id": 1})]
+
+    lines = result[1]["text"]["text"].splitlines()
+    assert len(lines) == 10
+    assert lines[0].startswith("1. *Today*")
+    assert lines[1].startswith("2. *Early*")
+
+
+def test_calendar_refresh_commits_when_special_events_are_outside_window(calendar_generation, monkeypatch):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    settings.update(
+        org_id=1,
+        bot_token="synthetic-token",
+        q_image_posting_enabled=True,
+        q_image_posting_channel="synthetic-channel",
+        calendar_config_special_days_out=14,
+        calendar_image_current="1-current-oldimagexx.png",
+    )
+    event = SimpleNamespace(start_date=date(2026, 10, 30), start_time="0530")
+    payloads = []
+
+    def post(**kwargs):
+        payload = [block.to_dict() for block in kwargs["blocks"]]
+        payloads.append(payload)
+        if any(block["type"] == "section" and not block.get("text", {}).get("text") for block in payload):
+            raise SlackApiError("Invalid empty section", {"ok": False, "error": "invalid_blocks"})
+        return {"ok": True, "ts": "synthetic-message"}
+
+    client = MagicMock()
+    client.chat_postMessage.side_effect = post
+    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    exports = run([row("Synthetic AO", now)], now, force=True, special_events=[event])
+
+    assert len(exports) == 1
+    assert image_metadata(settings, now)[0] == now.replace(tzinfo=UTC)
+    assert settings["q_image_posting_ts"] == "synthetic-message"
+    assert [block["type"] for block in payloads[0]] == ["header", "image", "actions"]
+    session.commit.assert_called_once()
+    session.rollback.assert_not_called()
 
 
 def test_special_event_blocks_reuse_generation_session(monkeypatch):
