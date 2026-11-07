@@ -80,7 +80,7 @@
     ]
   },
   "oauth_config": {
-    "redirect_urls": ["https://localhost:3006/slack/install"],
+    "redirect_urls": ["https://localhost:3007/slack/install"],
     "scopes": {
       "user": ["files:write"],
       "bot": [
@@ -139,13 +139,13 @@
   },
   "settings": {
     "event_subscriptions": {
-      "request_url": "https://localhost:3006/slack/events",
+      "request_url": "https://localhost:3007/slack/events",
       "bot_events": ["app_mention", "team_join"]
     },
     "interactivity": {
       "is_enabled": true,
-      "request_url": "https://localhost:3006/slack/events",
-      "message_menu_options_url": "https://localhost:3006/slack/events"
+      "request_url": "https://localhost:3007/slack/events",
+      "message_menu_options_url": "https://localhost:3007/slack/events"
     },
     "org_deploy_enabled": false,
     "socket_mode_enabled": true,

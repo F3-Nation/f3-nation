@@ -11,8 +11,10 @@ python_precommit_status=0
 turbo_scope_status=0
 mirror_postgres_image_status=0
 pr_triage_status=0
+github_scripts_status=0
 prt_status=0
 lint_fix_status=0
+local_ports_status=0
 review_links_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
@@ -26,8 +28,10 @@ bash scripts/python-precommit.test.sh || python_precommit_status=$?
 bash scripts/select-turbo-scope.test.sh || turbo_scope_status=$?
 bash scripts/mirror-postgres-image.test.sh || mirror_postgres_image_status=$?
 bash scripts/pr-triage.test.sh || pr_triage_status=$?
+node --test .github/scripts/ || github_scripts_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
 bash scripts/lint-fix.test.sh || lint_fix_status=$?
+bash scripts/local-ports.test.sh || local_ports_status=$?
 node scripts/check-review-links.mjs || review_links_status=$?
 bash scripts/check-review-links.test.sh || review_links_status=$?
 
@@ -75,8 +79,16 @@ if [ "$lint_fix_status" -ne 0 ]; then
   exit "$lint_fix_status"
 fi
 
+if [ "$local_ports_status" -ne 0 ]; then
+  exit "$local_ports_status"
+fi
+
 if [ "$review_links_status" -ne 0 ]; then
   exit "$review_links_status"
+fi
+
+if [ "$github_scripts_status" -ne 0 ]; then
+  exit "$github_scripts_status"
 fi
 
 exit "$pr_triage_status"

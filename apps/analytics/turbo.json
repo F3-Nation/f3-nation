@@ -1,0 +1,17 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "format": {
+      "cache": false
+    },
+    "lint": {
+      "cache": false
+    },
+    "test": {
+      "cache": false
+    },
+    "typecheck": {
+      "cache": false
+    }
+  }
+}

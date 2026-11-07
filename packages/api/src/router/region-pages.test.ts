@@ -16,7 +16,7 @@ import {
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
-import { clearMapDataCache } from "../lib/map-data-cache";
+import { cachedMapData, clearMapDataCache } from "../lib/map-data-cache";
 
 describe("Region Pages Router", () => {
   const createdEventIds: number[] = [];
@@ -359,6 +359,35 @@ describe("Region Pages Router", () => {
 
       const names = regions.map((r) => r.name);
       expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    });
+
+    it("never returns region emails to anonymous callers", async () => {
+      const { region, ao, location, eventType } = await createRegionFixture();
+      await createEvent(ao.id, location.id, [eventType.id]);
+
+      const client = createTestClient();
+      const regions = await client.regionPages.regions();
+      const listed = regions.find((r) => r.id === String(region.id));
+
+      expect(listed).toBeDefined();
+      expect(listed).not.toHaveProperty("email");
+      for (const r of regions) expect(r).not.toHaveProperty("email");
+
+      // The cached list must not hold emails either; the output schema
+      // alone would hide them from the response.
+      const cached = await cachedMapData<Record<string, unknown>[]>(
+        "regionPages.regions",
+        () => Promise.reject(new Error("expected a cache hit")),
+      );
+      const cachedRegion = cached.find((r) => r.id === String(region.id));
+      expect(cachedRegion).toMatchObject({ id: String(region.id) });
+      expect(cachedRegion).not.toHaveProperty("email");
+
+      // The region's own page still shows its contact email.
+      const page = await client.regionPages.region({
+        slug: kebabCase(region.name),
+      });
+      expect(page?.region.email).toBe("region@example.com");
     });
 
     it("hides regions under an inactive ancestor", async () => {

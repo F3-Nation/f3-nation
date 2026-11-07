@@ -258,6 +258,10 @@ client is hostile.
   a test that verifies a real token.
 - Classify `jose` errors by `err.code`, not `name` or message (minification
   breaks names).
+- auth3 (Better Auth) is an OpenID Connect provider only. An authorize
+  request must name its scopes and include `openid`; anything else gets
+  `invalid_scope`. Never fall back to a client's registered scopes:
+  `offline_access` (a refresh token) is granted only when it is requested.
 
 ### One-time secrets and codes
 
@@ -328,6 +332,11 @@ client is hostile.
 
 ### Tests
 
+- Registration stays non-submittable after confirmed account creation, including
+  while successful navigation leaves the form mounted. Preserve retries for
+  validation and non-401 failures before creation, rejected-code recovery, and
+  post-creation sign-in recovery; test clicks and native form submission for
+  both auth backends.
 - Deny-path tests discriminate: wrong value **and** missing value, a
   same-length wrong key, revoked **and** expired, a replayed token, and each
   branch of an allowlist.

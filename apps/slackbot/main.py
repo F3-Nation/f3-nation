@@ -257,7 +257,7 @@ def start_local_health_server(port: int):
 
 if __name__ == "__main__":
     port = 8080
-    local_http_port = int(os.environ.get("LOCAL_HTTP_PORT", "3006"))
+    local_http_port = int(os.environ.get("F3_SLACKBOT_PORT") or "3007")
 
     if LOCAL_DEVELOPMENT and not SOCKET_MODE:
         raise RuntimeError("Local development requires SOCKET_MODE=true.")
@@ -277,8 +277,12 @@ if __name__ == "__main__":
             pass
     else:
         if LOCAL_DEVELOPMENT:
-            start_local_health_server(local_http_port)
-            logging.getLogger().info(f"Local HTTP health server listening on http://localhost:{local_http_port}")
+            # The health page is a local convenience; a busy port must not stop the bot.
+            try:
+                start_local_health_server(local_http_port)
+                logging.getLogger().info(f"Local HTTP health server listening on http://localhost:{local_http_port}")
+            except OSError as exc:
+                logging.getLogger().warning(f"Local HTTP health server could not bind port {local_http_port}: {exc}")
 
         logging.getLogger().info("Running in local Socket Mode.")
 

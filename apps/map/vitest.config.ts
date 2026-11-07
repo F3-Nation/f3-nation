@@ -22,10 +22,10 @@ export default defineConfig({
         // instrumentation-client.ts back into the denominator with tests of
         // their own (see tooling/vitest/coverage.ts) — net upward.
         autoUpdate: true,
-        statements: 40.76,
-        branches: 38.87,
-        functions: 36.18,
-        lines: 40.79,
+        statements: 41.36,
+        branches: 39.97,
+        functions: 36.75,
+        lines: 41.42,
       },
     },
     exclude: [
@@ -37,7 +37,13 @@ export default defineConfig({
     ],
     server: {
       deps: {
-        inline: ["vitest-canvas-mock", "jest-canvas-mock"],
+        // Transform next-auth's extensionless Next imports for real cookie tests.
+        inline: [
+          "vitest-canvas-mock",
+          "jest-canvas-mock",
+          "next-auth",
+          "@auth/core",
+        ],
       },
     },
     alias: {

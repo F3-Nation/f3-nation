@@ -100,11 +100,12 @@ follow
 - **Second checkout or worktree:** `pnpm local:setup --slot N` (N = 1–9) gives it its own ports, containers, and database so it can run next to the main one. See [Running several checkouts at once](docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees).
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Each app, `packages/env`, and `packages/db` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
-- Code quality: always run `pnpm lint:fix` (whole repo only; it takes no arguments) and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
+- Code quality: always run `pnpm lint:fix` (whole repo only; it takes no arguments) and `pnpm format:fix` (whole repo only; do not append `--filter`) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - `pnpm lint` does **not** cover dead-code detection: CI's `lint` job runs `pnpm lint` and `pnpm lint:unused` (knip) as two separate steps, so run `pnpm lint:unused` as well before pushing.
 - `pnpm ci:local` chains the whole CI sequence (`format` → `lint` → `lint:unused` → `typecheck` → `build` → `test`) and is the closest local predictor of the CI gate.
 - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
 - Every other build/dev/test command is a standard Turborepo invocation — see the root `package.json` scripts.
+- Python checks also run through pnpm/Turbo. See [How Python is checked](apps/slackbot/AGENTS.md#how-python-is-checked) for task discovery, local `uv` skips, CI behavior, and CodeQL.
 
 ## Coding Style & Naming Conventions
 
@@ -236,6 +237,14 @@ These rules cover everything an AI assistant writes to GitHub — issues, pull r
 - **Never resolve review threads.** Resolving them is the PR author's responsibility, once they have read the replies; see [`docs/PR_REVIEW_PROCESS.md`](docs/PR_REVIEW_PROCESS.md#addressing-feedback).
 - **Reply to every review comment you act on**, in its thread, whether you changed code or decided not to, saying what you did and why.
 
+## Filing Issues
+
+These apply to every issue an agent opens, for any reason. The full rule and its rationale are in [`docs/CONTRIBUTING.md` § Filing issues](docs/CONTRIBUTING.md#filing-issues).
+
+- One objective per issue, as small as is reasonable. A task list holds only requirements for that objective, never a batch of independent findings.
+- An audit or review that finds several problems files one issue per problem; being related doesn't make them an Epic. A parent issue of type **Epic** is only for a large, cohesive effort whose issues together deliver one outcome. To set one up through the REST API: `PATCH .../issues/<n>` with `type` set to `Epic`, and `POST .../issues/<n>/sub_issues` with `sub_issue_id` set to the child's numeric `id` (not its issue number).
+- Before filing, search open and closed issues for a duplicate; then use an issue template and lead with the plain-language impact before the root cause and fix.
+
 ## Pull Request Guidelines
 
 - Every pull request should:
@@ -245,8 +254,8 @@ These rules cover everything an AI assistant writes to GitHub — issues, pull r
   - Never include secrets.
 - Keep PRs small enough to review in one sitting (review bots skip very large PRs), with mechanical sweeps (lint, renames, dependency bumps) separate from behavior changes.
 - Before opening a pull request, run `pnpm ci:local` (at minimum `pnpm lint` and `pnpm format`) and commit any coverage-threshold rewrite.
-- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI agents never resolve threads and sign what they write `_written by <model>_` (see [`.agents/skills/github/SKILL.md`](.agents/skills/github/SKILL.md)).
-- File pre-existing bugs found along the way as separate issues, not PR scope creep: search for duplicates, follow the issue templates, and lead with plain-language impact before the root cause and fix.
+- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI agents never resolve threads and sign what they write `_written by <model>_` (see [Writing to GitHub](#writing-to-github)).
+- File pre-existing bugs found along the way as separate issues (see [Filing Issues](#filing-issues)), not PR scope creep.
 
 ## Security & Environment
 

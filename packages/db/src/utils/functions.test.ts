@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
+import type * as AuditContext from "./audit-context";
+import type * as QueryTimeout from "./query-timeout";
 import {
+  createDbClient,
   getDatabaseNameFromUri,
   getDbUrl,
   migrationsDatabaseName,
@@ -15,6 +18,36 @@ const mockEnv = vi.hoisted(() => ({
 }));
 vi.mock("@acme/env", () => ({ env: mockEnv }));
 vi.mock("@acme/shared/common/constants", () => ({ isTest: true }));
+
+const wrapperOrder = vi.hoisted(() => {
+  vi.stubEnv("QUERY_TIMEOUT_MS", "60000");
+  return [] as string[];
+});
+vi.mock("./query-timeout", async (importOriginal) => {
+  const original = await importOriginal<typeof QueryTimeout>();
+  return {
+    ...original,
+    withQueryTimeout: vi.fn(
+      (...args: Parameters<typeof original.withQueryTimeout>) => {
+        wrapperOrder.push("timeout");
+        return original.withQueryTimeout(...args);
+      },
+    ),
+  };
+});
+vi.mock("./audit-context", async (importOriginal) => {
+  const original = await importOriginal<typeof AuditContext>();
+  return {
+    ...original,
+    withAuditContext: vi.fn(
+      (...args: Parameters<typeof original.withAuditContext>) => {
+        wrapperOrder.push("audit");
+        return original.withAuditContext(...args);
+      },
+    ),
+  };
+});
+afterAll(() => vi.unstubAllEnvs());
 
 const SOCKET = "/cloudsql/f3data:us-central1:f3data";
 
@@ -129,6 +162,22 @@ describe("getDbUrl", () => {
   it("throws when no database url is configured", () => {
     mockEnv.TEST_DATABASE_URL = undefined;
     expect(() => getDbUrl()).toThrow(/DATABASE_URL is not defined/);
+  });
+});
+
+describe("createDbClient", () => {
+  it("installs the timeout before the audit wrapper", async () => {
+    const previousDatabaseUrl = mockEnv.TEST_DATABASE_URL;
+    mockEnv.TEST_DATABASE_URL = "postgres://u:p@127.0.0.1/f3_test";
+    wrapperOrder.length = 0;
+    let client: ReturnType<typeof createDbClient> | undefined;
+    try {
+      client = createDbClient();
+      expect(wrapperOrder).toEqual(["timeout", "audit"]);
+    } finally {
+      mockEnv.TEST_DATABASE_URL = previousDatabaseUrl;
+      await client?.close();
+    }
   });
 });
 

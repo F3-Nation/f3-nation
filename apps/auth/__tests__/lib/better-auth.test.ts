@@ -8,6 +8,7 @@ import {
   generateKeyPair,
 } from "jose";
 import { getAuthTables } from "@better-auth/core/db";
+import { getIP } from "@better-auth/core/utils/ip";
 import { isAccessTokenPayload, verifyAccessToken } from "@f3nation/sso";
 
 import {
@@ -692,6 +693,158 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
   });
 });
 
+describe("authorize requires the openid scope (#1439)", () => {
+  async function setUp(scope = "openid profile email offline_access") {
+    const auth = createTestAuth(4250);
+    const sessionToken = await signInAndGetToken(
+      auth,
+      "strict-oidc@f3nation.test",
+    );
+    const client = await auth.api.createOAuthClient({
+      headers: { authorization: `Bearer ${sessionToken}` },
+      body: {
+        redirect_uris: [REDIRECT_URI],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        application_type: "web",
+        scope,
+      },
+    });
+    return { auth, sessionToken, client };
+  }
+
+  function authorizeParams(clientId: string, scope: string | undefined) {
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: REDIRECT_URI,
+      code_challenge: pkcePair().challenge,
+      code_challenge_method: "S256",
+      state: "strict-oidc-state",
+    });
+    if (scope !== undefined) params.set("scope", scope);
+    return params;
+  }
+
+  function expectInvalidScopeRedirect(response: Response) {
+    const location = response.headers.get("location");
+    expect(location).toBeTruthy();
+    const url = new URL(location!);
+    expect(`${url.origin}${url.pathname}`).toBe(REDIRECT_URI);
+    expect(url.searchParams.get("error")).toBe("invalid_scope");
+    expect(url.searchParams.get("state")).toBe("strict-oidc-state");
+    expect(url.searchParams.get("code")).toBeNull();
+  }
+
+  it.each([
+    ["no scope", undefined],
+    ["an empty scope", ""],
+    ["a scope without openid", "profile email"],
+    ["only offline_access", "offline_access"],
+  ])("sends %s back to the client as invalid_scope", async (_label, scope) => {
+    const { auth, sessionToken, client } = await setUp();
+    const response = await auth.handler(
+      new Request(
+        `${ENDPOINT}/oauth2/authorize?${authorizeParams(client.client_id, scope).toString()}`,
+        { headers: { authorization: `Bearer ${sessionToken}` } },
+      ),
+    );
+    expectInvalidScopeRedirect(response);
+  });
+
+  it("applies the same rule to a POST authorize request", async () => {
+    const { auth, sessionToken, client } = await setUp();
+    const response = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/authorize`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: authorizeParams(client.client_id, undefined).toString(),
+      }),
+    );
+    expectInvalidScopeRedirect(response);
+  });
+
+  it("checks a POST's body, not its query, for the scope", async () => {
+    const { auth, sessionToken, client } = await setUp();
+    const response = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/authorize?scope=openid`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: authorizeParams(client.client_id, undefined).toString(),
+      }),
+    );
+    expectInvalidScopeRedirect(response);
+  });
+
+  it("issues no code for a POST authorize request with no body", async () => {
+    const { auth, sessionToken } = await setUp();
+    const response = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/authorize`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${sessionToken}` },
+      }),
+    );
+    // The plugin rejects it for the missing client_id before any scope check.
+    expect(response.headers.get("location") ?? "").not.toContain("code=");
+  });
+
+  it("never redirects to an unregistered redirect_uri, even without a scope", async () => {
+    const { auth, sessionToken, client } = await setUp();
+    const params = authorizeParams(client.client_id, undefined);
+    params.set("redirect_uri", "https://attacker.example.com/callback");
+    const response = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/authorize?${params.toString()}`, {
+        headers: { authorization: `Bearer ${sessionToken}` },
+      }),
+    );
+    expect(response.headers.get("location") ?? "").not.toContain(
+      "attacker.example.com",
+    );
+  });
+
+  it("issues no refresh token unless offline_access is requested", async () => {
+    const { auth, sessionToken, client } = await setUp();
+    const tokenBody = (await authorizeAndExchange(auth, {
+      sessionToken,
+      clientId: client.client_id,
+      clientSecret: client.client_secret,
+      redirectUri: REDIRECT_URI,
+      scope: "openid profile email",
+    })) as { refresh_token?: string; id_token?: string };
+    expect(tokenBody.id_token).toBeTruthy();
+    expect(tokenBody.refresh_token).toBeUndefined();
+  });
+
+  it("issues a refresh token when a registered client requests offline_access", async () => {
+    const { auth, sessionToken, client } = await setUp();
+    const tokenBody = (await authorizeAndExchange(auth, {
+      sessionToken,
+      clientId: client.client_id,
+      clientSecret: client.client_secret,
+      redirectUri: REDIRECT_URI,
+      scope: "openid offline_access",
+    })) as { refresh_token?: string };
+    expect(tokenBody.refresh_token).toBeTruthy();
+  });
+
+  it("rejects offline_access for a client not registered for it", async () => {
+    const { auth, sessionToken, client } = await setUp("openid profile email");
+    const response = await auth.handler(
+      new Request(
+        `${ENDPOINT}/oauth2/authorize?${authorizeParams(client.client_id, "openid offline_access").toString()}`,
+        { headers: { authorization: `Bearer ${sessionToken}` } },
+      ),
+    );
+    expectInvalidScopeRedirect(response);
+  });
+});
+
 describe("allowProductionClientAction", () => {
   it("allows only read, list, and rotate", async () => {
     for (const action of [
@@ -744,6 +897,39 @@ describe("deleteBetterAuthOAuthTokens", () => {
       deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
     ).rejects.toThrow("refresh table down");
     expect(deleteMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("client IP for Better Auth's rate limiter", () => {
+  const options = buildBetterAuthOptions({
+    baseURL: BASE_URL,
+    basePath: BASE_PATH,
+    secret: "test-only-not-a-real-secret",
+    issuer: ISSUER,
+    database: memoryAdapter({}),
+    sendVerificationOTP: () => Promise.resolve(),
+    findF3UserId: () => Promise.resolve(null),
+    claimOtpAttempt: () => Promise.resolve(true),
+    isNationAdmin: () => Promise.resolve(false),
+    findF3Profile: findOnboardedProfile,
+    allowClientAction: () => Promise.resolve(true),
+  });
+
+  it("keys on the Cloud Run-appended hop, not a forged leading entry", () => {
+    for (const forged of ["6.6.6.6", "127.0.0.1", "not-an-ip"]) {
+      expect(
+        getIP(
+          new Headers({ "x-forwarded-for": `${forged}, 203.0.113.7` }),
+          options,
+        ),
+      ).toBe("203.0.113.7");
+    }
+  });
+
+  it("still keys on a single-entry header", () => {
+    expect(
+      getIP(new Headers({ "x-forwarded-for": "203.0.113.7" }), options),
+    ).toBe("203.0.113.7");
   });
 });
 

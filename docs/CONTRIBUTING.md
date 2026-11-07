@@ -28,9 +28,11 @@ All the apps in this monorepo can be developed and tested locally. See [LOCAL_DE
 
 ## Finding PRs that need you
 
-Run `pnpm pr:triage` to see every open PR sorted by what it needs next: waiting on the AI bots, needs the `pr-review-inline` skill, waiting on the author's unresolved threads, needs the `pr-local-test` skill, needs a codeowner's approval, or approved and waiting to merge. Your own PRs get their own section, since someone else has to approve them. Run `pnpm pr:triage:html` to open the same thing as a board in your browser; run it again to refresh.
+Run `pnpm pr:triage` to see every open PR sorted by what it needs next: waiting on the AI bots, needs the `pr-review-inline` skill, waiting on the author's unresolved threads, waiting on a reviewer's reply (the author has answered every open thread), needs the `pr-local-test` skill, needs a codeowner's approval, or approved and waiting to merge. Only a codeowner's skill run moves a PR along in the Codeowners PR Report; `pnpm pr:triage` also counts runs recorded in your own local ledger. Codeowners are read from [`.github/CODEOWNERS`](../.github/CODEOWNERS). Your own PRs get their own section, since someone else has to approve them. Run `pnpm pr:triage:html` to open the same thing as a board in your browser; run it again to refresh. Buttons at the top of the board narrow it to the PRs assigned to you or the ones nobody is assigned to.
 
 It needs the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`) and `jq`, and works on macOS, Linux and WSL. Drafts and Renovate and release-please PRs are left out. `scripts/pr-triage.sh --help` lists the options.
+
+`scripts/pr-triage.sh --json` prints the same data as JSON. The Codeowners PR Report reads it: a workflow ([`codeowners-pr-report.yml`](../.github/workflows/codeowners-pr-report.yml)) posts the PRs a codeowner can act on to the #monorepo Slack channel each weekday morning, as described in [How to tell it's your turn](PR_REVIEW_PROCESS.md#how-to-tell-its-your-turn). Its Slack mentions come from the `CODEOWNERS_SLACK_IDS` repository variable, a JSON object of GitHub login to Slack member ID; a codeowner missing from it shows as plain text.
 
 ## Use of AI
 
@@ -38,13 +40,21 @@ AI tools are welcome for writing code, tests, and PR descriptions. You're respon
 
 Conventions for writing code live in each area's `AGENTS.md`; rules for reviewing it live in [`REVIEW.md`](../REVIEW.md), which every AI reviewer loads. If a review bot keeps raising the same false positive, add a "do not flag" entry to `REVIEW.md`. If reviewers keep catching the same mistake, add a one-line rule to the matching `AGENTS.md`.
 
+## Filing issues
+
+Each issue covers one objective and is as small as is reasonable, ideally something a single PR can close. Small, single-focus issues are easier to claim, track and review, and they're the kind that suits `good first issue`.
+
+- An issue can have a task list, but every task is a requirement for that one objective. If a task could be done, reviewed and closed on its own, it's a separate issue.
+- Found several problems (an audit, a review, a bug bash)? File one issue per problem, and mention closely related ones in each other's descriptions. Being related isn't a reason for an Epic: the **Epic** type is for a large, cohesive effort whose issues only together deliver one outcome, each added to it as a sub-issue. Setting an issue's type and adding sub-issues needs triage access or higher. Without it, file the Epic and its child issues yourself, then comment on the Epic mentioning a code owner (see [`.github/CODEOWNERS`](../.github/CODEOWNERS)) and ask them to set its type and link the children.
+- Search open and closed issues for a duplicate first, use an issue template, and lead with the plain-language impact before the root cause and fix.
+
 ## Choosing which Issues to work on
 
 Short answer: work on whatever interests you. Any improvement you can make will be appreciated, even if there's not a current Issue for it.
 
 New to the project? Issues labeled [`good first issue`](https://github.com/F3-Nation/f3-nation/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) are a good place to start; [`help wanted`](https://github.com/F3-Nation/f3-nation/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) issues are ones we'd love a hand with.
 
-Some issues are checklists of small, independent items — each one is meant to be its own PR. Comment on the issue to claim an item before you start, and once your PR merges, comment again with the PR number and what you verified. Contributors can't tick boxes in someone else's issue, so a maintainer will check it off from your comment.
+Larger efforts are tracked as Epics: parent issues whose sub-issues are each their own small piece of work. Pick a sub-issue and comment on it to claim it before you start.
 
 If you're looking to drive along the roadmap with us, check out the Issues project board: https://github.com/orgs/F3-Nation/projects/4
 

@@ -74,9 +74,11 @@ async function loadClient(env: { authUrl?: string; list?: string }) {
   vi.stubEnv("AUTH_TRUSTED_ISSUERS", env.list);
   vi.resetModules();
   const { protectedProcedure } = await import("./shared");
+  const { auditContext } = await import("@acme/db");
   const router = {
     identity: protectedProcedure.handler(({ context }) => ({
       id: context.session!.id,
+      auditActor: auditContext.getStore()?.userId,
     })),
   };
   return (token: string) =>
@@ -94,11 +96,16 @@ describe("JWT verification across trusted issuers", () => {
   let userId: number;
   let primaryKey: CryptoKey;
   let auth3Key: CryptoKey;
-  const sign = (issuer: string, privateKey: CryptoKey, tokenUse = "access") =>
+  const sign = (
+    issuer: string,
+    privateKey: CryptoKey,
+    tokenUse = "access",
+    subject = userId,
+  ) =>
     new SignJWT({ token_use: tokenUse })
       .setProtectedHeader({ alg: "RS256" })
       .setIssuer(issuer)
-      .setSubject(String(userId))
+      .setSubject(String(subject))
       .setIssuedAt()
       .setExpirationTime("1h")
       .sign(privateKey);
@@ -168,6 +175,7 @@ describe("JWT verification across trusted issuers", () => {
 
       await expect(call(await sign(PRIMARY, primaryKey))).resolves.toEqual({
         id: userId,
+        auditActor: userId,
       });
 
       mocks.fetched.length = 0;
@@ -197,6 +205,7 @@ describe("JWT verification across trusted issuers", () => {
     it("accepts the first issuer's token, checked against its keys", async () => {
       await expect(call(await sign(PRIMARY, primaryKey))).resolves.toEqual({
         id: userId,
+        auditActor: userId,
       });
       expect(mocks.fetched).toEqual([jwksUrl(PRIMARY)]);
     });
@@ -204,8 +213,18 @@ describe("JWT verification across trusted issuers", () => {
     it("accepts the second issuer's token, checked against its keys", async () => {
       await expect(call(await sign(AUTH3, auth3Key))).resolves.toEqual({
         id: userId,
+        auditActor: userId,
       });
       expect(mocks.fetched).toEqual([jwksUrl(AUTH3)]);
+    });
+
+    it("attributes verified bearer user 1 without legacy-cookie ambiguity", async () => {
+      await expect(
+        call(await sign(PRIMARY, primaryKey, "access", 1)),
+      ).resolves.toEqual({
+        id: 1,
+        auditActor: 1,
+      });
     });
 
     it("rejects an issuer that isn't allowlisted without fetching any keys", async () => {
@@ -280,6 +299,7 @@ describe("JWT verification across trusted issuers", () => {
       );
       await expect(call(await sign(PRIMARY, primaryKey))).resolves.toEqual({
         id: userId,
+        auditActor: userId,
       });
     });
 

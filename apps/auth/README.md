@@ -33,7 +33,7 @@ Central authentication and authorization server for the F3 Nation ecosystem. Iss
 ## Quick Start
 
 ```bash
-# From monorepo root -- ensure Node >=20.19 and pnpm 8.15.1
+# From monorepo root -- `nvm use` picks the Node version in .nvmrc
 
 # 1. Install dependencies
 pnpm install
@@ -379,6 +379,20 @@ GET /.well-known/openid-configuration
 | `/login/email/verify` | Code input form. Checks if user exists first -- existing users sign in, new users are redirected to `/register` with their MFA code.   |
 | `/register`           | New user registration form. Collects First Name, Last Name, F3 Name, Home Region (searchable dropdown), Phone, Emergency Contact info. |
 | `/onboarding`         | Profile completion form (F3 Name, First Name, Last Name). For legacy users who haven't completed onboarding.                           |
+
+After registration and sign-in succeed, the form keeps submission disabled until
+navigation unmounts it, preventing another registration request while the next
+page loads. Validation errors and non-401 failures before confirmed creation
+remain retryable. A rejected verification code offers **Sign in again** to get a
+fresh code. After confirmed creation, a sign-in failure or a thrown navigation
+call also offers **Sign in again** instead of submitting registration again.
+This behavior applies to both auth backends.
+
+The email and verification code identify a registration attempt. Changing either
+resets the form's fields and submission state, reapplies phone defaults, and
+restores any answers saved for that email
+after a rejected code. Changing other URL parameters or rerendering the same
+attempt does not release its submission lock.
 
 All pages use Tailwind CSS with HSL CSS variables (light mode, F3 Nation color scheme: cream background, white cards, F3 red primary).
 
@@ -735,7 +749,7 @@ gcloud projects add-iam-policy-binding f3data \
 
 The Dockerfile uses a 3-stage build:
 
-1. **Builder**: `node:20-alpine` + corepack/pnpm + turbo prune for minimal workspace
+1. **Builder**: `node` alpine image (same version as `.nvmrc`) + corepack/pnpm + turbo prune for minimal workspace
 2. **Installer**: `pnpm install --frozen-lockfile` + `turbo build`
 3. **Runner**: Standalone Next.js output, non-root user (`auth`, UID 1001), port 8080 (Cloud Run default)
 
