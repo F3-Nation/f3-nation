@@ -12,15 +12,10 @@ export class InfoRequestGuard {
   private locationId: number | null = null;
   private pinnedOrgId: number | null = null;
 
-  /**
-   * Mark `id` as the active org selection. Clears any location selection.
-   * Returns `true` when this is a switch to a different org.
-   */
-  selectOrg(id: number): boolean {
-    const changed = this.orgId !== id;
+  /** Mark `id` as the active org selection. Clears any location selection. */
+  selectOrg(id: number): void {
     this.orgId = id;
     this.locationId = null;
-    return changed;
   }
 
   /** Mark `id` as the active location selection. Clears any org selection. */

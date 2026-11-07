@@ -231,13 +231,12 @@ export default function OrgMap() {
   // The loaded hierarchy, for values derived during render (the info panel).
   // Set in the same update as isLoaded; the refs above hold the same maps for
   // Leaflet callbacks and event handlers.
-  const [hierarchy, setHierarchy] = useState<{
-    orgById: Map<number, Org>;
-    childrenByParent: Map<number, Org[]>;
-    pointsById: Map<number, Point[]>;
-    metricsById: Map<number, OrgMetrics>;
-    descendantCache: Map<number, number[]>;
-  } | null>(null);
+  const [hierarchy, setHierarchy] = useState<
+    | (Omit<ReturnType<typeof buildOrgHierarchy>, "orgLocationsById"> & {
+        descendantCache: Map<number, number[]>;
+      })
+    | null
+  >(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentLevel, setCurrentLevel] = useState<OrgType>("sector");
   const [selectedPath, setSelectedPath] = useState<Org[]>([]);
@@ -991,8 +990,8 @@ export default function OrgMap() {
       ? undefined
       : infoState.org;
 
-  // A climb result for an earlier infoState is stale: show nothing until the
-  // current one's climb reports.
+  // Ignore a climb result tagged with an earlier infoState. Until the current
+  // climb reports, an org with no roles of its own shows "No admins listed."
   const currentAdminLookup =
     adminLookup?.forInfoState === infoState ? adminLookup : null;
   const nearestAdminOrg = currentAdminLookup?.nearestAdminOrg ?? null;
