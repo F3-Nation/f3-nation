@@ -54,3 +54,49 @@ describe("env skipValidation", () => {
     await expect(importEnv()).rejects.toThrow(/Invalid environment variables/);
   });
 });
+
+// F3_API_BASE_URL is required and must be a URL, so a missing or malformed
+// value fails at startup instead of on the first upstream request.
+describe("env F3_API_BASE_URL validation", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("CI", "");
+    vi.stubEnv("SKIP_ENV_VALIDATION", "");
+    vi.stubEnv("npm_lifecycle_event", "");
+    vi.stubEnv("AUTH_PROVIDER_URL", "http://localhost:3001");
+    vi.stubEnv("OAUTH_CLIENT_ID", "client-id");
+    vi.stubEnv("OAUTH_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("OAUTH_REDIRECT_URI", "http://localhost:3002/callback");
+    vi.stubEnv("F3_CHANNEL", "local");
+    vi.stubEnv("GCS_CREDENTIALS", "credentials");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3002");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("accepts a valid URL and exposes it unchanged", async () => {
+    vi.stubEnv("F3_API_BASE_URL", "https://api.test.f3nation.com/v1");
+
+    const { env } = await import("@/env");
+
+    expect(env.F3_API_BASE_URL).toBe("https://api.test.f3nation.com/v1");
+  });
+
+  it("rejects a missing value", async () => {
+    vi.stubEnv("F3_API_BASE_URL", "");
+
+    await expect(import("@/env")).rejects.toThrow(
+      /Invalid environment variables/,
+    );
+  });
+
+  it("rejects a value that is not a URL", async () => {
+    vi.stubEnv("F3_API_BASE_URL", "not-a-url");
+
+    await expect(import("@/env")).rejects.toThrow(
+      /Invalid environment variables/,
+    );
+  });
+});
