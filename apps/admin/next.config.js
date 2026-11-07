@@ -12,6 +12,7 @@ jiti("./src/env");
 const config = {
   output: "standalone",
   reactStrictMode: true,
+  typedRoutes: true,
   poweredByHeader: false,
   headers: nextSecurityHeaders({ frame: "deny" }),
 
