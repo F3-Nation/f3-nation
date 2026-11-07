@@ -870,5 +870,41 @@ def test_hc_un_hc_button_hcs_a_non_q_non_attendee():
     assert thread_reply.call_args.kwargs["is_hc"] is True
 
 
+@pytest.mark.parametrize("in_modal", [False, True])
+def test_preblast_action_renders_requesting_workspace_identity(monkeypatch, in_modal):
+    from utilities import helper_functions
+
+    monkeypatch.setattr(helper_functions, "session_scope", lambda: pytest.fail("caller-only test must not access DB"))
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: pytest.fail("no DB"))
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS.update(
+        {
+            ("T_OTHER", "U_ACTOR"): SimpleNamespace(user_id=99, user_name="Other Actor", avatar_url="other-avatar"),
+            ("T_ACTIVE", "U_ACTOR"): SimpleNamespace(user_id=8, user_name="Active Actor", avatar_url="active-avatar"),
+        }
+    )
+    body = _hc_un_hc_body()
+    if in_modal:
+        body["view"] = {
+            "id": "V_TEST",
+            "private_metadata": '{"event_instance_id":42,"preblast_ts":"1700000000.000100"}',
+        }
+        body["actions"][0]["action_id"] = actions.EVENT_PREBLAST_HC
+    info = SimpleNamespace(attendance_records=[], preblast_blocks=[], event_record=SimpleNamespace(meta={}))
+    client = MagicMock()
+    with (
+        patch("features.calendar.event_preblast.get_user", return_value=SimpleNamespace(user_id=8)),
+        patch("features.calendar.event_preblast._build_preblast_service"),
+        patch("features.calendar.event_preblast._user_is_q", return_value=False),
+        patch("features.calendar.event_preblast.build_preblast_info", return_value=info),
+        patch("features.calendar.event_preblast.build_event_preblast_form"),
+        patch("features.calendar.event_preblast.get_preblast_channel", return_value="C_PREBLAST"),
+        patch("features.calendar.event_preblast.post_hc_thread_reply"),
+    ):
+        handle_event_preblast_action(body, client, MagicMock(), {}, SimpleNamespace(team_id="T_ACTIVE", org_id=1))
+    assert client.chat_update.call_args.kwargs["username"] == "Active Actor (via F3 Nation)"
+    assert client.chat_update.call_args.kwargs["icon_url"] == "active-avatar"
+
+
 if __name__ == "__main__":
     unittest.main()

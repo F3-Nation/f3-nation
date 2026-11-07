@@ -875,7 +875,19 @@ class EventInstancePreblastChannelTest(unittest.TestCase):
             {META_PREBLAST_CHANNEL_ID: "CSELECTED"},
         )
         mock_create_record.assert_called_once()
+        self.assertEqual(mock_create_record.call_args.args[0].user_id, 99)
         mock_send_preblast.assert_called_once()
+
+        service.reset_mock()
+        mock_create_record.reset_mock()
+        mock_send_preblast.reset_mock()
+        with patch("features.calendar.event_instance.get_user", side_effect=ValueError("unlinked identity")):
+            with self.assertRaisesRegex(ValueError, "unlinked identity"):
+                handle_event_instance_add(body, MagicMock(), MagicMock(), {}, self._region_record())
+        service.create_instance.assert_not_called()
+        service.update_instance.assert_not_called()
+        mock_create_record.assert_not_called()
+        mock_send_preblast.assert_not_called()
 
 
 class HandleEventInstanceCloseTest(unittest.TestCase):

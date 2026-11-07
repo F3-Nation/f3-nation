@@ -1100,6 +1100,7 @@ class SlackUser(Base):
     """  # noqa: E501
 
     __tablename__ = "slack_users"
+    __table_args__ = (UniqueConstraint("slack_id", "slack_team_id", name="uq_slack_users_slack_id_team_id"),)
 
     id: Mapped[intpk]
     slack_id: Mapped[str]

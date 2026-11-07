@@ -14,6 +14,7 @@ from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users
 from utilities.helper_functions import (
     REGION_RECORDS,
+    get_member_email,
     get_user,
     safe_convert,
     safe_get,
@@ -48,7 +49,7 @@ def _is_admin(body: dict, region_record: SlackSettings, client: WebClient, logge
     if not region_record.org_id:
         return False
     user_id = safe_get(body, "user_id") or safe_get(body, "user", "id")
-    slack_user = get_user(user_id, region_record, client, logger)
+    slack_user = get_user(user_id, region_record, client, logger, require_link=False)
     admin_users = get_admin_users(region_record.org_id, region_record.team_id)
     return any(
         u[0].id == slack_user.user_id for u in admin_users if u[1] and u[1].slack_id and u[1].slack_id != "USLACKBOT"
@@ -176,6 +177,7 @@ def _build_region_info_blocks(
     org=None,
 ) -> list:
     """Return the dynamic info blocks shown after a region is selected."""
+    requester_email = get_member_email(requester_email) or ""
     blocks = [DividerBlock()]
 
     if not has_slack:
@@ -224,6 +226,14 @@ def _build_region_info_blocks(
             )
         )
     elif target_settings and target_settings.downrange_invite_sharing == "direct_email":
+        if not requester_email:
+            blocks.append(
+                SectionBlock(
+                    label="This region requires an email address for invitations. "
+                    "Check that the app can read your email, then reopen Downrange."
+                )
+            )
+            return blocks
         blocks.append(
             SectionBlock(
                 label=f":email: *{selected_org_name}* is on Slack! They accept invite requests via direct email."
@@ -481,9 +491,9 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
     safe_metadata = {"is_admin": bool(is_admin_user)}
 
     # Look up requester info
-    requester_slack_user = get_user(user_id, region_record, client, logger)
+    requester_slack_user = get_user(user_id, region_record, client, logger, require_link=False)
     requester_name = requester_slack_user.user_name or "Unknown"
-    requester_email = requester_slack_user.email or ""
+    requester_email = get_member_email(requester_slack_user.email) or ""
     requester_region_name = None
     if requester_slack_user.user_id:
         requester_user = DbManager.get(User, requester_slack_user.user_id, joinedloads=[User.home_region_org])
@@ -563,7 +573,7 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
     requester_user_id = action_value.get("requester_user_id") or safe_get(body, "user", "id")
     requester_name = action_value.get("requester_name", "Unknown")
     requester_region_name = action_value.get("requester_region_name", "Unknown")
-    requester_email = action_value.get("requester_email", "")
+    requester_email = get_member_email(action_value.get("requester_email")) or ""
 
     # Get intro text from form state (may be None)
     state_values = safe_get(body, "view", "state", "values") or {}
@@ -613,6 +623,22 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
     # Get the target region's current invite-sharing setting to determine DM format
     _, _, target_settings = _get_target_region_info(target_org_id, logger)
     is_direct_email = target_settings and target_settings.downrange_invite_sharing == "direct_email"
+    if is_direct_email and not requester_email:
+        BlockView(
+            blocks=[
+                SectionBlock(
+                    label="This invite requires an email address. "
+                    "Check that the app can read your email, then reopen Downrange."
+                )
+            ]
+        ).update_modal(
+            client=client,
+            view_id=safe_get(body, "view", "id"),
+            title_text="Email needed",
+            callback_id=actions.DOWNRANGE_CALLBACK_ID,
+            submit_button_text="None",
+        )
+        return
 
     # Build request message for target admins
     intro_section = f"\n\n*Their intro:*\n{intro_text}" if intro_text else ""

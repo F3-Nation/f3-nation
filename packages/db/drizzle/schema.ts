@@ -338,6 +338,10 @@ export const slackUsers = pgTable(
       table.userId.asc().nullsLast(),
       table.slackTeamId.asc().nullsLast(),
     ),
+    unique("uq_slack_users_slack_id_team_id").on(
+      table.slackId,
+      table.slackTeamId,
+    ),
     foreignKey({
       columns: [table.userId],
       foreignColumns: [users.id],

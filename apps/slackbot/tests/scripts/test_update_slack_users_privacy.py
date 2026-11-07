@@ -1,9 +1,15 @@
+import io
+import json
+import logging
 import os
 import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from google.cloud.logging_v2.handlers import StructuredLogHandler
+from slack_sdk.errors import SlackApiError
+from slack_sdk.web import SlackResponse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -65,10 +71,20 @@ def test_script_validates_environment_before_running_jobs(monkeypatch):
     sync.assert_not_called()
 
 
-def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
+@pytest.mark.parametrize("initial_user_id,resolved_user_id", [(42, 42), (None, None), (None, 42)])
+def test_production_sync_imports_slack_name_and_avatar(monkeypatch, caplog, initial_user_id, resolved_user_id):
     monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
-    slack_user = SimpleNamespace(id=17, slack_id="UFAKE001", user_id=42, slack_updated=1)
-    slack_space = SimpleNamespace(settings={"bot_token": "fabricated-token"})
+    slack_user = SimpleNamespace(
+        id=17, slack_id="UFAKE001", slack_team_id="T_ACTIVE", user_id=initial_user_id, slack_updated=1
+    )
+
+    def resolve(*_a, **_k):
+        slack_user.user_id = resolved_user_id
+        return slack_user
+
+    monkeypatch.setattr(update_slack_users, "create_user", resolve)
+    caplog.set_level("INFO")
+    slack_space = SimpleNamespace(team_id="T_ACTIVE", settings={"bot_token": "fabricated-token"})
     org_space = SimpleNamespace(org_id=3)
     monkeypatch.setattr(update_slack_users.DbManager, "find_records", Mock(return_value=[slack_user]))
     monkeypatch.setattr(
@@ -99,6 +115,12 @@ def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
 
     update_slack_users.update_slack_users()
 
+    summaries = [
+        r.json_fields
+        for r in caplog.records
+        if getattr(r, "json_fields", {}).get("event") == "slack.identity.sync_summary"
+    ]
+    assert summaries[0]["created"] == int(initial_user_id is None and resolved_user_id is not None)
     client.users_list.assert_called_once_with()
     update_record.assert_called_once()
     model, record_id, fields = update_record.call_args.args
@@ -107,3 +129,142 @@ def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
     fields_by_name = {column.key: value for column, value in fields.items()}
     assert fields_by_name["user_name"] == "Fabricated Display"
     assert fields_by_name["avatar_url"] == "https://example.invalid/fabricated-avatar.png"
+
+
+@pytest.mark.parametrize("linked", [True, False])
+def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplog, capsys, linked):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    rows = [
+        SimpleNamespace(id=10, slack_id="USHARED", slack_team_id="T_FIRST", user_id=1, slack_updated=1),
+        SimpleNamespace(id=20, slack_id="USHARED", slack_team_id="T_SECOND", user_id=2, slack_updated=1),
+    ]
+    monkeypatch.setattr(update_slack_users.DbManager, "find_records", lambda **_k: rows)
+    spaces = [
+        (SimpleNamespace(team_id=team, settings={"bot_token": "fabricated-token"}), SimpleNamespace(org_id=org))
+        for team, org in [("T_FIRST", 1), ("T_SECOND", 2), ("T_THIRD", 3), ("T_THIRD", 3)]
+    ]
+    monkeypatch.setattr(update_slack_users.DbManager, "find_join_records2", lambda *_a, **_k: spaces)
+    member = {
+        "id": "USHARED",
+        "is_bot": False,
+        "updated": 2,
+        "name": "Fabricated Name",
+        "profile": {"display_name": "Updated Name", "image_512": "updated-avatar"},
+    }
+    monkeypatch.setattr(
+        update_slack_users, "WebClient", lambda **_k: SimpleNamespace(users_list=lambda: {"members": [member, member]})
+    )
+    updates = []
+    monkeypatch.setattr(update_slack_users.DbManager, "update_record", lambda *a: updates.append(a))
+    creations = []
+
+    def create(info, org_id, *, team_id):
+        creations.append((info, org_id, team_id))
+        return SimpleNamespace(
+            id=30, slack_id="USHARED", slack_team_id=team_id, user_id=3 if linked else None, slack_updated=2
+        )
+
+    monkeypatch.setattr(update_slack_users, "create_user", create)
+    caplog.set_level("INFO")
+    update_slack_users.update_slack_users()
+    assert {args[1] for args in updates} == {10, 20}
+    assert creations == [(member, 3, "T_THIRD")] * (1 if linked else 4)
+    summaries = [
+        record
+        for record in caplog.records
+        if getattr(record, "json_fields", {}).get("event") == "slack.identity.sync_summary"
+    ]
+    assert [record.json_fields for record in summaries] == [
+        {"event": "slack.identity.sync_summary", "team_id": team, "created": count}
+        for team, count in [("T_FIRST", 0), ("T_SECOND", 0), ("T_THIRD", 1), ("T_THIRD", 0)]
+    ]
+    assert all(f"created={record.json_fields['created']}" in record.getMessage() for record in summaries)
+    output = capsys.readouterr().out + caplog.text
+    assert "USHARED" not in output and "Fabricated Name" not in output and "fabricated-token" not in output
+
+
+@pytest.mark.parametrize(
+    "error_code,expected_code",
+    [
+        ({"error": "missing_scope"}, "missing_scope"),
+        ({"error": "private-member@f3local.dev fabricated-token"}, "other"),
+        ({"error": {"private": "U_PRIVATE"}}, "other"),
+        (b"fabricated-token", "other"),
+        ([], "other"),
+        ("fabricated-token", "other"),
+        (123, "other"),
+        (None, "other"),
+    ],
+    ids=["known", "private", "malformed", "binary", "list", "string", "number", "null"],
+)
+@pytest.mark.parametrize("wrapped", [False, True], ids=["raw-response", "sdk-response"])
+def test_sync_failure_logs_safe_context_and_continues(monkeypatch, caplog, error_code, expected_code, wrapped):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    monkeypatch.setattr(update_slack_users.DbManager, "find_records", lambda **_kwargs: [])
+    spaces = [
+        (SimpleNamespace(team_id=team, settings={"bot_token": "fabricated-token"}), SimpleNamespace(org_id=1))
+        for team in ("T_DIAGNOSTIC", "T_NEXT")
+    ]
+    monkeypatch.setattr(update_slack_users.DbManager, "find_join_records2", lambda *_args, **_kwargs: spaces)
+
+    def unexpected_boundary(*_args, **_kwargs):
+        pytest.fail("unexpected database or Slack boundary")
+
+    monkeypatch.setattr(update_slack_users, "get_session", unexpected_boundary)
+    monkeypatch.setattr(update_slack_users, "create_user", unexpected_boundary)
+    monkeypatch.setattr(update_slack_users.DbManager, "update_record", unexpected_boundary)
+    completed = []
+
+    def users_list():
+        if not completed:
+            completed.append("failed")
+            error = SlackApiError("fabricated-token", response={})
+            error.response = (
+                SlackResponse(
+                    client=None,
+                    http_verb="GET",
+                    api_url="https://slack.invalid",
+                    req_args={},
+                    data=error_code,
+                    headers={},
+                    status_code=500,
+                )
+                if wrapped
+                else error_code
+            )
+            raise error
+        completed.append("continued")
+        return {"members": []}
+
+    monkeypatch.setattr(update_slack_users, "WebClient", lambda **_kwargs: SimpleNamespace(users_list=users_list))
+    with caplog.at_level(logging.ERROR, logger=update_slack_users.__name__):
+        assert update_slack_users.update_slack_users() is None
+    assert completed == ["failed", "continued"]
+    record = next(record for record in caplog.records if record.name == update_slack_users.__name__)
+    assert record.json_fields == {
+        "event": "slack.identity.sync_failed",
+        "team_id": "T_DIAGNOSTIC",
+        "error_type": "SlackApiError",
+        "slack_error": expected_code,
+    }
+    expected_message = (
+        f"slack.identity.sync_failed team_id=T_DIAGNOSTIC error_type=SlackApiError slack_error={expected_code}"
+    )
+    stream = io.StringIO()
+    local_handler = logging.StreamHandler(stream)
+    structured_handler = StructuredLogHandler()
+    try:
+        local_handler.handle(record)
+        assert stream.getvalue().strip() == expected_message
+        assert structured_handler.filter(record)
+        serialized = structured_handler.format(record)
+    finally:
+        local_handler.close()
+        structured_handler.close()
+    payload = json.loads(serialized)
+    assert payload["message"] == expected_message
+    assert {key: payload[key] for key in record.json_fields} == record.json_fields
+    assert record.exc_info is None and record.stack_info is None
+    recorded = json.dumps(record.__dict__, default=str)
+    for private in ("fabricated-token", "private-member@f3local.dev", "U_PRIVATE", "Private Member"):
+        assert private not in stream.getvalue() + serialized + recorded + caplog.text
