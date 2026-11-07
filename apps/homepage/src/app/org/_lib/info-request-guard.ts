@@ -14,8 +14,7 @@ export class InfoRequestGuard {
 
   /**
    * Mark `id` as the active org selection. Clears any location selection.
-   * Returns `true` when this is a switch to a different org, so callers can
-   * reset org-derived UI (e.g. the nearest-admin fallback).
+   * Returns `true` when this is a switch to a different org.
    */
   selectOrg(id: number): boolean {
     const changed = this.orgId !== id;
