@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Region } from "@/types/region";
+import type { RegionListItem } from "@/types/region";
 import { RegionsClient } from "@/components/regions-client";
 import { calculateHaversineDistance } from "@/lib/map-utils";
 import { toRegionSummary } from "@/types/region";
@@ -15,14 +15,15 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
-const makeRegion = (overrides: Partial<Region> = {}): Region => ({
+const makeRegion = (
+  overrides: Partial<RegionListItem> = {},
+): RegionListItem => ({
   id: "1",
   name: "Albuquerque",
   slug: "albuquerque",
   description: "desc",
   website: "https://f3abq.com",
   image: null,
-  email: null,
   facebook: null,
   twitter: null,
   instagram: null,

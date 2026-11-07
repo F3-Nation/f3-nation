@@ -94,7 +94,10 @@ Both procedures are `publicReadProcedure` (anonymous, session-agnostic,
 rate-limited per IP by the shared limiter). They return only public data: region org
 contact fields (already public through the map's procedures) and public
 workout schedules, under stricter visibility rules than the map (AC-7). No
-write paths.
+write paths. The directory list (`regionPages.regions`) leaves out the region
+contact email so one anonymous call can't return every region's address; only
+a single region (`regionPages.region`) returns its email, for the region
+page's contact link.
 
 | Action                                       | Allowed | Explicitly denied        |
 | -------------------------------------------- | ------- | ------------------------ |

@@ -99,6 +99,77 @@ DEFAULT_IMAGE_HEIGHT = 800
 DEFAULT_IMAGE_SCALE = 3
 
 
+# The neon style and glow effect below are adapted from mplcyberpunk 0.7.6 (MIT, Dominik Haitz).
+# They live here because mplcyberpunk calls matplotlib.style.core.read_style_directory and
+# update_nested_dict at import time, and matplotlib 3.11 no longer provides them in
+# matplotlib.style.core, so importing mplcyberpunk raises AttributeError.
+#
+# mplcyberpunk license notice for the adapted code:
+#
+# Copyright (c) Dominik Haitz
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+# associated documentation files (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge, publish, distribute,
+# sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all copies or
+# substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+# NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+# OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+def _neon_style() -> dict:
+    from matplotlib import cycler
+
+    return {
+        "legend.frameon": False,
+        "legend.numpoints": 1,
+        "legend.scatterpoints": 1,
+        "xtick.direction": "out",
+        "ytick.direction": "out",
+        "axes.axisbelow": True,
+        "axes.grid": True,
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Liberation Sans", "DejaVu Sans", "Bitstream Vera Sans", "sans-serif"],
+        "grid.linestyle": "-",
+        "lines.solid_capstyle": "round",
+        "axes.linewidth": 0,
+        "xtick.major.size": 0,
+        "ytick.major.size": 0,
+        "xtick.minor.size": 0,
+        "ytick.minor.size": 0,
+        "axes.prop_cycle": cycler(color=["#08F7FE", "#FE53BB", "#F5D300", "#00FF41", "r", "#9467BD"]),
+        "image.cmap": "cool",
+        "text.color": "0.9",
+        "axes.labelcolor": "0.9",
+        "xtick.color": "0.9",
+        "ytick.color": "0.9",
+        "figure.facecolor": "#212946",
+        "axes.facecolor": "#212946",
+        "savefig.facecolor": "#212946",
+        "grid.color": "#2A3459",
+    }
+
+
+def _add_glow_effects(ax, n_glow_lines: int = 10, diff_linewidth: float = 1.05, alpha_line: float = 0.3):
+    """Redraw each line several times, wider and faint, then faintly fill the area beneath it."""
+    lines = ax.get_lines()
+    xlims, ylims = ax.get_xlim(), ax.get_ylim()  # fill_between moves the limits; restore them after
+    for line in lines:
+        x, y = line.get_data(orig=False)
+        for n in range(1, n_glow_lines + 1):
+            (glow_line,) = ax.plot(x, y)
+            glow_line.update_from(line)
+            glow_line.set_alpha(alpha_line / n_glow_lines)
+            glow_line.set_linewidth(line.get_linewidth() + diff_linewidth * n)
+        ax.fill_between(x=x, y1=y, y2=[0] * len(y), color=line.get_color(), alpha=0.1, transform=line.get_transform())
+    ax.set(xlim=xlims, ylim=ylims)
+
+
 def upload_files_to_slack(file_paths: List[str], settings: SlackSettings, text: str, channel: str):
     if not settings.bot_token or not file_paths or not channel:
         print("Slack bot token or reporting channel not configured; skipping upload")
@@ -589,9 +660,8 @@ def create_org_monthly_summary(records: List[OrgMonthlySummary]) -> str:
     import calendar
 
     import matplotlib.pyplot as plt
-    import mplcyberpunk  # noqa: F401 needed for plt.style.
 
-    plt.style.use("cyberpunk")
+    plt.style.use(_neon_style())
     fig, axs = plt.subplots(nrows=3, ncols=1, figsize=(12, 10), sharex=True)
 
     now = datetime.now()
@@ -675,7 +745,7 @@ def create_org_monthly_summary(records: List[OrgMonthlySummary]) -> str:
     # ax.set_ylabel("Total Posts", fontsize=12)
     ax.set_ylim(bottom=0)
     ax.legend(loc="upper left")
-    mplcyberpunk.add_glow_effects(ax=ax, gradient_fill=False)
+    _add_glow_effects(ax)
 
     # Subplot 2: Unique PAX
     ax = axs[1]
@@ -700,7 +770,7 @@ def create_org_monthly_summary(records: List[OrgMonthlySummary]) -> str:
     # ax.set_ylabel("Unique PAX", fontsize=12)
     ax.set_ylim(bottom=0)
     ax.legend(loc="upper left")
-    mplcyberpunk.add_glow_effects(ax=ax, gradient_fill=False)
+    _add_glow_effects(ax)
 
     # Subplot 3: FNGs
     ax = axs[2]
@@ -726,7 +796,7 @@ def create_org_monthly_summary(records: List[OrgMonthlySummary]) -> str:
     # ax.set_ylabel("FNGs", fontsize=12)
     ax.set_ylim(bottom=0)
     ax.legend(loc="upper left")
-    mplcyberpunk.add_glow_effects(ax=ax, gradient_fill=False)
+    _add_glow_effects(ax)
 
     fig.suptitle("Monthly Attendance — Rolling 12 Months", fontsize=16)
     # axs[-1].set_xlabel("Month", fontsize=14)
