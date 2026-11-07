@@ -15986,16 +15986,6 @@
                           }
                         ]
                       },
-                      "email": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
                       "facebook": {
                         "anyOf": [
                           {
@@ -16123,7 +16113,6 @@
                       "description",
                       "website",
                       "image",
-                      "email",
                       "facebook",
                       "twitter",
                       "instagram",

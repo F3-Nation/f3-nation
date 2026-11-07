@@ -671,6 +671,9 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+charts = [
+    { name = "matplotlib" },
+]
 dev = [
     { name = "debugpy" },
     { name = "mypy" },
@@ -683,7 +686,6 @@ dev = [
 scripts = [
     { name = "dataframe-image" },
     { name = "matplotlib" },
-    { name = "mplcyberpunk" },
     { name = "pandas" },
     { name = "playwright" },
 ]
@@ -710,6 +712,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+charts = [{ name = "matplotlib", specifier = "==3.11.2" }]
 dev = [
     { name = "debugpy", specifier = "==1.8.22" },
     { name = "mypy", specifier = "==2.4.0" },
@@ -722,7 +725,6 @@ dev = [
 scripts = [
     { name = "dataframe-image", specifier = "==0.2.7" },
     { name = "matplotlib", specifier = "==3.11.2" },
-    { name = "mplcyberpunk", specifier = "==0.7.6" },
     { name = "pandas", specifier = "==2.3.3" },
     { name = "playwright", specifier = "==1.64.1" },
 ]
@@ -1379,19 +1381,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/de/1d/f4da6f02cdffe04d6362210b807146a26044c88d839208aec273bb0d9184/more_itertools-11.1.0.tar.gz", hash = "sha256:48e8f4d9e7e5878571ecf6f2b4e57634f93cd474cc8cfbd2376f2d11b396e30d", size = 145772, upload-time = "2026-05-22T14:14:29.909Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e8/3d/1087453384dbde46a8c7f9356eead2c58be8a7bf156bca40243377c85715/more_itertools-11.1.0-py3-none-any.whl", hash = "sha256:4b65538ae22f6fed0ce4874efd317463a7489796a0939fa66824dd542125a192", size = 72226, upload-time = "2026-05-22T14:14:28.824Z" },
-]
-
-[[package]]
-name = "mplcyberpunk"
-version = "0.7.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "matplotlib" },
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/21/53/9cf3da89c28374b92a2cb9b975fd1031858e0eaee31edd762e3a4619ecb7/mplcyberpunk-0.7.6.tar.gz", hash = "sha256:797cb36b5e1e178e7a3da5f4f215e469ef13935fd8c99d1cd20112e90bba7e22", size = 1605851, upload-time = "2025-02-26T13:36:33.246Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/8f/14ede5882332b013db2479f32b0678ff4bf4f648c5e8bce20b9f97d646bc/mplcyberpunk-0.7.6-py3-none-any.whl", hash = "sha256:5884f7add690a418695ef2f598257fedef89758c17884448518a307470590b42", size = 6527, upload-time = "2025-02-26T13:36:31.938Z" },
 ]
 
 [[package]]
