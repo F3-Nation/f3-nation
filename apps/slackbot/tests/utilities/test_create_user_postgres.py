@@ -895,3 +895,29 @@ def test_production_existing_workspace_identity_is_unchanged_when_member_joins_a
     assert set(helper_functions.SLACK_USERS) == {("T_SERIAL_A", "U_SERIAL_TEAMS"), ("T_SERIAL_B", "U_SERIAL_TEAMS")}
     assert helper_functions.SLACK_USERS[("T_SERIAL_A", "U_SERIAL_TEAMS")] is first
     assert helper_functions.SLACK_USERS[("T_SERIAL_B", "U_SERIAL_TEAMS")] is second
+
+
+@pytest.mark.parametrize("inherits_owner", [False, True])
+def test_identity_migration_requires_effective_owner_privileges(isolated_postgres, inherits_owner):
+    _legacy_slack_users(isolated_postgres)
+    with isolated_postgres.begin() as connection:
+        connection.exec_driver_sql("CREATE ROLE identity_migration_owner NOLOGIN")
+        connection.exec_driver_sql("CREATE ROLE identity_migration_runner NOLOGIN INHERIT")
+        connection.exec_driver_sql("ALTER TABLE public.slack_users OWNER TO identity_migration_owner")
+        connection.exec_driver_sql("GRANT USAGE ON SCHEMA public TO identity_migration_runner")
+        connection.exec_driver_sql("GRANT ALL ON public.slack_users TO identity_migration_runner")
+        if inherits_owner:
+            connection.exec_driver_sql("GRANT identity_migration_owner TO identity_migration_runner")
+    if inherits_owner:
+        with isolated_postgres.begin() as connection:
+            connection.exec_driver_sql("SET LOCAL ROLE identity_migration_runner")
+            _apply_identity_migration(connection)
+        assert _identity_constraint_exists(isolated_postgres)
+    else:
+        with pytest.raises(DBAPIError) as error, isolated_postgres.begin() as connection:
+            connection.exec_driver_sql("SET LOCAL ROLE identity_migration_runner")
+            _apply_identity_migration(connection)
+        assert error.value.orig.diag.message_primary == (
+            "Slack identity migration requires table-owner privileges on public.slack_users"
+        )
+        assert not _identity_constraint_exists(isolated_postgres)

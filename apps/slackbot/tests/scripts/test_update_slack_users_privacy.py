@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 from google.cloud.logging_v2.handlers import StructuredLogHandler
 from slack_sdk.errors import SlackApiError
+from slack_sdk.web import SlackResponse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -156,13 +157,19 @@ def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplo
 @pytest.mark.parametrize(
     "error_code,expected_code",
     [
-        ("missing_scope", "missing_scope"),
-        ("private-member@f3local.dev fabricated-token", "other"),
-        ({"private": "U_PRIVATE"}, "other"),
+        ({"error": "missing_scope"}, "missing_scope"),
+        ({"error": "private-member@f3local.dev fabricated-token"}, "other"),
+        ({"error": {"private": "U_PRIVATE"}}, "other"),
+        (b"fabricated-token", "other"),
+        ([], "other"),
+        ("fabricated-token", "other"),
+        (123, "other"),
+        (None, "other"),
     ],
-    ids=["known", "private", "malformed"],
+    ids=["known", "private", "malformed", "binary", "list", "string", "number", "null"],
 )
-def test_sync_failure_logs_safe_context_and_continues(monkeypatch, caplog, error_code, expected_code):
+@pytest.mark.parametrize("wrapped", [False, True], ids=["raw-response", "sdk-response"])
+def test_sync_failure_logs_safe_context_and_continues(monkeypatch, caplog, error_code, expected_code, wrapped):
     monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
     monkeypatch.setattr(update_slack_users.DbManager, "find_records", lambda **_kwargs: [])
     spaces = [
@@ -182,10 +189,21 @@ def test_sync_failure_logs_safe_context_and_continues(monkeypatch, caplog, error
     def users_list():
         if not completed:
             completed.append("failed")
-            raise SlackApiError(
-                "Private Member private-member@f3local.dev U_PRIVATE fabricated-token",
-                response={"error": error_code, "members": [{"id": "U_PRIVATE", "name": "Private Member"}]},
+            error = SlackApiError("fabricated-token", response={})
+            error.response = (
+                SlackResponse(
+                    client=None,
+                    http_verb="GET",
+                    api_url="https://slack.invalid",
+                    req_args={},
+                    data=error_code,
+                    headers={},
+                    status_code=500,
+                )
+                if wrapped
+                else error_code
             )
+            raise error
         completed.append("continued")
         return {"members": []}
 

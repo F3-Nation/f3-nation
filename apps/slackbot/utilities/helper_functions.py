@@ -244,7 +244,15 @@ def get_user_names(
 
 
 def slack_identity_error_context(team_id: str, error: Exception) -> dict[str, str]:
-    slack_error = safe_get(error.response, "error") if isinstance(error, SlackApiError) else None
+    slack_error = None
+    if isinstance(error, SlackApiError):
+        try:
+            response = error.response
+            data = getattr(response, "data", response)
+            slack_error = data.get("error") if isinstance(data, Mapping) else None
+        except Exception:
+            # Diagnostics must not replace the caller's recovery path with another failure.
+            slack_error = None
     if slack_error not in (
         "invalid_auth",
         "token_revoked",

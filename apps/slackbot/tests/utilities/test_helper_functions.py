@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from google.cloud.logging_v2.handlers import StructuredLogHandler
 from slack_sdk.errors import SlackApiError
+from slack_sdk.web import SlackResponse
 from sqlalchemy.exc import OperationalError
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -963,3 +964,38 @@ def test_production_populate_generates_only_eligible_workspace_pairs(monkeypatch
         row.slack_updated == 42 and row.user_name == "Import Display" and row.avatar_url == "import-avatar"
         for row in identities
     )
+
+
+@pytest.mark.parametrize("data", [b"fabricated-token", [], "fabricated-token", 123, None])
+@pytest.mark.parametrize("wrapped", [False, True], ids=["raw-response", "sdk-response"])
+def test_cached_link_failure_survives_non_mapping_slack_responses(monkeypatch, caplog, data, wrapped):
+    response = (
+        SlackResponse(
+            client=None,
+            http_verb="GET",
+            api_url="https://slack.invalid",
+            req_args={},
+            data=data,
+            headers={},
+            status_code=500,
+        )
+        if wrapped
+        else data
+    )
+    error = SlackApiError("fabricated-token", response={})
+    error.response = response
+    _assert_cached_failure_logs(monkeypatch, caplog, error, "SlackApiError", "other", fail_at="slack")
+
+
+def test_identity_error_context_survives_response_inspection_failure():
+    class BrokenResponse:
+        @property
+        def data(self):
+            raise ValueError("fabricated-token")
+
+    error = SlackApiError("fabricated-token", response=BrokenResponse())
+    assert helper_functions.slack_identity_error_context("T_TEST", error) == {
+        "team_id": "T_TEST",
+        "error_type": "SlackApiError",
+        "slack_error": "other",
+    }

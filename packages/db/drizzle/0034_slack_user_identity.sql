@@ -1,5 +1,17 @@
 SET LOCAL lock_timeout = '3s';
 --> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class
+    WHERE oid = 'public.slack_users'::regclass
+      AND pg_catalog.pg_has_role(current_user, relowner, 'USAGE')
+  ) THEN
+    RAISE EXCEPTION 'Slack identity migration requires table-owner privileges on public.slack_users';
+  END IF;
+END $$;
+--> statement-breakpoint
 LOCK TABLE public.slack_users IN SHARE ROW EXCLUSIVE MODE;
 --> statement-breakpoint
 DO $$
