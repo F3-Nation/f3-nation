@@ -492,7 +492,6 @@ def test_monthly_summary_executes_filters_and_counts_distinct_actual_users(repor
 
 
 def test_leaderboard_chart_sorts_mixed_typed_and_untyped_attendance(monkeypatch, tmp_path):
-    pytest.importorskip("matplotlib")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(monthly_reporting, "stitch_2x2", lambda *_args, **_kwargs: "stitched.png")
     records = [
@@ -523,3 +522,56 @@ def test_leaderboard_chart_sorts_mixed_typed_and_untyped_attendance(monkeypatch,
     assert result == "stitched.png"
     assert (tmp_path / "month_Q_leaders.png").is_file()
     assert (tmp_path / "year_Q_leaders.png").is_file()
+
+
+def test_org_monthly_summary_renders_neon_chart(monkeypatch, tmp_path):
+    import math
+
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import PolyCollection
+    from matplotlib.colors import to_hex
+    from PIL import Image
+
+    saved_axes = []
+    real_savefig = plt.savefig
+
+    def capture_axes_then_save(*args, **kwargs):
+        saved_axes.extend(plt.gcf().axes)
+        return real_savefig(*args, **kwargs)
+
+    monkeypatch.setattr(plt, "savefig", capture_axes_then_save)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(monthly_reporting, "datetime", January2025)
+    records = [
+        monthly_reporting.OrgMonthlySummary(
+            org_id=10,
+            month=datetime(year, month, 1),
+            event_count=4,
+            total_posts=40 + month,
+            total_fngs=month % 3,
+            unique_pax_count=12,
+        )
+        for year in (2023, 2024)
+        for month in range(1, 13)
+        if month != 6  # a month with no events leaves a gap in the series
+    ]
+
+    result = monthly_reporting.create_org_monthly_summary(records)
+
+    assert result == "org_monthly_attendance.png"
+    with Image.open(tmp_path / result) as image:
+        assert image.convert("RGB").getpixel((0, 0)) == (0x21, 0x29, 0x46)  # neon style's figure background
+
+    # Each subplot holds a current-year and a prior-year series; the glow effect redraws each one
+    # 10 times and fills beneath it once.
+    assert [ax.get_title() for ax in saved_axes] == ["Total Posts", "Unique PAX", "FNGs"]
+    june = 5  # index of June in the Jan-Dec 2024 window
+    for ax, color in zip(saved_axes, ["#39ff14", "#ff5733", "#33d6ff"], strict=True):
+        lines = ax.get_lines()
+        assert len(lines) == 2 * (1 + 10)
+        assert {line.get_label() for line in lines[:2]} == {"Jan 2024 - Dec 2024", "Jan 2023 - Dec 2023"}
+        assert all(to_hex(line.get_color()) == color for line in lines)
+        assert all(math.isnan(line.get_ydata(orig=False)[june]) for line in lines)
+        fills = [c for c in ax.collections if isinstance(c, PolyCollection)]
+        assert len(fills) == 2
+        assert all(to_hex(fill.get_facecolor()[0]) == color for fill in fills)

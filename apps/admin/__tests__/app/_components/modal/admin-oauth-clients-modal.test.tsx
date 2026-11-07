@@ -8,6 +8,7 @@ import {
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminOauthClientsModal from "~/app/_components/modal/admin-oauth-clients-modal";
+import { ORPCError } from "~/orpc/react";
 
 // jsdom has no ResizeObserver; Radix's Checkbox/Dialog primitives need one.
 beforeAll(() => {
@@ -27,13 +28,23 @@ beforeAll(() => {
   );
 });
 
-const { useQueryMock, updateMutateAsync, closeModalMock, isPendingMock } =
-  vi.hoisted(() => ({
-    useQueryMock: vi.fn(),
-    updateMutateAsync: vi.fn<(variables: unknown) => Promise<unknown>>(),
-    closeModalMock: vi.fn(),
-    isPendingMock: vi.fn(() => false),
-  }));
+const {
+  useQueryMock,
+  updateMutateAsync,
+  closeModalMock,
+  isPendingMock,
+  toastErrorMock,
+} = vi.hoisted(() => ({
+  useQueryMock: vi.fn(),
+  updateMutateAsync: vi.fn<(variables: unknown) => Promise<unknown>>(),
+  closeModalMock: vi.fn(),
+  isPendingMock: vi.fn(() => false),
+  toastErrorMock: vi.fn(),
+}));
+
+vi.mock("@acme/ui/toast", () => ({
+  toast: { success: vi.fn(), error: toastErrorMock },
+}));
 
 interface MutationOptions {
   onSuccess?: (result: unknown, variables: unknown) => unknown;
@@ -44,7 +55,8 @@ interface MutationOptions {
 // passed to mutationOptions() when mutateAsync settles — the modal's actual
 // toast/closeModal side effects live inside those callbacks, so the mock has
 // to run them too, not just record that mutateAsync was called.
-vi.mock("~/orpc/react", () => ({
+vi.mock("~/orpc/react", async () => ({
+  ORPCError: (await import("@orpc/client")).ORPCError,
   invalidateQueries: vi.fn(),
   useQuery: useQueryMock,
   useMutation: (options: MutationOptions) => ({
@@ -273,7 +285,7 @@ describe("AdminOauthClientsModal", () => {
     expect(closeModalMock).toHaveBeenCalled();
   });
 
-  it("preserves scopes beyond the four this form exposes when submitting an edit", async () => {
+  it("leaves unsupported stored scopes untouched when offline_access is unchanged", async () => {
     useQueryMock.mockReturnValue({
       data: {
         clients: [
@@ -298,13 +310,12 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: ["openid", "profile", "email", "custom:read"],
       });
     });
     expect(closeModalMock).toHaveBeenCalled();
   });
 
-  it("does not add profile/email scopes for a client narrower than those defaults", async () => {
+  it("does not resend scopes for a narrow client when offline_access is unchanged", async () => {
     useQueryMock.mockReturnValue({
       data: {
         clients: [
@@ -329,13 +340,12 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: ["openid"],
       });
     });
     expect(closeModalMock).toHaveBeenCalled();
   });
 
-  it("does not silently grant openid to a client that was never issued it", async () => {
+  it("lets a client without openid be renamed without touching its scopes", async () => {
     useQueryMock.mockReturnValue({
       data: {
         clients: [
@@ -360,10 +370,42 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: ["custom:read"],
       });
     });
     expect(closeModalMock).toHaveBeenCalled();
+  });
+
+  it("sends the stored scopes plus offline_access when the checkbox is turned on", async () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid"],
+            isPublic: false,
+          },
+        ],
+      },
+    });
+    updateMutateAsync.mockResolvedValue({});
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /offline_access scope/i }),
+    );
+    fireEvent.click(screen.getByText("Save changes"));
+
+    await waitFor(() => {
+      expect(updateMutateAsync).toHaveBeenCalledWith({
+        clientId: "paxvault-client",
+        name: "Paxvault",
+        redirectUris: ["https://paxvault.example.com/callback"],
+        scopes: ["openid", "offline_access"],
+      });
+    });
   });
 
   it("closes without submitting when Close is clicked in the edit form", () => {
@@ -473,7 +515,6 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: [],
       });
     });
   });
@@ -593,9 +634,15 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: ["openid", "offline_access"],
+        // The checkbox now matches the stored scopes, so nothing to send:
+        // the other admin's offline_access grant stays as they left it.
       });
     });
+    expect(
+      screen
+        .getByRole("checkbox", { name: /offline_access scope/i })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   it("shows a failure toast and leaves the modal open when the update mutation rejects", async () => {
@@ -622,5 +669,78 @@ describe("AdminOauthClientsModal", () => {
       expect(updateMutateAsync).toHaveBeenCalled();
     });
     expect(closeModalMock).not.toHaveBeenCalled();
+  });
+
+  describe("failure toast", () => {
+    const legacyClient = {
+      clientId: "legacy-client",
+      name: "Legacy",
+      redirectUris: ["https://legacy.example.com/callback"],
+      scopes: ["openid", "profile", "custom:read"],
+      isPublic: false,
+    };
+
+    it("says why when a save with an unsupported stored scope is refused", async () => {
+      useQueryMock.mockReturnValue({ data: { clients: [legacyClient] } });
+      updateMutateAsync.mockRejectedValue(
+        new ORPCError("BAD_REQUEST", { message: "Input validation failed" }),
+      );
+
+      render(<AdminOauthClientsModal data={{ clientId: "legacy-client" }} />);
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: /offline_access scope/i }),
+      );
+      fireEvent.click(screen.getByText("Save changes"));
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          "This client has scopes auth3 doesn't support, so offline_access " +
+            "can't be changed here. Fix its scopes first.",
+        );
+      });
+      expect(updateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scopes: ["openid", "profile", "custom:read", "offline_access"],
+        }),
+      );
+    });
+
+    it("keeps the generic toast when the refused save sent supported scopes only", async () => {
+      useQueryMock.mockReturnValue({
+        data: { clients: [{ ...legacyClient, scopes: ["openid"] }] },
+      });
+      updateMutateAsync.mockRejectedValue(
+        new ORPCError("BAD_REQUEST", { message: "Input validation failed" }),
+      );
+
+      render(<AdminOauthClientsModal data={{ clientId: "legacy-client" }} />);
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: /offline_access scope/i }),
+      );
+      fireEvent.click(screen.getByText("Save changes"));
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          "Unable to update OAuth client",
+        );
+      });
+    });
+
+    it("keeps the generic toast when a non-validation error hits a legacy client", async () => {
+      useQueryMock.mockReturnValue({ data: { clients: [legacyClient] } });
+      updateMutateAsync.mockRejectedValue(new Error("network error"));
+
+      render(<AdminOauthClientsModal data={{ clientId: "legacy-client" }} />);
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: /offline_access scope/i }),
+      );
+      fireEvent.click(screen.getByText("Save changes"));
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          "Unable to update OAuth client",
+        );
+      });
+    });
   });
 });

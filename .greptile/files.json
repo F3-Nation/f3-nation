@@ -138,6 +138,17 @@
       "scope": ["apps/analytics/**"]
     },
     {
+      "path": "docs/specs/database-audit-attribution.md",
+      "description": "Feature spec: Request-scoped database audit attribution. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "packages/db/**",
+        "packages/api/**",
+        "packages/auth/**",
+        "packages/shared/**",
+        "apps/map/**"
+      ]
+    },
+    {
       "path": "docs/specs/database-audit-history.md",
       "description": "Feature spec: Database audit-history foundation. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["packages/db/**", "packages/api/**", "apps/map/**"]
