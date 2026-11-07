@@ -1,0 +1,140 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
+import type postgres from "postgres";
+
+export interface AuditContext {
+  userId: number | null;
+  source: string | null;
+}
+
+export const auditContext = new AsyncLocalStorage<AuditContext>();
+
+/**
+ * Consume lazy builders within the callback to retain attribution. An async
+ * callback may return a builder: Promise adoption consumes it in that context.
+ * A synchronous callback returning a builder for later consumption loses context.
+ */
+export function runWithAuditContext<T>(store: AuditContext, fn: () => T): T {
+  return auditContext.run(store, fn);
+}
+
+// Keep this ceiling aligned with audit.log_change()'s integer actor bound.
+const MAX_AUDIT_USER_ID = 2_147_483_647;
+
+/** Normalizes a session identity to a valid database actor, or null. */
+export function toAuditUserId(value: unknown): number | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const id = Number(value);
+  return Number.isInteger(id) && id >= 1 && id <= MAX_AUDIT_USER_ID ? id : null;
+}
+
+/**
+ * SET LOCAL cannot bind parameters, so validate before literal interpolation.
+ * Keep quote delimiters and escape characters out of the accepted actor and
+ * source grammars.
+ */
+export function auditSettingsSql({ userId, source }: AuditContext): string {
+  if (
+    userId !== null &&
+    (typeof userId !== "number" || toAuditUserId(userId) !== userId)
+  ) {
+    throw new Error("Invalid audit user id");
+  }
+  if (
+    source !== null &&
+    (typeof source !== "string" || /[^a-z0-9-]/.test(source))
+  ) {
+    throw new Error("Invalid audit source");
+  }
+  return `set local app.user_id = '${userId ?? ""}'; set local app.source = '${source ?? ""}'`;
+}
+
+// This leading-keyword heuristic misses hidden writes such as SELECT functions;
+// a WITH read containing a write keyword can also enter the transaction path.
+const writePattern = /^\s*(with\b[\s\S]*?\b)?(insert|update|delete|merge)\b/i;
+
+function activeStore() {
+  const store = auditContext.getStore();
+  return store && (store.userId !== null || store.source !== null)
+    ? store
+    : undefined;
+}
+
+/**
+ * Depends on Drizzle's postgres-js session routing statements through unsafe,
+ * transactions through begin, and nested transactions through savepoint.
+ * Transaction-local settings prevent attribution leaking across pooled users.
+ * Install after withQueryTimeout so unmatched statements keep its existing
+ * timeout. Attributed writes (and heuristic false positives) use native begin:
+ * onexecute BEGIN and transaction-scoped statements bypass that timeout. Their
+ * client-side pool wait has no limit; a configured server statement_timeout
+ * can bound server execution. Installing the timeout afterward could reject a
+ * begin-backed write while it later commits. BEGIN must retain its native
+ * query/reservation path.
+ * The attributed unsafe result supports only then and values(), the lazy query
+ * shapes Drizzle consumes; it is not a full postgres-js PendingQuery facade.
+ */
+export function withAuditContext(client: postgres.Sql): void {
+  const originalUnsafe = client.unsafe.bind(client);
+  const originalBegin = client.begin.bind(client);
+  type Callback = (tx: postgres.TransactionSql) => unknown;
+
+  client.begin = ((options: string | Callback, callback?: Callback) => {
+    const store = activeStore();
+    if (!store) {
+      return typeof options === "string"
+        ? originalBegin(options, callback!)
+        : originalBegin(options);
+    }
+    let settings: string;
+    try {
+      settings = auditSettingsSql(store);
+    } catch (error) {
+      const validationError = error as Error;
+      return Promise.reject(validationError);
+    }
+    const run = typeof options === "string" ? callback! : options;
+    const attributed = async (tx: postgres.TransactionSql) => {
+      await tx.unsafe(settings);
+      const result = run(tx);
+      // postgres-js resolves an immediate callback array with Promise.all.
+      // An async wrapper hides that array from the driver's own detection.
+      return Array.isArray(result) ? Promise.all(result) : result;
+    };
+    return typeof options === "string"
+      ? originalBegin(options, attributed)
+      : originalBegin(attributed);
+  }) as typeof client.begin;
+
+  client.unsafe = ((...args: Parameters<typeof originalUnsafe>) => {
+    const store = activeStore();
+    if (!store) return originalUnsafe(...args);
+    const settings = auditSettingsSql(store);
+    const options = args[2] as { onexecute?: unknown } | undefined;
+    if (options?.onexecute || !writePattern.test(args[0])) {
+      return originalUnsafe(...args);
+    }
+
+    let promise: Promise<unknown> | undefined;
+    let values = false;
+    const query = {
+      then(
+        onFulfilled?: ((value: unknown) => unknown) | null,
+        onRejected?: ((reason: unknown) => unknown) | null,
+      ) {
+        const returnValues = values;
+        promise ??= originalBegin(async (tx) => {
+          await tx.unsafe(settings);
+          const pending = tx.unsafe(...args);
+          return returnValues ? pending.values() : pending;
+        });
+        return promise.then(onFulfilled, onRejected);
+      },
+      values() {
+        values = true;
+        return query;
+      },
+    };
+    return query;
+  }) as typeof client.unsafe;
+}
