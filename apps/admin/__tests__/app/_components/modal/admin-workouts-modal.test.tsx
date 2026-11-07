@@ -90,13 +90,14 @@ afterEach(() => {
 
 describe("AdminWorkoutsModal", () => {
   // React deduplicates this warning, so check it before other event loads.
-  it("keeps the disabled ID controlled after the event loads", async () => {
+  it("keeps the disabled ID and selects controlled after the event loads", async () => {
     let resolveEvent!: (value: unknown) => void;
     const eventLookup = new Promise((resolve) => {
       resolveEvent = resolve;
     });
     mocks.byId.mockReturnValue(eventLookup);
     const consoleError = vi.spyOn(console, "error");
+    const consoleWarn = vi.spyOn(console, "warn");
 
     try {
       mount(12);
@@ -129,8 +130,13 @@ describe("AdminWorkoutsModal", () => {
       expect(consoleError.mock.calls.flat().join("\n")).not.toMatch(
         /uncontrolled input to be controlled|controlled input to be uncontrolled/,
       );
+      expect(screen.getByLabelText("Day of Week").textContent).toBe("Monday");
+      expect(consoleWarn.mock.calls.flat().join("\n")).not.toMatch(
+        /Select is changing from uncontrolled to controlled/,
+      );
     } finally {
       consoleError.mockRestore();
+      consoleWarn.mockRestore();
     }
   });
 });
