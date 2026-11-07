@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.12...pkg-auth@0.3.0) (2026-11-07)
+
+
+### Features
+
+* **db:** attribute API writes to request actors ([#1493](https://github.com/F3-Nation/f3-nation/issues/1493)) ([a5aeed3](https://github.com/F3-Nation/f3-nation/commit/a5aeed3525167666f01b51d7c3cbb54b99dd9f95))
+
+
+### Bug Fixes
+
+* **auth:** consume email sign-in tokens atomically ([#1463](https://github.com/F3-Nation/f3-nation/issues/1463)) ([2d9695d](https://github.com/F3-Nation/f3-nation/commit/2d9695da355f8613045dae49cf72b73273af3b67))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.11.0
+    * @acme/shared bumped to 0.7.0
+
 ## [0.2.12](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.11...pkg-auth@0.2.12) (2026-10-29)
 
 

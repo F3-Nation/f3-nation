@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.6.0...pkg-shared@0.7.0) (2026-11-07)
+
+
+### Features
+
+* **db:** attribute API writes to request actors ([#1493](https://github.com/F3-Nation/f3-nation/issues/1493)) ([a5aeed3](https://github.com/F3-Nation/f3-nation/commit/a5aeed3525167666f01b51d7c3cbb54b99dd9f95))
+
+
+### Bug Fixes
+
+* **api:** limit OAuth client scopes to the ones auth3 serves ([#1475](https://github.com/F3-Nation/f3-nation/issues/1475)) ([580fd27](https://github.com/F3-Nation/f3-nation/commit/580fd276880e859ce1092eae41dc0d8f494eb862))
+* **slackbot:** omit empty calendar special-event sections ([#1477](https://github.com/F3-Nation/f3-nation/issues/1477)) ([f2a5f7f](https://github.com/F3-Nation/f3-nation/commit/f2a5f7f0c2a21b12420ea24079d1e1813e4adfe8))
+
 ## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.5.1...pkg-shared@0.6.0) (2026-10-29)
 
 
