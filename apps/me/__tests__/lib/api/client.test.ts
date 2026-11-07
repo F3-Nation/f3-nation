@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type * as ReactModule from "react";
+import { RPCLink } from "@orpc/client/fetch";
 
 // Mock environment variables
 process.env.F3_API_BASE_URL = "https://api.test.f3nation.com/v1";
@@ -61,6 +62,17 @@ describe("API client (oRPC)", () => {
     expect(mockMe.profile).toHaveBeenCalledOnce();
     expect(user.id).toBe(42);
     expect(user.f3Name).toBe("Dredd");
+  });
+
+  it("points the oRPC link at F3_API_BASE_URL", async () => {
+    mockMe.profile.mockResolvedValueOnce({ user: { id: 42 } });
+
+    const { getMyProfile } = await import("@/lib/api/client");
+    await getMyProfile();
+
+    expect(RPCLink).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://api.test.f3nation.com/v1" }),
+    );
   });
 
   it("updateMyProfile calls me.updateProfile() with the correct body", async () => {
