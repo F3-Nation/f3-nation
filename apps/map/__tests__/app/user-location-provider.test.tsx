@@ -43,7 +43,7 @@ describe("UserLocationProvider first jump", () => {
     return (setView.mock.calls[0]?.[0] as { zoom?: number }).zoom;
   };
 
-  it("opens at about a 25-30 mile radius when the URL has no zoom", async () => {
+  it("opens at USER_LOCATION_ZOOM when the URL has no zoom", async () => {
     expect(await firstJumpZoom("/")).toBe(10);
   });
 
@@ -53,13 +53,12 @@ describe("UserLocationProvider first jump", () => {
 
   it("ignores a zoom the map writes into the URL before location resolves", async () => {
     let resolvePosition: (p: typeof position) => void = () => undefined;
+    const getCurrentPosition = vi.fn((ok: (p: typeof position) => void) => {
+      resolvePosition = ok;
+    });
     Object.defineProperty(navigator, "geolocation", {
       configurable: true,
-      value: {
-        getCurrentPosition: (ok: (p: typeof position) => void) => {
-          resolvePosition = ok;
-        },
-      },
+      value: { getCurrentPosition },
     });
     window.history.replaceState(null, "", "/");
     render(
@@ -69,8 +68,7 @@ describe("UserLocationProvider first jump", () => {
     );
     // The map's own URL sync runs while geolocation is still pending
     window.history.replaceState(null, "", "/?lat=36.2&lng=-81.66&zoom=15");
-    await waitFor(() => expect(resolvePosition).not.toBe(undefined));
-    await new Promise((r) => setTimeout(r, 0));
+    await waitFor(() => expect(getCurrentPosition).toHaveBeenCalled());
     resolvePosition(position);
     await waitFor(() => expect(setView).toHaveBeenCalled());
     expect((setView.mock.calls[0]?.[0] as { zoom?: number }).zoom).toBe(10);

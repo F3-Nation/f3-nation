@@ -9,6 +9,8 @@ import {
 } from "~/app/_components/map/initial-location-provider";
 import { mapStore } from "~/utils/store/map";
 
+vi.mock("~/utils/store/selected-item", () => ({ setSelectedItem: vi.fn() }));
+
 const h = vi.hoisted(() => ({ search: "" }));
 
 vi.mock("next/navigation", () => ({
@@ -50,6 +52,10 @@ describe("InitialLocationProvider initial zoom", () => {
 
   it("opens a URL location at street level when there is no zoom", () => {
     expect(initialZoom("?lat=36.2&lon=-81.66")).toBe(CLOSE_ZOOM);
+  });
+
+  it("opens a URL locationId at street level when there is no zoom", () => {
+    expect(initialZoom("?locationId=5")).toBe(CLOSE_ZOOM);
   });
 
   it("falls back to the stored zoom", () => {

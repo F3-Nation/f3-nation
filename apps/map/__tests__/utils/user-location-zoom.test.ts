@@ -13,7 +13,7 @@ import {
 } from "~/utils/user-location-zoom";
 
 describe("getUserLocationZoom", () => {
-  it("opens at about a 25-30 mile radius by default", () => {
+  it("opens at USER_LOCATION_ZOOM by default", () => {
     expect(USER_LOCATION_ZOOM).toBe(10);
     expect(getUserLocationZoom("")).toBe(10);
   });

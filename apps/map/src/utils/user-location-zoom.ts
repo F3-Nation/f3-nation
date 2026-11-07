@@ -17,7 +17,7 @@ export const parseZoomParam = (value: string | null): number | undefined => {
 
 /**
  * Zoom for the first jump to the visitor's location. A `zoom` query param
- * (e.g. from a site embed) wins; otherwise about a 25-30 mile radius.
+ * (e.g. from a site embed) wins; otherwise USER_LOCATION_ZOOM.
  */
 export const getUserLocationZoom = (search: string): number =>
   parseZoomParam(new URLSearchParams(search).get("zoom")) ?? USER_LOCATION_ZOOM;

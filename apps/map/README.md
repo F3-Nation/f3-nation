@@ -106,13 +106,14 @@ pnpm lint --filter f3-map
 Sites embed the map in an iframe (see `iframe-test.html`). URL options:
 
 - `lat`, `lon` (or `lng`): center there, at street level (`CLOSE_ZOOM`).
-- `zoom`: starting zoom. With `lat`/`lon`, it replaces street level. Without
-  them, it also sets the zoom of the first jump to the visitor's location.
-- `locationId`: open that workout's panel. Add `eventId` to select one of its
-  events.
+- `locationId`: open that workout's panel, at street level. Add `eventId` to
+  select one of its events.
+- `zoom`: starting zoom. With `lat`/`lon` or `locationId`, it replaces street
+  level. Without them, it also sets the zoom of the first jump to the
+  visitor's location.
 
 With no options, the map centers on the visitor (if they allow location) at
-`USER_LOCATION_ZOOM` (10, about a 25-30 mile radius). The theme defaults to
+`USER_LOCATION_ZOOM` (10, a regional view; how far it reaches depends on the screen or iframe size). The theme defaults to
 dark; a visitor's choice in Settings overrides it.
 
 ## Email sign-in

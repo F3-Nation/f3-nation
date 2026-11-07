@@ -25,7 +25,7 @@ export const BOONE_CENTER = [36.211104, -81.660849] as [number, number];
 export const DEFAULT_CENTER = BOONE_CENTER;
 
 export const CLOSE_ZOOM = 13;
-// First view when the map centers on the visitor: about a 25-30 mile radius
+// First view when the map centers on the visitor: a regional view, wider on larger screens
 export const USER_LOCATION_ZOOM = 10;
 // Map theme for visitors who haven't picked one in Settings
 export const MAP_DEFAULT_THEME = "dark";
