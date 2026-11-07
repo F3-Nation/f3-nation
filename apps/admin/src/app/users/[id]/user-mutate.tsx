@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 
+import { routes } from "@acme/shared/app/constants";
 import type { RoleEntry } from "@acme/shared/app/types";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { Button } from "@acme/ui/button";
@@ -72,7 +73,7 @@ export default function UserMutate({
     orpc.user.crupdate.mutationOptions({
       onSuccess: async () => {
         await invalidateQueries("user");
-        router.push("/admin/users");
+        router.push(routes.admin.users.__path);
         toast.success("Successfully upserted user");
       },
       onError: (err) => {
@@ -313,7 +314,7 @@ export default function UserMutate({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push("/admin/users")}
+                  onClick={() => router.push(routes.admin.users.__path)}
                   className="w-full"
                 >
                   Cancel
