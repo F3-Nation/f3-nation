@@ -7,6 +7,7 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { SessionProvider } from "next-auth/react";
 
+import { MAP_DEFAULT_THEME } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
 import { ThemeProvider } from "@acme/ui/theme";
 import { Toaster } from "@acme/ui/toast";
@@ -74,7 +75,11 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
 const ElementProvider = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme={MAP_DEFAULT_THEME}
+      enableSystem={false}
+    >
       <TooltipProvider delayDuration={100}>{children}</TooltipProvider>
       <Toaster />
       <ShadCnContainer />

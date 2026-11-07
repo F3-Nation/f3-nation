@@ -1,4 +1,4 @@
-import { USER_LOCATION_ZOOM } from "@acme/shared/app/constants";
+import { CLOSE_ZOOM, USER_LOCATION_ZOOM } from "@acme/shared/app/constants";
 import { safeParseFloat } from "@acme/shared/common/functions";
 
 // Google Maps zoom range
@@ -21,3 +21,16 @@ export const parseZoomParam = (value: string | null): number | undefined => {
  */
 export const getUserLocationZoom = (search: string): number =>
   parseZoomParam(new URLSearchParams(search).get("zoom")) ?? USER_LOCATION_ZOOM;
+
+/**
+ * Zoom for the map's first render. A `zoom` param wins (0 included); a
+ * location or lat/lon in the URL opens at street level; otherwise the stored
+ * zoom.
+ */
+export const getInitialZoom = (params: {
+  queryZoom: number | undefined;
+  hasQueryLocation: boolean;
+  storedZoom: number;
+}): number =>
+  params.queryZoom ??
+  (params.hasQueryLocation ? CLOSE_ZOOM : params.storedZoom);

@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { USER_LOCATION_ZOOM } from "@acme/shared/app/constants";
+import {
+  CLOSE_ZOOM,
+  MAP_DEFAULT_THEME,
+  USER_LOCATION_ZOOM,
+} from "@acme/shared/app/constants";
 
 import {
+  getInitialZoom,
   getUserLocationZoom,
   parseZoomParam,
 } from "~/utils/user-location-zoom";
@@ -36,5 +41,42 @@ describe("parseZoomParam", () => {
     expect(parseZoomParam("1e9")).toBe(22);
     expect(parseZoomParam("-5")).toBe(0);
     expect(parseZoomParam("12")).toBe(12);
+  });
+});
+
+describe("getInitialZoom", () => {
+  it("uses the zoom param, including zero", () => {
+    expect(
+      getInitialZoom({ queryZoom: 0, hasQueryLocation: true, storedZoom: 5 }),
+    ).toBe(0);
+    expect(
+      getInitialZoom({ queryZoom: 8, hasQueryLocation: false, storedZoom: 5 }),
+    ).toBe(8);
+  });
+
+  it("opens a URL location at street level", () => {
+    expect(
+      getInitialZoom({
+        queryZoom: undefined,
+        hasQueryLocation: true,
+        storedZoom: 5,
+      }),
+    ).toBe(CLOSE_ZOOM);
+  });
+
+  it("falls back to the stored zoom", () => {
+    expect(
+      getInitialZoom({
+        queryZoom: undefined,
+        hasQueryLocation: false,
+        storedZoom: 5,
+      }),
+    ).toBe(5);
+  });
+});
+
+describe("MAP_DEFAULT_THEME", () => {
+  it("is dark for visitors who haven't picked a theme", () => {
+    expect(MAP_DEFAULT_THEME).toBe("dark");
   });
 });

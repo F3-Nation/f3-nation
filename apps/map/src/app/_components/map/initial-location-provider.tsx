@@ -4,16 +4,12 @@ import type { ReactNode } from "react";
 import { createContext, Suspense, useContext, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 
-import {
-  CLOSE_ZOOM,
-  DEFAULT_CENTER,
-  DEFAULT_ZOOM,
-} from "@acme/shared/app/constants";
+import { DEFAULT_CENTER, DEFAULT_ZOOM } from "@acme/shared/app/constants";
 import { safeParseFloat, safeParseInt } from "@acme/shared/common/functions";
 
 import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
-import { parseZoomParam } from "~/utils/user-location-zoom";
+import { getInitialZoom, parseZoomParam } from "~/utils/user-location-zoom";
 import { setSelectedItem } from "~/utils/store/selected-item";
 
 const InitialLocationContext = createContext<{
@@ -71,13 +67,12 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
     center.current = queryParamCenter ?? mapStore.get("center");
   }
 
-  zoom.current ??=
-    queryZoom ??
-    // If we have a query location or lat/lon, use the close zoom
-    (!!queryLocationId || (queryLat != null && queryLon != null)
-      ? CLOSE_ZOOM
-      : // Otherwise, use the stored zoom or default zoom
-        mapStore.get("zoom"));
+  zoom.current ??= getInitialZoom({
+    queryZoom,
+    hasQueryLocation:
+      !!queryLocationId || (queryLat != null && queryLon != null),
+    storedZoom: mapStore.get("zoom"),
+  });
 
   // Sync the derived initial state into the external stores in an effect.
   // Writing to these stores during render updates other subscribed components
