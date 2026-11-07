@@ -37,7 +37,13 @@ export default defineConfig({
     ],
     server: {
       deps: {
-        inline: ["vitest-canvas-mock", "jest-canvas-mock"],
+        // Transform next-auth's extensionless Next imports for real cookie tests.
+        inline: [
+          "vitest-canvas-mock",
+          "jest-canvas-mock",
+          "next-auth",
+          "@auth/core",
+        ],
       },
     },
     alias: {

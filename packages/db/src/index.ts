@@ -85,3 +85,12 @@ export const authSchema = {
 export * from "drizzle-orm";
 export { getUserRoles } from "./queries/roles";
 export type { UserRoleRow } from "./queries/roles";
+
+export {
+  auditContext,
+  auditSettingsSql,
+  runWithAuditContext,
+  toAuditUserId,
+  withAuditContext,
+} from "./utils/audit-context";
+export type { AuditContext } from "./utils/audit-context";

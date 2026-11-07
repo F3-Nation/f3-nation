@@ -5,7 +5,18 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 
 import type { Session } from "@acme/auth";
 import { getSessionFromHeaders } from "@acme/auth";
-import { and, eq, getUserRoles, gt, isNull, or, schema, sql } from "@acme/db";
+import {
+  and,
+  eq,
+  getUserRoles,
+  gt,
+  isNull,
+  or,
+  runWithAuditContext,
+  schema,
+  sql,
+  toAuditUserId,
+} from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
@@ -150,7 +161,20 @@ const base = os.$context<BaseContext>().use(async ({ context, next }) => {
 const withSessionAndDb = base.use(async ({ context, next }) => {
   const session = await getSession({ context });
   const newContext: Context = { ...context, session, db };
-  return next({ context: newContext });
+  const userId = toAuditUserId(session?.id);
+  // An unmarked cookie for user 1 may be a person or a Development Mode login.
+  const ambiguousLegacyIdentity =
+    userId === 1 && session?.devMode === undefined;
+  return runWithAuditContext(
+    {
+      userId:
+        session?.apiKey || session?.devMode || ambiguousLegacyIdentity
+          ? null
+          : userId,
+      source: null,
+    },
+    () => next({ context: newContext }),
+  );
 });
 
 export const publicProcedure = base;
@@ -502,6 +526,8 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
 
   return {
     id: user.id,
+    // Trusted access-token issuers do not use the cookie Development Mode provider.
+    devMode: false,
     email: user.email,
     roles,
     user: {

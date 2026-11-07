@@ -28,7 +28,7 @@ Bookkeeping-only changes can be ignored; sensitive values are masked.
   feedback on this policy when code is available.
 - The existing read-only PostgreSQL role should receive history read access.
   Exact role identity and deployment runner/owner must be verified before release.
-- Attribution integration remains #665 (user) and #667 (originating app).
+- User attribution is specified in [request-scoped database audit attribution](database-audit-attribution.md); originating-application population is outside the capture foundation.
 - Reference implementation only: PR #825 at commit 890bb587,
   packages/db/drizzle/0029_audit_history.sql. That PR remains unchanged.
 - Main implementation lives in packages/db custom migrations. SQL integration
