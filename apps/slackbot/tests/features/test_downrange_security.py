@@ -29,6 +29,7 @@ def test_region_selection_button_payload_contains_identifiers_not_credentials(sh
         requester_user_id="U_REQUESTER",
         requester_name="Requester",
         requester_region_name="Home",
+        requester_email="member@example.invalid",
     )
 
     buttons = [element for block in blocks if hasattr(block, "elements") for element in block.elements]
@@ -259,3 +260,42 @@ def test_slack_error_with_unexpected_code_and_other_errors_log_type_only():
     assert "RuntimeError" in logged
     assert "handle_invite_mark_done.admin_message_update_error" in logged
     assert "xoxb" not in logged
+
+
+def test_direct_email_invite_is_not_offered_for_placeholder():
+    blocks = downrange._build_region_info_blocks(
+        has_slack=True,
+        target_settings=SimpleNamespace(downrange_invite_sharing="direct_email"),
+        target_team_id="T_TARGET",
+        target_org_id=42,
+        selected_org_name="Target",
+        requester_team_id="T_SOURCE",
+        requester_user_id="U_HIDDEN",
+        requester_name="Member",
+        requester_region_name="Home",
+        requester_email="u_hidden",
+    )
+    rendered = [block.as_form_field() for block in blocks]
+    assert "u_hidden" not in str(rendered)
+    assert downrange.actions.DOWNRANGE_INVITE_REQUEST_BUTTON not in str(rendered)
+    assert "email" in str(rendered)
+
+
+def test_direct_email_request_rejects_placeholder_before_contacting_admins(monkeypatch):
+    settings = SimpleNamespace(downrange_invite_sharing="direct_email")
+    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: ("T_TARGET", "test-token", settings))
+    monkeypatch.setattr(downrange, "get_admin_users", lambda *_a: [(None, SimpleNamespace(slack_id="U_ADMIN"))])
+    target = MagicMock()
+    monkeypatch.setattr(downrange, "WebClient", MagicMock(return_value=target))
+    client = MagicMock()
+    body = {
+        "user": {"id": "U_HIDDEN"},
+        "view": {"id": "V_TEST"},
+        "actions": [
+            {"value": json.dumps({"target_team_id": "T_TARGET", "target_org_id": 42, "requester_email": "u_hidden"})}
+        ],
+    }
+    downrange.handle_invite_request(body, client, MagicMock(), {}, SlackSettings(team_id="T_SOURCE", org_id=7))
+    target.conversations_open.assert_not_called()
+    target.chat_postMessage.assert_not_called()
+    client.views_update.assert_called_once()

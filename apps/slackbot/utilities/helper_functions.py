@@ -252,8 +252,9 @@ def slack_identity_error_context(team_id: str, error: Exception) -> dict[str, st
             slack_error = data.get("error") if isinstance(data, Mapping) else None
         except Exception:
             # Diagnostics must not replace the caller's recovery path with another failure.
-            slack_error = None
+            slack_error = "response_inspection_failed"
     if slack_error not in (
+        "response_inspection_failed",
         "invalid_auth",
         "token_revoked",
         "ratelimited",
@@ -298,7 +299,26 @@ def _identity_database_error_context(error: Exception) -> dict[str, str]:
     return context
 
 
-def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient, logger: Logger) -> SlackUser:
+class UnlinkedSlackIdentityError(ValueError):
+    """The workspace identity cannot yet supply an F3 account for an interaction."""
+
+    def __init__(self):
+        super().__init__(
+            "An F3 account link could not be verified for a Slack member in this action. "
+            "Check that the app can read the member's email, then try again."
+        )
+
+
+def get_user(
+    slack_user_id: str, region_record: SlackSettings, client: WebClient, logger: Logger, *, require_link: bool = True
+) -> SlackUser:
+    user = _resolve_user(slack_user_id, region_record, client, logger)
+    if require_link and safe_get(user, "user_id") is None:
+        raise UnlinkedSlackIdentityError()
+    return user
+
+
+def _resolve_user(slack_user_id: str, region_record: SlackSettings, client: WebClient, logger: Logger) -> SlackUser:
     if not slack_user_id:
         raise ValueError("Slack user ID is required")
     team_id = safe_get(region_record, "team_id")
@@ -316,7 +336,7 @@ def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient
         update_local_slack_users()
 
     user: SlackUser | None = SLACK_USERS.get((team_id, slack_user_id))
-    # A cached row with no user_id has no F3 user yet; resolve it like a new member so create_user links it.
+    # An unlinked cached identity can be linked when a member email becomes available.
     if not user or not safe_get(user, "user_id"):
         try:
             user_info = client.users_info(user=slack_user_id)
@@ -329,8 +349,7 @@ def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient
             slack_user_record = create_user(user_info["user"], region_record.org_id, team_id=team_id)
         except Exception as error:
             if user:
-                # A Slack or database failure here must not break requests that used to get this cached row.
-                # It is still unlinked, so callers must cope with user_id being None.
+                # Keep cached profiles available to display-only callers when refresh fails.
                 context = {**slack_identity_error_context(team_id, error), **_identity_database_error_context(error)}
                 level = logging.WARNING if isinstance(error, SlackApiError) else logging.ERROR
                 logging.getLogger(__name__).log(
@@ -377,6 +396,15 @@ def _parse_view_private_metadata(body: dict) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def get_member_email(value) -> str | None:
+    # Raw Slack-ID placeholders in SlackUser.email are not person-matching evidence.
+    if not isinstance(value, str):
+        return None
+    value = value.strip().lower()
+    local, separator, domain = value.partition("@")
+    return value if local and separator and domain and not any(c.isspace() for c in value) else None
+
+
 def create_user(slack_user_info: dict, home_region_id: int | None = None, team_id: str | None = None) -> SlackUser:
     slack_id = safe_get(slack_user_info, "id")
     if not slack_id:
@@ -396,6 +424,7 @@ def create_user(slack_user_info: dict, home_region_id: int | None = None, team_i
         )
         slack_user_record = session.scalars(pair_query).first()
         if not slack_user_record or slack_user_record.user_id is None:
+            user_record = None
             if not constants.is_production_deployment():
                 # The provisional address contains no Slack-supplied data and is
                 # finalized in the same transaction as the identity link.
@@ -414,23 +443,25 @@ def create_user(slack_user_info: dict, home_region_id: int | None = None, team_i
                     "is_bot": False,
                 }
             else:
-                email = safe_get(slack_user_info, "profile", "email")
+                email = get_member_email(safe_get(slack_user_info, "profile", "email"))
                 if not email and slack_user_record and not slack_user_record.is_bot:
-                    email = slack_user_record.email
-                email = (email or slack_id).lower()
-                user_name = safe_get(slack_user_info, "profile", "display_name") or safe_get(
-                    slack_user_info, "profile", "real_name"
+                    email = get_member_email(slack_user_record.email)
+                user_name = (
+                    safe_get(slack_user_info, "profile", "display_name")
+                    or safe_get(slack_user_info, "profile", "real_name")
+                    or slack_id
                 )
                 # Different workspace pairs can concurrently identify the same F3
                 # user; CIText uniqueness arbitrates before the following select.
-                session.execute(
-                    insert(User)
-                    .values(email=email, f3_name=user_name, home_region_id=home_region_id)
-                    .on_conflict_do_nothing(index_elements=[User.email])
-                )
-                user_record = session.scalars(select(User).where(User.email == email)).one()
+                if email:
+                    session.execute(
+                        insert(User)
+                        .values(email=email, f3_name=user_name, home_region_id=home_region_id)
+                        .on_conflict_do_nothing(index_elements=[User.email])
+                    )
+                    user_record = session.scalars(select(User).where(User.email == email)).one()
                 identity_fields = {
-                    "email": email,
+                    "email": email or slack_id.lower(),
                     "user_name": user_name,
                     "avatar_url": safe_get(slack_user_info, "profile", "image_192"),
                     "is_admin": safe_get(slack_user_info, "is_admin") or False,
@@ -446,13 +477,14 @@ def create_user(slack_user_info: dict, home_region_id: int | None = None, team_i
                     .on_conflict_do_nothing(index_elements=[SlackUser.slack_id, SlackUser.slack_team_id])
                 )
                 slack_user_record = session.scalars(pair_query).one()
-            if slack_user_record.user_id is None:
+            if slack_user_record.user_id is None and user_record is not None:
                 slack_user_record.user_id = user_record.id
                 if not constants.is_production_deployment():
                     for field in ("email", "user_name", "avatar_url"):
                         setattr(slack_user_record, field, identity_fields[field])
             session.flush()
-            session.expunge(user_record)
+            if user_record is not None:
+                session.expunge(user_record)
 
         # Detach before commit expires attributes; only a successful commit may
         # publish the resolved identity to the process-local cache.
@@ -578,11 +610,12 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
     user_list = [
         User(
             f3_name=u["profile"]["display_name"] or u["profile"]["real_name"],
-            email=u["profile"].get("email") or u["id"],
+            email=get_member_email(u["profile"].get("email")),
             avatar_url=u["profile"].get("image_192"),
             home_region_id=org_id,
         )
         for u in active_users
+        if get_member_email(u["profile"].get("email"))
     ]
     DbManager.create_or_ignore(User, user_list)
 
@@ -592,9 +625,9 @@ def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
     slack_user_list = [
         SlackUser(
             slack_id=u["id"],
-            user_id=users_dict.get((u["profile"].get("email") or u["id"]).lower()),
+            user_id=users_dict.get(get_member_email(u["profile"].get("email"))),
             user_name=u["profile"]["display_name"] or u["profile"]["real_name"],
-            email=u["profile"].get("email") or u["id"],
+            email=get_member_email(u["profile"].get("email")) or u["id"].lower(),
             avatar_url=u["profile"]["image_192"],
             slack_team_id=team_id,
             is_admin=u.get("is_admin") or False,

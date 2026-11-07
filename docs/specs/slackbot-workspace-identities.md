@@ -49,7 +49,12 @@ has two distinct Slack accounts there.
   are preserved, without creating another F3 user first.
 - **AC-4** — GIVEN an unlinked identity WHEN it is resolved THEN linkage and any
   new identity/user creation commit together while existing integration data is
-  retained. Nonproduction resolution preserves synthetic profile handling.
+  retained. In production, a profile email or stored non-bot member email is
+  required to create or match an F3 user. Raw Slack IDs stored as email
+  placeholders are not matching evidence. Without an email, the workspace
+  identity remains unlinked, preserves its display profile, and creates no F3
+  user. A later email can link that same identity. Established links remain
+  unchanged. Nonproduction resolution preserves synthetic profile handling.
 - **AC-5** — GIVEN caller workspace context WHEN a Slack payload omits its team
   THEN that context supplies the workspace; explicit context takes precedence.
   If neither source supplies a workspace, creation fails before database work.
@@ -86,9 +91,10 @@ has two distinct Slack accounts there.
   absence, including on failure.
 - **AC-12** — GIVEN a migration release WHEN it is approved THEN its human-owned
   recovery plan requires a verified backup of the original affected rows,
-  including survivors, retained beyond the migration session, and accounts for
+  including survivors and re-homed identities, retained beyond the migration session, and accounts for
   both merged fields and the constraint. Synthetic local recovery tests must
-  demonstrate restoration of the original rows and removal of the constraint.
+  demonstrate restoration of the original rows by stable internal ID and removal
+  of the constraint; workspace keys can change during reconciliation.
 
 - **AC-13** — GIVEN identities stored with the placeholder workspace `NOT FOUND`
   WHEN reconciliation runs THEN each linked identity is re-homed only when its
@@ -97,7 +103,16 @@ has two distinct Slack accounts there.
   including timestamps and integration data, are preserved. Any legacy row
   without a safe mapping (including an unlinked row or occupied destination)
   aborts the entire migration with aggregate-only diagnostics. The original
-  trigger mode is preserved. Recovery backups include these re-homed rows.
+  trigger mode is preserved.
+
+- **AC-14** — GIVEN an unlinked member selected for an interaction WHEN an F3
+  account is required THEN identity lookup raises a fixed, actionable error
+  before returning a missing F3 user ID to the caller. Q reassignment and
+  backblast submission perform no attendance writes or uploads for that selection;
+  unscheduled preblasts resolve their Q before saving the event. Slack name and
+  avatar display, calendar browsing, help and downrange remain available without
+  an F3 account link. Import and sync
+  preserve unlinked identities without inventing placeholder F3 users.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -137,7 +152,8 @@ Existing Slack interaction authorization and F3-user matching continue to apply.
 - Cached identity-link failures distinguish Slack warnings from non-Slack errors
   and include only bounded SQLSTATE and allowlisted constraint diagnostics.
 - The hourly entrypoint configures structured logging for deployment and stream
-  logging locally. Member sync emits workspace summaries with creation counts.
+  logging locally. Each completed workspace-region sync pass emits a summary
+  counting identities created or linked; Slack API failures emit the sync failure event.
 - Identity changes do not add profile data, credentials or personal identifiers
   to logs or public review artifacts.
 - Existing delivery eligibility and error handling remain observable through

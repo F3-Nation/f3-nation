@@ -15,6 +15,11 @@ def test_hourly_logging_configuration(monkeypatch, local, level):
     monkeypatch.setenv("LOG_LEVEL", level)
     root = logging.getLogger()
     previous_handlers, previous_level = root.handlers[:], root.level
+    previous_propagation = {
+        name: logger.propagate
+        for name, logger in logging.root.manager.loggerDict.items()
+        if isinstance(logger, logging.Logger)
+    }
     stream = io.StringIO()
     try:
         hourly_runner.configure_logging()
@@ -38,3 +43,6 @@ def test_hourly_logging_configuration(monkeypatch, local, level):
                 handler.close()
         root.handlers[:] = previous_handlers
         root.setLevel(previous_level)
+        for name, logger in logging.root.manager.loggerDict.items():
+            if isinstance(logger, logging.Logger):
+                logger.propagate = previous_propagation.get(name, True)

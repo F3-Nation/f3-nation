@@ -20,6 +20,28 @@ DECLARE
   updated_trigger_mode text;
   conflict_count integer;
 BEGIN
+  SELECT count(*) INTO conflict_count FROM (
+    SELECT 1
+    FROM public.slack_users
+    GROUP BY slack_id, slack_team_id
+    HAVING count(*) > 1
+      AND (
+        count(DISTINCT user_id) > 1
+        OR count(*) FILTER (WHERE
+          strava_access_token IS NOT NULL
+          OR strava_refresh_token IS NOT NULL
+          OR strava_expires_at IS NOT NULL
+          OR strava_athlete_id IS NOT NULL
+          OR meta IS NOT NULL
+        ) > 1
+      )
+  ) AS conflicting_groups;
+  IF conflict_count > 0 THEN
+    RAISE EXCEPTION 'Slack identity reconciliation requires manual resolution'
+      USING DETAIL = format('%s ambiguous (slack_id, slack_team_id) groups', conflict_count),
+            HINT = 'Resolve groups with distinct user_id or more than one data-bearing row, then rerun.';
+  END IF;
+
   -- Freeze the candidate set so validation and repair use the same mapping.
   CREATE TEMP TABLE slack_identity_legacy_targets ON COMMIT DROP AS
   SELECT legacy.id, min(space.team_id) AS team_id
@@ -52,7 +74,7 @@ BEGIN
     AND tgname = 'set_updated_slack_users'
     AND NOT tgisinternal;
 
-  -- Integration repair preserves profile timestamps and the trigger's original mode.
+  -- Identity repair preserves profile timestamps and the trigger's original mode.
   IF updated_trigger_mode IN ('O', 'R', 'A') THEN
     ALTER TABLE public.slack_users DISABLE TRIGGER set_updated_slack_users;
   END IF;
@@ -61,28 +83,6 @@ BEGIN
   SET slack_team_id = target.team_id
   FROM pg_temp.slack_identity_legacy_targets AS target
   WHERE legacy.id = target.id;
-
-  SELECT count(*) INTO conflict_count FROM (
-    SELECT 1
-    FROM public.slack_users
-    GROUP BY slack_id, slack_team_id
-    HAVING count(*) > 1
-      AND (
-        count(DISTINCT user_id) > 1
-        OR count(*) FILTER (WHERE
-          strava_access_token IS NOT NULL
-          OR strava_refresh_token IS NOT NULL
-          OR strava_expires_at IS NOT NULL
-          OR strava_athlete_id IS NOT NULL
-          OR meta IS NOT NULL
-        ) > 1
-      )
-  ) AS conflicting_groups;
-  IF conflict_count > 0 THEN
-    RAISE EXCEPTION 'Slack identity reconciliation requires manual resolution'
-      USING DETAIL = format('%s ambiguous (slack_id, slack_team_id) groups', conflict_count),
-            HINT = 'Resolve groups with distinct user_id or more than one data-bearing row, then rerun.';
-  END IF;
 
   FOR duplicate_group IN
     SELECT

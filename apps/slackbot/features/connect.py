@@ -358,6 +358,9 @@ def handle_approve_connection(
     region_record.bot_token = slack_space_record.bot_token
     requester_client = WebClient(token=slack_space_record.bot_token)
     org_record = DbManager.get(Org, metadata.get("region_id"))
+    region_record.org_id = org_record.id
+    slack_user_id = metadata.get("user_id")
+    user_id = get_user(slack_user_id, region_record, requester_client, logger).user_id
 
     # Connect the slack space to the new org
     if team_id:
@@ -368,7 +371,6 @@ def handle_approve_connection(
             )
             DbManager.create_record(connect_record)
         # Update the slack space record with the new org
-        region_record.org_id = org_record.id
         region_record.migration_date = metadata.get("migration_date")
         DbManager.update_records(
             cls=SlackSpace,
@@ -376,8 +378,6 @@ def handle_approve_connection(
             fields={SlackSpace.settings: region_record.__dict__},
         )
     # Make the current user an admin of the new org
-    slack_user_id = metadata.get("user_id")
-    user_id = get_user(slack_user_id, region_record, requester_client, logger).user_id
     admin_role_id = DbManager.find_first_record(Role, filters=[Role.name == "admin"]).id
     try:
         DbManager.create_record(

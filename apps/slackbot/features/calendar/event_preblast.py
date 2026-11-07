@@ -271,7 +271,9 @@ def build_event_preblast_select_form(
       2. A link to the calendar so the user can sign up to Q for an event.
       3. A button to create a preblast for an unscheduled event.
     """
-    user_id = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger).user_id
+    user_id = get_user(
+        safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger, require_link=False
+    ).user_id
 
     # Query for upcoming events where this user is Q or Co-Q, no preblast yet
     event_records = event_attendance_query(
@@ -660,9 +662,9 @@ def handle_event_preblast_edit(
                 client=client,
                 title="Co-Qs not saved",
                 text=(
-                    f"{photo_note}Preblast details were saved, but Co-Qs were not updated because "
-                    f"these Slack users could not be resolved: {failed_coqs}. "
-                    "Please reopen the form and try again."
+                    f"{photo_note}Preblast details were saved, but Co-Qs were not updated. "
+                    "Check app email access and account links before retrying: "
+                    f"{failed_coqs}."
                 ),
                 level=constants.AlertLevel.ERROR,
                 logger=logger,
@@ -1130,7 +1132,9 @@ def build_preblast_info(
     user_id = None
     user_is_q = False
     if body:
-        user_obj = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger)
+        user_obj = get_user(
+            safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger, require_link=False
+        )
         user_id = user_obj.user_id
         user_is_q = any(
             att.user_id == user_id

@@ -14,6 +14,21 @@ from utilities.routing import MAIN_MAPPER
 from utilities.slack import actions
 
 
+def test_unlinked_identity_has_actionable_private_error_response():
+    from utilities.helper_functions import UnlinkedSlackIdentityError
+
+    error = UnlinkedSlackIdentityError()
+    handler = MagicMock(side_effect=error)
+    body = {"type": "shortcut", "callback_id": "calendar_shortcut", "team": {"id": "T_TEST"}}
+    with (
+        patch("main.MAIN_MAPPER", {"shortcut": {"calendar_shortcut": (handler, False, False)}}),
+        patch("main.get_region_record", return_value=MagicMock()),
+        patch("main.send_error_response") as response,
+    ):
+        main_response(body, MagicMock(), MagicMock(), MagicMock(), {})
+    assert response.call_args.kwargs["error"] == str(error)
+
+
 @pytest.mark.parametrize(
     ("action_prefix", "suffix", "expected_handler", "add_loading"),
     [

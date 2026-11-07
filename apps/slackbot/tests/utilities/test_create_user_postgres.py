@@ -421,6 +421,24 @@ def test_bulk_import_repeated_pairs_preserve_links_and_integrations(isolated_pos
         assert {row.slack_team_id for row in rows} == {"T_IMPORT", "T_OTHER"}
 
 
+def test_bulk_import_without_email_preserves_unlinked_workspace_identity(isolated_postgres, monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    member = {"id": "U_HIDDEN", "profile": {"display_name": "Hidden", "real_name": "", "image_192": None}}
+    client = SimpleNamespace(users_list=lambda: {"members": [member]})
+    for _ in range(2):
+        helper_functions.populate_users(client, "T_IMPORT")
+    with Session(isolated_postgres) as session:
+        assert session.scalars(select(User)).all() == []
+        rows = session.scalars(select(SlackUser)).all()
+        assert len(rows) == 1
+        assert rows[0].user_id is None and rows[0].user_name == "Hidden"
+        identity_id = rows[0].id
+    linked = helper_functions.create_user(
+        {**member, "profile": {**member["profile"], "email": "member@example.invalid"}}, team_id="T_IMPORT"
+    )
+    assert linked.id == identity_id and linked.user_id is not None
+
+
 IDENTITY_CONSTRAINT = "uq_slack_users_slack_id_team_id"
 IDENTITY_MIGRATION = Path(__file__).resolve().parents[4] / "packages/db/drizzle/0034_slack_user_identity.sql"
 INTEGRATION_FIELDS = (
@@ -782,7 +800,7 @@ def test_nonproduction_same_slack_account_has_independent_workspace_links(isolat
 
 
 @pytest.mark.parametrize("bot", [False, True])
-def test_production_new_no_email_identity_retains_existing_fallback(isolated_postgres, monkeypatch, bot):
+def test_production_no_email_identity_waits_for_email_before_linking(isolated_postgres, monkeypatch, bot):
     monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
     result = helper_functions.create_user(
         {
@@ -793,11 +811,22 @@ def test_production_new_no_email_identity_retains_existing_fallback(isolated_pos
         },
         team_id="T_NO_EMAIL",
     )
-    assert result.email == "u_no_email" and result.is_bot is bot
+    assert result.email == "u_no_email" and result.user_id is None and result.is_bot is bot
     assert result.user_name == "Display" and result.avatar_url == "profile-avatar" and result.slack_updated == 12
     with Session(isolated_postgres) as session:
-        user = session.get(User, result.user_id)
-        assert user.email == "u_no_email" and user.f3_name == "Display"
+        assert session.scalars(select(User)).all() == []
+        assert session.get(SlackUser, result.id).user_id is None
+    linked = helper_functions.create_user(
+        {"id": "U_NO_EMAIL", "profile": {"email": "Verified@Example.invalid", "display_name": "Display"}},
+        team_id="T_NO_EMAIL",
+    )
+    assert linked.id == result.id and linked.user_id is not None
+    other_workspace = helper_functions.create_user({"id": "U_NO_EMAIL", "profile": {}}, team_id="T_OTHER")
+    assert other_workspace.user_id is None and other_workspace.id != linked.id
+    with Session(isolated_postgres) as session:
+        users = session.scalars(select(User)).all()
+        assert len(users) == 1 and users[0].id == linked.user_id
+        assert users[0].email == "verified@example.invalid"
 
 
 def test_production_pair_insert_preserves_importer_winning_link(isolated_postgres, monkeypatch):
@@ -1036,18 +1065,44 @@ def test_legacy_rehome_rolls_back_on_later_failure(isolated_postgres):
     assert not _identity_constraint_exists(engine)
 
 
+def test_migration_rejects_legacy_conflict_before_rehoming(isolated_postgres):
+    engine = isolated_postgres
+    _legacy_slack_users(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("INSERT INTO orgs VALUES (10), (20)")
+        connection.exec_driver_sql("UPDATE users SET home_region_id = id * 10")
+        connection.exec_driver_sql("INSERT INTO slack_spaces VALUES (1, 'T_ONE'), (2, 'T_TWO')")
+        connection.exec_driver_sql("INSERT INTO orgs_x_slack_spaces VALUES (10, 1), (20, 2)")
+        _insert_identity(connection, 10, "U_CONFLICT", user_id=1, slack_team_id="NOT FOUND")
+        _insert_identity(connection, 11, "U_CONFLICT", user_id=2, slack_team_id="NOT FOUND")
+    before = _identity_rows(engine)
+    with pytest.raises(DBAPIError) as error, engine.begin() as connection:
+        _apply_identity_migration(connection)
+    assert error.value.orig.pgcode == "P0001"
+    assert error.value.orig.diag.message_detail == "1 ambiguous (slack_id, slack_team_id) groups"
+    assert _identity_rows(engine) == before
+    assert not _identity_constraint_exists(engine)
+
+
 def test_identity_migration_blocks_writers_until_commit(isolated_postgres):
     engine = isolated_postgres
     _legacy_slack_users(engine)
     statements = IDENTITY_MIGRATION.read_text().split("--> statement-breakpoint")
+    lock_index = next(
+        (i for i, statement in enumerate(statements) if "LOCK TABLE public.slack_users" in statement), None
+    )
+    assert lock_index is not None, "Migration must explicitly lock writers before inspecting identities"
+    assert "LOCK TABLE public.slack_users IN SHARE ROW EXCLUSIVE MODE" in statements[lock_index]
+    inspection_index = next(i for i, statement in enumerate(statements) if "conflict_count" in statement)
+    assert lock_index < inspection_index
     with engine.begin() as migration:
-        for statement in statements[:3]:
+        for statement in statements[: lock_index + 1]:
             migration.exec_driver_sql(statement, execution_options={"no_parameters": True})
         with pytest.raises(DBAPIError) as error, engine.begin() as writer:
             writer.exec_driver_sql("SET LOCAL lock_timeout = '100ms'")
             _insert_identity(writer, 1, "U_BLOCKED")
         assert error.value.orig.pgcode == "55P03"
-        for statement in statements[3:]:
+        for statement in statements[lock_index + 1 :]:
             if statement.strip():
                 migration.exec_driver_sql(statement, execution_options={"no_parameters": True})
     with engine.begin() as writer:

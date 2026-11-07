@@ -71,9 +71,19 @@ def test_script_validates_environment_before_running_jobs(monkeypatch):
     sync.assert_not_called()
 
 
-def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
+@pytest.mark.parametrize("initial_user_id,resolved_user_id", [(42, 42), (None, None), (None, 42)])
+def test_production_sync_imports_slack_name_and_avatar(monkeypatch, caplog, initial_user_id, resolved_user_id):
     monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
-    slack_user = SimpleNamespace(id=17, slack_id="UFAKE001", slack_team_id="T_ACTIVE", user_id=42, slack_updated=1)
+    slack_user = SimpleNamespace(
+        id=17, slack_id="UFAKE001", slack_team_id="T_ACTIVE", user_id=initial_user_id, slack_updated=1
+    )
+
+    def resolve(*_a, **_k):
+        slack_user.user_id = resolved_user_id
+        return slack_user
+
+    monkeypatch.setattr(update_slack_users, "create_user", resolve)
+    caplog.set_level("INFO")
     slack_space = SimpleNamespace(team_id="T_ACTIVE", settings={"bot_token": "fabricated-token"})
     org_space = SimpleNamespace(org_id=3)
     monkeypatch.setattr(update_slack_users.DbManager, "find_records", Mock(return_value=[slack_user]))
@@ -105,6 +115,12 @@ def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
 
     update_slack_users.update_slack_users()
 
+    summaries = [
+        r.json_fields
+        for r in caplog.records
+        if getattr(r, "json_fields", {}).get("event") == "slack.identity.sync_summary"
+    ]
+    assert summaries[0]["created"] == int(initial_user_id is None and resolved_user_id is not None)
     client.users_list.assert_called_once_with()
     update_record.assert_called_once()
     model, record_id, fields = update_record.call_args.args
@@ -115,7 +131,8 @@ def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
     assert fields_by_name["avatar_url"] == "https://example.invalid/fabricated-avatar.png"
 
 
-def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplog, capsys):
+@pytest.mark.parametrize("linked", [True, False])
+def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplog, capsys, linked):
     monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
     rows = [
         SimpleNamespace(id=10, slack_id="USHARED", slack_team_id="T_FIRST", user_id=1, slack_updated=1),
@@ -143,13 +160,15 @@ def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplo
 
     def create(info, org_id, *, team_id):
         creations.append((info, org_id, team_id))
-        return SimpleNamespace(id=30, slack_id="USHARED", slack_team_id=team_id, user_id=3, slack_updated=2)
+        return SimpleNamespace(
+            id=30, slack_id="USHARED", slack_team_id=team_id, user_id=3 if linked else None, slack_updated=2
+        )
 
     monkeypatch.setattr(update_slack_users, "create_user", create)
     caplog.set_level("INFO")
     update_slack_users.update_slack_users()
     assert {args[1] for args in updates} == {10, 20}
-    assert creations == [(member, 3, "T_THIRD")]
+    assert creations == [(member, 3, "T_THIRD")] * (1 if linked else 4)
     summaries = [
         record
         for record in caplog.records

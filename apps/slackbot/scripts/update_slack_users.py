@@ -53,10 +53,12 @@ def update_slack_users(force=False):
                 pair = (slack_space.team_id, user["id"])
                 slack_user = slack_user_dict.get(pair)
                 if not safe_get(slack_user, "user_id"):
+                    is_new_identity = slack_user is None
                     slack_user = create_user(user, region_org_record.org_id, team_id=slack_space.team_id)
                     slack_user_dict[pair] = slack_user
-                    created += 1
-                elif slack_user.slack_updated and slack_user.slack_updated >= user["updated"] and not force:
+                    if is_new_identity or slack_user.user_id is not None:
+                        created += 1
+                if slack_user.slack_updated and slack_user.slack_updated >= user["updated"] and not force:
                     continue
                 else:
                     update_fields = {

@@ -373,18 +373,24 @@ def test_failed_upload_on_already_posted_preblast_passes_warning_to_send_preblas
 
 
 @pytest.mark.usefixtures("wired_services")
-@pytest.mark.parametrize("coq_failure", ["unresolved", "assign"])
+@pytest.mark.parametrize("coq_failure", ["unresolved", "unlinked", "assign"])
 def test_failed_upload_warning_survives_truncation_when_coqs_also_fail(coq_failure):
     """Runs the real update_submission_wait_view, which cuts text at 200 characters."""
-    coqs = [f"U_COQ_{n:03d}" for n in range(4)]
+    from utilities.helper_functions import UnlinkedSlackIdentityError
+
+    coqs = [f"U_COQ_{n:03d}" for n in range(8)]
     body = _submission_body(files=[SLACK_FILE])
     body["view"]["state"]["values"][actions.EVENT_PREBLAST_COQS] = {
         actions.EVENT_PREBLAST_COQS: {"type": "multi_users_select", "selected_users": coqs},
     }
     client = MagicMock()
     coq_patch = (
-        patch.object(event_preblast, "get_user", side_effect=RuntimeError("unknown user"))
-        if coq_failure == "unresolved"
+        patch.object(
+            event_preblast,
+            "get_user",
+            side_effect=(UnlinkedSlackIdentityError() if coq_failure == "unlinked" else RuntimeError("unknown user")),
+        )
+        if coq_failure in ("unresolved", "unlinked")
         else patch.object(event_preblast, "_build_attendance_service", side_effect=RuntimeError("api down"))
     )
     with (
@@ -399,6 +405,8 @@ def test_failed_upload_warning_survives_truncation_when_coqs_also_fail(coq_failu
     assert view["title"]["text"] == "Co-Qs not saved"
     assert shown.endswith("...")
     assert shown.startswith("The photo was not saved. Preblast details were saved")
+    if coq_failure == "unlinked":
+        assert "Check app email access and account links" in shown
 
 
 def test_send_now_posts_the_photo_uploaded_in_the_same_submission(api_client, wired_services):
