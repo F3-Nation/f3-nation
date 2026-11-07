@@ -12,7 +12,8 @@
 # `get` and `untriaged` print one JSON object per issue. `apply` reads rows of
 # number<TAB>type<TAB>priority<TAB>effort<TAB>app (app comma-separated; an
 # empty cell leaves that field unchanged; lines starting with # are skipped;
-# further columns are ignored) and validates every row before writing any.
+# further columns are ignored). It checks every row's names and looks up every
+# issue before writing any; a write that fails after that leaves earlier rows set.
 #
 # Targets GH_REPO (owner/name) when set, else the current checkout's repo.
 set -euo pipefail
@@ -26,7 +27,7 @@ die() {
 }
 
 usage() {
-  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -51,14 +52,17 @@ init_repo() {
   NAME=${SLUG#*/}
 }
 
-# Runs a GraphQL request whose body ({query, variables}) is on stdin and fails
-# on any `errors` entry, which gh does not treat as a failure by itself.
+# Runs a GraphQL request whose body ({query, variables}) is on stdin. gh exits
+# non-zero on an `errors` entry; the body still names each error. A response
+# without `data` (empty or not JSON) also fails.
 graphql() {
-  local out
-  out=$(gh api graphql --input -) || die "GraphQL request failed"
-  if printf '%s' "$out" | jq -e '(.errors // []) | length > 0' >/dev/null; then
-    die "GraphQL error: $(printf '%s' "$out" | jq -c '.errors')"
+  local out status=0
+  out=$(gh api graphql --input -) || status=$?
+  if printf '%s' "$out" | jq -e '(.errors // []) | length > 0' >/dev/null 2>&1; then
+    die "GraphQL error: $(printf '%s' "$out" | jq -r '[.errors[].message] | join("; ")')"
   fi
+  [ "$status" -eq 0 ] || die "GraphQL request failed (gh exit $status)"
+  printf '%s' "$out" | jq -e '.data != null' >/dev/null 2>&1 || die "GraphQL response has no data"
   printf '%s\n' "$out"
 }
 
@@ -127,12 +131,15 @@ cmd_untriaged() {
   done
 }
 
-# Resolves one row of names to IDs. Prints {number, typeId, fields} or exits
-# with every unknown name and the valid choices for it.
+# Resolves one row of names to IDs. Prints {number, typeId, fields}, or prints
+# the first unknown name in the row with its valid choices and returns non-zero.
 resolve_row() {
   local number=$1 type=$2 priority=$3 effort=$4 app=$5
   case "$number" in
-    '' | *[!0-9]*) die "not an issue number: '$number'" ;;
+    '' | *[!0-9]*)
+      printf "issue %s: not an issue number\n" "'$number'"
+      return 1
+      ;;
   esac
   printf '%s' "$CATALOG" | jq -c \
     --argjson n "$number" --arg type "$type" --arg priority "$priority" --arg effort "$effort" --arg app "$app" '
@@ -150,28 +157,41 @@ resolve_row() {
             ($cat | field("Priority")) as $f | {fieldId: $f.id, singleSelectOptionId: pick($f.options; $priority; "Priority").id} end),
           (if $effort == "" then empty else
             ($cat | field("Effort")) as $f | {fieldId: $f.id, singleSelectOptionId: pick($f.options; $effort; "Effort").id} end),
-          (if ($app | norm) == "" then empty else
-            ($cat | field("App")) as $f
-            | {fieldId: $f.id, multiSelectOptionIds: [$app | split(",")[] | select(norm != "") | pick($f.options; .; "App").id] | unique} end)
+          (($app | split(",") | map(select(norm != ""))) as $names
+            | if ($names | length) == 0 then empty else
+              ($cat | field("App")) as $f
+              | {fieldId: $f.id, multiSelectOptionIds: [$names[] | pick($f.options; .; "App").id] | unique} end)
         ])
       }
     | if .typeId == null and (.fields | length) == 0 then error("issue \($n): nothing to set") else . end
   ' 2>&1 | sed 's/^jq: error ([^)]*): //'
 }
 
+# Prints the issue's node ID. A failed request exits with graphql's reason;
+# "not found" is only for a request that succeeded and returned no issue.
 issue_node_id() {
-  jq -n --arg o "$OWNER" --arg r "$NAME" --argjson n "$1" '{
+  local out
+  out=$(jq -n --arg o "$OWNER" --arg r "$NAME" --argjson n "$1" '{
     query: "query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){ issue(number:$n){ id } } }",
     variables: { o: $o, r: $r, n: $n }
-  }' | graphql | jq -er '.data.repository.issue.id' || die "issue $1 not found in $SLUG"
+  }' | graphql) || exit 1
+  printf '%s' "$out" | jq -er '.data.repository.issue.id' || die "issue $1 not found in $SLUG"
+}
+
+# Adds the issue's node ID to a resolved row, or fails without writing.
+with_issue_id() {
+  local row=$1 id
+  id=$(issue_node_id "$(printf '%s' "$row" | jq -r .number)") || return 1
+  printf '%s' "$row" | jq -c --arg id "$id" '. + {id: $id}'
 }
 
 write_row() {
   local row=$1 number id type_id fields
   number=$(printf '%s' "$row" | jq -r .number)
+  id=$(printf '%s' "$row" | jq -r .id)
   type_id=$(printf '%s' "$row" | jq -r '.typeId // ""')
   fields=$(printf '%s' "$row" | jq -c .fields)
-  id=$(issue_node_id "$number")
+  printf 'setting #%s\n' "$number" >&2
   if [ -n "$type_id" ]; then
     jq -n --arg i "$id" --arg t "$type_id" '{
       query: "mutation($i:ID!,$t:ID!){ updateIssueIssueType(input:{issueId:$i, issueTypeId:$t}){ issue{ number } } }",
@@ -205,6 +225,7 @@ cmd_set() {
   load_catalog
   local row
   row=$(resolve_row "$number" "$type" "$priority" "$effort" "$app") || die "$row"
+  row=$(with_issue_id "$row") || exit 1
   write_row "$row"
 }
 
@@ -231,7 +252,13 @@ cmd_apply() {
   done <"$file"
   [ -z "$errors" ] || die $'nothing written; fix these rows first:\n'"$errors"
   [ -n "$rows" ] || die "no rows in $file"
-  printf '%s' "$rows" | while IFS= read -r row; do
+  # Look up every issue before writing any, so a missing one writes nothing.
+  local targets=""
+  while IFS= read -r row; do
+    row=$(with_issue_id "$row") || die "nothing written"
+    targets="$targets$row"$'\n'
+  done <<<"${rows%$'\n'}"
+  printf '%s' "$targets" | while IFS= read -r row; do
     write_row "$row"
   done
 }

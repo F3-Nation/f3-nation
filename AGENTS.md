@@ -248,7 +248,7 @@ These apply to every issue an agent opens, for any reason. The full rule and its
 - One objective per issue, as small as is reasonable. A task list holds only requirements for that objective, never a batch of independent findings.
 - An audit or review that finds several problems files one issue per problem; being related doesn't make them an Epic. A parent issue of type **Epic** is only for a large, cohesive effort whose issues together deliver one outcome. To set one up through the REST API: `PATCH .../issues/<n>` with `type` set to `Epic`, and `POST .../issues/<n>/sub_issues` with `sub_issue_id` set to the child's numeric `id` (not its issue number).
 - Before filing, search open and closed issues for a duplicate; then use an issue template and lead with the plain-language impact before the root cause and fix.
-- Right after filing, set the issue's Type, Priority, Effort and App with the [`issue-triage`](.agents/skills/issue-triage/SKILL.md) skill; an issue filed with `gh issue create` skips the forms and gets none of them.
+- Right after filing, set the issue's Type, Priority, Effort and App with the [`issue-triage`](.agents/skills/issue-triage/SKILL.md) skill; nothing sets them on a new issue.
 
 ## Pull Request Guidelines
 

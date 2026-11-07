@@ -28,7 +28,9 @@ lists the valid ones.
   can change. When the issue doesn't say who is affected or how badly, give
   your best guess and mark it _unsure_ rather than leaving it empty.
 - Read the whole issue before deciding: body, labels, parent issue and
-  sub-issue count. The title alone misleads.
+  sub-issue count. The title alone misleads. `get` and `untriaged` cut long
+  bodies and end them with `[truncated]`; read the full text with
+  `gh issue view <n> --json body` before deciding.
 
 ## Commands
 
@@ -38,15 +40,24 @@ Run from the repo root. `GH_REPO=owner/name` targets another repository.
 S=.agents/skills/issue-triage/scripts/issue-fields.sh
 bash $S options                 # allowed Types and field values
 bash $S get 123 456             # one JSON object per issue, current values + body
-bash $S untriaged > /tmp/u.jsonl  # every open issue missing any of the four
+bash $S untriaged > <scratch>/untriaged.jsonl  # open issues missing any of the four
 bash $S set 123 --type Bug --priority Medium --effort Low --app "Map,API"
-bash $S apply proposals.tsv     # bulk write; validates every row before writing any
+bash $S apply proposals.tsv     # bulk write; checks every row before writing any
 ```
 
 `apply` reads tab-separated rows of `number`, `type`, `priority`, `effort`,
-`app` (comma-separated). An empty cell leaves that value unchanged, lines
-starting with `#` are skipped, and any further columns (a reason, a title)
-are ignored, so the reviewed table can be applied as is.
+`app` (comma-separated). An empty cell leaves that value unchanged, but a row
+with every value empty is an error; drop such rows before applying. An App
+value replaces the issue's whole App list, so list every app it should keep.
+Lines starting with `#` are skipped, and any further columns (a reason, a
+title) are ignored, so the reviewed table can be applied as is.
+
+`apply` checks every row's values and looks up every issue before writing,
+so a bad value or a missing issue writes nothing. It prints `setting #N`
+before each issue and `set #N` after; if a write fails partway, the issues
+already printed as `set` keep their new values, and the one named by the last
+`setting` may have its Type changed. Check that issue with `get`, then
+re-apply only the rows not yet set.
 
 ## Deciding each value
 
@@ -60,8 +71,10 @@ Use the organization's descriptions, which `options` doesn't print:
   site visitor).
 - **Task** — work no user sees: refactors, CI, tests, docs, dependency and
   infrastructure changes, security hardening with no visible change.
-- **Epic** — any issue that has sub-issues, or whose body plans to split into
-  them. Without sub-issues, a list of related problems is not an Epic.
+- **Epic** — a large, cohesive effort whose sub-issues together deliver one
+  outcome. Sub-issues, or a plan to split into them, are evidence, not the
+  test: a small parent is a Bug, Story or Task, and a list of related problems
+  is not an Epic.
 - **Discussion** — a proposal or open question ("consider…", "should we…")
   whose next step is a decision, not code. An issue that already says what to
   build is a Bug, Story or Task even if details are open.
