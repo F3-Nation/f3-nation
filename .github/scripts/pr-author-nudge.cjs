@@ -124,10 +124,16 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
   let lastHandoff = created; // latest event that put the PR in front of someone
   const latestReviewByReviewer = new Map();
 
+  const headCommit = pr.commits?.nodes?.[0]?.commit;
+  const headOid = headCommit?.oid;
+  let headForcePushedAt = null;
   for (const item of timeline) {
     switch (item.__typename) {
       case "HeadRefForcePushedEvent":
         lastPush = maxTs(lastPush, ts(item.createdAt));
+        // GitHub's own record of when the current head arrived.
+        if (item.afterCommit?.oid && item.afterCommit.oid === headOid)
+          headForcePushedAt = maxTs(headForcePushedAt, ts(item.createdAt));
         break;
       case "ConvertToDraftEvent":
         lastDraftStart = maxTs(lastDraftStart, ts(item.createdAt));
@@ -204,20 +210,24 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
         lastAuthorActivity = maxTs(lastAuthorActivity, ts(comment.createdAt));
     }
   }
-  const headCommit = pr.commits?.nodes?.[0]?.commit;
   const contexts = headCommit?.statusCheckRollup?.contexts?.nodes ?? [];
   // GitHub keeps no push time for an ordinary push, and a commit's date is
   // whatever its author set: a commit dated 2099 would hold the PR open
   // forever. GitHub's own clock is used instead: the first check suite or CI
   // run on the head commit, created when it reached GitHub (fork PRs waiting
-  // on workflow approval get suites too). Commit dates never count. A head
-  // commit with neither (a `[skip ci]` push, say) may have just been pushed,
+  // on workflow approval get suites too), the first legacy status on it, or
+  // the force-push that brought it. Commit dates never count. A head commit
+  // with none of these (a `[skip ci]` push, say) may have just been pushed,
   // so `decide()` won't warn about or close that PR until one shows up.
   const headArrival = minTs(
     ...(headCommit?.checkSuites?.nodes ?? []).map((s) => ts(s.createdAt)),
     ...contexts
       .filter((c) => c.__typename === "CheckRun")
       .map((c) => ts(c.startedAt)),
+    ...contexts
+      .filter((c) => c.__typename === "StatusContext")
+      .map((c) => ts(c.createdAt)),
+    headForcePushedAt,
   );
   lastPush = maxTs(lastPush, headArrival);
   lastAuthorActivity = maxTs(lastAuthorActivity, lastPush);
@@ -498,7 +508,7 @@ const PR_FIELDS = `
       PULL_REQUEST_REVIEW]) {
     nodes {
       __typename
-      ... on HeadRefForcePushedEvent { createdAt }
+      ... on HeadRefForcePushedEvent { createdAt afterCommit { oid } }
       ... on ReadyForReviewEvent { createdAt actor { login } }
       ... on ConvertToDraftEvent { createdAt actor { login } }
       ... on ReopenedEvent { createdAt actor { login } }
@@ -513,6 +523,7 @@ const PR_FIELDS = `
   }
   commits(last: 1) {
     nodes { commit {
+      oid
       checkSuites(first: 20) { nodes { createdAt } }
       statusCheckRollup { contexts(first: 100) { nodes {
         __typename

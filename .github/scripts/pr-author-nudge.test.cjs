@@ -787,7 +787,8 @@ test("a passing legacy status doesn't hide a failing check run of the same name"
       createdAt: at(3),
     },
   ]);
-  assert.equal(run(pr, 7.1).action, "nudge");
+  // The status (day 3) is the earliest record of the head arriving.
+  assert.equal(run(pr, 8.1).action, "nudge");
 });
 
 test("a PR into another branch isn't judged by main's required checks", async () => {
@@ -1257,4 +1258,47 @@ test("with no push time for the head commit, reminders go out but heads-ups and 
   // Once GitHub records the head commit, the close goes ahead as usual.
   pr.commits = pushedAt(0);
   assert.equal(run(pr, 30, warned).action, "close");
+});
+
+test("a legacy status or the force-push that brought the head gives its push time", () => {
+  const noChecks = {
+    nodes: [
+      {
+        commit: { oid: "abc", statusCheckRollup: { contexts: { nodes: [] } } },
+      },
+    ],
+  };
+  const nudged = { id: 9, nudgedAt: at(6.1), warnedAt: at(10.2) };
+
+  const status = basePr({
+    reviewThreads: { nodes: [thread("coderabbitai", 1)] },
+    commits: structuredClone(noChecks),
+  });
+  status.commits.nodes[0].commit.statusCheckRollup.contexts.nodes = [
+    {
+      __typename: "StatusContext",
+      context: "other",
+      state: "SUCCESS",
+      createdAt: at(0.5),
+    },
+  ];
+  assert.equal(run(status, 30, nudged).action, "close");
+
+  const forced = (oid) =>
+    basePr({
+      reviewThreads: { nodes: [thread("coderabbitai", 1)] },
+      commits: structuredClone(noChecks),
+      timelineItems: {
+        nodes: [
+          {
+            __typename: "HeadRefForcePushedEvent",
+            createdAt: at(0.5),
+            afterCommit: { oid },
+          },
+        ],
+      },
+    });
+  assert.equal(run(forced("abc"), 30, nudged).action, "close");
+  // A force-push to an earlier head says nothing about the current one.
+  assert.equal(run(forced("old"), 30, nudged).why, "push time unknown");
 });
