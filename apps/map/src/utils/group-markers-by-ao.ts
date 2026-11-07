@@ -4,6 +4,21 @@ import type {
 } from "~/app/_components/map/filtered-map-results-provider";
 
 /**
+ * Pick an AO row's logo: the AO's own logo, else the location's logo when the
+ * location belongs to that same AO. Empty logos count as missing, and another
+ * AO's logo is never a valid fallback.
+ */
+const resolveAoLogo = (
+  marker: LocationMarkerWithDistance,
+  aoName: LocationMarkerWithDistance["aoName"],
+  aoLogo: string | null | undefined,
+): LocationMarkerWithDistance["logo"] => {
+  const fallbackLogo = aoName === marker.aoName ? marker.logo : null;
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+  return aoLogo || fallbackLogo;
+};
+
+/**
  * Split each location marker's events by AO so the nearby list shows one row
  * per AO even when multiple AOs share the same physical location.
  */
@@ -28,16 +43,12 @@ export const groupMarkersByAo = (
       // Treat an empty AO name as missing so the row keeps the pin's AO label instead of going blank.
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       const aoName = event?.aoName || marker.aoName;
-      const fallbackLogo = aoName === marker.aoName ? marker.logo : null;
-      // Empty logos are missing; another AO's logo is not a valid fallback.
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      const logo = event?.aoLogo || fallbackLogo;
       return [
         {
           ...marker,
           aoId: `${marker.id}`,
           aoName,
-          logo,
+          logo: resolveAoLogo(marker, aoName, event?.aoLogo),
         },
       ];
     }
@@ -46,7 +57,7 @@ export const groupMarkersByAo = (
       ...marker,
       aoId: `${marker.id}-${events[0]?.id}`,
       aoName,
-      logo: events[0]?.aoLogo ?? marker.logo,
+      logo: resolveAoLogo(marker, aoName, events[0]?.aoLogo),
       events,
     }));
   });

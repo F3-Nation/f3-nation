@@ -169,6 +169,36 @@ describe("groupMarkersByAo", () => {
     },
   );
 
+  it.each([
+    { aLogo: "a.png", bLogo: null, expected: ["a.png", null] },
+    { aLogo: "a.png", bLogo: "", expected: ["a.png", null] },
+    { aLogo: null, bLogo: null, expected: ["location.png", null] },
+    { aLogo: "", bLogo: "b.png", expected: ["location.png", "b.png"] },
+    { aLogo: "a.png", bLogo: "b.png", expected: ["a.png", "b.png"] },
+  ])(
+    "only falls back to the location logo for its own AO at a shared location: $aLogo / $bLogo",
+    ({ aLogo, bLogo, expected }) => {
+      const marker = makeMarker({
+        id: 1,
+        aoName: "AO A",
+        logo: "location.png",
+        events: [
+          makeEvent({ id: 1, aoName: "AO A", aoLogo: aLogo }),
+          makeEvent({ id: 2, aoName: "AO B", aoLogo: bLogo }),
+        ],
+      });
+
+      const result = groupMarkersByAo([marker]);
+
+      expect(
+        result.map((row) => ({ name: row.aoName, logo: row.logo })),
+      ).toEqual([
+        { name: "AO A", logo: expected[0] },
+        { name: "AO B", logo: expected[1] },
+      ]);
+    },
+  );
+
   it("splits a location with multiple AOs into separate entries", () => {
     const marker = makeMarker({
       id: 1,
