@@ -561,7 +561,7 @@ export async function runLoad(
         throw new Error("Not a terminal: pass --yes to load without a prompt.");
       }
       const answer = await deps.confirm(
-        `Replace the data in ${tables.length} tables of the local "${PG_DB}" database with a snapshot exported ${age.text} (${rows} rows)? This also empties anything that references them (attendance, API keys, OAuth tokens, sign-in sessions); dev users and keys are re-created. [y/N] `,
+        `Replace the data in ${tables.length} tables of the local "${PG_DB}" database with a snapshot exported ${age.text} (${rows} rows)? This also empties anything that references them (API keys, OAuth tokens, sign-in sessions); dev users and keys are re-created. [y/N] `,
       );
       if (!["y", "yes"].includes(answer.trim().toLowerCase())) {
         throw new Error("Load cancelled");

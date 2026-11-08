@@ -232,7 +232,8 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
    `preblast_rich` and `backblast_rich` are set to NULL; `pax_count` and
    `fng_count` are kept. `users.meta`, `attendance.meta` and
    `achievements_x_users.meta` are set to NULL: the obfuscator only scrubs
-   emails and phones in them, and the rest is free text. Before trimming, the job refuses if a kept table
+   emails and phones in the first two and copies award rows untouched, and
+   the rest is free text. Before trimming, the job refuses if a kept table
    has a column that isn't in `obfuscate-db.columns.txt`.
 6. **Leak scan, package and publish.**
    - verify-target runs again on the trimmed copy, so the scan covers

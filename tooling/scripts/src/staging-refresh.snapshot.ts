@@ -203,8 +203,8 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
     // obfuscate-db only scrubs emails and phones in it; the profile answers
     // (my_f3_why, f3_name_origin, …) are free text.
     await tx`UPDATE public.users SET meta = NULL WHERE meta IS NOT NULL`;
-    // Same for attendance and award meta: obfuscate-db only scrubs emails
-    // and phones in them.
+    // obfuscate-db only scrubs emails and phones in attendance.meta and copies
+    // achievements_x_users untouched; both can hold free text.
     await tx`UPDATE public.attendance SET meta = NULL WHERE meta IS NOT NULL`;
     await tx`
       UPDATE public.achievements_x_users SET meta = NULL WHERE meta IS NOT NULL`;
