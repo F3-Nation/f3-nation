@@ -3,6 +3,12 @@ name: PR Title
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
+  # lint-title is a required check, so it must also report on merge-queue
+  # commits or the queue waits for it until the check times out. A merge-group
+  # run has no PR title to read; the title was already linted on the PR, so
+  # every step is skipped there and the job reports green.
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -11,10 +17,12 @@ jobs:
   lint-title:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup
+      - if: github.event_name == 'pull_request'
+        uses: ./.github/actions/setup
       # Squash-merge builds the squash commit subject from the PR title, and
       # release-please parses that subject to decide version bumps. The local
       # commit-msg hook never sees the PR title, so validate it here against the
@@ -25,7 +33,7 @@ jobs:
       # STEP (not the job) so a skipped run still reports green and never blocks
       # branch protection on the bot's release PRs.
       - name: Lint PR title with commitlint
-        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+        if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--') }}
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: printf '%s\n' "$PR_TITLE" | pnpm exec commitlint

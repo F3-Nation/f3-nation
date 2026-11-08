@@ -59,6 +59,12 @@ Codeowners also get the **Codeowners PR Report** in the #monorepo Slack channel 
 
 **A codeowner claims a PR by assigning themselves** on GitHub, and the next report shows it under their name. `pr-review-inline` and `pr-local-test` do this for you, except on your own PR. A PR counts as claimed once a codeowner other than its author is assigned; until then, it shows in the report as needing a codeowner. When you take over a PR someone else claimed, add yourself rather than removing them, and say so in the PR.
 
+### Merging
+
+PRs reach `main` through GitHub's merge queue. Once a PR is approved and its checks are green, click **Merge when ready**. The branch doesn't need updating with `main` first. The queue tests the PR together with `main` and every PR queued ahead of it, runs every required check across the whole repository, and merges the PR only if they all pass. That takes a few minutes; the PR shows as merged once it's done.
+
+If a check fails in the queue, GitHub takes the PR out of the queue and the failed run shows in its checks. A failure that also shows in the PR's own checks is the PR's to fix. One that shows only in the queue means the PR breaks when combined with a change queued or merged ahead of it, or in a part of the repository its own checks didn't cover: update the branch, fix it and queue it again. A failure that passes on a re-run is a flaky test; queue the PR again and file an issue for the test.
+
 ## Running the review and test skills
 
 Running either skill takes one command and a PR number. Both live in [`.agents/skills/`](../.agents/skills/).

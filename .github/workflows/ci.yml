@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: ["**"]
     types: [opened, synchronize, reopened]
+  # Required checks must also report on merge-queue commits, or the queue
+  # waits for them until the check times out. Merge-group runs test every
+  # workspace: affected-only selection needs a PR's base and head.
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
