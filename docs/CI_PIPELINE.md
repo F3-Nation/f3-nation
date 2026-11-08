@@ -130,10 +130,14 @@ execute whenever selected, including in CI, while unrelated tasks retain caching
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the
-repository. The merge queue's full-workspace run closes that gap before merge:
-undeclared cross-workspace coupling fails the queue entry and ejects the PR
-instead of reaching `main`. A red full run on `main` still blocks deploys until
-corrected. The
+repository. The merge queue's full-workspace run tests the PR combined with
+`main` and every PR queued ahead of it, so a break between combined changes
+ejects the PR instead of reaching `main`. It does not catch undeclared
+cross-workspace coupling: a task whose declared inputs are unchanged replays its
+cached result, in the queue and on `main` alike, so a missing dependency edge
+surfaces only on a cache miss. Declare the edge (a workspace dependency or the
+task's `inputs`) so Turbo re-runs the dependent. A red full run on `main` still
+blocks deploys until corrected. The
 zero-selection and detection-failure fallbacks above protect against an empty
 or unavailable affected set, but they cannot infer dependencies missing from
 the graph or detect a plausible nonempty selection that differs from the
@@ -228,14 +232,18 @@ build check is named `build-homepage` to stay distinct from CI's `build`.
   push-to-`main` CI run performs full-workspace validation, so deploy gates on
   that full run rather than a PR-scoped `--affected` run.
 - Queue entries run `ci.yml` but not `docker-build`, which is PR-only, so an
-  image breakage that appears only once two PRs combine surfaces at release
-  time in the deploy `build` job.
+  image breakage that appears only once two PRs combine is not caught before
+  merge. The push-to-`main` `docker-cache-refresh` job (advisory) surfaces it
+  for every image except `analytics` and `staging-refresh`, which first fail
+  in the deploy `build` job.
 - Merge-queue runs execute the PR's code in this repository, including code
   from forks, after a codeowner approves and queues it. `ci.yml` reads no
-  repository secrets, and its jobs get a `GITHUB_TOKEN` limited to
-  `contents: read` and at most `packages: read`, so a queued fork PR can only
-  read. Giving a required check a secret or a write grant gives it to every
-  queued PR's code as well.
+  repository secrets, and every job that runs on `merge_group` gets a
+  `GITHUB_TOKEN` limited to `contents: read` and at most `packages: read`; the
+  jobs with write grants (`recent-package-watch`, `docker-cache-refresh`) are
+  gated to `pull_request` and `push`, so a queued fork PR can only read. Giving
+  a merge-queue job a secret or a write grant gives it to every queued PR's
+  code as well.
 - The deploy `ci-gate` regexp waits on the five build/test checks but not
   `security-audit` (the audit already gated the merge; a tag cut from an
   unmerged or old SHA relies on that earlier gate).

@@ -63,7 +63,7 @@ Codeowners also get the **Codeowners PR Report** in the #monorepo Slack channel 
 
 PRs reach `main` through GitHub's merge queue. Once a PR is approved and its checks are green, click **Merge when ready**. The branch doesn't need updating with `main` first. The queue tests the PR together with `main` and every PR queued ahead of it, runs every required check across the whole repository, and merges the PR only if they all pass. That takes a few minutes; the PR shows as merged once it's done.
 
-If a check fails in the queue, GitHub takes the PR out of the queue and the failed run shows in its checks. A failure that also shows in the PR's own checks is the PR's to fix. One that shows only in the queue means the PR breaks when combined with a change queued or merged ahead of it, or in a part of the repository its own checks didn't cover: update the branch, fix it and queue it again. A failure that passes on a re-run is a flaky test; queue the PR again and file an issue for the test.
+If a check fails in the queue, GitHub takes the PR out of the queue and the failed run shows in its checks. A failure that also shows in the PR's own checks is the PR's to fix. One that shows only in the queue means the PR breaks when combined with a change merged or queued ahead of it, or in a part of the repository its own checks didn't cover: once the changes ahead of it have merged, update the branch, fix it and queue it again. A failure that passes on a re-run is flaky; queue the PR again and file an issue for the flaky test or step.
 
 ## Running the review and test skills
 

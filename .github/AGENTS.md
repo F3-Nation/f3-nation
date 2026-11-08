@@ -57,8 +57,9 @@ upkeep. These rules apply to new and changed workflows.
   so gate on the specific label.
 - Renaming or adding a required check also updates `docs/CI_PIPELINE.md`.
 - A required check's workflow also triggers on `merge_group`, and its job runs
-  or reports green there; a check that never reports holds the merge queue
-  until it times out. `merge_group` runs execute queued PR code, forks
+  its checks there; only `lint-title`, which has no PR title to lint on a merge
+  group, may skip its steps and report green. A check that never reports holds
+  the merge queue until it times out. `merge_group` runs execute queued PR code, forks
   included, so the security rule on secrets and write tokens applies to them.
 - Check environment protection rules before adding a trigger; a deployment
   environment's branch or tag policy can make a new path undeployable.
