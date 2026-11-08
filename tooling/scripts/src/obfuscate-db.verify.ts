@@ -49,12 +49,13 @@ import {
   unreviewedColumns,
 } from "./obfuscate-db.columns";
 import { isLoremRich, isLoremText } from "./obfuscate-db.lorem";
-import { quoteQualified } from "./db-url";
+import { quoteIdent, quoteQualified } from "./db-url";
 import { fkEdges, planKeptFks } from "./staging-refresh.checks";
 import {
   PRESERVED_TABLES,
   SNAPSHOT_EMAIL_SINK,
   SNAPSHOT_TABLES,
+  SNAPSHOT_WINDOW,
 } from "./staging-refresh.config";
 import {
   dropFksAndTruncate,
@@ -847,6 +848,8 @@ async function sweepForEmails(
 
 const SNAPSHOT_DB = "f3_snapshot";
 const SNAPSHOT_COPY_DB = "f3_snapshot_copy";
+const SNAPSHOT_LOAD_DB = "f3_snapshot_load";
+const { daysBack: WINDOW_BACK, daysAhead: WINDOW_AHEAD } = SNAPSHOT_WINDOW;
 const dbUrl = (db: string) => {
   const url = new URL(DATABASE_URL);
   url.pathname = `/${db}`;
@@ -855,7 +858,9 @@ const dbUrl = (db: string) => {
 
 /**
  * A clone of the planted, not yet obfuscated sandbox for the snapshot
- * checks, plus an empty database to stand in for the refresh's copy.
+ * checks, an empty database to stand in for the refresh's copy, and a
+ * second clone to stand in for a developer's seeded database that the
+ * published file is loaded into.
  * CREATE DATABASE … TEMPLATE needs no other session on the template.
  */
 async function cloneForSnapshot(): Promise<void> {
@@ -866,6 +871,9 @@ async function cloneForSnapshot(): Promise<void> {
   try {
     await admin.unsafe(`CREATE DATABASE ${SNAPSHOT_DB} TEMPLATE ${DB_NAME}`);
     await admin.unsafe(`CREATE DATABASE ${SNAPSHOT_COPY_DB}`);
+    await admin.unsafe(
+      `CREATE DATABASE ${SNAPSHOT_LOAD_DB} TEMPLATE ${DB_NAME}`,
+    );
   } finally {
     await admin.end();
   }
@@ -899,9 +907,15 @@ async function verifySnapshotMode(
   const work = mkdtempSync(path.join(os.tmpdir(), "f3-snapshot-verify-"));
   try {
     // Instances on both sides of each edge of the window, with link rows,
-    // blasts and counts.
+    // blasts, counts and an attendance row (with a type and free-text meta).
     const planted = new Map<number, number>();
-    for (const offset of [-31, -30, 90, 91]) {
+    const plantedAttendance = new Map<number, number>();
+    for (const offset of [
+      -WINDOW_BACK - 1,
+      -WINDOW_BACK,
+      WINDOW_AHEAD,
+      WINDOW_AHEAD + 1,
+    ]) {
       const [row] = await snap<{ id: number }[]>`
         INSERT INTO event_instances (org_id, is_active, highlight, start_date,
           name, preblast, backblast, pax_count, fng_count)
@@ -915,6 +929,32 @@ async function verifySnapshotMode(
       await snap`
         INSERT INTO event_instances_x_event_types (event_instance_id, event_type_id)
         SELECT ${row.id}, min(id) FROM event_types`;
+      const [att] = await snap<{ id: number }[]>`
+        INSERT INTO attendance (user_id, event_instance_id, is_planned, meta)
+        SELECT min(id), ${row.id}, false,
+          '{"note": "Jane Smith carpools from 123 Main Street"}'::jsonb
+        FROM users
+        RETURNING id`;
+      if (!att) throw new Error("Harness bug: could not plant attendance");
+      plantedAttendance.set(offset, att.id);
+      await snap`
+        INSERT INTO attendance_x_attendance_types (attendance_id, attendance_type_id)
+        SELECT ${att.id}, min(id) FROM attendance_types`;
+    }
+    // The local seed has no achievements, so plant one to award.
+    const [award] = await snap<{ n: number }[]>`
+      WITH ach AS (
+        INSERT INTO achievements (name) VALUES ('Snapshot probe') RETURNING id),
+      ins AS (
+        INSERT INTO achievements_x_users (achievement_id, user_id, award_year,
+          award_period, meta)
+        SELECT ach.id, (SELECT min(id) FROM users), 1901, 1,
+          '{"citation": "Jane Smith, 123 Main Street"}'::jsonb
+        FROM ach
+        RETURNING 1)
+      SELECT count(*)::int AS n FROM ins`;
+    if (award?.n !== 1) {
+      throw new Error("Harness bug: could not plant an achievement award");
     }
 
     // Inside the window: a private series and one under it, a private
@@ -1026,14 +1066,15 @@ async function verifySnapshotMode(
         AND event_instance_id NOT IN (SELECT id FROM event_instances)`;
     const [outside] = await snap<{ n: number }[]>`
       SELECT count(*)::int AS n FROM event_instances
-      WHERE start_date NOT BETWEEN current_date - 30 AND current_date + 90`;
+      WHERE start_date NOT BETWEEN current_date - ${WINDOW_BACK}::int
+        AND current_date + ${WINDOW_AHEAD}::int`;
     const [blasts] = await snap<{ n: number }[]>`
       SELECT count(*)::int AS n FROM event_instances
       WHERE preblast IS NOT NULL OR backblast IS NOT NULL
         OR preblast_rich IS NOT NULL OR backblast_rich IS NOT NULL`;
-    const keptIds = [planted.get(-30), planted.get(90)];
+    const keptIds = [planted.get(-WINDOW_BACK), planted.get(WINDOW_AHEAD)];
     check(
-      "snapshot trim keeps exactly the -30..+90 day window, with link rows and counts",
+      `snapshot trim keeps exactly the -${WINDOW_BACK}..+${WINDOW_AHEAD} day window, with link rows and counts`,
       survivors.length === 2 &&
         survivors.every(
           (r, i) =>
@@ -1082,6 +1123,42 @@ async function verifySnapshotMode(
       metaLeft?.n === 0,
       `${metaLeft?.n ?? "?"} user(s) still have meta`,
     );
+    const attIds = [...plantedAttendance.values()];
+    const keptAtt = [
+      plantedAttendance.get(-WINDOW_BACK),
+      plantedAttendance.get(WINDOW_AHEAD),
+    ];
+    const attSurvivors = await snap<{ id: number; types: number }[]>`
+      SELECT a.id, (SELECT count(*)::int FROM attendance_x_attendance_types x
+                    WHERE x.attendance_id = a.id) AS types
+      FROM attendance a WHERE a.id IN ${snap(attIds)} ORDER BY a.id`;
+    const [attOutside] = await snap<{ n: number; types: number }[]>`
+      SELECT
+        (SELECT count(*) FROM attendance a
+         WHERE NOT EXISTS (SELECT 1 FROM event_instances ei
+                           WHERE ei.id = a.event_instance_id))::int AS n,
+        (SELECT count(*) FROM attendance_x_attendance_types x
+         WHERE NOT EXISTS (SELECT 1 FROM attendance a
+                           WHERE a.id = x.attendance_id))::int AS types`;
+    check(
+      "snapshot trim keeps attendance only on kept instances, with its types",
+      attSurvivors.length === 2 &&
+        attSurvivors.every((r, i) => r.id === keptAtt[i] && r.types === 1) &&
+        attOutside?.n === 0 &&
+        attOutside.types === 0,
+      `${attSurvivors.length}/2 edge rows kept, ${attOutside?.n ?? "?"} attendance and ` +
+        `${attOutside?.types ?? "?"} type row(s) left without a parent`,
+    );
+    const [attMeta] = await snap<{ attendance: number; awards: number }[]>`
+      SELECT
+        (SELECT count(*) FROM attendance WHERE meta IS NOT NULL)::int AS attendance,
+        (SELECT count(*) FROM achievements_x_users
+         WHERE meta IS NOT NULL)::int AS awards`;
+    check(
+      "snapshot trim clears attendance.meta and achievements_x_users.meta",
+      attMeta?.attendance === 0 && attMeta.awards === 0,
+      `${attMeta?.attendance ?? "?"} attendance and ${attMeta?.awards ?? "?"} award row(s) still have meta`,
+    );
     check(
       "snapshot trim nulls every blast",
       blasts?.n === 0,
@@ -1108,7 +1185,7 @@ async function verifySnapshotMode(
       "snapshot trim empties every table outside SNAPSHOT_TABLES",
       populated.length === 0 && others.length > 0,
       populated.length === 0
-        ? `${others.length} tables empty (attendance, slack_*, api_keys, auth.*, history, …)`
+        ? `${others.length} tables empty (slack_*, api_keys, update_requests, auth.*, history, …)`
         : `still populated: ${populated.join(", ")}`,
     );
 
@@ -1179,6 +1256,85 @@ async function verifySnapshotMode(
       `delivered ${published}x; tar [${listing.join(", ")}]; ${tableData} TABLE DATA entries; ` +
         `row counts ${miscounted.length === 0 ? "match" : `differ: ${miscounted.join(", ")}`}`,
     );
+    const attendanceTables = [
+      "public.attendance",
+      "public.attendance_x_attendance_types",
+      "public.achievements_x_users",
+    ];
+    const emptyAttendance = attendanceTables.filter(
+      (t) => !shipped.tables[t]?.rows,
+    );
+    check(
+      "the manifest lists attendance, its types and awards, with rows",
+      emptyAttendance.length === 0,
+      emptyAttendance.length === 0
+        ? attendanceTables
+            .map((t) => `${t}: ${shipped.tables[t]?.rows}`)
+            .join(", ")
+        : `missing or empty: ${emptyAttendance.join(", ")}`,
+    );
+
+    // Load the published dump the way pnpm db:load:snapshot does (truncate
+    // the manifest's tables CASCADE, then a data-only restore with triggers
+    // off, in one transaction), into a seeded database. With triggers off
+    // Postgres checks no FK, so check every one here.
+    const loadUrl = dbUrl(SNAPSHOT_LOAD_DB);
+    const load = postgres(loadUrl, { max: 1, onnotice: () => undefined });
+    try {
+      await load.unsafe(
+        `TRUNCATE TABLE ${Object.keys(shipped.tables).map(quoteQualified).join(", ")} CASCADE`,
+      );
+      await pgTool(
+        "pg_restore",
+        [
+          "--data-only",
+          "--disable-triggers",
+          "--no-owner",
+          "--single-transaction",
+          "--exit-on-error",
+          `--dbname=${SNAPSHOT_LOAD_DB}`,
+          path.join(extracted, "snapshot.dump"),
+        ],
+        loadUrl,
+      );
+      const loadMiscounted: string[] = [];
+      for (const [t, { rows }] of Object.entries(shipped.tables)) {
+        const [row] = await load.unsafe<{ n: number }[]>(
+          `SELECT count(*)::int AS n FROM ${quoteQualified(t)}`,
+        );
+        if (row?.n !== rows) loadMiscounted.push(`${t} ${row?.n}/${rows}`);
+      }
+      const dangling: string[] = [];
+      const edges = (await fkEdges(load, ["public"])).filter((e) =>
+        Object.hasOwn(shipped.tables, e.table),
+      );
+      for (const e of edges) {
+        const match = e.columns
+          .map(
+            (c, i) => `r.${quoteIdent(e.refColumns[i]!)} = t.${quoteIdent(c)}`,
+          )
+          .join(" AND ");
+        const set = e.columns
+          .map((c) => `t.${quoteIdent(c)} IS NOT NULL`)
+          .join(" AND ");
+        const [row] = await load.unsafe<{ n: number }[]>(
+          `SELECT count(*)::int AS n FROM ${quoteQualified(e.table)} t
+           WHERE ${set} AND NOT EXISTS (
+             SELECT 1 FROM ${quoteQualified(e.refTable)} r WHERE ${match})`,
+        );
+        if (row?.n) dangling.push(`${e.name} (${row.n})`);
+      }
+      check(
+        "a loaded snapshot matches the manifest's row counts and every FK resolves",
+        loadMiscounted.length === 0 &&
+          dangling.length === 0 &&
+          edges.some((e) => e.table === "public.attendance"),
+        `${loadMiscounted.length === 0 ? "counts match" : `counts differ: ${loadMiscounted.join(", ")}`}; ` +
+          `${edges.length} FKs checked, ${dangling.length === 0 ? "none dangling" : `dangling: ${dangling.join(", ")}`}`,
+      );
+    } finally {
+      await load.end();
+    }
 
     const dumpedData = execFileSync(
       pgRestore,
