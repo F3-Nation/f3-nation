@@ -41,6 +41,7 @@ def run(
     spaces=None,
     dm_side_effect=None,
     locked=None,
+    hand_back_error=None,
     **settings,
 ):
     class FakeDatetime(datetime):
@@ -78,7 +79,12 @@ def run(
         finally:
             in_transaction.pop()
 
+    claimed = set()
+
     def save_reminders_sent(_session, user_id, received):
+        if user_id in claimed and hand_back_error:
+            raise hand_back_error
+        claimed.add(user_id)
         row = rows[user_id]
         row.meta = {**(row.meta or {}), fng_reminders.FNG_META_REMINDERS_SENT: received}
 
@@ -294,6 +300,30 @@ def test_failed_reminder_restores_the_count_he_had(monkeypatch):
     run(monkeypatch, [fng], delivered=())
 
     assert fng.meta["fng_reminders_sent"] == {"7": 1}
+
+
+@pytest.mark.parametrize("dm_side_effect", [None, RuntimeError("slack timeout")], ids=["undelivered", "send raised"])
+def test_failed_hand_back_is_logged_without_hiding_the_send_error(monkeypatch, dm_side_effect):
+    run(
+        monkeypatch,
+        [fng_created_days_ago(3)],
+        delivered=(),
+        dm_side_effect=dm_side_effect,
+        hand_back_error=TimeoutError("lock timeout"),
+    )
+
+    errors = [c.kwargs["extra"]["json_fields"] for c in fng_reminders.logger.error.call_args_list]
+    assert errors[0] == {
+        "event": "fng.reminder_hand_back_failed",
+        "team_id": "T1",
+        "user_id": 42,
+        "due": 1,
+        "error_type": "TimeoutError",
+    }
+    if dm_side_effect:
+        assert errors[1]["event"] == "fng.reminder_failed" and errors[1]["error_type"] == "RuntimeError"
+    else:
+        assert len(errors) == 1
 
 
 def test_handing_back_a_failed_claim_keeps_a_newer_count(monkeypatch):

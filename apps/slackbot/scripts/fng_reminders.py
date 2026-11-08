@@ -138,9 +138,9 @@ def _remind_fng(
     try:
         delivered = dm_fng_contacts(client, space.team_id, fng, message, logger, contact_ids=list(previous))
     except Exception:
-        _hand_back(fng.id, previous, due)
+        _safe_hand_back(space, fng.id, previous, due)
         raise
-    _hand_back(fng.id, {user_id: n for user_id, n in previous.items() if user_id not in delivered}, due)
+    _safe_hand_back(space, fng.id, {user_id: n for user_id, n in previous.items() if user_id not in delivered}, due)
     if not delivered:
         logger.warning(
             "fng.reminder_undeliverable",
@@ -162,8 +162,8 @@ def _contacts_behind(fng: User, due: int) -> list[int]:
 
 
 def _lock_fng(session: Session, user_id: int) -> User | None:
-    # Held only for a read and a write, so waiting is short; the timeout bounds a writer that holds it longer, and
-    # its error leaves him for the next day's catch-up.
+    # Held only for a read and a write, so waiting is short; the timeout bounds a writer that holds it longer. When
+    # claiming, its error writes nothing, so he is retried in the next day's catch-up.
     session.execute(text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'"))
     return session.query(User).filter(User.id == user_id).with_for_update().one_or_none()
 
@@ -184,6 +184,27 @@ def _claim_reminder(
         save_reminders_sent(session, user_id, {**received, **{str(contact_id): due for contact_id in behind}})
         return {contact_id: received.get(str(contact_id)) for contact_id in behind}, _reminder_text(
             settings, fng, days, due
+        )
+
+
+def _safe_hand_back(space: SlackSpace, user_id: int, previous: dict[int, int | None], due: int) -> None:
+    """Hands back the claim without letting a failure replace the send's own error. A failed hand-back leaves the
+    contacts counted as reminded, so it gets its own event."""
+    try:
+        _hand_back(user_id, previous, due)
+    except Exception as exc:
+        logger.error(
+            "fng.reminder_hand_back_failed error_type=%s",
+            type(exc).__name__,
+            extra={
+                "json_fields": {
+                    "event": "fng.reminder_hand_back_failed",
+                    "team_id": space.team_id,
+                    "user_id": user_id,
+                    "due": due,
+                    "error_type": type(exc).__name__,
+                }
+            },
         )
 
 
