@@ -60,3 +60,28 @@ it.each([
     isNationAdmin,
   );
 });
+
+it("renders internal routes as same-tab links to their admin paths", () => {
+  render(<AdminNavLinks mapUrl="https://map.example.invalid" />);
+
+  for (const [name, href] of [
+    ["All Users", "/users/all"],
+    ["My Users", "/users/mine"],
+    ["Events", "/workouts"],
+    ["Locations", "/locations"],
+  ] as const) {
+    const link = screen.getByRole("link", { name });
+    expect(link.getAttribute("href")).toBe(href);
+    expect(link.getAttribute("target")).toBeNull();
+    expect(link.getAttribute("rel")).toBeNull();
+  }
+});
+
+it("opens the Map in a new tab at its external URL", () => {
+  render(<AdminNavLinks mapUrl="https://map.example.invalid/region" />);
+
+  const map = screen.getByRole("link", { name: "Map" });
+  expect(map.getAttribute("href")).toBe("https://map.example.invalid/region");
+  expect(map.getAttribute("target")).toBe("_blank");
+  expect(map.getAttribute("rel")).toBe("noopener noreferrer");
+});

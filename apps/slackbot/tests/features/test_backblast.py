@@ -115,6 +115,25 @@ def _assert_ineligible_submission_rejected(posting_context):
     assert "reopen" in response["text"].lower()
 
 
+def test_backblast_does_not_write_or_post_with_unlinked_member(submission_body, region_record, posting_context):
+    from utilities.helper_functions import UnlinkedSlackIdentityError
+
+    posting_context.db_manager.find_first_record.return_value = SimpleNamespace(
+        id=12, is_active=True, specific_org_id=None
+    )
+    submission_body["view"]["state"]["values"][actions.BACKBLAST_FILE] = {
+        actions.BACKBLAST_FILE: {"type": "file_input", "files": [{"id": "F_TEST"}]}
+    }
+    posting_context.upload_files.return_value = ([], [], [], [])
+    posting_context.get_user.side_effect = UnlinkedSlackIdentityError()
+    with pytest.raises(UnlinkedSlackIdentityError):
+        handle_backblast_post(submission_body, posting_context.client, MagicMock(), {}, region_record)
+    for operation in ("create_record", "create_records", "update_record", "update_records", "delete_records"):
+        getattr(posting_context.db_manager, operation).assert_not_called()
+    posting_context.upload_files.assert_not_called()
+    posting_context.client.chat_postMessage.assert_not_called()
+
+
 def test_backblast_selector_emits_unscheduled_event_confirmation(region_record):
     region_record.migration_date = "2020-01-01"
     event = SimpleNamespace(

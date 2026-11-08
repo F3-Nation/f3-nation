@@ -847,6 +847,9 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
     file_ids = safe_get(backblast_data, "file_ids") or []
     selected_options = safe_get(backblast_data, actions.BACKBLAST_OPTIONS) or []
 
+    all_pax = list(set([the_q] + (the_coq or []) + pax))
+    db_users: List[SlackUser] = [get_user(p, region_record, client, logger) for p in all_pax]
+
     user_id = safe_get(body, "user_id") or safe_get(body, "user", "id")
     if files:
         file_list, file_send_list, file_ids, low_rez_file_list = upload_files_to_storage(
@@ -884,8 +887,6 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
         message_channel = None
         message_ts = None
 
-    all_pax = list(set([the_q] + (the_coq or []) + pax))
-    db_users: List[SlackUser] = [get_user(p, region_record, client, logger) for p in all_pax]
     db_ids = []
     db_users_deduped = []
     for u in db_users:

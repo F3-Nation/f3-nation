@@ -101,7 +101,7 @@ def build_home_form(
     if action_id == actions.CALENDAR_HOME_DATE_FILTER and not safe_get(body, "actions", 0, "selected_date"):
         return
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
-    user_id = get_user(slack_user_id, region_record, client, logger).user_id
+    user_id = get_user(slack_user_id, region_record, client, logger, require_link=False).user_id
 
     metadata = safe_convert(safe_get(body, "view", "metadata", "event_payload"), json.loads) or {}
     user_is_admin = safe_get(metadata, "user_is_admin")
@@ -599,7 +599,9 @@ def handle_assign_q_form(
 def handle_home_event(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     event_instance_id = safe_convert(safe_get(body, "actions", 0, "action_id").split("_")[1], int)
     action = safe_get(body, "actions", 0, "selected_option", "value")
-    user_id = get_user(safe_get(body, "user", "id"), region_record, client, logger).user_id
+    user_id = get_user(
+        safe_get(body, "user", "id"), region_record, client, logger, require_link=action != "View Preblast"
+    ).user_id
     view_id = safe_get(body, "view", "id")
     update_post = False
     hc_action: bool | None = None  # True = HC, False = Un-HC, None = not an HC action

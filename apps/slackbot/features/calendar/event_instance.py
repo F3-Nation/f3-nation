@@ -292,6 +292,12 @@ def handle_event_instance_add(
         )
     form_data = form.get_selected_values(body)
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
+    # Resolve the Q before saving an event that would otherwise lack its attendance link.
+    q_user_id = (
+        get_user(slack_user_id, region_record, client, logger).user_id
+        if safe_get(metadata, "is_preblast") == "True"
+        else None
+    )
 
     selected_options = safe_get(form_data, CALENDAR_ADD_EVENT_INSTANCE_OPTIONS) or []
     is_private = "private" in selected_options
@@ -435,7 +441,7 @@ def handle_event_instance_add(
         DbManager.create_record(
             Attendance(
                 event_instance_id=record.id,
-                user_id=get_user(slack_user_id, region_record, client, logger).user_id,
+                user_id=q_user_id,
                 is_planned=True,
                 attendance_x_attendance_types=[Attendance_x_AttendanceType(attendance_type_id=2)],  # 2 = Q
             )

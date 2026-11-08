@@ -364,3 +364,15 @@ def test_dm_returns_who_got_it_and_can_target_some_contacts(monkeypatch):
 @pytest.mark.parametrize("days, expected", [(None, 3), (0, 0), (2, 2), (7, 7), (5, 3), (-1, 3)])
 def test_reminder_frequency_defaults_to_every_three_days_unless_a_listed_choice(days, expected):
     assert fng.fng_reminder_days(region_record(fng_reminder_days=days)) == expected
+
+
+def test_unlinked_battle_buddy_does_not_block_fng_creation(monkeypatch):
+    from utilities import helper_functions
+
+    db, send, view = patch_db(monkeypatch)
+    monkeypatch.setattr(fng, "get_user", helper_functions.get_user)
+    monkeypatch.setattr(helper_functions, "_resolve_user", lambda *_a, **_k: SimpleNamespace(user_id=None))
+    fng.handle_fng_form(submission(), MagicMock(), MagicMock(), {}, region_record())
+    created = db.create_record.call_args.args[0]
+    assert "battle_buddy" not in created.meta
+    assert view.call_args.kwargs["level"] == constants.AlertLevel.SUCCESS

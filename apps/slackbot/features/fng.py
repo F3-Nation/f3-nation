@@ -133,7 +133,7 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     existing = safe_get(DbManager.find_records(User, filters=[User.email == email]), 0)
     if not existing:
         try:
-            buddy = get_user(safe_get(body, "user", "id"), region_record, client, logger)
+            buddy = get_user(safe_get(body, "user", "id"), region_record, client, logger, require_link=False)
             buddy_user_id = safe_get(buddy, "user_id")
             DbManager.create_record(
                 User(
