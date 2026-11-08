@@ -88,6 +88,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
   // Writing to these stores during render updates other subscribed components
   // (e.g. the ancestor UserLocationProvider) mid-render, which React flags.
   useEffect(() => {
+    // Once per mount: later URL changes mirror map state and must not re-select.
     if (hasSyncedInitialMapState.current) return;
     hasSyncedInitialMapState.current = true;
 
