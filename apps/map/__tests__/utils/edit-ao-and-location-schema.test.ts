@@ -63,9 +63,28 @@ describe("EditAOAndLocationSchema – valid submission", () => {
       originalLocationId: 10,
       currentValues: {},
     }));
+
+  it("keeps prior values that break today's rules", () => {
+    const currentValues = {
+      aoName: "A",
+      aoLogo: "not-a-valid-url",
+      aoWebsite: null,
+      locationAddress: "",
+      locationCity: "X",
+    };
+    const result = EditAOAndLocationSchema.parse({ ...valid, currentValues });
+    expect(result.currentValues).toEqual(currentValues);
+  });
 });
 
 describe("EditAOAndLocationSchema – invalid submissions", () => {
+  it("rejects a prior value of the wrong type", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, currentValues: { aoName: 42 } },
+      "currentValues",
+    ));
+
   it("rejects an aoName shorter than 2 characters", () =>
     expectInvalidAt(
       EditAOAndLocationSchema,
