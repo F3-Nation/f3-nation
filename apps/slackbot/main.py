@@ -30,6 +30,7 @@ from utilities.builders import SUBMISSION_WAIT_VIEW, add_debug_form, add_loading
 from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE, is_production_deployment
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
+    UnlinkedSlackIdentityError,
     get_oauth_settings,
     get_region_record,
     get_request_type,
@@ -61,6 +62,8 @@ setup_debugger()
 
 
 def get_user_facing_error_message(exc: Exception) -> str:
+    if isinstance(exc, UnlinkedSlackIdentityError):
+        return str(exc)
     if isinstance(exc, F3ApiAuthError):
         return "The Slackbot could not authenticate with the F3 Nation API."
     if isinstance(exc, F3ApiNotFoundError):

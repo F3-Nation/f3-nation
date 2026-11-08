@@ -225,5 +225,5 @@ def send_error_response(body: dict, client: WebClient, error: str) -> None:
             pass
 
     blocks = [block.as_form_field() for block in error_form.blocks]
-    user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
+    user_id = safe_get(body, "user", "id") or safe_get(body, "user_id") or safe_get(body, "event", "user")
     client.chat_postMessage(channel=user_id, text=error, blocks=blocks)

@@ -14,6 +14,49 @@ from features.calendar.home import SLACK_MODAL_BLOCK_LIMIT, _append_calendar_eve
 from utilities.slack import actions, orm
 
 
+@pytest.mark.parametrize("unlinked_coq", [False, True])
+def test_assign_q_does_not_delete_existing_attendance_for_unlinked_selection(monkeypatch, unlinked_coq):
+    from features.calendar import home
+    from utilities import helper_functions
+
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    monkeypatch.setattr(helper_functions, "SLACK_USERS", {})
+    monkeypatch.setattr(helper_functions, "update_local_slack_users", lambda: None)
+    identity = SimpleNamespace(user_id=None, slack_id="U_HIDDEN", slack_team_id="T_TEST")
+    monkeypatch.setattr(
+        helper_functions,
+        "create_user",
+        lambda profile, *_a, **_k: identity if profile["id"] == "U_HIDDEN" else SimpleNamespace(user_id=42),
+    )
+    field = actions.CALENDAR_HOME_ASSIGN_Q_USER
+    body = {
+        "user": {"id": "U_ACTOR"},
+        "view": {
+            "private_metadata": '{"event_instance_id":7}',
+            "blocks": [],
+            "state": {"values": {field: {field: {"type": "multi_users_select", "selected_users": ["U_HIDDEN"]}}}},
+        },
+    }
+    client = MagicMock()
+    if unlinked_coq:
+        body["view"]["state"]["values"][field][field]["selected_users"] = ["U_LINKED"]
+        coq_field = actions.CALENDAR_HOME_ASSIGN_Q_CO_QS
+        body["view"]["state"]["values"][coq_field] = {
+            coq_field: {"type": "multi_users_select", "selected_users": ["U_HIDDEN"]}
+        }
+    client.users_info.side_effect = lambda user: {"user": {"id": user, "profile": {}}}
+    with patch.object(home, "DbManager") as database:
+        database.find_records.return_value = [
+            SimpleNamespace(id=9, user_id=42, attendance_types=[SimpleNamespace(type="Q")])
+        ]
+        with pytest.raises(helper_functions.UnlinkedSlackIdentityError):
+            home.handle_assign_q_form(body, client, MagicMock(), {}, SimpleNamespace(team_id="T_TEST", org_id=1))
+        database.delete_records.assert_not_called()
+        database.create_record.assert_not_called()
+        database.update_record.assert_not_called()
+    client.chat_postMessage.assert_not_called()
+
+
 def _calendar_event(event_id: int, start_date: datetime.date, *, closed: bool = False) -> SimpleNamespace:
     event = SimpleNamespace(
         id=event_id,

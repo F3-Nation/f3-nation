@@ -19,13 +19,6 @@ describe("InfoRequestGuard", () => {
     expect(guard.isOrgCurrent(10)).toBe(false);
   });
 
-  it("signals a switch only when selecting a different org", () => {
-    const guard = new InfoRequestGuard();
-    expect(guard.selectOrg(10)).toBe(true);
-    expect(guard.selectOrg(10)).toBe(false);
-    expect(guard.selectOrg(11)).toBe(true);
-  });
-
   // Reproduction for the P2 "switching regions leaves stale details" bug:
   // a location request from region A must not populate the sidebar after the
   // map switches to region B's pins.

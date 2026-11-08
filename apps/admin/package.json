@@ -12,7 +12,7 @@
     "start": "pnpm with-env next start",
     "test": "vitest --run --coverage",
     "test:watch": "vitest -w",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "dotenv -v SKIP_ENV_VALIDATION=1 -- next typegen && tsc --noEmit",
     "with-env": "dotenv -e .env --"
   },
   "dependencies": {
