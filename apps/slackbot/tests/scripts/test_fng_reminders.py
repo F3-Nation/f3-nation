@@ -62,17 +62,39 @@ def run(
     # The row read under the lock is the job's copy unless a test says an overlapping run already changed it.
     rows = {fng.id: fng for fng in fngs} if locked is None else locked
     session = MagicMock()
+    session.lock_options = []
     session.query.return_value.filter.side_effect = lambda clause: SimpleNamespace(
-        with_for_update=lambda **_: SimpleNamespace(one_or_none=lambda: rows.get(clause.right.value))
+        with_for_update=lambda **options: (
+            session.lock_options.append(options) or SimpleNamespace(one_or_none=lambda: rows.get(clause.right.value))
+        )
     )
+    in_transaction = []
 
     @contextmanager
     def session_scope():
-        yield session
+        in_transaction.append(True)
+        try:
+            yield session
+        finally:
+            in_transaction.pop()
+
+    def save_reminders_sent(_session, user_id, received):
+        row = rows[user_id]
+        row.meta = {**(row.meta or {}), fng_reminders.FNG_META_REMINDERS_SENT: received}
+
+    def send(*args, **kwargs):
+        assert not in_transaction, "a Slack DM was sent while a transaction (and the FNG's row lock) was open"
+        outcome = dm_side_effect.pop(0) if isinstance(dm_side_effect, list) else dm_side_effect
+        if isinstance(outcome, Exception):
+            raise outcome
+        if callable(outcome):
+            return outcome(*args, **kwargs)
+        return list(delivered) if outcome is None else outcome
 
     monkeypatch.setattr(fng_reminders, "session_scope", session_scope)
-    monkeypatch.setattr(fng_reminders, "save_reminders_sent", MagicMock())
-    dm = MagicMock(return_value=list(delivered), side_effect=dm_side_effect)
+    monkeypatch.setattr(fng_reminders, "save_reminders_sent", MagicMock(side_effect=save_reminders_sent))
+    dm = MagicMock(side_effect=send)
+    dm.session = session
     monkeypatch.setattr(fng_reminders, "dm_fng_contacts", dm)
     monkeypatch.setattr(fng_reminders, "WebClient", MagicMock())
     monkeypatch.setattr(fng_reminders, "logger", MagicMock())
@@ -127,8 +149,10 @@ def test_missed_reminder_goes_out_the_next_day_once(monkeypatch):
 
 
 def test_undelivered_reminder_is_retried(monkeypatch):
-    assert run(monkeypatch, [fng_created_days_ago(3)], delivered=()).called
-    fng_reminders.save_reminders_sent.assert_not_called()
+    fng = fng_created_days_ago(3)
+
+    assert run(monkeypatch, [fng], delivered=()).called
+    assert fng.meta["fng_reminders_sent"] == {}  # the claim was handed back
     fng_reminders.logger.warning.assert_called_once()
     assert fng_reminders.logger.warning.call_args.args[0] == "fng.reminder_undeliverable"
 
@@ -209,7 +233,12 @@ def test_a_failing_fng_does_not_stop_the_next_one(monkeypatch):
     dm = run(monkeypatch, fngs, dm_side_effect=[RuntimeError("slack timeout"), [7]])
 
     assert [c.args[2].id for c in dm.call_args_list] == [42, 43]
-    fng_reminders.save_reminders_sent.assert_called_once()
+    # 42's claim is handed back so tomorrow's run retries him.
+    assert [c.args[1:] for c in fng_reminders.save_reminders_sent.call_args_list] == [
+        (42, {"7": 1}),
+        (42, {}),
+        (43, {"7": 1}),
+    ]
     fng_reminders.logger.error.assert_called_once()
     assert fng_reminders.logger.error.call_args.args[0].startswith("fng.reminder_failed")
 
@@ -242,12 +271,42 @@ def test_reminder_uses_the_locked_row(monkeypatch):
 
     dm = run(monkeypatch, [fng_created_days_ago(3)], locked={42: locked})
 
-    assert dm.call_args.args[2] is locked
+    assert dm.call_args.args[3].startswith("*Locked (John S.)*")
+    assert locked.meta["fng_reminders_sent"] == {"7": 1}
 
 
-def test_fng_locked_by_another_run_or_deleted_is_skipped(monkeypatch):
-    # skip_locked returns no row for both.
+def test_deleted_fng_is_skipped(monkeypatch):
     run(monkeypatch, [fng_created_days_ago(3)], locked={}).assert_not_called()
+
+
+def test_lock_wait_is_bounded_instead_of_skipped(monkeypatch):
+    # The lock is only held for a quick read and write, so waiting on it can't lose his reminder for the day.
+    session = run(monkeypatch, [fng_created_days_ago(3)]).session
+
+    assert session.lock_options and all(options == {} for options in session.lock_options)
+    timeouts = [str(c.args[0]) for c in session.execute.call_args_list]
+    assert timeouts and all("lock_timeout" in sql for sql in timeouts)
+
+
+def test_failed_reminder_restores_the_count_he_had(monkeypatch):
+    fng = fng_created_days_ago(6, meta={"battle_buddy": 7, "fng_reminders_sent": {"7": 1}})
+
+    run(monkeypatch, [fng], delivered=())
+
+    assert fng.meta["fng_reminders_sent"] == {"7": 1}
+
+
+def test_handing_back_a_failed_claim_keeps_a_newer_count(monkeypatch):
+    # While this run's DM fails, a later run records a newer count; handing back only undoes this run's own.
+    fng = fng_created_days_ago(3)
+
+    def newer_count_lands_then_dm_fails(*args, **kwargs):
+        fng.meta = {**fng.meta, "fng_reminders_sent": {"7": 2}}
+        return []
+
+    run(monkeypatch, [fng], dm_side_effect=newer_count_lands_then_dm_fails)
+
+    assert fng.meta["fng_reminders_sent"] == {"7": 2}
 
 
 @pytest.mark.parametrize("failing", ["region", "fng"])

@@ -156,10 +156,18 @@ def test_overlapping_runs_send_each_reminder_once(isolated_postgres, monkeypatch
     monkeypatch.setattr(fng_reminders.DbManager, "find_first_record", MagicMock(return_value=None))
     settings = fng_reminders.SlackSettings(team_id="T1", bot_token="xoxb")
 
+    first_errors = []
+
     def remind():
         fng_reminders._remind_fng(MagicMock(), SimpleNamespace(team_id="T1"), settings, 3, fng, now)
 
-    first = threading.Thread(target=remind)
+    def remind_first():
+        try:
+            remind()
+        except Exception as exc:  # a thread would otherwise swallow it
+            first_errors.append(exc)
+
+    first = threading.Thread(target=remind_first)
     first.start()
     assert first_sending.wait(10)
     started = time.monotonic()
@@ -167,6 +175,30 @@ def test_overlapping_runs_send_each_reminder_once(isolated_postgres, monkeypatch
     waited = time.monotonic() - started
     first.join(10)
 
+    assert not first.is_alive() and not first_errors
     assert dm_mock.call_count == 1
-    assert waited < 0.5  # skipped him instead of waiting for the first run's lock
+    assert waited < 0.8  # read the first run's claim without waiting for its send
     assert _meta(isolated_postgres, user_id)["fng_reminders_sent"] == {"7": 1}
+
+
+def test_no_row_lock_is_held_while_the_dm_is_sent(isolated_postgres, monkeypatch):
+    user_id = _insert_user(isolated_postgres, {"battle_buddy": 7})
+    with Session(isolated_postgres) as session:
+        fng = session.get(User, user_id)
+        session.expunge(fng)
+    now = datetime.now(pytz.timezone("US/Central")) + timedelta(days=4)
+
+    def dm(client, team_id, fng, text_, logger, contact_ids):
+        # A profile edit arriving mid-send must not wait on the reminder job.
+        with isolated_postgres.begin() as connection:
+            connection.execute(text("SELECT id FROM users WHERE id = :id FOR UPDATE NOWAIT"), {"id": user_id})
+        return []  # undelivered, so the claim is handed back too
+
+    monkeypatch.setattr(fng_reminders, "dm_fng_contacts", MagicMock(side_effect=dm))
+    monkeypatch.setattr(fng_reminders.DbManager, "find_first_record", MagicMock(return_value=None))
+    settings = fng_reminders.SlackSettings(team_id="T1", bot_token="xoxb")
+
+    fng_reminders._remind_fng(MagicMock(), SimpleNamespace(team_id="T1"), settings, 3, fng, now)
+
+    assert fng_reminders.dm_fng_contacts.call_count == 1
+    assert _meta(isolated_postgres, user_id)["fng_reminders_sent"] == {}
