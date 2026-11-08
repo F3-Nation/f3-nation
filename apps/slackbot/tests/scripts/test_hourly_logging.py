@@ -69,13 +69,15 @@ JOBS = [
 SENSITIVE = "member@example.invalid xoxb-synthetic-token SELECT private_data U_SYNTHETIC_MEMBER"
 
 
-def stub_jobs(monkeypatch, failing_job=None, error=None):
+def stub_jobs(monkeypatch, failing_job=None, error=None, arguments=None):
     attempted = []
     for module, function in JOBS:
         job = f"{module}.{function}"
 
         def run(*args, _job=job, **kwargs):
             attempted.append(_job)
+            if arguments is not None:
+                arguments.append((_job, args, kwargs))
             if _job == failing_job:
                 raise error
 
@@ -132,15 +134,28 @@ def test_hourly_success_keeps_job_selection(monkeypatch, caplog, run_reporting):
     assert not [record for record in caplog.records if record.name == "scripts.hourly_runner"]
 
 
-@pytest.mark.parametrize("name", ["member@example.invalid", "X" * 100])
-def test_hourly_failure_bounds_exception_class(monkeypatch, caplog, name):
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("member@example.invalid", "Exception"),
+        ("X" * 64, "X" * 64),
+        ("X" * 65, "Exception"),
+        ("1Bad", "Exception"),
+        ("_Err2", "_Err2"),
+    ],
+)
+def test_hourly_failure_bounds_exception_class(monkeypatch, caplog, capsys, name, expected):
     error = type(name, (Exception,), {})(SENSITIVE)
     stub_jobs(monkeypatch, "requests.post", error)
     with caplog.at_level(logging.ERROR):
         hourly_runner.run_all_hourly_scripts()
     record = next(record for record in caplog.records if record.name == "scripts.hourly_runner")
-    assert record.json_fields["error_type"] == "Exception"
-    assert name not in repr(record.__dict__)
+    assert record.json_fields["error_type"] == expected
+    captured = capsys.readouterr()
+    output = captured.out + captured.err + repr(record.__dict__)
+    assert SENSITIVE not in output
+    if expected != name:
+        assert name not in output
 
 
 @pytest.mark.parametrize(
@@ -164,3 +179,26 @@ def test_hourly_provider_errors_do_not_retain_sensitive_payloads(monkeypatch, ca
     assert record.json_fields["error_type"] == type(error).__name__
     assert record.exc_info is None
     assert attempted == [f"{m}.{f}" for m, f in JOBS]
+
+
+@pytest.mark.parametrize("failure", [None, "calendar_images.generate_calendar_images"])
+def test_hourly_runner_preserves_job_arguments(monkeypatch, failure):
+    arguments = []
+    stub_jobs(monkeypatch, failure, RuntimeError(SENSITIVE), arguments)
+    hourly_runner.run_all_hourly_scripts(force=True, reporting_org_id=123)
+    assert arguments == [
+        ("calendar_images.generate_calendar_images", (), {"force": True}),
+        ("backblast_reminders.send_backblast_reminders", (), {}),
+        ("preblast_reminders.send_preblast_reminders", (), {}),
+        ("auto_preblast_send.send_automated_preblasts", (), {}),
+        ("q_lineups.send_lineups", (), {"force": True}),
+        ("update_slack_users.update_slack_users", (), {}),
+        ("update_slack_users.update_home_regions", (), {}),
+        ("fng_reminders.send_fng_reminders", (), {"force": True}),
+        ("home_region_nudge.send_home_region_nudges", (), {}),
+        ("f3versary_announcements.send_f3versary_announcements", (), {"force": True}),
+        ("monthly_reporting.cycle_all_orgs", (), {"run_org_id": 123}),
+        ("kotter_reports.send_kotter_reports", (), {"force": True, "run_org_id": 123}),
+        ("award_achievements.main", (), {}),
+        ("requests.post", (f"{hourly_runner.APP_URL}/hourly-runner-complete",), {}),
+    ]
