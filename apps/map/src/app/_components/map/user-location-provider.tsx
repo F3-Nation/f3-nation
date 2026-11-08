@@ -7,11 +7,13 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
 } from "react";
 
 import { isDevelopment, RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { setView } from "~/utils/set-view";
+import { getUserLocationZoom } from "~/utils/user-location-zoom";
 import { mapStore } from "~/utils/store/map";
 
 const UserLocationContext = createContext<{
@@ -30,6 +32,11 @@ const USE_FAKE_LOCATION = false as boolean;
 export const UserLocationProvider = ({ children }: { children: ReactNode }) => {
   RERENDER_LOGS && console.log("UserLocationProvider rerender");
   const hasTriedInitialShowUserLocation = useRef(false);
+  // The URL as the visitor opened it. The map rewrites `zoom` into the URL as it
+  // moves, so read the embed's zoom before that can happen.
+  const [initialSearch] = useState(() =>
+    typeof window === "undefined" ? "" : window.location.search,
+  );
   const userGpsLocationStatus = mapStore.use.userGpsLocationStatus();
   const userGpsLocationPermissions = mapStore.use.userGpsLocationPermissions();
   const setPermissions = (permissionState: PermissionState) => {
@@ -116,7 +123,7 @@ export const UserLocationProvider = ({ children }: { children: ReactNode }) => {
         setView({
           lat: position.latitude,
           lng: position.longitude,
-          zoom: 15,
+          zoom: getUserLocationZoom(initialSearch),
           options: { onlyIfNotMovedMap: true },
         });
       }
@@ -130,7 +137,7 @@ export const UserLocationProvider = ({ children }: { children: ReactNode }) => {
       .catch(() => {
         setStatus("error");
       });
-  }, []);
+  }, [initialSearch]);
 
   return (
     <UserLocationContext.Provider
