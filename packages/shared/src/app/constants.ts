@@ -25,6 +25,10 @@ export const BOONE_CENTER = [36.211104, -81.660849] as [number, number];
 export const DEFAULT_CENTER = BOONE_CENTER;
 
 export const CLOSE_ZOOM = 13;
+// First view when the map centers on the visitor: a regional view, wider on larger screens
+export const USER_LOCATION_ZOOM = 10;
+// Map theme for visitors who haven't picked one in Settings
+export const MAP_DEFAULT_THEME = "dark";
 export const FAR_ZOOM = 4;
 export const COUNTRY_ZOOM = 5; // below 5 it is red
 
