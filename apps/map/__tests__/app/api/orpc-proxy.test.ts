@@ -347,6 +347,33 @@ describe("oRPC proxy route", () => {
     }
   });
 
+  it("aborts the API request when the browser goes away mid-body, without logging a failure", async () => {
+    let upstreamSignal: AbortSignal | undefined;
+    fetchSpy.mockImplementationOnce((_url, init) => {
+      upstreamSignal = init.signal ?? undefined;
+      return Promise.resolve(
+        new Response(new ReadableStream<Uint8Array>(), {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+    });
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const response = await GET(
+      new NextRequest("http://localhost:3000/api/orpc/v1/ping"),
+    );
+    const reader = response.body!.getReader();
+    const pending = reader.read();
+    await sleep(10); // let the proxy start waiting on the API
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    expect(upstreamSignal?.aborted).toBe(true);
+    await sleep(10);
+    expect(logWarn).not.toHaveBeenCalled();
+  });
+
   it("fails a body that stops arriving after the headers", async () => {
     vi.useFakeTimers();
     try {

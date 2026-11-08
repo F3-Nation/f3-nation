@@ -76,12 +76,14 @@ function getApiBaseUrl(): string {
  * mid-body. The timer runs only while waiting on the API, not while the
  * browser is slow to take the next chunk. Reads go through our own reader
  * because Next's patched fetch can hand back a copied body that aborting the
- * request never reaches.
+ * request never reaches. Cancelling that copy can likewise wait on another
+ * branch, so `onCancel` lets the caller also abort the request.
  */
 export function withStallTimeout<T>(
   body: ReadableStream<T>,
   timeoutMs: number,
   onFailure: (err: unknown) => void,
+  onCancel?: () => void,
 ): ReadableStream<T> {
   const reader = body.getReader();
   // Set when the browser goes away. Cancelling ends a pending read with
@@ -115,6 +117,7 @@ export function withStallTimeout<T>(
     },
     cancel(reason) {
       cancelled = true;
+      onCancel?.();
       return reader.cancel(reason);
     },
   });
@@ -233,16 +236,21 @@ async function proxyRequest(request: NextRequest) {
 
   let responseBody =
     upstreamResponse.body &&
-    withStallTimeout(upstreamResponse.body, UPSTREAM_TIMEOUT_MS, (err) => {
-      // Headers already went out, so the browser sees a failed download
-      // rather than a 503; this log is the only record of why.
-      upstreamTimeout.abort();
-      logWarn("map.orpc_proxy.upstream_body_failed", {
-        path: proxiedPath,
-        durationMs: Date.now() - startedAt,
-        err,
-      });
-    });
+    withStallTimeout(
+      upstreamResponse.body,
+      UPSTREAM_TIMEOUT_MS,
+      (err) => {
+        // Headers already went out, so the browser sees a failed download
+        // rather than a 503; this log is the only record of why.
+        upstreamTimeout.abort();
+        logWarn("map.orpc_proxy.upstream_body_failed", {
+          path: proxiedPath,
+          durationMs: Date.now() - startedAt,
+          err,
+        });
+      },
+      () => upstreamTimeout.abort(),
+    );
 
   // Compress JSON for the browser here, at the browser-facing hop. The API
   // doesn't compress (see apps/api/src/app.ts), so eventsAndLocations went out
