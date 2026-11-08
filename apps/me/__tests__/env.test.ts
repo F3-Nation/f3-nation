@@ -85,8 +85,14 @@ describe("env F3_API_BASE_URL validation", () => {
   });
 
   it("rejects a missing value", async () => {
-    vi.stubEnv("F3_API_BASE_URL", "");
+    vi.stubEnv("F3_API_BASE_URL", undefined);
+    await expect(import("@/env")).rejects.toThrow(
+      /Invalid environment variables/,
+    );
+  });
 
+  it("rejects an empty value", async () => {
+    vi.stubEnv("F3_API_BASE_URL", "");
     await expect(import("@/env")).rejects.toThrow(
       /Invalid environment variables/,
     );
