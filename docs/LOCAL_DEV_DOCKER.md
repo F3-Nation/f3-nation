@@ -654,6 +654,37 @@ sudo systemctl restart docker
 pnpm local:setup
 ```
 
+### `pnpm ci:local` freezes the machine or runs out of JavaScript heap
+
+`pnpm ci:local` runs typecheck, build, lint and test through Turbo, which starts many tasks in parallel. Several of them (`tsc`, `next build`, type-aware ESLint) each take gigabytes of memory, and Node sizes its default heap limit from the memory it can see. CI runners have enough memory for the defaults; a laptop, or a WSL 2 VM that only gets part of the Windows host's memory, may not. The symptoms are the whole machine locking up, or a task dying with `JavaScript heap out of memory`.
+
+These are per-machine settings, so put them in your own shell profile (for example `~/.bashrc`), not in the repo:
+
+1. **Run fewer tasks at once.** Turbo reads `TURBO_CONCURRENCY`. Start low and raise it until the machine stays responsive:
+
+   ```bash
+   export TURBO_CONCURRENCY=4
+   ```
+
+2. **Raise Node's heap limit** if a task still runs out of heap:
+
+   ```bash
+   export NODE_OPTIONS="--max-old-space-size=4096"
+   ```
+
+   The limit applies to each Node process, so the worst case is about the limit times `TURBO_CONCURRENCY`. Keep that product below the memory you actually have, or the system swaps or kills processes instead. `NODE_OPTIONS` also applies to every other Node program you run from that shell.
+
+3. **On WSL 2, give the VM more memory.** WSL 2 caps its VM at part of the Windows host's memory. To raise the cap, create or edit `%UserProfile%\.wslconfig` on Windows:
+
+   ```ini
+   [wsl2]
+   memory=12GB
+   ```
+
+   Then run `wsl --shutdown` from PowerShell and reopen your distro. Check the new total with `free -h`. With more memory you may not need the other two settings.
+
+If one task runs out of heap even on its own (run it alone, e.g. `pnpm typecheck`), that task's memory use has grown, so open an issue that names it rather than only raising the limit.
+
 ### Postgres won't start
 
 Check the container logs:
