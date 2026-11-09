@@ -35,6 +35,11 @@ env:
   REGION: us-central1
   JOB: f3-staging-refresh
   IMAGE_BASE: us-central1-docker.pkg.dev/f3data/cloud-run-builds/f3-staging-refresh
+  # Named here, not in repo or environment variables: an unset environment variable
+  # would fall back to the organization-level WIF_PROVIDER / WIF_SA, another account.
+  # setup.sh creates both under these fixed names (f3data is project 1086302786213).
+  WIF_PROVIDER: projects/1086302786213/locations/global/workloadIdentityPools/staging-refresh-gh/providers/github-main
+  WIF_SA: staging-refresh-deploy@f3data.iam.gserviceaccount.com
 
 jobs:
   ci-gate:
@@ -100,8 +105,8 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
-          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SA }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SA }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1

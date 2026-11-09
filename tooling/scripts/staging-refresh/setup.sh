@@ -399,11 +399,12 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   WIF_POOL="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${WIF_POOL_ID}"
   WIF_PROVIDER="${WIF_POOL}/providers/${WIF_PROVIDER_ID}"
   WIF_MEMBER="principal://iam.googleapis.com/${WIF_POOL}/subject/${WIF_SUBJECT}"
+  # The workflow names these two; keep them in step with its env block.
+  echo "rebuild workflow signs in with WIF_PROVIDER=$WIF_PROVIDER, WIF_SA=$DEPLOY_SA"
   echo "In GitHub (repo admin, once): environment $GH_ENV, deployment branches: main only,"
-  echo "no required reviewers; variables WIF_SA=$DEPLOY_SA and"
-  echo "WIF_PROVIDER=$WIF_PROVIDER"
-  # Fail closed. "Only main can deploy" rests on the environment's branch policy, and
-  # GitHub creates a missing environment, unprotected, the first time a job names it.
+  echo "no required reviewers"
+  # Fail closed, as a second layer to the provider's main-only condition: GitHub
+  # creates a missing environment, unprotected, the first time a job names it.
   # So GitHub gets the trust only while the environment exists with branches = main
   # only, and a re-run takes the trust back if that policy was loosened.
   WIF_GRANT_PENDING=1

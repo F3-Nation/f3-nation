@@ -202,9 +202,9 @@ trust back.
 
 Order, once: a repo admin creates the GitHub environment `staging-refresh`
 with deployment branches `main` only and no required reviewers. Then an Owner
-runs the full setup, which prints the two variables to set on that
-environment: `WIF_PROVIDER` (the `github-main` provider; it overrides the
-organization-level one) and `WIF_SA` (the account above).
+runs the full setup. The workflow names the provider and account itself (not
+through variables, which would fall back to the organization-level ones), so
+there is nothing to set in GitHub after that.
 
 ### Rebuild the image after a prod migration
 

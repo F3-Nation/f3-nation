@@ -69,7 +69,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 <!-- OPTIONAL (Production only, when a new migration can change the refresh login's grants: CREATE TABLE, CREATE SCHEMA, OWNER TO, REVOKE or audit.enable_tracking; see the skill): -->
 
 - [ ] **Re-grant the Staging refresh login**, before the rebuild below (the full setup also deploys an image from the release commit; the rebuild then replaces it with main's). From the repository root, `git status --porcelain` must print nothing; then run `git fetch origin main && git switch --detach {{RELEASE_SHA}}`, then `STAGING_REFRESH_RUNNERS="<same runners as last time>" bash tooling/scripts/staging-refresh/setup.sh` (the runner list isn't in the repo; the Refresh admin has it), then `git switch -`. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
-  - **Expected:** it ends with `Done. Image …` and no errors. The notes it prints every time (the GitHub environment variables and the slackbot restart) are informational once they're set up.
+  - **Expected:** it ends with `Done. Image …` and no errors. The notes it prints every time (the GitHub environment and the slackbot restart) are informational once they're set up.
   - **If it fails** (or prints `WARNING: the checkout has uncommitted changes`): this item is outside the Stop rule and doesn't hold up the release. Post it in `#monorepo` so the next Staging refresh waits until it's fixed.
 
 <!-- OPTIONAL (Production only, when there is a migration): -->
