@@ -598,7 +598,9 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
         throw new PhaseError("applied", { cause: e });
       }
     } finally {
-      await rw.end();
+      // Closing can't change the outcome, and a close error must not replace
+      // the migration's own error or read as "nothing was changed" after a commit.
+      await rw.end().catch(() => undefined);
     }
   }
 
@@ -616,7 +618,11 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     if (!last) throw new Error("No pending migration to apply.");
     await applyMigrations(snapshot, last);
   } finally {
-    rmSync(snapshot, { recursive: true, force: true });
+    try {
+      rmSync(snapshot, { recursive: true, force: true });
+    } catch {
+      // A temp copy left behind is harmless; don't let it hide the result.
+    }
   }
   for (const line of afterMigrationSteps(target)) console.log(line);
 }
