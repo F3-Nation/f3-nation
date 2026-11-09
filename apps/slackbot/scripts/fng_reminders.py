@@ -164,7 +164,7 @@ def _contacts_behind(fng: User, due: int) -> list[int]:
 def _lock_fng(session: Session, user_id: int) -> User | None:
     # Held only for a read and a write, so waiting is short; the timeout bounds a writer that holds it longer. When
     # claiming, its error writes nothing, so he is retried in the next day's catch-up.
-    session.execute(text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'"))
+    session.execute(text("SELECT set_config('lock_timeout', :timeout, true)"), {"timeout": LOCK_TIMEOUT})
     return session.query(User).filter(User.id == user_id).with_for_update().one_or_none()
 
 

@@ -181,6 +181,16 @@ def test_overlapping_runs_send_each_reminder_once(isolated_postgres, monkeypatch
     assert _meta(isolated_postgres, user_id)["fng_reminders_sent"] == {"7": 1}
 
 
+def test_lock_timeout_lasts_only_for_the_locking_transaction(isolated_postgres):
+    user_id = _insert_user(isolated_postgres, {"battle_buddy": 7})
+
+    with data_model_utils.session_scope() as session:
+        assert fng_reminders._lock_fng(session, user_id).id == user_id
+        assert session.execute(text("SHOW lock_timeout")).scalar() == fng_reminders.LOCK_TIMEOUT
+    with data_model_utils.session_scope() as session:
+        assert session.execute(text("SHOW lock_timeout")).scalar() == "0"
+
+
 def test_no_row_lock_is_held_while_the_dm_is_sent(isolated_postgres, monkeypatch):
     user_id = _insert_user(isolated_postgres, {"battle_buddy": 7})
     with Session(isolated_postgres) as session:

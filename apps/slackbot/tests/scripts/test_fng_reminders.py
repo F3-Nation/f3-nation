@@ -290,8 +290,9 @@ def test_lock_wait_is_bounded_instead_of_skipped(monkeypatch):
     session = run(monkeypatch, [fng_created_days_ago(3)]).session
 
     assert session.lock_options and all(options == {} for options in session.lock_options)
-    timeouts = [str(c.args[0]) for c in session.execute.call_args_list]
-    assert timeouts and all("lock_timeout" in sql for sql in timeouts)
+    timeouts = session.execute.call_args_list
+    assert timeouts and all("lock_timeout" in str(c.args[0]) for c in timeouts)
+    assert all(c.args[1] == {"timeout": fng_reminders.LOCK_TIMEOUT} for c in timeouts)
 
 
 def test_failed_reminder_restores_the_count_he_had(monkeypatch):
