@@ -113,8 +113,10 @@ Ask for anything missing before starting:
    the Staging refresh login" item and the Refresh admin row only when a new
    `.sql` file creates a table (`CREATE TABLE`) or calls
    `audit.enable_tracking`: either can take away the refresh login's read
-   access, and only the full setup re-grants it. Otherwise delete both. In
-   every other plan, delete all three.
+   access, and only the full setup re-grants it. Otherwise delete both. Keep
+   the re-grant before the rebuild: the full setup deploys an image from the
+   release commit, and the rebuild must replace it with main's. In every
+   other plan, delete all three.
 
 4. **Skim the linked PRs only for risk.** For each changelog entry, read the
    PR title and, if needed, the first lines of its body. You are looking for

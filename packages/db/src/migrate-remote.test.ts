@@ -263,4 +263,17 @@ describe("afterMigrationSteps", () => {
   it("after staging, says nothing", () => {
     expect(afterMigrationSteps("staging")).toEqual([]);
   });
+
+  it("after prod, a failed check of applied migrations still says to rebuild", () => {
+    const failure = new PhaseError("applied", { cause: new Error("boom") });
+    expect(describeFailure(failure, "prod").join("\n")).toContain(
+      "gh workflow run rebuild-staging-refresh.yml",
+    );
+    expect(describeFailure(failure, "staging").join("\n")).not.toContain(
+      "rebuild-staging-refresh",
+    );
+    expect(
+      describeFailure(new Error("connection dropped"), "prod").join("\n"),
+    ).not.toContain("rebuild-staging-refresh");
+  });
 });

@@ -55,9 +55,28 @@ jobs:
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync)$"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync|obfuscate-db-verify)$"
           wait-interval: 15
           allowed-conclusions: success
+
+      # The wait above fails only when none of the named checks exist, so also
+      # require each one: present on this commit, and its latest run green.
+      - name: Every required check passed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUIRED: build lint typecheck format-check test-coverage security-audit db-schema-sync obfuscate-db-verify
+        run: |
+          runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+            --jq '.check_runs[] | [.name, .started_at, (.conclusion // "pending")] | @tsv')"
+          failed=0
+          for name in ${REQUIRED}; do
+            latest="$(printf '%s\n' "${runs}" | awk -F'\t' -v n="${name}" '$1 == n' | sort -t$'\t' -k2 | tail -n 1 | cut -f3)"
+            if [[ "${latest}" != "success" ]]; then
+              echo "::error::check '${name}' on ${GITHUB_SHA}: ${latest:-missing}"
+              failed=1
+            fi
+          done
+          exit "${failed}"
 
   rebuild:
     needs: ci-gate
@@ -104,6 +123,16 @@ jobs:
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      # A migration merged while this ran would be on prod before long, and this
+      # image wouldn't know it. Other changes to main don't matter here.
+      - name: No newer migration on main
+        run: |
+          git fetch --quiet --depth=1 origin main
+          if ! git diff --quiet HEAD FETCH_HEAD -- packages/db/drizzle; then
+            echo "::error::main gained a migration while this ran. Run the workflow again; the job keeps its current image."
+            exit 1
+          fi
 
       - name: Point the job at the new image
         env:

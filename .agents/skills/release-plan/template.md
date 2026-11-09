@@ -66,17 +66,17 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Stop if:** the migration shows an error, or the check query doesn't match. Retry **once**; if it fails again, stop.
 - [ ] **Return to your branch:** `git switch -`. Owner: Release lead
 
+<!-- OPTIONAL (Production only, when a new migration creates a table or calls audit.enable_tracking): -->
+
+- [ ] **Re-grant the Staging refresh login**, before the rebuild below (the full setup also deploys an image from the release commit; the rebuild then replaces it with main's). From the repository root, `git status --porcelain` must print nothing; then run `git fetch origin main && git switch --detach {{RELEASE_SHA}}`, then `STAGING_REFRESH_RUNNERS="<same runners as last time>" bash tooling/scripts/staging-refresh/setup.sh` (the runner list isn't in the repo; the Refresh admin has it), then `git switch -`. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
+  - **Expected:** it ends with `Done. Image …` and no errors. The note about restarting the slackbot that it prints every time is informational.
+  - **If it fails** (or prints `WARNING: the checkout has uncommitted changes`): this item is outside the Stop rule and doesn't hold up the release. Post it in `#monorepo` so the next Staging refresh waits until it's fixed.
+
 <!-- OPTIONAL (Production only, when there is a migration): -->
 
 - [ ] **Rebuild the Staging refresh image** so the refresh and the developer snapshot know the new migration. `pnpm db:migrate:prod` prints this too: `gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main` (or Actions > **Rebuild Staging refresh image** > Run workflow, on `main`). Any code owner can run it; no Google Cloud access needed. Owner: Release lead
   - **Expected:** the run finishes green and its summary says `f3-staging-refresh now runs …`.
   - **If it fails:** this item is outside the Stop rule and doesn't hold up the release. Post it in `#monorepo` so the next Staging refresh waits until it's fixed.
-
-<!-- OPTIONAL (Production only, when a new migration creates a table or calls audit.enable_tracking): -->
-
-- [ ] **Re-grant the Staging refresh login.** From the repository root, `git status --porcelain` must print nothing; then run `git fetch origin main && git switch --detach {{RELEASE_SHA}}`, then `STAGING_REFRESH_RUNNERS="<same runners as last time>" bash tooling/scripts/staging-refresh/setup.sh` (the runner list isn't in the repo; the Refresh admin has it), then `git switch -`. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
-  - **Expected:** it ends with `Done. Image …` and no errors. The note about restarting the slackbot that it prints every time is informational.
-  - **If it fails** (or prints `WARNING: the checkout has uncommitted changes`): this item is outside the Stop rule and doesn't hold up the release. Post it in `#monorepo` so the next Staging refresh waits until it's fixed.
 
 <!-- Production: drop the "Create the test plan" step below and renumber. -->
 

@@ -215,9 +215,14 @@ credentials go only to the `staging-refresh` environment, which only `main`
 may use.
 
 If a migration creates a table or calls `audit.enable_tracking`, an `f3data`
-Owner also runs the full setup: a migration can take away the read-only prod
-login's access, and only the full setup re-grants it (with the `spuds`
-passwords). Over-running it is harmless.
+Owner runs the full setup first, then the rebuild: a migration can take away
+the read-only prod login's access, and only the full setup re-grants it (with
+the `spuds` passwords). The full setup also deploys an image from its own
+checkout, so the rebuild goes last. Over-running it is harmless.
+
+The workflow waits for every CI check on main's newest commit (including
+`obfuscate-db-verify`) and fails, leaving the job's image as it was, if
+another migration lands on main while it runs. Run it again then.
 
 The job's command is `pnpm -F @acme/scripts staging-refresh`
 (`tooling/scripts/src/staging-refresh.ts`), which also runs outside Cloud Run

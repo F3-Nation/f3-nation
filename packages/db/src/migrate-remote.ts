@@ -109,13 +109,16 @@ export function afterMigrationSteps(target: RemoteEnvironment): string[] {
     "snapshot know this migration (any code owner can run it):",
     "  gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main",
     "If a migration you just applied creates a table or calls",
-    "audit.enable_tracking, an f3data Owner also runs the full",
-    "tooling/scripts/staging-refresh/setup.sh: it re-grants the job's read-only",
-    "prod login (docs/STAGING_REFRESH.md).",
+    "audit.enable_tracking, an f3data Owner first runs the full",
+    "tooling/scripts/staging-refresh/setup.sh (it re-grants the job's read-only",
+    "prod login), then the rebuild (docs/STAGING_REFRESH.md).",
   ];
 }
 
-export function describeFailure(error: unknown): string[] {
+export function describeFailure(
+  error: unknown,
+  target?: RemoteEnvironment,
+): string[] {
   const phase = error instanceof PhaseError ? error.phase : "checks";
   const lines = [PHASE_MESSAGES[phase]];
   let e: unknown = error instanceof PhaseError ? error.cause : error;
@@ -138,6 +141,8 @@ export function describeFailure(error: unknown): string[] {
     if (extra) lines.push(`    ${extra}`);
     e = e.cause;
   }
+  // Committed even though the check afterwards failed: the next steps still apply.
+  if (phase === "applied" && target) lines.push(...afterMigrationSteps(target));
   return lines;
 }
 
@@ -629,7 +634,7 @@ if (require.main === module) {
         console.error("Nothing was changed.");
       } else {
         console.error("\nMigration failed.");
-        for (const line of describeFailure(error)) console.error(line);
+        for (const line of describeFailure(error, target)) console.error(line);
       }
       process.exit(1);
     });
