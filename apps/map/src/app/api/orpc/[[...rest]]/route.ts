@@ -10,8 +10,8 @@ import { logWarn } from "~/lib/logging";
 
 const PROXY_PREFIX = "/api/orpc";
 
-// How long to wait for the API to start answering before treating it as down.
-// Only the wait for response headers is bounded; the body streams afterwards.
+// How long the API may take to send its response headers, and then each next
+// chunk of the body, before it is treated as down.
 const UPSTREAM_TIMEOUT_MS = 20_000;
 
 // Anonymous-reachable paths the map calls — see docs/specs/map-browse-and-search.md
@@ -69,6 +69,58 @@ function getApiBaseUrl(): string {
   return normalized.endsWith(API_PREFIX_V1)
     ? normalized.slice(0, -API_PREFIX_V1.length)
     : normalized;
+}
+
+/**
+ * Passes `body` through, failing it if the API goes quiet for `timeoutMs`
+ * mid-body. The timer runs only while waiting on the API, not while the
+ * browser is slow to take the next chunk. Reads go through our own reader
+ * because Next's patched fetch can hand back a copied body that aborting the
+ * request never reaches. Cancelling that copy can likewise wait on another
+ * branch, so `onCancel` lets the caller also abort the request.
+ */
+export function withStallTimeout<T>(
+  body: ReadableStream<T>,
+  timeoutMs: number,
+  onFailure: (err: unknown) => void,
+  onCancel?: () => void,
+): ReadableStream<T> {
+  const reader = body.getReader();
+  // Set when the browser goes away. Cancelling ends a pending read with
+  // `done`, and closing our already-cancelled stream would then throw and be
+  // logged as an API failure.
+  let cancelled = false;
+  return new ReadableStream<T>({
+    async pull(controller) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stalled = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new DOMException("API stopped sending", "TimeoutError")),
+          timeoutMs,
+        );
+      });
+      try {
+        const { done, value } = await Promise.race([reader.read(), stalled]);
+        if (cancelled) return;
+        if (done) controller.close();
+        else controller.enqueue(value);
+      } catch (err) {
+        if (cancelled) return;
+        // Not awaited: cancelling one branch of a copied body settles only
+        // once the other branch is cancelled too.
+        void reader.cancel(err).catch(() => undefined);
+        onFailure(err);
+        controller.error(err);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    cancel(reason) {
+      cancelled = true;
+      onCancel?.();
+      return reader.cancel(reason);
+    },
+  });
 }
 
 function getProxiedPath(request: NextRequest): string {
@@ -140,8 +192,9 @@ async function proxyRequest(request: NextRequest) {
   const targetUrl = getTargetUrl(request, proxiedPath);
   const forwardedHeaders = getForwardedHeaders(request);
 
-  // Cleared once headers arrive, so a large body can still stream afterwards.
+  // Bounds the wait for headers; withStallTimeout below bounds the body.
   const upstreamTimeout = new AbortController();
+  const startedAt = Date.now();
   const upstreamTimer = setTimeout(() => {
     upstreamTimeout.abort(
       new DOMException("API did not respond", "TimeoutError"),
@@ -181,6 +234,24 @@ async function proxyRequest(request: NextRequest) {
   // not just SIGNED_IN_ONLY_PATHS — must stay uncached.
   headers.set("Cache-Control", "no-store");
 
+  let responseBody =
+    upstreamResponse.body &&
+    withStallTimeout(
+      upstreamResponse.body,
+      UPSTREAM_TIMEOUT_MS,
+      (err) => {
+        // Headers already went out, so the browser sees a failed download
+        // rather than a 503; this log is the only record of why.
+        upstreamTimeout.abort();
+        logWarn("map.orpc_proxy.upstream_body_failed", {
+          path: proxiedPath,
+          durationMs: Date.now() - startedAt,
+          err,
+        });
+      },
+      () => upstreamTimeout.abort(),
+    );
+
   // Compress JSON for the browser here, at the browser-facing hop. The API
   // doesn't compress (see apps/api/src/app.ts), so eventsAndLocations went out
   // as 1.5 MB on every map load. Doing it in the proxy can't break an older
@@ -189,7 +260,6 @@ async function proxyRequest(request: NextRequest) {
   // PUBLIC_PATHS responses are compressed: SIGNED_IN_ONLY_PATHS carry the
   // caller's own data, and leaving them uncompressed rules out BREACH-style
   // length leaks for the price of a few small responses.
-  let responseBody = upstreamResponse.body;
   headers.append("Vary", "Accept-Encoding");
   if (
     isPublic &&
