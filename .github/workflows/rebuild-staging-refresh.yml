@@ -12,12 +12,13 @@ name: Rebuild Staging refresh image
 # trusts only that environment (workload identity subject
 # repo:F3-Nation/f3-nation:environment:staging-refresh). So the button can only
 # ever redeploy reviewed code from main. setup.sh creates the account and its
-# grants; it can push this one image and update this one job, nothing else.
+# grants; it can push to the cloud-run-builds repository and update this one
+# job, nothing else.
 #
 # Only the image changes: secrets, Cloud SQL, env vars, service account and
-# resources stay as setup.sh set them. A migration that creates a table,
-# changes a table's owner or calls audit.enable_tracking also needs an Owner to
-# run the full setup.sh first (it re-grants the job's database logins).
+# resources stay as setup.sh set them. A migration that can change the refresh
+# login's grants also needs an Owner to run the full setup.sh first
+# (docs/STAGING_REFRESH.md, "Migrations that need the full setup").
 
 on:
   workflow_dispatch:
@@ -40,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      checks: read
+      checks: read # read CI check runs on github.sha
     steps:
       # Belt and braces: a dispatch from another branch runs that branch's copy
       # of this file, so the real guard is the environment's branch policy.
@@ -84,7 +85,7 @@ jobs:
     environment: staging-refresh
     permissions:
       contents: read
-      id-token: write
+      id-token: write # WIF auth as staging-refresh-deploy
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
         with:
@@ -125,7 +126,8 @@ jobs:
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
       # A migration merged while this ran would be on prod before long, and this
-      # image wouldn't know it. Other changes to main don't matter here.
+      # image wouldn't know it. Fails on any change under packages/db/drizzle;
+      # other changes to main don't matter here.
       - name: No newer migration on main
         run: |
           git fetch --quiet --depth=1 origin main

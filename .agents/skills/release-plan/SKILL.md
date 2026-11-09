@@ -111,10 +111,12 @@ Ask for anything missing before starting:
    Staging refresh image" item: the refresh job refuses to run once
    Production is ahead of the migrations in its image. Keep the "Re-grant
    the Staging refresh login" item and the Refresh admin row only when a new
-   `.sql` file creates a table (`CREATE TABLE`), changes a table's owner
-   (`OWNER TO`) or calls `audit.enable_tracking`: each can take away the
-   refresh login's read access or owner-role membership, and only the full
-   setup re-grants it. Otherwise delete both. Keep
+   `.sql` file creates a table or schema (`CREATE TABLE`, `CREATE SCHEMA`),
+   changes an owner (`OWNER TO`), revokes privileges (`REVOKE`) or calls
+   `audit.enable_tracking`: any of these can take away the refresh login's
+   access, and only the full setup re-grants it. This is the list in
+   `docs/STAGING_REFRESH.md` ("Migrations that need the full setup"); keep the
+   two the same. Otherwise delete both. Keep
    the re-grant before the rebuild: the full setup deploys an image from the
    release commit, and the rebuild must replace it with main's. In every
    other plan, delete all three.

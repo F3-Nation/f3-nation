@@ -2,10 +2,10 @@
 # Set up (or update) the one-command staging refresh: Cloud Run job f3-staging-refresh
 # in project f3data (F3-65, docs/STAGING_REFRESH.md). Idempotent; re-run it to rebuild
 # the image from this checkout and redeploy the job. After a prod migration, any code
-# owner rebuilds the image with the "Rebuild Staging refresh image" workflow
+# with write access to the repo rebuilds the image with the "Rebuild Staging refresh image" workflow
 # (.github/workflows/rebuild-staging-refresh.yml). Re-run the full setup (not
-# --image-only) when a migration creates a table, changes a table's owner or calls
-# audit.enable_tracking: each can undo the refresh login's grants.
+# --image-only) first when a migration can change the refresh login's grants
+# (docs/STAGING_REFRESH.md, "Migrations that need the full setup").
 #
 #   bash tooling/scripts/staging-refresh/setup.sh               # everything
 #   bash tooling/scripts/staging-refresh/setup.sh --image-only  # rebuild + redeploy only
@@ -29,9 +29,10 @@
 #      log bucket f3-staging-refresh (30 days) fed by sink f3-staging-refresh with
 #      only this job's logs, logging.viewAccessor on its _AllLogs view; removes the
 #      first version's view on _Default and its bindings
-#   7. the rebuild workflow's deploy account staging-refresh-deploy: push the image,
-#      update this job, act as its SA; trusted only by GitHub Actions jobs in this
-#      repo's staging-refresh environment (main only, set up in GitHub)
+#   7. the rebuild workflow's deploy account staging-refresh-deploy: push to
+#      cloud-run-builds, update this job, act as its SA. GitHub Actions jobs in this
+#      repo's staging-refresh environment may act as it, and only once that
+#      environment exists with deployment branches = main only (needs gh)
 #   8. prints what it can't do itself (the slackbot restart permission)
 set -euo pipefail
 
@@ -69,7 +70,9 @@ RUNNERS=()
 DEPLOY_SA="staging-refresh-deploy@${PROJECT}.iam.gserviceaccount.com"
 AR_REPO=cloud-run-builds
 WIF_POOL_ID=github
-WIF_SUBJECT="repo:F3-Nation/f3-nation:environment:staging-refresh"
+GH_REPO=F3-Nation/f3-nation
+GH_ENV=staging-refresh
+WIF_SUBJECT="repo:${GH_REPO}:environment:${GH_ENV}"
 SLACKBOT_PROJECT=f3-slackbot-staging
 SLACKBOT_SERVICE=f3-slackbot
 # The developer snapshot lands in a public bucket shared with the apps' images. The job
@@ -348,13 +351,18 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   if ! gcloud iam service-accounts describe "$DEPLOY_SA" --project "$PROJECT" >/dev/null 2>&1; then
     gcloud iam service-accounts create "${DEPLOY_SA%%@*}" --project "$PROJECT" \
       --display-name "Rebuild Staging refresh image (GitHub Actions)"
+    # A new account takes a few seconds to become visible to the IAM calls below.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      gcloud iam service-accounts describe "$DEPLOY_SA" --project "$PROJECT" >/dev/null 2>&1 && break
+      sleep 3
+    done
   else
     echo "exists"
   fi
   gcloud artifacts repositories add-iam-policy-binding "$AR_REPO" --project "$PROJECT" \
     --location "$REGION" --member "serviceAccount:$DEPLOY_SA" \
     --role roles/artifactregistry.writer >/dev/null
-  echo "artifactregistry.writer on $AR_REPO"
+  echo "artifactregistry.writer on $AR_REPO (the whole repository)"
   gcloud run jobs add-iam-policy-binding "$JOB" --project "$PROJECT" --region "$REGION" \
     --member "serviceAccount:$DEPLOY_SA" --role roles/run.developer >/dev/null
   echo "run.developer on $JOB"
@@ -363,17 +371,46 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   echo "iam.serviceAccountUser on $SA (updating a job that runs as it)"
   PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
   WIF_POOL="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${WIF_POOL_ID}"
-  gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --project "$PROJECT" \
-    --member "principal://iam.googleapis.com/${WIF_POOL}/subject/${WIF_SUBJECT}" \
-    --role roles/iam.workloadIdentityUser >/dev/null
-  echo "workloadIdentityUser for $WIF_SUBJECT"
+  WIF_MEMBER="principal://iam.googleapis.com/${WIF_POOL}/subject/${WIF_SUBJECT}"
   WIF_PROVIDER="$(gcloud iam workload-identity-pools providers list \
     --workload-identity-pool "$WIF_POOL_ID" --location global --project "$PROJECT" \
     --filter="attributeCondition~F3-Nation AND state=ACTIVE" --format='value(name)' | head -n 1 || true)"
-  echo "In GitHub (repo admin, once): environment staging-refresh, deployment branches: main"
-  echo "only, no required reviewers; variables WIF_SA=$DEPLOY_SA and"
   [ -n "$WIF_PROVIDER" ] || WIF_PROVIDER="<the F3-Nation provider of pool $WIF_POOL>"
+  echo "In GitHub (repo admin, once): environment $GH_ENV, deployment branches: main only,"
+  echo "no required reviewers; variables WIF_SA=$DEPLOY_SA and"
   echo "WIF_PROVIDER=$WIF_PROVIDER"
+  # Fail closed. "Only main can deploy" rests on the environment's branch policy, and
+  # GitHub creates a missing environment, unprotected, the first time a job names it.
+  # So GitHub gets the trust only while the environment exists with branches = main
+  # only, and a re-run takes the trust back if that policy was loosened.
+  WIF_GRANT_PENDING=1
+  if command -v gh >/dev/null; then
+    ENV_API="repos/$GH_REPO/environments/$GH_ENV"
+    # gh prints the error body on stdout when a call fails, so drop it then.
+    CUSTOM="$(gh api "$ENV_API" --jq '.deployment_branch_policy.custom_branch_policies // false' \
+      2>/dev/null)" || CUSTOM=missing
+    BRANCHES="$(gh api "$ENV_API/deployment-branch-policies" \
+      --jq '[.branch_policies[] | "\(.type // "branch"):\(.name)"] | join(",")' 2>/dev/null)" \
+      || BRANCHES=""
+    if [ "$CUSTOM" = "true" ] && [ "$BRANCHES" = "branch:main" ]; then WIF_GRANT_PENDING=0; fi
+  fi
+  if [ "$WIF_GRANT_PENDING" = 0 ]; then
+    gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --project "$PROJECT" \
+      --member "$WIF_MEMBER" --role roles/iam.workloadIdentityUser >/dev/null
+    echo "workloadIdentityUser for $WIF_SUBJECT (environment $GH_ENV is main only)"
+  else
+    gcloud iam service-accounts remove-iam-policy-binding "$DEPLOY_SA" --project "$PROJECT" \
+      --member "$WIF_MEMBER" --role roles/iam.workloadIdentityUser >/dev/null 2>&1 || true
+    echo "WARNING: GitHub is not trusted yet: environment $GH_ENV must exist with deployment" >&2
+    echo "branches = main only (checked with gh, which must be installed). A repo admin" >&2
+    echo "creates it as above; then re-run this script." >&2
+  fi
+fi
+
+if [ "${WIF_GRANT_PENDING:-0}" = 1 ]; then
+  echo
+  echo "WARNING: the Rebuild Staging refresh image workflow can't sign in until the GitHub"
+  echo "environment above exists (main only) and this script runs again."
 fi
 
 say "8. not done here"

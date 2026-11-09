@@ -275,5 +275,11 @@ describe("afterMigrationSteps", () => {
     expect(
       describeFailure(new Error("connection dropped"), "prod").join("\n"),
     ).not.toContain("rebuild-staging-refresh");
+    expect(
+      describeFailure(
+        new PhaseError("migrating", { cause: new Error("boom") }),
+        "prod",
+      ).join("\n"),
+    ).not.toContain("rebuild-staging-refresh");
   });
 });

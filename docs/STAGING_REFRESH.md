@@ -106,7 +106,8 @@ job rolled it back. Common reasons it stops:
 | `!! STOPPED:` says                                                         | Do this                                                                                                                                                                                         |
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `migration gate: prod is at … but staging is at …`                         | Wait until prod and staging run the same release, then run it again.                                                                                                                            |
-| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Any code owner runs [Rebuild the image](#rebuild-the-image-after-a-prod-migration), then runs it again.                                                     |
+| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Anyone with write access to the repo runs [Rebuild the image](#rebuild-the-image-after-a-prod-migration), then runs it again.                               |
+| `permission denied` from `pg_dump`                                         | A migration took away the refresh login's read access. An `f3data` Owner runs the full setup, then the rebuild ([Migrations that need the full setup](#migrations-that-need-the-full-setup)).   |
 | `obfuscate-db failed` with `column(s) nobody has reviewed for PII`         | A migration added a column without classifying it. That needs a code change (see [Review gate](#review-gate)), then a new image.                                                                |
 | `copy and staging tables differ`                                           | Prod and staging have different columns on a table. Usually the same fix as the migration gate: wait for both to run the same release.                                                          |
 | `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                                                                         |
@@ -185,24 +186,32 @@ restarting the slackbot in `f3-slackbot-staging`.
 The full setup also lets the
 [Rebuild Staging refresh image](../.github/workflows/rebuild-staging-refresh.yml)
 workflow do its one job. It creates the service account
-`staging-refresh-deploy@f3data.iam.gserviceaccount.com`, which may push only
-the `f3-staging-refresh` image (`roles/artifactregistry.writer` on the
-`cloud-run-builds` repository), update only this job (`roles/run.developer` on
-the job) and act as the job's service account. It trusts GitHub Actions only
-in the `staging-refresh` environment of this repo (workload identity subject
+`staging-refresh-deploy@f3data.iam.gserviceaccount.com`, which may push to the
+`cloud-run-builds` repository (`roles/artifactregistry.writer`; the repository
+holds other images too, which their deploys pin by digest), update only this
+job (`roles/run.developer` on the job) and act as the job's service account.
+GitHub Actions may act as it only from the `staging-refresh` environment of
+this repo (workload identity subject
 `repo:F3-Nation/f3-nation:environment:staging-refresh` in `f3data`'s `github`
-pool), not the whole repo. Once, a repo admin creates that GitHub environment
-with a deployment-branch policy of `main` only and no required reviewers, and
-sets its variables `WIF_PROVIDER`
-(`projects/1086302786213/locations/global/workloadIdentityPools/github/providers/my-repo2`)
-and `WIF_SA` (the account above).
+pool), not the whole repo, and only while that environment allows `main`
+alone: GitHub creates a missing environment, unprotected, the first time a job
+names it, so the full setup checks the policy with `gh` first. Without it, it
+withholds that trust and warns; with a loosened policy, a re-run takes the
+trust back.
+
+Order, once: a repo admin creates the GitHub environment `staging-refresh`
+with deployment branches `main` only and no required reviewers. Then an Owner
+runs the full setup, which prints the two variables to set on that
+environment: `WIF_PROVIDER` (overriding the organization-level one) and
+`WIF_SA` (the account above).
 
 ### Rebuild the image after a prod migration
 
 The job refuses to run while prod has a migration its image doesn't know
 (`… migration(s) this build's … _journal.json doesn't know`), so rebuild it
 after every prod migration. `pnpm db:migrate:prod` prints this when it
-applies one. Any code owner can run it, with no Google Cloud access:
+applies one. Anyone with write access to the repo can run it, with no Google
+Cloud access:
 
 ```bash
 gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
@@ -214,16 +223,26 @@ at it; nothing else about the job changes. It can only build `main`: the
 credentials go only to the `staging-refresh` environment, which only `main`
 may use.
 
-If a migration creates a table, changes a table's owner or calls
-`audit.enable_tracking`, an `f3data`
-Owner runs the full setup first, then the rebuild: a migration can take away
-the read-only prod login's access, and only the full setup re-grants it (with
-the `spuds` passwords). The full setup also deploys an image from its own
-checkout, so the rebuild goes last. Over-running it is harmless.
+The workflow waits for the CI checks named in its `ci-gate` job (the deploy
+gate's required checks plus `obfuscate-db-verify`) on that commit, and fails,
+leaving the job's image as it was, if anything under `packages/db/drizzle`
+changes on main while it runs (a new migration, for instance). Run it again then.
 
-The workflow waits for every CI check on main's newest commit (including
-`obfuscate-db-verify`) and fails, leaving the job's image as it was, if
-another migration lands on main while it runs. Run it again then.
+### Migrations that need the full setup
+
+A migration can take away the refresh login's access, and only the full setup
+re-grants it (it needs the `spuds` passwords, so an `f3data` Owner runs it).
+That applies when a new `.sql` file:
+
+- creates a table or schema (`CREATE TABLE`, `CREATE SCHEMA`),
+- changes an owner (`OWNER TO`),
+- revokes privileges (`REVOKE`), or
+- calls `audit.enable_tracking`.
+
+Then the Owner runs the full setup first and the rebuild after it: the full
+setup also deploys an image from its own checkout, so the rebuild goes last.
+Running the full setup when it wasn't needed is harmless. Missing it shows up
+as `permission denied` from `pg_dump` or `the job's login doesn't own …`.
 
 The job's command is `pnpm -F @acme/scripts staging-refresh`
 (`tooling/scripts/src/staging-refresh.ts`), which also runs outside Cloud Run
@@ -300,10 +319,10 @@ The job has no schedule: a maintainer runs the command above when a fresh
 snapshot is wanted. Publishing is a hand-run sequence for whoever runs
 production operations:
 
-1. If a Production release added a migration, make sure the image is current
-   ([Rebuild the image](#rebuild-the-image-after-a-prod-migration)). Run the
-   full setup if the job's service account doesn't have the `dev-snapshots/`
-   write access yet.
+1. Run the full setup first if the job's service account doesn't have the
+   `dev-snapshots/` write access yet. Then, if a Production release added a
+   migration, make sure the image is current
+   ([Rebuild the image](#rebuild-the-image-after-a-prod-migration)).
 2. Execute the job with `--args=--snapshot-only` and confirm the execution's
    logs contain `DEV SNAPSHOT: OK`.
 3. Attach the tar's `manifest.json` and the job log's leak-scan output to the

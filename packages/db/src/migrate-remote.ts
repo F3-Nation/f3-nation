@@ -91,12 +91,6 @@ const PHASE_MESSAGES: Record<MigratePhase, string> = {
 };
 
 /**
- * The lines to print for a failed run: the phase line, then every message in
- * the cause chain with any Postgres code/detail/hint. Drizzle wraps a failed
- * statement in an error whose message is only the SQL; the Postgres error
- * (e.g. `column "x" already exists`) is its cause.
- */
-/**
  * What to do once a migration is applied. After prod: rebuild the Staging
  * refresh image, which refuses to run while prod has a migration it doesn't
  * know (docs/STAGING_REFRESH.md). Nothing after staging.
@@ -106,15 +100,22 @@ export function afterMigrationSteps(target: RemoteEnvironment): string[] {
   return [
     "",
     "Next: rebuild the Staging refresh image so the refresh and the developer",
-    "snapshot know this migration (any code owner can run it):",
+    "snapshot know this migration (anyone with write access to the repo):",
     "  gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main",
-    "If a migration you just applied creates a table, changes a table's owner",
-    "or calls audit.enable_tracking, an f3data Owner first runs the full",
-    "tooling/scripts/staging-refresh/setup.sh (it re-grants the job's read-only",
-    "prod login), then the rebuild (docs/STAGING_REFRESH.md).",
+    "If a migration you just applied creates a table or schema, changes an owner,",
+    "revokes privileges or calls audit.enable_tracking, an f3data Owner first",
+    "runs the full tooling/scripts/staging-refresh/setup.sh (it re-grants the",
+    "job's logins), then the rebuild (docs/STAGING_REFRESH.md, \"Migrations",
+    'that need the full setup").',
   ];
 }
 
+/**
+ * The lines to print for a failed run: the phase line, then every message in
+ * the cause chain with any Postgres code/detail/hint. Drizzle wraps a failed
+ * statement in an error whose message is only the SQL; the Postgres error
+ * (e.g. `column "x" already exists`) is its cause.
+ */
 export function describeFailure(
   error: unknown,
   target?: RemoteEnvironment,
