@@ -321,12 +321,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          # Merge groups need history too: the suppression check compares
+          # against the queue's base commit.
+          fetch-depth: ${{ github.event_name != 'push' && '0' || '1' }}
       - uses: ./.github/actions/setup
         with:
           enable-turbo-cache: "true"
           select-turbo-affected: "true"
           turbo-task: lint
+      # Without a base, check-eslint-suppressions.mjs skips. Turbo reads
+      # TURBO_SCM_BASE only with --affected, which merge groups never use.
+      - name: Pin suppression-check base for merge groups
+        if: github.event_name == 'merge_group'
+        env:
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: echo "TURBO_SCM_BASE=${MERGE_GROUP_BASE_SHA}" >> "$GITHUB_ENV"
       - run: pnpm lint ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
       - run: pnpm lint:unused
 

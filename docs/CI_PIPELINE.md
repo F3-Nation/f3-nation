@@ -237,7 +237,8 @@ build check is named `build-homepage` to stay distinct from CI's `build`.
   for every image except `analytics` and `staging-refresh`, which first fail
   in the deploy `build` job.
 - Merge-queue runs execute the PR's code in this repository, including code
-  from forks, after a codeowner approves and queues it. `ci.yml` reads no
+  from forks, after a codeowner approves it and someone with write access
+  queues it. `ci.yml` reads no
   repository secrets, and every job that runs on `merge_group` gets a
   `GITHUB_TOKEN` limited to `contents: read` and at most `packages: read`; the
   jobs with write grants (`recent-package-watch`, `docker-cache-refresh`) are
