@@ -125,14 +125,14 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
-      # A migration merged while this ran would be on prod before long, and this
-      # image wouldn't know it. Fails on any change under packages/db/drizzle;
-      # other changes to main don't matter here.
-      - name: No newer migration on main
+      # A migration or refresh-code change merged while this ran would leave the
+      # image behind main (a migration soon reaches prod too). Fails on any change
+      # under these paths; other changes to main aren't in the image's code.
+      - name: No newer migration or refresh code on main
         run: |
           git fetch --quiet --depth=1 origin main
-          if ! git diff --quiet HEAD FETCH_HEAD -- packages/db/drizzle; then
-            echo "::error::main gained a migration while this ran. Run the workflow again; the job keeps its current image."
+          if ! git diff --quiet HEAD FETCH_HEAD -- packages/db/drizzle tooling/scripts; then
+            echo "::error::main changed packages/db/drizzle or tooling/scripts while this ran. Run the workflow again; the job keeps its current image."
             exit 1
           fi
 

@@ -225,8 +225,9 @@ may use.
 
 The workflow waits for the CI checks named in its `ci-gate` job (the deploy
 gate's required checks plus `obfuscate-db-verify`) on that commit, and fails,
-leaving the job's image as it was, if anything under `packages/db/drizzle`
-changes on main while it runs (a new migration, for instance). Run it again then.
+leaving the job's image as it was, if anything under `packages/db/drizzle` or
+`tooling/scripts` changes on main while it runs (a new migration, for instance).
+Run it again then.
 
 ### Migrations that need the full setup
 
