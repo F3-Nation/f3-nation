@@ -777,7 +777,8 @@ def generate_calendar_images(force: bool = False):
                                         print(f"Error deleting unposted calendar image: {cleanup_error}")
                                 raise
 
-                        print(f"Updating Slack app settings for region {region_name} with {slack_app_settings}")
+                        # Settings hold the bot token and SMTP password; never print them.
+                        print(f"Updating Slack app settings for region {region_name}")
                         session.query(SlackSpace).filter(SlackSpace.team_id == slack_app_settings["team_id"]).update(
                             {"settings": slack_app_settings}
                         )

@@ -1,10 +1,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 import { parseOptionalSize } from "@acme/storage";
 
-import { requireAccessToken } from "~/lib/auth/server";
-import { logError } from "~/lib/logging";
+import { getOrgParentId } from "~/lib/api/client";
+import { canEditOrg } from "~/lib/auth/org-access";
+import { getSessionLookup, requireAccessToken } from "~/lib/auth/server";
+import { logError, logWarn } from "~/lib/logging";
 import { storage } from "~/lib/storage";
 
 const ALLOWED_TYPES = new Set([
@@ -52,6 +55,32 @@ export async function POST(request: NextRequest) {
   }
 
   const orgId = orgIdNum;
+
+  // The logo is public and keyed only by org id, so only an editor or admin
+  // of that org, or of an org above it, may replace it.
+  const apiUnavailableResponse = () =>
+    NextResponse.json(
+      { error: "The F3 API is unavailable. Please try again." },
+      { status: 503 },
+    );
+  try {
+    const { session, apiUnavailable } = await getSessionLookup();
+    if (apiUnavailable) return apiUnavailableResponse();
+    if (!session || !(await canEditOrg(orgId, session.roles, getOrgParentId))) {
+      logWarn("admin.logo.upload_forbidden", { orgId });
+      return NextResponse.json(
+        { error: "You are not allowed to change this org's logo" },
+        { status: 403 },
+      );
+    }
+  } catch (err) {
+    if (isApiUnavailableError(err)) return apiUnavailableResponse();
+    logError("admin.logo.authorize_failed", { orgId }, err);
+    return NextResponse.json(
+      { error: "Failed to upload logo" },
+      { status: 500 },
+    );
+  }
 
   try {
     const buffer = Buffer.from(await fileEntry.arrayBuffer());

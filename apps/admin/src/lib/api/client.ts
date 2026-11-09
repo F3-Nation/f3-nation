@@ -53,6 +53,21 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
   return createORPCClient<RouterClient<typeof router>>(link);
 });
 
+/**
+ * The org's parent id, `null` for a root org, or `undefined` when the org
+ * does not exist.
+ */
+export async function getOrgParentId(
+  orgId: number,
+): Promise<number | null | undefined> {
+  const client = await getApiClient();
+  const { org } = await client.org.byId(
+    { id: orgId },
+    { signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS) },
+  );
+  return org ? org.parentId : undefined;
+}
+
 export async function getMyProfile() {
   const client = await getApiClient();
   const result = await client.me.profile(undefined, {

@@ -122,10 +122,10 @@ jobs:
             exit 1
           fi
 
-      # lint-title is deliberately excluded: it only runs on `pull_request`
-      # (pr-title.yml has no `push` trigger), so it never has a check-run
-      # against a commit reached via tag push -- waiting on it here would
-      # hang until timeout, not deploy.
+      # lint-title is deliberately excluded: it never runs on `push`
+      # (pr-title.yml triggers only on `pull_request` and `merge_group`), so a
+      # commit that reached main outside the merge queue has no check-run for
+      # it -- waiting on it here would hang until timeout, not deploy.
       #
       # NOTE: wait-on-check-action only fails when the filtered check list is
       # completely empty (fail-on-no-checks). Redeploying a tag older than the
