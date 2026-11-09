@@ -30,9 +30,10 @@
 #      only this job's logs, logging.viewAccessor on its _AllLogs view; removes the
 #      first version's view on _Default and its bindings
 #   7. the rebuild workflow's deploy account staging-refresh-deploy: push to
-#      cloud-run-builds, update this job, act as its SA. GitHub Actions jobs in this
-#      repo's staging-refresh environment may act as it, and only once that
-#      environment exists with deployment branches = main only (needs gh)
+#      cloud-run-builds, update this job, act as its SA. Its own workload identity
+#      pool accepts only GitHub tokens from main in this repo's staging-refresh
+#      environment, and the trust is granted only once that environment exists with
+#      deployment branches = main only (needs gh)
 #   8. prints what it can't do itself (the slackbot restart permission)
 set -euo pipefail
 
@@ -69,10 +70,16 @@ RUNNERS=()
 # subject: jobs in this repo's staging-refresh environment, which only main may use.
 DEPLOY_SA="staging-refresh-deploy@${PROJECT}.iam.gserviceaccount.com"
 AR_REPO=cloud-run-builds
-WIF_POOL_ID=github
 GH_REPO=F3-Nation/f3-nation
 GH_ENV=staging-refresh
 WIF_SUBJECT="repo:${GH_REPO}:environment:${GH_ENV}"
+# Its own workload identity pool, with one provider that accepts only GitHub tokens
+# from main, in this repo's staging-refresh environment. Not a shared pool: another
+# provider there could accept the same subject from a tag or another branch.
+WIF_POOL_ID=staging-refresh-gh
+WIF_PROVIDER_ID=github-main
+WIF_CONDITION="assertion.repository == '${GH_REPO}' && assertion.ref == 'refs/heads/main'"
+WIF_CONDITION="${WIF_CONDITION} && assertion.environment == '${GH_ENV}'"
 SLACKBOT_PROJECT=f3-slackbot-staging
 SLACKBOT_SERVICE=f3-slackbot
 # The developer snapshot lands in a public bucket shared with the apps' images. The job
@@ -369,13 +376,29 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$PROJECT" \
     --member "serviceAccount:$DEPLOY_SA" --role roles/iam.serviceAccountUser >/dev/null
   echo "iam.serviceAccountUser on $SA (updating a job that runs as it)"
+  if ! gcloud iam workload-identity-pools describe "$WIF_POOL_ID" --location global \
+    --project "$PROJECT" >/dev/null 2>&1; then
+    gcloud iam workload-identity-pools create "$WIF_POOL_ID" --location global --project "$PROJECT" \
+      --display-name "Staging refresh rebuild (GitHub)"
+  fi
+  if gcloud iam workload-identity-pools providers describe "$WIF_PROVIDER_ID" \
+    --workload-identity-pool "$WIF_POOL_ID" --location global --project "$PROJECT" >/dev/null 2>&1; then
+    gcloud iam workload-identity-pools providers update-oidc "$WIF_PROVIDER_ID" \
+      --workload-identity-pool "$WIF_POOL_ID" --location global --project "$PROJECT" \
+      --attribute-mapping "google.subject=assertion.sub" \
+      --attribute-condition "$WIF_CONDITION" >/dev/null
+  else
+    gcloud iam workload-identity-pools providers create-oidc "$WIF_PROVIDER_ID" \
+      --workload-identity-pool "$WIF_POOL_ID" --location global --project "$PROJECT" \
+      --issuer-uri https://token.actions.githubusercontent.com \
+      --attribute-mapping "google.subject=assertion.sub" \
+      --attribute-condition "$WIF_CONDITION"
+  fi
+  echo "workload identity pool $WIF_POOL_ID, provider $WIF_PROVIDER_ID: $WIF_CONDITION"
   PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
   WIF_POOL="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${WIF_POOL_ID}"
+  WIF_PROVIDER="${WIF_POOL}/providers/${WIF_PROVIDER_ID}"
   WIF_MEMBER="principal://iam.googleapis.com/${WIF_POOL}/subject/${WIF_SUBJECT}"
-  WIF_PROVIDER="$(gcloud iam workload-identity-pools providers list \
-    --workload-identity-pool "$WIF_POOL_ID" --location global --project "$PROJECT" \
-    --filter="attributeCondition~F3-Nation AND state=ACTIVE" --format='value(name)' | head -n 1 || true)"
-  [ -n "$WIF_PROVIDER" ] || WIF_PROVIDER="<the F3-Nation provider of pool $WIF_POOL>"
   echo "In GitHub (repo admin, once): environment $GH_ENV, deployment branches: main only,"
   echo "no required reviewers; variables WIF_SA=$DEPLOY_SA and"
   echo "WIF_PROVIDER=$WIF_PROVIDER"

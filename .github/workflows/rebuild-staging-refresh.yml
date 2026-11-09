@@ -6,12 +6,12 @@ name: Rebuild Staging refresh image
 #
 #   gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
 #
-# Anyone with write access can run it, with no Google Cloud access of their own:
-# the credentials go only to jobs in the staging-refresh environment, which only
-# main may use (environment deployment-branch policy), and the deploy account
-# trusts only that environment (workload identity subject
-# repo:F3-Nation/f3-nation:environment:staging-refresh). So the button can only
-# ever redeploy reviewed code from main. setup.sh creates the account and its
+# Anyone with write access can run it, with no Google Cloud access of their own.
+# The deploy account trusts one workload identity pool whose only provider accepts
+# GitHub tokens from refs/heads/main in this repo's staging-refresh environment,
+# and that environment allows only main. So a run from a branch or tag (even with
+# an edited copy of this file) can't sign in: the button can only ever redeploy
+# reviewed code from main. setup.sh creates the account and its
 # grants; it can push to the cloud-run-builds repository and update this one
 # job, nothing else.
 #
@@ -56,7 +56,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync|obfuscate-db-verify)$"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|\
+            security-audit|db-schema-sync|obfuscate-db-verify)$"
           wait-interval: 15
           allowed-conclusions: success
 
@@ -65,13 +66,17 @@ jobs:
       - name: Every required check passed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REQUIRED: build lint typecheck format-check test-coverage security-audit db-schema-sync obfuscate-db-verify
+          REQUIRED: >-
+            build lint typecheck format-check test-coverage security-audit
+            db-schema-sync obfuscate-db-verify
         run: |
           runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
-            --jq '.check_runs[] | [.name, .started_at, (.conclusion // "pending")] | @tsv')"
+            --jq '.check_runs[] | [.name, .id, (.conclusion // "pending")] | @tsv')"
           failed=0
           for name in ${REQUIRED}; do
-            latest="$(printf '%s\n' "${runs}" | awk -F'\t' -v n="${name}" '$1 == n' | sort -t$'\t' -k2 | tail -n 1 | cut -f3)"
+            # The newest run of each check (ids only grow; a queued rerun has no start time).
+            latest="$(printf '%s\n' "${runs}" | awk -F'\t' -v n="${name}" '$1 == n' \
+              | sort -t$'\t' -k2,2n | tail -n 1 | cut -f3)"
             if [[ "${latest}" != "success" ]]; then
               echo "::error::check '${name}' on ${GITHUB_SHA}: ${latest:-missing}"
               failed=1
@@ -132,7 +137,8 @@ jobs:
         run: |
           git fetch --quiet --depth=1 origin main
           if ! git diff --quiet HEAD FETCH_HEAD -- packages/db/drizzle tooling/scripts; then
-            echo "::error::main changed packages/db/drizzle or tooling/scripts while this ran. Run the workflow again; the job keeps its current image."
+            echo "::error::main changed packages/db/drizzle or tooling/scripts while this ran." \
+              "Run the workflow again; the job keeps its current image."
             exit 1
           fi
 

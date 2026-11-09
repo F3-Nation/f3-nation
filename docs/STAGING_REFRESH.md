@@ -190,20 +190,21 @@ workflow do its one job. It creates the service account
 `cloud-run-builds` repository (`roles/artifactregistry.writer`; the repository
 holds other images too, which their deploys pin by digest), update only this
 job (`roles/run.developer` on the job) and act as the job's service account.
-GitHub Actions may act as it only from the `staging-refresh` environment of
-this repo (workload identity subject
-`repo:F3-Nation/f3-nation:environment:staging-refresh` in `f3data`'s `github`
-pool), not the whole repo, and only while that environment allows `main`
-alone: GitHub creates a missing environment, unprotected, the first time a job
-names it, so the full setup checks the policy with `gh` first. Without it, it
-withholds that trust and warns; with a loosened policy, a re-run takes the
+GitHub Actions may act as it only through its own workload identity pool,
+`staging-refresh-gh`, whose one provider (`github-main`) accepts only tokens
+from `refs/heads/main` in this repo's `staging-refresh` environment. A run
+from a branch or a tag can't sign in, even with an edited copy of the
+workflow. The full setup also grants that trust only while the environment
+exists and allows `main` alone (GitHub creates a missing environment,
+unprotected, the first time a job names it), checked with `gh`. Without it,
+it withholds the trust and warns; with a loosened policy, a re-run takes the
 trust back.
 
 Order, once: a repo admin creates the GitHub environment `staging-refresh`
 with deployment branches `main` only and no required reviewers. Then an Owner
 runs the full setup, which prints the two variables to set on that
-environment: `WIF_PROVIDER` (overriding the organization-level one) and
-`WIF_SA` (the account above).
+environment: `WIF_PROVIDER` (the `github-main` provider; it overrides the
+organization-level one) and `WIF_SA` (the account above).
 
 ### Rebuild the image after a prod migration
 
@@ -244,6 +245,11 @@ Then the Owner runs the full setup first and the rebuild after it: the full
 setup also deploys an image from its own checkout, so the rebuild goes last.
 Running the full setup when it wasn't needed is harmless. Missing it shows up
 as `permission denied` from `pg_dump` or `the job's login doesn't own …`.
+
+Row-level security is different: the full setup doesn't fix it. If a migration
+enables it (`ENABLE ROW LEVEL SECURITY`) on a table the refresh reads, the
+read-only prod login needs a policy that lets it read every row, or `pg_dump`
+fails. Add that policy in the same migration.
 
 The job's command is `pnpm -F @acme/scripts staging-refresh`
 (`tooling/scripts/src/staging-refresh.ts`), which also runs outside Cloud Run
