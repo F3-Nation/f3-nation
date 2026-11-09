@@ -13,6 +13,7 @@ export const env = createEnv({
     OAUTH_CLIENT_ID: z.string().min(1),
     OAUTH_CLIENT_SECRET: z.string().min(1),
     OAUTH_REDIRECT_URI: z.url(),
+    F3_API_BASE_URL: z.url(),
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
     // Base64-encoded service-account JSON for GCS public-image uploads.
     GCS_CREDENTIALS: z.string().min(1),

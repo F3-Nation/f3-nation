@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth/server";
 import { deleteMyRole } from "@/lib/api/client";
 import { logError } from "@/lib/logging";
+import { env } from "@/env";
 
 const deleteRoleSchema = z.strictObject({
   orgId: z.number().int().positive(),
@@ -41,7 +42,7 @@ export async function DELETE(request: NextRequest) {
       "me.profile_roles.delete_failed",
       {
         sessionUserId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
+        apiBaseUrl: env.F3_API_BASE_URL,
       },
       err,
     );
