@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EditEventSchema } from "@acme/validators/request-schemas";
+import { EditEventSchema, EventFields } from "@acme/validators/request-schemas";
 
 import { base, expectInvalidAt, expectValid } from "./request-schema-fixtures";
 
@@ -37,6 +37,14 @@ describe("EditEventSchema", () => {
       eventDescription: null,
       eventTypeIds: [],
     };
+    const result = EditEventSchema.parse({ ...valid, currentValues });
+    expect(result.currentValues).toEqual(currentValues);
+  });
+
+  it("accepts null for every prior field", () => {
+    const currentValues = Object.fromEntries(
+      Object.keys(EventFields.shape).map((key) => [key, null]),
+    );
     const result = EditEventSchema.parse({ ...valid, currentValues });
     expect(result.currentValues).toEqual(currentValues);
   });

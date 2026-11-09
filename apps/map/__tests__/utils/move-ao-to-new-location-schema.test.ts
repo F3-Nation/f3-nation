@@ -20,7 +20,7 @@ const valid = {
 
 describe("MoveAOToNewLocationSchema", () => {
   it("keeps prior values that break today's rules", () => {
-    const currentValues = { locationAddress: "123", locationZip: null };
+    const currentValues = { locationAddress: "123", locationZip: "1" };
     const result = MoveAOToNewLocationSchema.parse({ ...valid, currentValues });
     expect(result.currentValues).toEqual(currentValues);
   });

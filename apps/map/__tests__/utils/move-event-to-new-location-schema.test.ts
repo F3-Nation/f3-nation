@@ -20,7 +20,7 @@ const valid = {
 
 describe("MoveEventToNewLocationSchema", () => {
   it("keeps prior values that break today's rules", () => {
-    const currentValues = { locationAddress: "123", locationZip: null };
+    const currentValues = { locationAddress: "123", locationZip: "1" };
     const result = MoveEventToNewLocationSchema.parse({
       ...valid,
       currentValues,

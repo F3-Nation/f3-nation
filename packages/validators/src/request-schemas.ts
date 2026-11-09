@@ -102,10 +102,12 @@ export const RegionFields = z.object({
 
 export type RegionFieldsType = z.infer<typeof RegionFields>;
 
-// `currentValues` holds the entity as it stands today, shown struck through in
-// the map's edit forms. These mirror the field types above but drop their rules
-// and allow null: an entity can hold data older than a rule, and that must not
-// block an approval. `satisfies` fails the build if they drift from the fields.
+// `currentValues` holds the entity as it stands today; the map's event form
+// strikes through the event fields that changed. These mirror the field types
+// above without their rules and also allow null: stored data can be older than
+// a rule, and that must not block an approval. `satisfies` fails the build if a
+// key is added or removed or a type stops fitting. It can't see a dropped
+// `.nullish()`, so the schema tests check that every field accepts null.
 type PriorValuesShape<T> = {
   [K in keyof T]-?: z.ZodType<T[K] | null | undefined>;
 };
