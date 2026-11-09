@@ -49,11 +49,22 @@ def log_job_failure(job: str, error: Exception) -> None:
     # Exception messages and tracebacks can contain credentials or member data.
     name = type(error).__name__
     error_type = name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) else "Exception"
+    module = type(error).__module__
+    module_match = re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,127}", module) if isinstance(module, str) else None
+    error_module = module_match.group(0) if module_match else "unknown"
     logger.error(
-        "slack.hourly.job_failed job=%s error_type=%s",
+        "slack.hourly.job_failed job=%s error_type=%s error_module=%s",
         job,
         error_type,
-        extra={"json_fields": {"event": "slack.hourly.job_failed", "job": job, "error_type": error_type}},
+        error_module,
+        extra={
+            "json_fields": {
+                "event": "slack.hourly.job_failed",
+                "job": job,
+                "error_type": error_type,
+                "error_module": error_module,
+            }
+        },
     )
 
 
@@ -143,7 +154,7 @@ def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, repo
     try:
         requests.post(f"{APP_URL}/hourly-runner-complete")
     except Exception as e:
-        log_job_failure("requests.post", e)
+        log_job_failure("hourly_runner.notify_completion", e)
 
     print("Hourly scripts complete")
 

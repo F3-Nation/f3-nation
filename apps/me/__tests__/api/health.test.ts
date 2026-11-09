@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   healthResponseSchema,
   HEALTH_CONTRACT_VERSION,
 } from "@f3nation/health";
+
+import type * as HealthModule from "@f3nation/health";
 
 vi.mock("@/lib/logging", () => ({
   logError: vi.fn(),
@@ -13,6 +15,10 @@ describe("Health API route", () => {
     vi.clearAllMocks();
     vi.resetModules();
     process.env.F3_API_BASE_URL = "https://api.test.f3nation.com/v1";
+  });
+
+  afterEach(() => {
+    vi.doUnmock("@f3nation/health");
   });
 
   it("returns HTTP 200 with cache-control no-store and contract-valid JSON", async () => {
@@ -151,5 +157,45 @@ describe("Health API route", () => {
         reason: "missing_config",
       });
     }
+  });
+
+  it("returns a contract-valid down response when building the report throws", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+    );
+    const actual =
+      await vi.importActual<typeof HealthModule>("@f3nation/health");
+    const failure = new Error("build failed");
+    // Throw on the first call only, so the catch block's own call succeeds.
+    const buildHealthResponse = vi
+      .fn<typeof actual.buildHealthResponse>()
+      .mockImplementationOnce(() => {
+        throw failure;
+      })
+      .mockImplementation(actual.buildHealthResponse);
+    vi.doMock("@f3nation/health", () => ({ ...actual, buildHealthResponse }));
+
+    const { GET } = await import("@/app/health/route");
+    const response = await GET();
+    const data = (await response.json()) as unknown;
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    const parsed = healthResponseSchema.parse(data);
+    expect(parsed.status).toBe("down");
+    expect(parsed.checks).toHaveLength(1);
+    expect(parsed.checks[0]).toMatchObject({
+      id: "health-endpoint",
+      status: "down",
+      details: { reason: "internal_error" },
+    });
+
+    const { logError } = await import("@/lib/logging");
+    expect(logError).toHaveBeenCalledWith(
+      "me.health.endpoint_failed",
+      { hasApiBaseUrl: true },
+      failure,
+    );
   });
 });
