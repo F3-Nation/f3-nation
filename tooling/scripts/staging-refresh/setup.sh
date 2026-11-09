@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Set up (or update) the one-command staging refresh: Cloud Run job f3-staging-refresh
 # in project f3data (F3-65, docs/STAGING_REFRESH.md). Idempotent; re-run it to rebuild
-# the image from this checkout and redeploy the job. After a release that adds a
-# migration, run the full setup (not --image-only): the job refuses with "rebuild the
-# refresh image" until it's rebuilt, and a migration can undo the refresh login's grants.
+# the image from this checkout and redeploy the job. After a prod migration, any code
+# owner rebuilds the image with the "Rebuild Staging refresh image" workflow
+# (.github/workflows/rebuild-staging-refresh.yml). Re-run the full setup (not
+# --image-only) when a migration creates a table or calls audit.enable_tracking: either
+# can undo the refresh login's grants on prod.
 #
 #   bash tooling/scripts/staging-refresh/setup.sh               # everything
 #   bash tooling/scripts/staging-refresh/setup.sh --image-only  # rebuild + redeploy only
@@ -27,7 +29,10 @@
 #      log bucket f3-staging-refresh (30 days) fed by sink f3-staging-refresh with
 #      only this job's logs, logging.viewAccessor on its _AllLogs view; removes the
 #      first version's view on _Default and its bindings
-#   7. prints what it can't do itself (the slackbot restart permission)
+#   7. the rebuild workflow's deploy account staging-refresh-deploy: push the image,
+#      update this job, act as its SA; trusted only by GitHub Actions jobs in this
+#      repo's staging-refresh environment (main only, set up in GitHub)
+#   8. prints what it can't do itself (the slackbot restart permission)
 set -euo pipefail
 
 PROJECT=f3data
@@ -59,6 +64,12 @@ OLD_LOG_TITLE=f3-staging-refresh-logs
 # Read from the environment, not committed: the repo is public. Not needed
 # with --image-only.
 RUNNERS=()
+# The "Rebuild Staging refresh image" workflow's account. It trusts one GitHub Actions
+# subject: jobs in this repo's staging-refresh environment, which only main may use.
+DEPLOY_SA="staging-refresh-deploy@${PROJECT}.iam.gserviceaccount.com"
+AR_REPO=cloud-run-builds
+WIF_POOL_ID=github
+WIF_SUBJECT="repo:F3-Nation/f3-nation:environment:staging-refresh"
 SLACKBOT_PROJECT=f3-slackbot-staging
 SLACKBOT_SERVICE=f3-slackbot
 # The developer snapshot lands in a public bucket shared with the apps' images. The job
@@ -332,7 +343,40 @@ if [ "$SNAPSHOT_BIND_PENDING" = 1 ]; then
   echo "WARNING: the dev-snapshot upload will fail until the bucket binding above is applied."
 fi
 
-say "7. not done here"
+if [ "$IMAGE_ONLY" = 0 ]; then
+  say "7. deploy account $DEPLOY_SA for the rebuild workflow"
+  if ! gcloud iam service-accounts describe "$DEPLOY_SA" --project "$PROJECT" >/dev/null 2>&1; then
+    gcloud iam service-accounts create "${DEPLOY_SA%%@*}" --project "$PROJECT" \
+      --display-name "Rebuild Staging refresh image (GitHub Actions)"
+  else
+    echo "exists"
+  fi
+  gcloud artifacts repositories add-iam-policy-binding "$AR_REPO" --project "$PROJECT" \
+    --location "$REGION" --member "serviceAccount:$DEPLOY_SA" \
+    --role roles/artifactregistry.writer >/dev/null
+  echo "artifactregistry.writer on $AR_REPO"
+  gcloud run jobs add-iam-policy-binding "$JOB" --project "$PROJECT" --region "$REGION" \
+    --member "serviceAccount:$DEPLOY_SA" --role roles/run.developer >/dev/null
+  echo "run.developer on $JOB"
+  gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$PROJECT" \
+    --member "serviceAccount:$DEPLOY_SA" --role roles/iam.serviceAccountUser >/dev/null
+  echo "iam.serviceAccountUser on $SA (updating a job that runs as it)"
+  PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+  WIF_POOL="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${WIF_POOL_ID}"
+  gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --project "$PROJECT" \
+    --member "principal://iam.googleapis.com/${WIF_POOL}/subject/${WIF_SUBJECT}" \
+    --role roles/iam.workloadIdentityUser >/dev/null
+  echo "workloadIdentityUser for $WIF_SUBJECT"
+  WIF_PROVIDER="$(gcloud iam workload-identity-pools providers list \
+    --workload-identity-pool "$WIF_POOL_ID" --location global --project "$PROJECT" \
+    --filter="attributeCondition~F3-Nation AND state=ACTIVE" --format='value(name)' | head -n 1)"
+  echo "In GitHub (repo admin, once): environment staging-refresh, deployment branches: main"
+  echo "only, no required reviewers; variables WIF_SA=$DEPLOY_SA and"
+  [ -n "$WIF_PROVIDER" ] || WIF_PROVIDER="<the F3-Nation provider of pool $WIF_POOL>"
+  echo "WIF_PROVIDER=$WIF_PROVIDER"
+fi
+
+say "8. not done here"
 cat <<EOF
 The job restarts the staging slackbot after a load, if it may. Nobody running this script
 has access to $SLACKBOT_PROJECT, so ask someone who does to run:

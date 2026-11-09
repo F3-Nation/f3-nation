@@ -96,6 +96,25 @@ const PHASE_MESSAGES: Record<MigratePhase, string> = {
  * statement in an error whose message is only the SQL; the Postgres error
  * (e.g. `column "x" already exists`) is its cause.
  */
+/**
+ * What to do once a migration is applied. After prod: rebuild the Staging
+ * refresh image, which refuses to run while prod has a migration it doesn't
+ * know (docs/STAGING_REFRESH.md). Nothing after staging.
+ */
+export function afterMigrationSteps(target: RemoteEnvironment): string[] {
+  if (target !== "prod") return [];
+  return [
+    "",
+    "Next: rebuild the Staging refresh image so the refresh and the developer",
+    "snapshot know this migration (any code owner can run it):",
+    "  gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main",
+    "If a migration you just applied creates a table or calls",
+    "audit.enable_tracking, an f3data Owner also runs the full",
+    "tooling/scripts/staging-refresh/setup.sh: it re-grants the job's read-only",
+    "prod login (docs/STAGING_REFRESH.md).",
+  ];
+}
+
 export function describeFailure(error: unknown): string[] {
   const phase = error instanceof PhaseError ? error.phase : "checks";
   const lines = [PHASE_MESSAGES[phase]];
@@ -593,6 +612,7 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
   } finally {
     rmSync(snapshot, { recursive: true, force: true });
   }
+  for (const line of afterMigrationSteps(target)) console.log(line);
 }
 
 if (require.main === module) {

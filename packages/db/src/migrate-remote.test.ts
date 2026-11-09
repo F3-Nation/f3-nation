@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { checkGitState } from "./migrate-guards";
 import {
+  afterMigrationSteps,
   describeFailure,
   findMainRemote,
   migrationsFingerprint,
@@ -247,5 +248,19 @@ describe("describeFailure", () => {
       "Stopped before changing anything.",
       "  connection dropped",
     ]);
+  });
+});
+
+describe("afterMigrationSteps", () => {
+  it("after prod, says to rebuild the Staging refresh image", () => {
+    const text = afterMigrationSteps("prod").join("\n");
+    expect(text).toContain(
+      "gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main",
+    );
+    expect(text).toContain("tooling/scripts/staging-refresh/setup.sh");
+  });
+
+  it("after staging, says nothing", () => {
+    expect(afterMigrationSteps("staging")).toEqual([]);
   });
 });

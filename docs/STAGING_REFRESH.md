@@ -103,18 +103,18 @@ The logs never contain row data: counts, table and key names only.
 You don't need to clean anything up: either staging wasn't touched, or the
 job rolled it back. Common reasons it stops:
 
-| `!! STOPPED:` says                                                         | Do this                                                                                                                                                                                                  |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `migration gate: prod is at … but staging is at …`                         | Wait until prod and staging run the same release, then run it again.                                                                                                                                     |
-| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Ask whoever maintains it to run the full `tooling/scripts/staging-refresh/setup.sh` (with `STAGING_REFRESH_RUNNERS`) from a checkout of the release Production runs. |
-| `obfuscate-db failed` with `column(s) nobody has reviewed for PII`         | A migration added a column without classifying it. That needs a code change (see [Review gate](#review-gate)), then a new image.                                                                         |
-| `copy and staging tables differ`                                           | Prod and staging have different columns on a table. Usually the same fix as the migration gate: wait for both to run the same release.                                                                   |
-| `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                                                                                  |
-| `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                                                                                   |
-| `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                                                                                      |
-| `the job's login doesn't own …`                                            | A migration added a table owned by a role the job's login isn't in. Re-run `setup.sh` so `staging-login.sql` grants the new owner role, then run again.                                                  |
-| `system triggers are left on …`                                            | A `DEFERRABLE` unique/exclusion constraint leaves a system trigger the job can't disable. Make it `NOT DEFERRABLE` on staging, or have `dropFksAndTruncate` drop and re-add it, then run again.          |
-| `trigger(s) not in the default enabled state`                              | Someone disabled a trigger on staging (or set it to `REPLICA` / `ALWAYS`). Set it back or drop it, then run again.                                                                                       |
+| `!! STOPPED:` says                                                         | Do this                                                                                                                                                                                         |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `migration gate: prod is at … but staging is at …`                         | Wait until prod and staging run the same release, then run it again.                                                                                                                            |
+| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Any code owner runs [Rebuild the image](#rebuild-the-image-after-a-prod-migration), then runs it again.                                                     |
+| `obfuscate-db failed` with `column(s) nobody has reviewed for PII`         | A migration added a column without classifying it. That needs a code change (see [Review gate](#review-gate)), then a new image.                                                                |
+| `copy and staging tables differ`                                           | Prod and staging have different columns on a table. Usually the same fix as the migration gate: wait for both to run the same release.                                                          |
+| `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                                                                         |
+| `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                                                                          |
+| `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                                                                             |
+| `the job's login doesn't own …`                                            | A migration added a table owned by a role the job's login isn't in. Re-run `setup.sh` so `staging-login.sql` grants the new owner role, then run again.                                         |
+| `system triggers are left on …`                                            | A `DEFERRABLE` unique/exclusion constraint leaves a system trigger the job can't disable. Make it `NOT DEFERRABLE` on staging, or have `dropFksAndTruncate` drop and re-add it, then run again. |
+| `trigger(s) not in the default enabled state`                              | Someone disabled a trigger on staging (or set it to `REPLICA` / `ALWAYS`). Set it back or drop it, then run again.                                                                              |
 
 **`ROLLBACK FAILED`** means the load failed and putting staging back failed
 too (e.g. staging was unreachable), three times. Staging's loaded tables may
@@ -178,11 +178,46 @@ It creates:
   setup lacks it, the script prints the one
   `gcloud storage buckets add-iam-policy-binding` command for someone who has it.
 
-Re-run the full setup after any Production release that adds a migration:
-it rebuilds the image so it knows prod's migrations and columns, and it
-re-applies `prod-login.sql`, whose read access a migration can undo.
-`--image-only` is only for a code-only rebuild. It prints the one permission
-it can't grant: restarting the slackbot in `f3-slackbot-staging`.
+`setup.sh --image-only` rebuilds and redeploys only the image, for an Owner
+working from a local checkout. It prints the one permission it can't grant:
+restarting the slackbot in `f3-slackbot-staging`.
+
+The full setup also lets the
+[Rebuild Staging refresh image](../.github/workflows/rebuild-staging-refresh.yml)
+workflow do its one job. It creates the service account
+`staging-refresh-deploy@f3data.iam.gserviceaccount.com`, which may push only
+the `f3-staging-refresh` image (`roles/artifactregistry.writer` on the
+`cloud-run-builds` repository), update only this job (`roles/run.developer` on
+the job) and act as the job's service account. It trusts GitHub Actions only
+in the `staging-refresh` environment of this repo (workload identity subject
+`repo:F3-Nation/f3-nation:environment:staging-refresh` in `f3data`'s `github`
+pool), not the whole repo. Once, a repo admin creates that GitHub environment
+with a deployment-branch policy of `main` only and no required reviewers, and
+sets its variables `WIF_PROVIDER`
+(`projects/1086302786213/locations/global/workloadIdentityPools/github/providers/my-repo2`)
+and `WIF_SA` (the account above).
+
+### Rebuild the image after a prod migration
+
+The job refuses to run while prod has a migration its image doesn't know
+(`… migration(s) this build's … _journal.json doesn't know`), so rebuild it
+after every prod migration. `pnpm db:migrate:prod` prints this when it
+applies one. Any code owner can run it, with no Google Cloud access:
+
+```bash
+gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
+```
+
+(or Actions > **Rebuild Staging refresh image** > Run workflow, on `main`). It
+waits for CI on main's newest commit, builds the image from it, and points the job
+at it; nothing else about the job changes. It can only build `main`: the
+credentials go only to the `staging-refresh` environment, which only `main`
+may use.
+
+If a migration creates a table or calls `audit.enable_tracking`, an `f3data`
+Owner also runs the full setup: a migration can take away the read-only prod
+login's access, and only the full setup re-grants it (with the `spuds`
+passwords). Over-running it is harmless.
 
 The job's command is `pnpm -F @acme/scripts staging-refresh`
 (`tooling/scripts/src/staging-refresh.ts`), which also runs outside Cloud Run
@@ -259,9 +294,10 @@ The job has no schedule: a maintainer runs the command above when a fresh
 snapshot is wanted. Publishing is a hand-run sequence for whoever runs
 production operations:
 
-1. Run the full setup (not `--image-only`) if the job's service account
-   doesn't have the `dev-snapshots/` write access yet or a Production release
-   added a migration, so the image is current.
+1. If a Production release added a migration, make sure the image is current
+   ([Rebuild the image](#rebuild-the-image-after-a-prod-migration)). Run the
+   full setup if the job's service account doesn't have the `dev-snapshots/`
+   write access yet.
 2. Execute the job with `--args=--snapshot-only` and confirm the execution's
    logs contain `DEV SNAPSHOT: OK`.
 3. Attach the tar's `manifest.json` and the job log's leak-scan output to the

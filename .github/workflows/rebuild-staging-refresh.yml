@@ -1,0 +1,116 @@
+name: Rebuild Staging refresh image
+
+# Rebuilds the f3-staging-refresh Cloud Run job's image from main and points the
+# job at it (docs/STAGING_REFRESH.md). Run it after a prod migration: until then
+# the refresh and the developer snapshot refuse with "Rebuild the refresh image".
+#
+#   gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
+#
+# Anyone with write access can run it, with no Google Cloud access of their own:
+# the credentials go only to jobs in the staging-refresh environment, which only
+# main may use (environment deployment-branch policy), and the deploy account
+# trusts only that environment (workload identity subject
+# repo:F3-Nation/f3-nation:environment:staging-refresh). So the button can only
+# ever redeploy reviewed code from main. setup.sh creates the account and its
+# grants; it can push this one image and update this one job, nothing else.
+#
+# Only the image changes: secrets, Cloud SQL, env vars, service account and
+# resources stay as setup.sh set them. A migration that creates a table or
+# calls audit.enable_tracking also needs an Owner to run the full setup.sh (it
+# re-grants the job's read-only prod login).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: cloudrun-job-deploy-f3data-us-central1-f3-staging-refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: f3data
+  REGION: us-central1
+  JOB: f3-staging-refresh
+  IMAGE_BASE: us-central1-docker.pkg.dev/f3data/cloud-run-builds/f3-staging-refresh
+
+jobs:
+  ci-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      # Belt and braces: a dispatch from another branch runs that branch's copy
+      # of this file, so the real guard is the environment's branch policy.
+      - name: Only main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run this from main (--ref main), not ${GITHUB_REF}."
+          exit 1
+
+      - name: Wait for CI to pass on this commit
+        uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
+        with:
+          ref: ${{ github.sha }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync)$"
+          wait-interval: 15
+          allowed-conclusions: success
+
+  rebuild:
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    environment: staging-refresh
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push the image
+        id: image
+        run: |
+          # Same tag as setup.sh: the commit, so the job's image names its code.
+          TAG="$(git rev-parse --short=12 HEAD)"
+          TURBO_VERSION="$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')"
+          docker build \
+            --platform=linux/amd64 \
+            --file tooling/scripts/Dockerfile.staging-refresh \
+            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
+            --tag "${IMAGE_BASE}:${TAG}" \
+            .
+          docker push "${IMAGE_BASE}:${TAG}"
+          DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "${IMAGE_BASE}:${TAG}")"
+          if [[ "${DIGEST}" != "${IMAGE_BASE}@sha256:"* ]]; then
+            echo "::error::unexpected image digest '${DIGEST}'"
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Point the job at the new image
+        env:
+          IMAGE: ${{ steps.image.outputs.digest }}
+          TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          gcloud run jobs update "${JOB}" --project "${PROJECT}" --region "${REGION}" \
+            --image "${IMAGE}"
+          echo "### ${JOB} now runs ${IMAGE_BASE}:${TAG}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Re-run the refresh or the developer snapshot (docs/STAGING_REFRESH.md)." >> "$GITHUB_STEP_SUMMARY"
