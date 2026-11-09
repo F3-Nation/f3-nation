@@ -246,10 +246,12 @@ setup also deploys an image from its own checkout, so the rebuild goes last.
 Running the full setup when it wasn't needed is harmless. Missing it shows up
 as `permission denied` from `pg_dump` or `the job's login doesn't own …`.
 
-Row-level security is different: the full setup doesn't fix it. If a migration
-enables it (`ENABLE ROW LEVEL SECURITY`) on a table the refresh reads, the
-read-only prod login needs a policy that lets it read every row, or `pg_dump`
-fails. Add that policy in the same migration.
+Row-level security is different: neither the full setup nor a policy fixes it.
+If a migration enables it (`ENABLE ROW LEVEL SECURITY`) on a table the refresh
+reads, the refresh stops: `pg_dump` runs without `--enable-row-security`, so a
+login that neither owns the table nor bypasses RLS can't dump it. That needs a
+change to the refresh first (dump with `--enable-row-security`, plus a policy
+that lets the read-only login read every row), shipped before the migration.
 
 The job's command is `pnpm -F @acme/scripts staging-refresh`
 (`tooling/scripts/src/staging-refresh.ts`), which also runs outside Cloud Run

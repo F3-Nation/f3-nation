@@ -3,9 +3,9 @@
 # in project f3data (F3-65, docs/STAGING_REFRESH.md). Idempotent; re-run it to rebuild
 # the image from this checkout and redeploy the job. After a prod migration, anyone
 # with write access to the repo rebuilds the image with the "Rebuild Staging refresh
-# image" workflow (.github/workflows/rebuild-staging-refresh.yml). Re-run the full setup (not
-# --image-only) first when a migration can change the refresh login's grants
-# (docs/STAGING_REFRESH.md, "Migrations that need the full setup").
+# image" workflow (.github/workflows/rebuild-staging-refresh.yml). Re-run the full
+# setup (not --image-only) first when a migration can change the refresh login's
+# grants (docs/STAGING_REFRESH.md, "Migrations that need the full setup").
 #
 #   bash tooling/scripts/staging-refresh/setup.sh               # everything
 #   bash tooling/scripts/staging-refresh/setup.sh --image-only  # rebuild + redeploy only
