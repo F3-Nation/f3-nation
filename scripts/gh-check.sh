@@ -28,8 +28,10 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
-# 3. Check whether the current repository is accessible and whether access is read-only
-if ! repo_permission="$(gh repo view --json viewerPermission --jq '.viewerPermission' 2>/dev/null)"; then
+# 3. Check whether the target repository is accessible and whether access is read-only.
+# `gh repo view` without an argument resolves the repository from the checkout's git
+# remotes and ignores GH_REPO, so pass GH_REPO explicitly when it is set.
+if ! repo_permission="$(gh repo view ${GH_REPO:+"$GH_REPO"} --json viewerPermission --jq '.viewerPermission' 2>/dev/null)"; then
     echo "ERROR: The current repository is not accessible."
     echo "INSTRUCTION FOR USER: Run this from a cloned repository directory or set GH_REPO to a repository you can access."
     exit 1
