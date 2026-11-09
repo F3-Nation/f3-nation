@@ -4,8 +4,8 @@
 # the image from this checkout and redeploy the job. After a prod migration, any code
 # owner rebuilds the image with the "Rebuild Staging refresh image" workflow
 # (.github/workflows/rebuild-staging-refresh.yml). Re-run the full setup (not
-# --image-only) when a migration creates a table or calls audit.enable_tracking: either
-# can undo the refresh login's grants on prod.
+# --image-only) when a migration creates a table, changes a table's owner or calls
+# audit.enable_tracking: each can undo the refresh login's grants.
 #
 #   bash tooling/scripts/staging-refresh/setup.sh               # everything
 #   bash tooling/scripts/staging-refresh/setup.sh --image-only  # rebuild + redeploy only
@@ -369,7 +369,7 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   echo "workloadIdentityUser for $WIF_SUBJECT"
   WIF_PROVIDER="$(gcloud iam workload-identity-pools providers list \
     --workload-identity-pool "$WIF_POOL_ID" --location global --project "$PROJECT" \
-    --filter="attributeCondition~F3-Nation AND state=ACTIVE" --format='value(name)' | head -n 1)"
+    --filter="attributeCondition~F3-Nation AND state=ACTIVE" --format='value(name)' | head -n 1 || true)"
   echo "In GitHub (repo admin, once): environment staging-refresh, deployment branches: main"
   echo "only, no required reviewers; variables WIF_SA=$DEPLOY_SA and"
   [ -n "$WIF_PROVIDER" ] || WIF_PROVIDER="<the F3-Nation provider of pool $WIF_POOL>"

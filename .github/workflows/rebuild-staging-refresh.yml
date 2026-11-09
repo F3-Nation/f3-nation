@@ -15,9 +15,9 @@ name: Rebuild Staging refresh image
 # grants; it can push this one image and update this one job, nothing else.
 #
 # Only the image changes: secrets, Cloud SQL, env vars, service account and
-# resources stay as setup.sh set them. A migration that creates a table or
-# calls audit.enable_tracking also needs an Owner to run the full setup.sh (it
-# re-grants the job's read-only prod login).
+# resources stay as setup.sh set them. A migration that creates a table,
+# changes a table's owner or calls audit.enable_tracking also needs an Owner to
+# run the full setup.sh first (it re-grants the job's database logins).
 
 on:
   workflow_dispatch:

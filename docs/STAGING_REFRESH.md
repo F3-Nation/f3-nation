@@ -214,7 +214,8 @@ at it; nothing else about the job changes. It can only build `main`: the
 credentials go only to the `staging-refresh` environment, which only `main`
 may use.
 
-If a migration creates a table or calls `audit.enable_tracking`, an `f3data`
+If a migration creates a table, changes a table's owner or calls
+`audit.enable_tracking`, an `f3data`
 Owner runs the full setup first, then the rebuild: a migration can take away
 the read-only prod login's access, and only the full setup re-grants it (with
 the `spuds` passwords). The full setup also deploys an image from its own

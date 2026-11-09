@@ -108,8 +108,8 @@ export function afterMigrationSteps(target: RemoteEnvironment): string[] {
     "Next: rebuild the Staging refresh image so the refresh and the developer",
     "snapshot know this migration (any code owner can run it):",
     "  gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main",
-    "If a migration you just applied creates a table or calls",
-    "audit.enable_tracking, an f3data Owner first runs the full",
+    "If a migration you just applied creates a table, changes a table's owner",
+    "or calls audit.enable_tracking, an f3data Owner first runs the full",
     "tooling/scripts/staging-refresh/setup.sh (it re-grants the job's read-only",
     "prod login), then the rebuild (docs/STAGING_REFRESH.md).",
   ];
