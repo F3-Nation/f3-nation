@@ -16,9 +16,11 @@ import {
   afterMigrationSteps,
   describeFailure,
   findMainRemote,
+  ignoreCleanupError,
   migrationsFingerprint,
   PhaseError,
   readGitState,
+  removeSnapshot,
   snapshotMigrations,
 } from "./migrate-remote";
 
@@ -281,5 +283,20 @@ describe("afterMigrationSteps", () => {
         "prod",
       ).join("\n"),
     ).not.toContain("rebuild-staging-refresh");
+  });
+});
+
+describe("cleanup after a run", () => {
+  it("a failed close doesn't replace the result", async () => {
+    await expect(
+      Promise.reject(new Error("close failed")).catch(ignoreCleanupError),
+    ).resolves.toBeUndefined();
+  });
+
+  it("removeSnapshot removes the copy and never throws", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "snap-"));
+    removeSnapshot(dir);
+    expect(existsSync(dir)).toBe(false);
+    expect(() => removeSnapshot("bad\0path")).not.toThrow();
   });
 });

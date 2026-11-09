@@ -110,6 +110,20 @@ export function afterMigrationSteps(target: RemoteEnvironment): string[] {
   ];
 }
 
+/** For cleanup after a run, whose failure must not replace the run's result. */
+export function ignoreCleanupError(): void {
+  // Nothing to do: the result of the run is what gets reported.
+}
+
+/** Removes the migrator's temp copy; a copy left behind is harmless. */
+export function removeSnapshot(folder: string): void {
+  try {
+    rmSync(folder, { recursive: true, force: true });
+  } catch {
+    // Leaving it is fine; don't let it hide the migration's result.
+  }
+}
+
 /**
  * The lines to print for a failed run: the phase line, then every message in
  * the cause chain with any Postgres code/detail/hint. Drizzle wraps a failed
@@ -600,7 +614,7 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     } finally {
       // Closing can't change the outcome, and a close error must not replace
       // the migration's own error or read as "nothing was changed" after a commit.
-      await rw.end().catch(() => undefined);
+      await rw.end().catch(ignoreCleanupError);
     }
   }
 
@@ -618,11 +632,7 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     if (!last) throw new Error("No pending migration to apply.");
     await applyMigrations(snapshot, last);
   } finally {
-    try {
-      rmSync(snapshot, { recursive: true, force: true });
-    } catch {
-      // A temp copy left behind is harmless; don't let it hide the result.
-    }
+    removeSnapshot(snapshot);
   }
   for (const line of afterMigrationSteps(target)) console.log(line);
 }
