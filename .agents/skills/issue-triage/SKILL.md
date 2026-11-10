@@ -6,15 +6,19 @@ compatibility: Any agent with bash, jq and an authenticated gh. Writing needs th
 
 # Issue triage
 
-Every issue in this repo carries four values that drive the project board:
-**Type** (the issue's own type) and three organization issue fields,
-**Priority**, **Effort** and **App**. This skill decides them from the issue's
-content and sets them with [`scripts/issue-fields.sh`](scripts/issue-fields.sh).
+Every issue in this repo should have four values: **Type** (the issue's own
+type) and three organization issue fields, **Priority**, **Effort** and
+**App**. This skill decides them from the issue's content and sets them with
+[`scripts/issue-fields.sh`](scripts/issue-fields.sh).
 
 The allowed values are set at the organization level and can change. Never
-type them from memory or from this file: run `issue-fields.sh options` first
-and choose only from what it prints. The script rejects any other name and
-lists the valid ones.
+type them from memory: run `issue-fields.sh options` first and choose only
+from what it prints. The script rejects any other name and lists the valid
+ones. The rules under "Deciding each value" name the values as they are set
+now; when an organization value is renamed, added or removed, update those
+rules in the same change. If `options` prints a value the rules don't
+describe, or lacks one they do, tell the user the rules are out of date and
+ask before choosing.
 
 ## Rules for every run
 
@@ -25,7 +29,8 @@ lists the valid ones.
   approved replacing it.
 - **Propose before writing.** Show each issue's values with a one-line reason
   each, and write only after the user approves. Exception: the user asked you
-  to set the values outright (for example, on an issue you just filed for them).
+  to set the values outright. Filing an issue is not that request; after
+  filing, propose the values in the same reply.
 - **Priority is the maintainers' call.** Your Priority is a suggestion they
   can change. When the issue doesn't say who is affected or how badly, give
   your best guess and mark it _unsure_ rather than leaving it empty.
@@ -37,14 +42,16 @@ lists the valid ones.
 ## Commands
 
 Run from the repo root. `GH_REPO=owner/name` targets another repository.
+Keep working files in a private temp directory (`mktemp -d`), shown as
+`<scratch>`, never in the repo.
 
 ```bash
 S=.agents/skills/issue-triage/scripts/issue-fields.sh
 bash $S options                 # allowed Types and field values
 bash $S get 123 456             # one JSON object per issue, current values + body
 bash $S untriaged > <scratch>/untriaged.jsonl  # open issues missing any of the four
-bash $S set 123 --type Bug --priority Medium --effort Low --app "Map,API"
-bash $S apply proposals.tsv     # bulk write; checks every row before writing any
+bash $S set 123 --type Bug --priority Medium --effort Low --app Map
+bash $S apply <scratch>/proposals.tsv  # bulk write; checks every row before writing any
 ```
 
 `apply` reads tab-separated rows of `number`, `type`, `priority`, `effort`,
@@ -65,7 +72,8 @@ re-apply only the rows not yet set.
 
 ### Type
 
-Use the organization's descriptions, which `options` doesn't print:
+Decide Type by these definitions, which are stricter than the short
+descriptions set on the organization's issue types:
 
 - **Bug** — something that already exists behaves wrongly: an error, wrong
   data, a broken page, a failing check.
@@ -87,8 +95,9 @@ Choose **one** app: the one the issue is about — where users see the problem
 or feature, or where most of the change lands. `options` lists every app in
 the organization, including apps in other repositories.
 
-- An app under `apps/` maps to the option of the same name (`apps/region-pages`
-  is Region Pages).
+- An app under `apps/` maps to the `options` entry of the same name
+  (`apps/region-pages` is Region Pages). If `options` has no entry for that
+  app, say so in the proposal and leave App empty rather than pick a neighbor.
 - Schema, migrations and database infrastructure (`packages/db`, Cloud SQL)
   are **Database**.
 - Shared packages, tooling, CI, scripts, repo config and work spread across
@@ -142,10 +151,10 @@ each change is mechanical. An Epic's Effort covers all its sub-issues.
 ## One issue
 
 1. `bash $S options`, then `bash $S get <n>`.
-2. Decide each missing value using the rules above, and show the user a short
-   table: value, then a one-line reason.
+2. Decide each missing value using "Deciding each value", and show the user a
+   short table: value, then a one-line reason.
 3. On approval (or straight away if asked to set them), run `bash $S set`
-   with only the missing values, then `bash $S get <n>` to confirm.
+   with the approved values, then `bash $S get <n>` to confirm.
 
 ## The backlog
 
@@ -157,8 +166,9 @@ each change is mechanical. An Epic's Effort covers all its sub-issues.
 2. For more than about 20 issues, split the file and give each part to a
    subagent along with this file; each returns TSV rows. Tell them to leave
    cells empty for values the issue already has.
-3. Combine the rows into one file with the header
+3. Combine the rows into `<scratch>/proposals.tsv` with the header
    `# number	type	priority	effort	app	title	reason` and show it to the user
    as a table, grouped by App.
-4. Apply the rows the user approves with `bash $S apply`, and re-run
-   `untriaged` to confirm that only the issues they held back remain.
+4. Apply the rows the user approves with `bash $S apply`, then re-run
+   `untriaged` with the same filter as step 1 to confirm that only the issues
+   they held back remain.

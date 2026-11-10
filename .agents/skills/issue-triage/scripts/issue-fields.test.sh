@@ -105,10 +105,11 @@ case "$query" in
       "$FAKE_DIR/pages.json" ;;
   *"issue(number:\$n){ id }"*)
     if [ -f "$FAKE_DIR/fail-lookup" ]; then
-      echo '{"data":null,"errors":[{"message":"Could not resolve"}]}'
+      echo '{"data":null,"errors":[{"message":"Bad credentials"}]}'
       exit 1
     elif [ -f "$FAKE_DIR/missing-$(var n)" ]; then
-      echo '{"data":{"repository":{"issue":null}}}'
+      echo '{"data":{"repository":{"issue":null}},"errors":[{"type":"NOT_FOUND","message":"Could not resolve to an Issue with the number of '"$(var n)"'."}]}'
+      exit 1
     else
       printf '{"data":{"repository":{"issue":{"id":"I_%s"}}}}\n' "$(var n)"
     fi ;;
@@ -206,7 +207,7 @@ printf '20\t\t\tLow\n21\t\t\tLow\n22\t\t\tLow\n' >"$tmp_dir/missing.tsv"
 out=$(bash "$fields" apply "$tmp_dir/missing.tsv" 2>&1)
 assert_eq "apply fails when an issue is missing" "1" "$?"
 assert_eq "a missing issue writes nothing, even for earlier rows" "" "$(mutations)"
-assert_eq "the missing issue is named" "1" "$(contains 'issue 21 not found in acme/repo' "$out")"
+assert_eq "the missing issue is named" "1" "$(contains 'Could not resolve to an Issue with the number of 21' "$out")"
 rm "$tmp_dir/missing-21"
 
 # apply: rows are written in file order.
@@ -230,8 +231,7 @@ rm "$tmp_dir/fail-mutation-I_31"
 touch "$tmp_dir/fail-lookup"
 out=$(bash "$fields" set 13 --priority Low 2>&1)
 assert_eq "a GraphQL error fails the run" "1" "$?"
-assert_eq "the GraphQL error message is reported" "1" "$(contains 'GraphQL error: Could not resolve' "$out")"
-assert_eq "a failed lookup is not reported as a missing issue" "0" "$(contains 'not found in' "$out")"
+assert_eq "the GraphQL error message is reported" "1" "$(contains 'GraphQL error: Bad credentials' "$out")"
 rm "$tmp_dir/fail-lookup"
 
 # An empty response is a failure, not a successful write.

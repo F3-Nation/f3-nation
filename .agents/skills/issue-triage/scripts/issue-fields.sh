@@ -18,6 +18,9 @@
 # Targets GH_REPO (owner/name) when set, else the current checkout's repo.
 set -euo pipefail
 
+# The organization issue fields this script reads and writes. Each name is also
+# matched in ISSUE_PROJECTION, resolve_row and the untriaged filter, so a new
+# field needs adding there too.
 TRIAGE_FIELDS='["Priority","Effort","App"]'
 BODY_LIMIT=4000
 
@@ -27,7 +30,7 @@ die() {
 }
 
 usage() {
-  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' >&2
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0" >&2
   exit 2
 }
 
@@ -52,9 +55,9 @@ init_repo() {
   NAME=${SLUG#*/}
 }
 
-# Runs a GraphQL request whose body ({query, variables}) is on stdin. gh exits
-# non-zero on an `errors` entry; the body still names each error. A response
-# without `data` (empty or not JSON) also fails.
+# Runs a GraphQL request whose body ({query, variables}) is on stdin and prints
+# the response. Fails on any `errors` entry (naming each message), a non-zero
+# gh exit, or a response without `data`.
 graphql() {
   local out status=0
   out=$(gh api graphql --input -) || status=$?
@@ -114,7 +117,7 @@ cmd_get() {
     jq -n --arg o "$OWNER" --arg r "$NAME" --argjson n "$n" --arg sel "$ISSUE_SELECTION" '{
       query: ("query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){ issue(number:$n){ " + $sel + " } } }"),
       variables: { o: $o, r: $r, n: $n }
-    }' | graphql | jq -c --argjson limit "$BODY_LIMIT" ".data.repository.issue | if . == null then error(\"issue $n not found\") else $ISSUE_PROJECTION end"
+    }' | graphql | jq -c --argjson limit "$BODY_LIMIT" ".data.repository.issue | $ISSUE_PROJECTION"
   done
 }
 
@@ -171,15 +174,15 @@ resolve_row() {
   ' 2>&1 | sed 's/^jq: error ([^)]*): //'
 }
 
-# Prints the issue's node ID. A failed request exits with graphql's reason;
-# "not found" is only for a request that succeeded and returned no issue.
+# Prints the issue's node ID. Any failed request, including GitHub's NOT_FOUND
+# error for a missing issue, exits with graphql's reason.
 issue_node_id() {
   local out
   out=$(jq -n --arg o "$OWNER" --arg r "$NAME" --argjson n "$1" '{
     query: "query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){ issue(number:$n){ id } } }",
     variables: { o: $o, r: $r, n: $n }
   }' | graphql) || exit 1
-  printf '%s' "$out" | jq -er '.data.repository.issue.id' || die "issue $1 not found in $SLUG"
+  printf '%s' "$out" | jq -r '.data.repository.issue.id'
 }
 
 # Adds the issue's node ID to a resolved row, or fails without writing.
