@@ -822,9 +822,9 @@ legacy. Two things are specific to them:
    `SNAPSHOT_WINDOW` window (with link rows, counts and attendance), nulls
    every blast and the `meta` of users, attendance and awards; it empties
    every other table; the leak scan passes; the manifest lists attendance,
-   its types and awards with rows; the published file, loaded the way
-   `pnpm db:load:snapshot` loads it, matches the manifest's row counts and
-   every foreign key resolves; an unreviewed column on a kept table is
+   its types and awards with rows; the published file, restored the way
+   `pnpm db:load:snapshot` restores it (before the loader seeds dev logins),
+   matches the manifest's row counts and every foreign key resolves; an unreviewed column on a kept table is
    refused; and a planted address stops the run before the file is built or
    delivered. It then runs `staging-refresh --snapshot-only`
    itself, with `STAGING_DATABASE_URL` pointing at a listener that counts
