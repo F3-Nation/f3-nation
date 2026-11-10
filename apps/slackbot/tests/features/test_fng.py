@@ -171,15 +171,24 @@ def test_failed_buddy_lookup_shows_error_and_creates_nothing(monkeypatch):
     assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
 
 
-def test_without_invite_link_no_email_goes_out(monkeypatch):
+@pytest.mark.parametrize("invite_link", [None, "", "   "])
+def test_without_invite_link_no_email_goes_out_and_submitter_is_told_to_get_an_admin(monkeypatch, invite_link):
     db, send, view = patch_db(monkeypatch)
+    client = MagicMock()
+    long_name = {fng.FNG_F3_NAME: "X" * 60, fng.FNG_FIRST_NAME: "Y" * 40}
 
-    fng.handle_fng_form(submission(), MagicMock(), MagicMock(), {}, region_record(downrange_invite_link=None))
+    fng.handle_fng_form(
+        submission(**long_name), client, MagicMock(), {}, region_record(downrange_invite_link=invite_link)
+    )
 
     db.create_record.assert_called_once()
     send.assert_not_called()
+    client.chat_postMessage.assert_not_called()
     assert view.call_args.kwargs["level"] == constants.AlertLevel.WARNING
-    assert "Downrange" in view.call_args.kwargs["text"]
+    # Leads the alert so the 200-char cap can't cut it off behind a long name.
+    assert view.call_args.kwargs["text"].startswith(
+        f"No welcome email was sent: this region has no Slack invite link. {fng.FNG_SET_INVITE_LINK}"
+    )
 
 
 def test_failed_email_dms_the_buddy_the_link(monkeypatch):
@@ -257,6 +266,20 @@ def test_form_asks_only_for_the_fngs_details():
     ]
     picker = next(b for b in view["view"]["blocks"] if b.get("block_id") == fng.USER_FORM_BROUGHT_BY)
     assert picker["optional"] is True
+
+
+@pytest.mark.parametrize("invite_link, warns", [(INVITE_LINK, False), (None, True), ("  ", True)])
+def test_form_warns_when_region_has_no_invite_link(invite_link, warns):
+    client = MagicMock()
+
+    fng.build_fng_form(
+        {"loading_id": "V_LOADING"}, client, MagicMock(), {}, region_record(downrange_invite_link=invite_link)
+    )
+
+    blocks = client.views_update.call_args.kwargs["view"]["blocks"]
+    note = next(b for b in blocks if b["type"] == "context")["elements"][0]["text"]
+    assert (fng.FNG_SET_INVITE_LINK in note) is warns
+    assert ("emails him the Slack invite" in note) is not warns
 
 
 def fng_user(**overrides):
