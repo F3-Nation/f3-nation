@@ -171,7 +171,7 @@ def test_failed_buddy_lookup_shows_error_and_creates_nothing(monkeypatch):
     assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
 
 
-@pytest.mark.parametrize("invite_link", [None, "", "   "])
+@pytest.mark.parametrize("invite_link", [None, "", "   ", "Join me on Slack -- sign up here"])
 def test_without_invite_link_no_email_goes_out_and_submitter_is_told_to_get_an_admin(monkeypatch, invite_link):
     db, send, view = patch_db(monkeypatch)
     client = MagicMock()
@@ -189,6 +189,16 @@ def test_without_invite_link_no_email_goes_out_and_submitter_is_told_to_get_an_a
     assert view.call_args.kwargs["text"].startswith(
         f"No welcome email was sent: this region has no Slack invite link. {fng.FNG_SET_INVITE_LINK}"
     )
+
+
+def test_invite_link_saved_inside_slacks_share_message_emails_just_the_url(monkeypatch):
+    _, send, view = patch_db(monkeypatch)
+    saved = f"Join me on Slack -- it\u2019s a faster, simpler way to work. Sign up here, from any device: {INVITE_LINK}"
+
+    fng.handle_fng_form(submission(), MagicMock(), MagicMock(), {}, region_record(downrange_invite_link=saved))
+
+    assert f'<a href="{INVITE_LINK}">Join us here</a>' in send.call_args.kwargs["html_content"]
+    assert view.call_args.kwargs["level"] == constants.AlertLevel.SUCCESS
 
 
 def test_failed_email_dms_the_buddy_the_link(monkeypatch):
@@ -268,7 +278,9 @@ def test_form_asks_only_for_the_fngs_details():
     assert picker["optional"] is True
 
 
-@pytest.mark.parametrize("invite_link, warns", [(INVITE_LINK, False), (None, True), ("  ", True)])
+@pytest.mark.parametrize(
+    "invite_link, warns", [(INVITE_LINK, False), (None, True), ("  ", True), ("Join me on Slack", True)]
+)
 def test_form_warns_when_region_has_no_invite_link(invite_link, warns):
     client = MagicMock()
 

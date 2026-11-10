@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from logging import Logger
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urlparse
 
 import pytz
 import requests
@@ -919,6 +920,22 @@ def remove_keys_from_dict(d, keys_to_remove):
         return [remove_keys_from_dict(item, keys_to_remove) for item in d]
     else:
         return d
+
+
+_URL_IN_TEXT = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+
+
+def usable_invite_link(saved: str | None) -> str | None:
+    """The first http(s) URL in a region's saved Slack invite link, or None if it holds none.
+
+    A saved link can be Slack's whole share message ("Join me on Slack -- ... from any device: https://...")
+    rather than a bare URL. Sending that text as a link gives the FNG a broken link, so keep only the URL.
+    """
+    match = _URL_IN_TEXT.search(saved or "")
+    if not match:
+        return None
+    url = match.group(0).rstrip(".,;:!?)]}")
+    return url if urlparse(url).netloc else None
 
 
 def safe_convert(value: str | None, conversion, args: list = None, default=None):

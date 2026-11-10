@@ -22,7 +22,7 @@ from utilities import constants
 from utilities.builders import update_submission_wait_view
 from utilities.constants import AlertLevel
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import get_user, safe_convert, safe_get
+from utilities.helper_functions import get_user, safe_convert, safe_get, usable_invite_link
 from utilities.sendmail import send_via_sendgrid
 from utilities.slack import actions
 from utilities.slack.orm import (
@@ -76,7 +76,7 @@ def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict,
             element=ContextElement(
                 initial_value="This creates his F3 Nation profile, emails him the Slack invite "
                 "and lists you as his battle buddy. He's welcomed in Slack once he joins."
-                if _invite_link(region_record)
+                if usable_invite_link(region_record.downrange_invite_link)
                 else ":warning: This region has no Slack invite link, so he won't get a welcome email. "
                 f"{FNG_SET_INVITE_LINK} This still creates his F3 Nation profile and lists you as his battle buddy."
             )
@@ -167,7 +167,7 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     region = safe_get(DbManager.get(Org, region_record.org_id), "name") or region_record.workspace_name or "F3"
     # An existing user may still need this region's Slack invite, but greet him by his profile name, not a typed one.
     greet = safe_get(existing, "first_name") if existing else first_name
-    invite_link = _invite_link(region_record)
+    invite_link = usable_invite_link(region_record.downrange_invite_link)
     emailed = _send_welcome_email(email, greet, region, invite_link)
 
     lines = [
@@ -196,11 +196,6 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
         # First, so the 200-char alert cap can't cut off what the submitter needs to do.
         lines.insert(0, f"No welcome email was sent: this region has no Slack invite link. {FNG_SET_INVITE_LINK}")
     done(AlertLevel.SUCCESS if emailed else AlertLevel.WARNING, " ".join(lines))
-
-
-def _invite_link(region_record: SlackSettings) -> str | None:
-    """The region's Slack invite link, or None when unset or blank."""
-    return (region_record.downrange_invite_link or "").strip() or None
 
 
 def _send_welcome_email(email: str, first_name: str | None, region: str, invite_link: str | None) -> bool:
