@@ -808,6 +808,25 @@ def test_legacy_image_without_metadata_rebuilds_once(calendar_generation, monkey
     assert run(rows, now + timedelta(hours=1)) == []
 
 
+def test_settings_update_does_not_print_region_secrets(calendar_generation, capsys):
+    run, row, settings, _ = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    secrets = {
+        "bot_token": "xoxb-secret-bot-token",
+        "email_password": "secret-smtp-password",
+        "downrange_invite_link": "https://join.slack.com/t/secret-invite",
+        "email_to": "secret-to@example.com",
+        "email_user": "secret-user@example.com",
+    }
+    settings.update(secrets)
+    assert len(run([row("One-time AO", now - timedelta(days=2))], now)) == 1
+    assert settings["bot_token"] == secrets["bot_token"]
+    output = capsys.readouterr()
+    for value in secrets.values():
+        assert value not in output.out
+        assert value not in output.err
+
+
 def test_failed_export_keeps_previous_filename_and_metadata(calendar_generation, monkeypatch):
     run, row, settings, _ = calendar_generation
     now = datetime(2026, 9, 30, 10)

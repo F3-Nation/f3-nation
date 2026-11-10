@@ -19,7 +19,6 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
-import scripts
 from features import strava
 from infrastructure.api_client.exceptions import (
     F3ApiAuthError,
@@ -138,9 +137,6 @@ if not LOCAL_DEVELOPMENT:
     def handler(request: Request):
         if request.path == "/":
             return Response("Service is running", status=200, headers={"Access-Control-Allow-Origin": "*"})
-        elif request.path == "/gcp_event":
-            logging.info("GCP Event")
-            return scripts.handle(request)
         elif request.path == "/exchange_token":
             logging.info("Strava token exchange request")
             logging.info(f"Request query parameters: {request.args}")
