@@ -11,15 +11,12 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 
-import {
-  CLOSE_ZOOM,
-  DEFAULT_CENTER,
-  DEFAULT_ZOOM,
-} from "@acme/shared/app/constants";
+import { DEFAULT_CENTER, DEFAULT_ZOOM } from "@acme/shared/app/constants";
 import { safeParseFloat, safeParseInt } from "@acme/shared/common/functions";
 
 import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
+import { getInitialZoom, parseZoomParam } from "~/utils/user-location-zoom";
 import { setSelectedItem } from "~/utils/store/selected-item";
 
 const InitialLocationContext = createContext<{
@@ -47,7 +44,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
   const queryLon = safeParseFloat(
     searchParams.get("lon") ?? searchParams.get("lng"),
   );
-  const queryZoom = safeParseFloat(searchParams.get("zoom"));
+  const queryZoom = parseZoomParam(searchParams.get("zoom"));
   const queryLocationId = safeParseInt(searchParams.get("locationId"));
   const queryEventId = safeParseInt(searchParams.get("eventId"));
 

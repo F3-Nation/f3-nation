@@ -199,6 +199,7 @@ test("REPLY goes to 💬, mentioning the codeowners who opened the threads", () 
     ]),
     "💬",
   );
+  assert.match(reply, /^\*💬 Reviewer needs to reply\*/);
   assert.match(lineFor(reply, 1), /· 3 threads · <@U0ANDY> <@U0DAN> · 1d$/);
 });
 

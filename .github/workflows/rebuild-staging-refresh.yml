@@ -1,0 +1,158 @@
+name: Rebuild Staging refresh image
+
+# Rebuilds the f3-staging-refresh Cloud Run job's image from main and points the
+# job at it (docs/STAGING_REFRESH.md). Run it after a prod migration: until then
+# the refresh and the developer snapshot refuse with "Rebuild the refresh image".
+#
+#   gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
+#
+# Anyone with write access can run it, with no Google Cloud access of their own.
+# The deploy account trusts one workload identity pool whose only provider accepts
+# GitHub tokens from refs/heads/main in this repo's staging-refresh environment,
+# and that environment allows only main. So a run from a branch or tag (even with
+# an edited copy of this file) can't sign in: the button can only ever redeploy
+# reviewed code from main. setup.sh creates the account and its
+# grants; it can push to the cloud-run-builds repository and update this one
+# job, nothing else.
+#
+# Only the image changes: secrets, Cloud SQL, env vars, service account and
+# resources stay as setup.sh set them. A migration that can change the refresh
+# login's grants also needs an Owner to run the full setup.sh first
+# (docs/STAGING_REFRESH.md, "Migrations that need the full setup").
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: cloudrun-job-deploy-f3data-us-central1-f3-staging-refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: f3data
+  REGION: us-central1
+  JOB: f3-staging-refresh
+  IMAGE_BASE: us-central1-docker.pkg.dev/f3data/cloud-run-builds/f3-staging-refresh
+  # Named here, not in repo or environment variables: an unset environment variable
+  # would fall back to the organization-level WIF_PROVIDER / WIF_SA, another account.
+  # setup.sh creates both under these fixed names (f3data is project 1086302786213).
+  WIF_PROVIDER: projects/1086302786213/locations/global/workloadIdentityPools/staging-refresh-gh/providers/github-main
+  WIF_SA: staging-refresh-deploy@f3data.iam.gserviceaccount.com
+
+jobs:
+  ci-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read # read CI check runs on github.sha
+    steps:
+      # Belt and braces: a dispatch from another branch runs that branch's copy
+      # of this file, so the real guard is the environment's branch policy.
+      - name: Only main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run this from main (--ref main), not ${GITHUB_REF}."
+          exit 1
+
+      - name: Wait for CI to pass on this commit
+        uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
+        with:
+          ref: ${{ github.sha }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|\
+            security-audit|db-schema-sync|obfuscate-db-verify)$"
+          wait-interval: 15
+          allowed-conclusions: success
+
+      # The wait above fails only when none of the named checks exist, so also
+      # require each one: present on this commit, and its latest run green.
+      - name: Every required check passed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUIRED: >-
+            build lint typecheck format-check test-coverage security-audit
+            db-schema-sync obfuscate-db-verify
+        run: |
+          runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+            --jq '.check_runs[] | [.name, .id, (.conclusion // "pending")] | @tsv')"
+          failed=0
+          for name in ${REQUIRED}; do
+            # The newest run of each check (ids only grow; a queued rerun has no start time).
+            latest="$(printf '%s\n' "${runs}" | awk -F'\t' -v n="${name}" '$1 == n' \
+              | sort -t$'\t' -k2,2n | tail -n 1 | cut -f3)"
+            if [[ "${latest}" != "success" ]]; then
+              echo "::error::check '${name}' on ${GITHUB_SHA}: ${latest:-missing}"
+              failed=1
+            fi
+          done
+          exit "${failed}"
+
+  rebuild:
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    environment: staging-refresh
+    permissions:
+      contents: read
+      id-token: write # WIF auth as staging-refresh-deploy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push the image
+        id: image
+        run: |
+          # Same tag as setup.sh: the commit, so the job's image names its code.
+          TAG="$(git rev-parse --short=12 HEAD)"
+          TURBO_VERSION="$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')"
+          docker build \
+            --platform=linux/amd64 \
+            --file tooling/scripts/Dockerfile.staging-refresh \
+            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
+            --tag "${IMAGE_BASE}:${TAG}" \
+            .
+          docker push "${IMAGE_BASE}:${TAG}"
+          DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "${IMAGE_BASE}:${TAG}")"
+          if [[ "${DIGEST}" != "${IMAGE_BASE}@sha256:"* ]]; then
+            echo "::error::unexpected image digest '${DIGEST}'"
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      # A migration or refresh-code change merged while this ran would leave the
+      # image behind main (a migration soon reaches prod too). Fails on any change
+      # under these paths; other changes to main aren't in the image's code.
+      - name: No newer migration or refresh code on main
+        run: |
+          git fetch --quiet --depth=1 origin main
+          if ! git diff --quiet HEAD FETCH_HEAD -- packages/db/drizzle tooling/scripts; then
+            echo "::error::main changed packages/db/drizzle or tooling/scripts while this ran." \
+              "Run the workflow again; the job keeps its current image."
+            exit 1
+          fi
+
+      - name: Point the job at the new image
+        env:
+          IMAGE: ${{ steps.image.outputs.digest }}
+          TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          gcloud run jobs update "${JOB}" --project "${PROJECT}" --region "${REGION}" \
+            --image "${IMAGE}"
+          echo "### ${JOB} now runs ${IMAGE_BASE}:${TAG}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Re-run the refresh or the developer snapshot (docs/STAGING_REFRESH.md)." >> "$GITHUB_STEP_SUMMARY"
