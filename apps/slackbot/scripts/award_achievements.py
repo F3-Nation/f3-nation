@@ -33,7 +33,6 @@ If filter keys are unrecognised, they are ignored (logged at DEBUG level).
 from __future__ import annotations
 
 import os
-import ssl
 import sys
 
 import pytz
@@ -436,14 +435,6 @@ class RegionAchievementGroup:
     achievements: Dict[int, List[Tuple[AwardedUserInfo, CandidateAward]]]
 
 
-def _get_ssl_context():
-    """Create SSL context for Slack client."""
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    return ssl_context
-
-
 def _build_achievement_message(achievement: Achievement, user_tag: str) -> str:
     """Build a message for a single achievement award."""
     msg = f"🏆 *{achievement.name}*"
@@ -634,8 +625,7 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
                 print(f"  - {ach_name}: {', '.join(users)}")
             continue
 
-        ssl_context = _get_ssl_context()
-        client = WebClient(group.bot_token, ssl=ssl_context)
+        client = WebClient(group.bot_token)
 
         if send_option == "post_individually":
             _post_individually(client, achievement_channel, group, achievements_by_id, team_id)

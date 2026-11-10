@@ -1,7 +1,6 @@
 import copy
 import json
 import re
-import ssl
 from logging import Logger
 
 from f3_data_models.models import Org, Org_x_SlackSpace, SlackSpace, User
@@ -353,13 +352,6 @@ def _update_request_modal_for_resubmit(body: dict, client: WebClient, logger: Lo
         )
     except Exception:
         logger.info("Downrange resubmission guidance could not be displayed")
-
-
-def _ssl_context():
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
 
 
 # Blocks for the admin settings section (appended below the search when user is admin)
@@ -721,7 +713,7 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
         ]
 
     try:
-        target_client = WebClient(token=target_bot_token, ssl=_ssl_context())
+        target_client = WebClient(token=target_bot_token)
         dm = target_client.conversations_open(users=",".join(admin_slack_ids))
         dm_channel = safe_get(dm, "channel", "id")
         target_client.chat_postMessage(
@@ -811,7 +803,7 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} has been approved!",
@@ -856,7 +848,7 @@ def handle_invite_deny(body: dict, client: WebClient, logger: Logger, context: d
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} was not approved at this time.",
@@ -913,7 +905,7 @@ def handle_invite_link_broken(
         ]
         if admin_slack_ids:
             try:
-                target_client = WebClient(token=target_bot_token, ssl=_ssl_context())
+                target_client = WebClient(token=target_bot_token)
                 dm = target_client.conversations_open(users=",".join(admin_slack_ids))
                 dm_channel = safe_get(dm, "channel", "id")
                 target_client.chat_postMessage(
@@ -964,7 +956,7 @@ def handle_invite_mark_done(body: dict, client: WebClient, logger: Logger, conte
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite to {target_org_name} has been sent — check your email!",

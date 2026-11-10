@@ -13,11 +13,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { checkGitState } from "./migrate-guards";
 import {
+  afterMigrationSteps,
   describeFailure,
   findMainRemote,
+  ignoreCleanupError,
   migrationsFingerprint,
   PhaseError,
   readGitState,
+  removeSnapshot,
   snapshotMigrations,
 } from "./migrate-remote";
 
@@ -247,5 +250,53 @@ describe("describeFailure", () => {
       "Stopped before changing anything.",
       "  connection dropped",
     ]);
+  });
+});
+
+describe("afterMigrationSteps", () => {
+  it("after prod, says to rebuild the Staging refresh image", () => {
+    const text = afterMigrationSteps("prod").join("\n");
+    expect(text).toContain(
+      "gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main",
+    );
+    expect(text).toContain("tooling/scripts/staging-refresh/setup.sh");
+  });
+
+  it("after staging, says nothing", () => {
+    expect(afterMigrationSteps("staging")).toEqual([]);
+  });
+
+  it("after prod, a failed check of applied migrations still says to rebuild", () => {
+    const failure = new PhaseError("applied", { cause: new Error("boom") });
+    expect(describeFailure(failure, "prod").join("\n")).toContain(
+      "gh workflow run rebuild-staging-refresh.yml",
+    );
+    expect(describeFailure(failure, "staging").join("\n")).not.toContain(
+      "rebuild-staging-refresh",
+    );
+    expect(
+      describeFailure(new Error("connection dropped"), "prod").join("\n"),
+    ).not.toContain("rebuild-staging-refresh");
+    expect(
+      describeFailure(
+        new PhaseError("migrating", { cause: new Error("boom") }),
+        "prod",
+      ).join("\n"),
+    ).not.toContain("rebuild-staging-refresh");
+  });
+});
+
+describe("cleanup after a run", () => {
+  it("a failed close doesn't replace the result", async () => {
+    await expect(
+      Promise.reject(new Error("close failed")).catch(ignoreCleanupError),
+    ).resolves.toBeUndefined();
+  });
+
+  it("removeSnapshot removes the copy and never throws", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "snap-"));
+    removeSnapshot(dir);
+    expect(existsSync(dir)).toBe(false);
+    expect(() => removeSnapshot("bad\0path")).not.toThrow();
   });
 });

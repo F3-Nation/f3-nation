@@ -1,6 +1,5 @@
 import os
 import re
-import ssl
 from logging import Logger
 
 from f3_data_models.models import Org, Org_x_SlackSpace, Role, Role_x_User_x_Org, SlackSpace
@@ -297,12 +296,9 @@ def handle_existing_region_selection(
             ]
         ),
     ]
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
     if os.environ.get("ADMIN_BOT_TOKEN") and os.environ.get("ADMIN_CHANNEL_ID"):
         try:
-            send_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"), ssl=ssl_context)
+            send_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"))
             send_client.chat_postMessage(
                 channel=os.environ.get("ADMIN_CHANNEL_ID"),
                 text="Region Connection Request",
@@ -410,12 +406,9 @@ def handle_approve_connection(
             text=f"Your region connection request was approved by the F3 Nation Admins! Your slack space is now connected to {metadata.get('region_name')}. Your PAX can start signing up to Q through the `/f3-calendar` command."  # noqa
         ),
     ]
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
     if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=slack_space_record.bot_token, ssl=ssl_context)
+            send_client = WebClient(token=slack_space_record.bot_token)
             send_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Approved",
@@ -444,7 +437,7 @@ def handle_approve_connection(
                     )
                 ),
             ]
-            admin_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"), ssl=ssl_context)
+            admin_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"))
             admin_client.chat_update(
                 channel=channel_id,
                 ts=message_ts,
@@ -470,12 +463,9 @@ def handle_deny_connection(body: dict, client: WebClient, logger: Logger, contex
             text="Your region connection request was denied by the F3 Nation Admins. Please reach out to it@f3nation.com for more information."  # noqa
         ),
     ]
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
     if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=slack_space_record.bot_token, ssl=ssl_context)
+            send_client = WebClient(token=slack_space_record.bot_token)
             send_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Denied",

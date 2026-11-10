@@ -1,4 +1,3 @@
-import ssl
 from datetime import timedelta
 from logging import Logger
 from typing import List
@@ -110,10 +109,7 @@ def update_all_canvases():
     for region in regions:
         slack_settings = SlackSettings(**region.slack_space.settings)
         if slack_settings.canvas_channel and slack_settings.special_events_enabled:
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            client = WebClient(token=slack_settings.bot_token, ssl=ssl_context)
+            client = WebClient(token=slack_settings.bot_token)
             try:
                 update_canvas({}, client, Logger("logger"), {}, slack_settings)
             except Exception as e:
