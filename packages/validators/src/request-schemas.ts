@@ -102,6 +102,44 @@ export const RegionFields = z.object({
 
 export type RegionFieldsType = z.infer<typeof RegionFields>;
 
+// `currentValues` holds the entity as it stands today; the map's event form
+// strikes through the event fields that changed. These mirror the field types
+// above without their rules and also allow null: stored data can be older than
+// a rule, and that must not block an approval. `satisfies` fails the build if a
+// key is added or removed or a type stops fitting. It can't see a dropped
+// `.nullish()`, so the schema tests check that every field accepts null.
+type PriorValuesShape<T> = {
+  [K in keyof T]-?: z.ZodType<T[K] | null | undefined>;
+};
+
+const PriorEventValues = z.object({
+  eventName: z.string().nullish(),
+  eventDayOfWeek: z.enum(DayOfWeek).nullish(),
+  eventStartTime: z.string().nullish(),
+  eventEndTime: z.string().nullish(),
+  eventStartDate: z.string().nullish(),
+  eventDescription: z.string().nullish(),
+  eventTypeIds: z.array(z.number()).nullish(),
+} satisfies PriorValuesShape<EventFieldsType>);
+
+const PriorAOValues = z.object({
+  aoName: z.string().nullish(),
+  aoLogo: z.string().nullish(),
+  aoWebsite: z.string().nullish(),
+} satisfies PriorValuesShape<AOFieldsType>);
+
+const PriorLocationValues = z.object({
+  locationLat: z.number().nullish(),
+  locationLng: z.number().nullish(),
+  locationAddress: z.string().nullish(),
+  locationAddress2: z.string().nullish(),
+  locationCity: z.string().nullish(),
+  locationState: z.string().nullish(),
+  locationZip: z.string().nullish(),
+  locationCountry: z.string().nullish(),
+  locationDescription: z.string().nullish(),
+} satisfies PriorValuesShape<LocationFieldsType>);
+
 // Base schema with common fields.
 export const BaseSchema = RequestInsertSchema.pick({
   requestType: true,
@@ -173,7 +211,7 @@ export const EditEventSchema = BaseSchema.extend({
   // Optional: `currentValues` carries the entity's prior values for the review
   // UI only (stripped before persistence). Optional so the admin normalizer no
   // longer has to fabricate an empty object just to satisfy the union. (#13)
-  .extend({ currentValues: makeSchemaLoose(EventFields).optional() })
+  .extend({ currentValues: PriorEventValues.optional() })
   .superRefine(checkEventTimeOrder);
 
 export type EditEventType = z.infer<typeof EditEventSchema>;
@@ -187,9 +225,7 @@ export const EditAOAndLocationSchema = BaseSchema.extend({
   .extend(AOFields.partial().shape)
   .extend(LocationFields.partial().shape)
   .extend({
-    currentValues: makeSchemaLoose(
-      AOFields.extend(LocationFields.shape),
-    ).optional(),
+    currentValues: PriorAOValues.extend(PriorLocationValues.shape).optional(),
   });
 
 export type EditAOAndLocationType = z.infer<typeof EditAOAndLocationSchema>;
@@ -212,9 +248,7 @@ export const MoveAOToNewLocationSchema = BaseSchema.extend({
   originalLocationId: z.number().positive("Location ID is required"),
 })
   .extend(LocationFields.shape)
-  .extend({
-    currentValues: makeSchemaLoose(LocationFields).optional(),
-  });
+  .extend({ currentValues: PriorLocationValues.optional() });
 
 export type MoveAOToNewLocationType = z.infer<typeof MoveAOToNewLocationSchema>;
 
@@ -274,7 +308,7 @@ export const MoveEventToNewLocationSchema = BaseSchema.extend({
   originalLocationId: z.number().positive("Location ID is required"),
 })
   .extend(LocationFields.shape)
-  .extend({ currentValues: makeSchemaLoose(LocationFields).optional() });
+  .extend({ currentValues: PriorLocationValues.optional() });
 
 export type MoveEventToNewLocationType = z.infer<
   typeof MoveEventToNewLocationSchema
@@ -295,24 +329,3 @@ export const DeleteAOSchema = BaseSchema.extend({
 });
 
 export type DeleteAOType = z.infer<typeof DeleteAOSchema>;
-
-/**
- * Creates a "loose" version of a Zod schema where all fields accept any value
- * Preserves the keys for type safety but disables validation
- *
- * @example
- * const StrictSchema = z.object({ name: z.string(), age: z.number() });
- * const LooseSchema = makeSchemaLoose(StrictSchema);
- * // Result: z.object({ name: z.unknown(), age: z.unknown() })
- */
-function makeSchemaLoose(schema: z.ZodObject<z.ZodRawShape>) {
-  const shape = schema.shape;
-  const looseShape: Record<string, z.ZodOptional<z.ZodUnknown>> = {};
-
-  for (const key in shape) {
-    // Optional so missing keys pass — a bare `z.unknown()` is required in Zod 4.
-    looseShape[key] = z.unknown().optional();
-  }
-
-  return z.object(looseShape);
-}

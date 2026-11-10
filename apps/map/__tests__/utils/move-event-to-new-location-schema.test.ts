@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { MoveEventToNewLocationSchema } from "@acme/validators/request-schemas";
 
@@ -19,6 +19,22 @@ const valid = {
 };
 
 describe("MoveEventToNewLocationSchema", () => {
+  it("keeps prior values that break today's rules", () => {
+    const currentValues = { locationAddress: "123", locationZip: "1" };
+    const result = MoveEventToNewLocationSchema.parse({
+      ...valid,
+      currentValues,
+    });
+    expect(result.currentValues).toEqual(currentValues);
+  });
+
+  it("rejects a prior value of the wrong type", () =>
+    expectInvalidAt(
+      MoveEventToNewLocationSchema,
+      { ...valid, currentValues: { locationLat: "35.5" } },
+      "currentValues",
+    ));
+
   it("accepts a move-event-to-new-location request", () =>
     expectValid(MoveEventToNewLocationSchema, valid));
 
