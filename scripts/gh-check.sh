@@ -32,9 +32,19 @@ fi
 # `gh repo view` without an argument resolves the repository from the checkout's git
 # remotes and ignores GH_REPO, so pass GH_REPO explicitly when it is set.
 repo_label="${GH_REPO:-the current repository}"
-if ! repo_permission="$(gh repo view ${GH_REPO:+"$GH_REPO"} --json viewerPermission --jq '.viewerPermission' 2>/dev/null)"; then
+# gh's stderr carries the real cause of a failure (typo in GH_REPO, missing token
+# scope, SSO enforcement, network error), so keep it and show it.
+gh_err=""
+trap 'if [[ -n "$gh_err" ]]; then rm -f "$gh_err"; fi' EXIT
+gh_err="$(mktemp "${TMPDIR:-/tmp}/gh-check.XXXXXX")"
+if ! repo_permission="$(gh repo view ${GH_REPO:+"$GH_REPO"} --json viewerPermission --jq '.viewerPermission' 2>"$gh_err")"; then
     echo "ERROR: Cannot access ${repo_label}."
-    echo "INSTRUCTION FOR USER: Run this from a cloned repository directory or set GH_REPO to a repository you can access."
+    sed 's/^/  gh: /' "$gh_err"
+    if [[ -n "${GH_REPO:-}" ]]; then
+        echo "INSTRUCTION FOR USER: Check that GH_REPO is set to an <owner>/<name> repository you can access."
+    else
+        echo "INSTRUCTION FOR USER: Run this from a cloned repository directory or set GH_REPO to a repository you can access."
+    fi
     exit 1
 fi
 
