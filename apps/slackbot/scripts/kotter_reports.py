@@ -1,6 +1,5 @@
 import logging
 import os
-import ssl
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -744,9 +743,6 @@ def send_kotter_reports(
     current_time = now_cst or datetime.now(pytz.timezone("US/Central"))
     records = DbManager.find_join_records3(Org_x_SlackSpace, Org, SlackSpace, filters=[Org.is_active])
     stats_url = os.getenv("STATS_URL")
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
 
     for org, slack in [(record[1], record[2]) for record in records]:
         if run_org_id and org.id != run_org_id:
@@ -789,7 +785,7 @@ def send_kotter_reports(
                 continue
             retry_handlers = default_retry_handlers()
             retry_handlers.append(RateLimitErrorRetryHandler())
-            client = WebClient(token=config.bot_token, ssl=ssl_context, retry_handlers=retry_handlers)
+            client = WebClient(token=config.bot_token, retry_handlers=retry_handlers)
             for delivery in deliveries:
                 try:
                     _send_delivery(client, delivery, stats_url=stats_url, org_id=config.org_id)
