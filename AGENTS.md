@@ -79,6 +79,10 @@ The review uses the [Superpowers](https://github.com/obra/superpowers)
 `requesting-code-review` skill when it is installed (optional; a bundled brief
 covers it otherwise).
 
+To set an issue's Type, Priority, Effort and App — one issue, or every open
+issue missing them — follow
+[`.agents/skills/issue-triage/SKILL.md`](.agents/skills/issue-triage/SKILL.md).
+
 To address, respond to, or work through review feedback on a pull request,
 follow
 [`.agents/skills/address-pr-comments/SKILL.md`](.agents/skills/address-pr-comments/SKILL.md).
@@ -244,6 +248,7 @@ These apply to every issue an agent opens, for any reason. The full rule and its
 - One objective per issue, as small as is reasonable. A task list holds only requirements for that objective, never a batch of independent findings.
 - An audit or review that finds several problems files one issue per problem; being related doesn't make them an Epic. A parent issue of type **Epic** is only for a large, cohesive effort whose issues together deliver one outcome. To set one up through the REST API: `PATCH .../issues/<n>` with `type` set to `Epic`, and `POST .../issues/<n>/sub_issues` with `sub_issue_id` set to the child's numeric `id` (not its issue number).
 - Before filing, search open and closed issues for a duplicate; then use an issue template and lead with the plain-language impact before the root cause and fix.
+- Right after filing, propose any Type, Priority, Effort and App the issue lacks, using the [`issue-triage`](.agents/skills/issue-triage/SKILL.md) skill, and set them once the user approves.
 
 ## Pull Request Guidelines
 
