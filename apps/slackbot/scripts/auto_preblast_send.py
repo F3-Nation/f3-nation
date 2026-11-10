@@ -1,6 +1,5 @@
 import logging
 import os
-import ssl
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -176,10 +175,7 @@ def send_automated_preblasts(force: bool = False):
             continue
 
         try:
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            slack_client = WebClient(preblast.slack_settings.bot_token, ssl=ssl_context)
+            slack_client = WebClient(preblast.slack_settings.bot_token)
             event_preblast.send_preblast(
                 event_instance_id=preblast.event.id,
                 region_record=preblast.slack_settings,
