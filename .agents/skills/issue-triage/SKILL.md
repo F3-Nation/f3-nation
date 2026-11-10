@@ -152,7 +152,8 @@ each change is mechanical. An Epic's Effort covers all its sub-issues.
 1. `bash $S options`, then `bash $S untriaged > <scratch>/untriaged.jsonl`.
    `untriaged` lists issues missing any of the four values; when the user asks
    about one field, keep only the issues missing it, e.g.
-   `jq -c 'select(.priority == null)'` (for App, `select(.app == [])`).
+   `jq -c 'select(.priority == null)' <scratch>/untriaged.jsonl > <scratch>/todo.jsonl`
+   (for App, `select(.app == [])`), and work from that file.
 2. For more than about 20 issues, split the file and give each part to a
    subagent along with this file; each returns TSV rows. Tell them to leave
    cells empty for values the issue already has.
