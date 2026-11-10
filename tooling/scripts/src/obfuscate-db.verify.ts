@@ -1289,11 +1289,11 @@ async function verifySnapshotMode(
         : `missing or empty: ${emptyAttendance.join(", ")}`,
     );
 
-    // Load the published dump the way pnpm db:load:snapshot does, into a
-    // seeded database: only its TABLE DATA entries, as data-only SQL with
-    // triggers off behind a TRUNCATE … CASCADE of the manifest's tables,
-    // applied by psql in one transaction. With triggers off Postgres checks
-    // no FK, so check every one here.
+    // Must replay RESTORE_SCRIPT in packages/db/src/load-snapshot-lib.ts
+    // (change both together), into a seeded database: only the dump's TABLE
+    // DATA entries, as data-only SQL with triggers off behind a TRUNCATE …
+    // CASCADE of the manifest's tables, applied by psql in one transaction.
+    // With triggers off Postgres checks no FK, so check every one here.
     const loadUrl = dbUrl(SNAPSHOT_LOAD_DB);
     const dumpFile = path.join(extracted, "snapshot.dump");
     const loadList = path.join(work, "load.list");

@@ -293,8 +293,8 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
    emptied. The trim refuses if a kept table has a foreign key into an
    emptied one. Private event series (and series under them) and private
    event instances (and instances of a private series) are deleted with
-   their link rows. `event_instances` keeps only `start_date` from 183 days
-   (about 6 months) back to 90 days ahead (`SNAPSHOT_WINDOW`), with their
+   their link rows. `event_instances` keeps only `start_date` inside
+   `SNAPSHOT_WINDOW` (days before and after the export date), with their
    link rows. `attendance` is a link row too, so it keeps only rows on a
    kept instance, and `attendance_x_attendance_types` goes with it;
    `achievements_x_users` is not windowed. `preblast`, `backblast`,
@@ -310,9 +310,8 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
      other than `dev.staging-email-sink+<tag>@f3nation.local`, any phone
      number that isn't one of the obfuscator's `555-` fakes, and any Slack
      mention (`<@U…>` / `<@W…>`) whose id isn't an obfuscator `Uf3…` id.
-   - `orgs`, `users`, `event_types`, `events`, `event_instances` and
-     `attendance` must each have rows (`SNAPSHOT_REQUIRED_TABLES`), so an empty copy can't
-     replace a good snapshot.
+   - Every table in `SNAPSHOT_REQUIRED_TABLES` must have rows, so an empty
+     copy can't replace a good snapshot.
    - If either check fails, nothing is built or uploaded. Otherwise a
      `pg_dump --data-only --format=custom` of the kept tables, plus
      `manifest.json`, goes into one uncompressed tar:
@@ -353,14 +352,6 @@ the object right away (`gcloud storage rm`, as a bucket admin) and fix the
 cause before publishing again. If the bucket has object versioning on,
 earlier generations stay readable by generation number until they are
 deleted.
-
-The snapshot includes attendance: who attended which event instance, for the
-window above, plus achievement awards. The people in it are the obfuscator's
-fake users and the blasts are cleared, but someone who knows a local group
-could still match a fake user's attendance pattern (which workouts, on which
-days) to a real person. Leadership accepted that re-identification risk. If
-it needs to go down, generate attendance rows (random users from each
-instance's region, as many as its head count) instead of copying them.
 
 The grant includes delete so a run can replace the previous snapshot. An IAM condition constrains the object name, not how the client
 writes it, so the service account could delete any object under
