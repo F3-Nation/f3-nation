@@ -336,7 +336,9 @@ jobs:
         env:
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: echo "TURBO_SCM_BASE=${MERGE_GROUP_BASE_SHA}" >> "$GITHUB_ENV"
-      - run: pnpm lint ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
+      # Limit simultaneous type-aware ESLint processes to reduce peak memory
+      # when every workspace needs linting without cached results.
+      - run: pnpm lint --concurrency=2 ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
       - run: pnpm lint:unused
 
   typecheck:
