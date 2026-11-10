@@ -31,25 +31,26 @@ fi
 # 3. Check whether the target repository is accessible and whether access is read-only.
 # `gh repo view` without an argument resolves the repository from the checkout's git
 # remotes and ignores GH_REPO, so pass GH_REPO explicitly when it is set.
+repo_label="${GH_REPO:-the current repository}"
 if ! repo_permission="$(gh repo view ${GH_REPO:+"$GH_REPO"} --json viewerPermission --jq '.viewerPermission' 2>/dev/null)"; then
-    echo "ERROR: The current repository is not accessible."
+    echo "ERROR: Cannot access ${repo_label}."
     echo "INSTRUCTION FOR USER: Run this from a cloned repository directory or set GH_REPO to a repository you can access."
     exit 1
 fi
 
 case "$repo_permission" in
     WRITE|MAINTAIN|ADMIN)
-        echo "SUCCESS: gh CLI is installed, authenticated, and has write access to the current repository."
+        echo "SUCCESS: gh CLI is installed, authenticated, and has write access to ${repo_label}."
         ;;
     READ)
         if [[ "$require_write" == true ]]; then
-            echo "ERROR: The current repository is accessible only in read-only mode. Write operations are not permitted."
+            echo "ERROR: Access to ${repo_label} is read-only. Write operations are not permitted."
             exit 1
         fi
-        echo "SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible in read-only mode."
+        echo "SUCCESS: gh CLI is installed, authenticated, and ${repo_label} is accessible in read-only mode."
         ;;
     NONE|NULL|TRIAGE|"")
-        echo "ERROR: The current repository is not accessible or has insufficient permissions."
+        echo "ERROR: Cannot access ${repo_label} or it has insufficient permissions."
         exit 1
         ;;
     *)

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Regression tests for scripts/gh-check.sh: the permission check runs against GH_REPO
-# when it is set (not the checkout's own remotes), read-only access fails only with
-# --require-write, an inaccessible repository fails, and an unknown argument is rejected.
+# Regression tests for scripts/gh-check.sh, mainly that the permission check
+# targets GH_REPO when it is set rather than the checkout's own remotes.
 # `gh` is replaced by a stub that, like the real `gh repo view`, ignores GH_REPO and
 # resolves a repository only from an explicit argument or the checkout's remotes.
 # Run directly: bash scripts/gh-check.test.sh
@@ -71,13 +70,13 @@ assert_eq "read-only checkout passes without --require-write" \
   "0: SUCCESS: gh CLI is installed, authenticated, and the current repository is accessible in read-only mode." \
   "$(run_check "")"
 assert_eq "read-only checkout fails with --require-write" \
-  "1: ERROR: The current repository is accessible only in read-only mode. Write operations are not permitted." \
+  "1: ERROR: Access to the current repository is read-only. Write operations are not permitted." \
   "$(run_check "" --require-write)"
 assert_eq "GH_REPO naming a writable repository passes --require-write" \
-  "0: SUCCESS: gh CLI is installed, authenticated, and has write access to the current repository." \
+  "0: SUCCESS: gh CLI is installed, authenticated, and has write access to fork/repo." \
   "$(run_check fork/repo --require-write)"
 assert_eq "GH_REPO naming an inaccessible repository fails" \
-  "1: ERROR: The current repository is not accessible." \
+  "1: ERROR: Cannot access missing/repo." \
   "$(run_check missing/repo --require-write)"
 assert_eq "an unknown argument is rejected" \
   "1: ERROR: Unknown argument: --bogus" \
