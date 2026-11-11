@@ -23,7 +23,7 @@
  * they'd be closed.
  *
  * `buildReport()` and the formatters are pure; `assembleReport()` reads GitHub
- * and is shared with the security-advisory PR report, so both reports pick
+ * and is shared with the Security Advisory Report, so both reports pick
  * and format PRs the same way.
  */
 

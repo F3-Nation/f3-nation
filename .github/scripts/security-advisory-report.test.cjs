@@ -1,6 +1,6 @@
 "use strict";
 
-// Run with: node --test .github/scripts/security-advisory-pr-report.test.cjs
+// Run with: node --test .github/scripts/security-advisory-report.test.cjs
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
@@ -11,7 +11,7 @@ const {
   checkAccess,
   listAdvisories,
   buildAdvisoryReport,
-} = require("./security-advisory-pr-report.cjs");
+} = require("./security-advisory-report.cjs");
 const { toSlackMarkdown } = require("./codeowners-pr-report.cjs");
 
 const NOW = Date.parse("2026-11-11T14:07:00Z");
@@ -320,7 +320,7 @@ test("fork PRs are listed by advisory, in the Codeowners PR Report's format", as
   assert.equal(result.messages.length, 1);
   assert.match(
     message,
-    /^### Security Advisory PR Report · Wed Nov 11 · 2 PRs need a codeowner · 🔴 0 🟡 0\n/,
+    /^### Security Advisory Report · Wed Nov 11 · 2 PRs need a codeowner · 🔴 0 🟡 0\n/,
   );
   assert.match(
     message,
@@ -333,7 +333,7 @@ test("fork PRs are listed by advisory, in the Codeowners PR Report's format", as
   assert.doesNotMatch(message, /waiting on its author|No open fix PR/);
   assert.match(
     message,
-    /Run by @andy with the `security-advisory-pr-report` agent skill/,
+    /Run by @andy with the `security-advisory-report` agent skill/,
   );
   // Branch rules and the team come from the advisory's repo; forks have neither.
   assert.ok(
@@ -431,7 +431,7 @@ test("no open advisories gives the empty message", async () => {
     assert.fail("nothing to triage"),
   );
   assert.deepEqual(result.messages, [
-    "There are no open security advisories.\n\nRun by @andy with the `security-advisory-pr-report` agent skill · reply in this thread to take a PR or ask for help",
+    "There are no open security advisories.\n\nRun by @andy with the `security-advisory-report` agent skill · reply in this thread to take a PR or ask for help",
   ]);
 });
 
@@ -536,7 +536,7 @@ test("a long report is split between sections into messages Slack accepts", asyn
   assert.ok(result.messages.length > 1);
   for (const message of result.messages)
     assert.ok(message.length <= SLACK_MAX_CHARS);
-  assert.match(result.messages[0], /^### Security Advisory PR Report/);
+  assert.match(result.messages[0], /^### Security Advisory Report/);
   assert.match(result.messages.at(-1), /Run by @andy/);
   // Nothing is lost or reordered in the split.
   assert.equal(result.messages.join("\n\n"), toSlackMarkdown(result.report));

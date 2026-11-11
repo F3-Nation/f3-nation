@@ -546,12 +546,12 @@ test("the report's name, empty text and board hint can be changed", () => {
     new Map([[pr(1).url, teamFacts]]),
     {
       now: NOW,
-      title: "Security Advisory PR Report",
+      title: "Security Advisory Report",
       boardHint: "Run by @andy",
     },
   );
-  assert.match(named.blocks[0].text.text, /^Security Advisory PR Report · /);
-  assert.match(named.text, /^Security Advisory PR Report: 1 PR needs/);
+  assert.match(named.blocks[0].text.text, /^Security Advisory Report · /);
+  assert.match(named.text, /^Security Advisory Report: 1 PR needs/);
   assert.match(named.blocks.at(-1).elements[0].text, /^Run by @andy · /);
   const empty = buildReport({ codeowners: [], prs: [] }, new Map(), {
     now: NOW,

@@ -1,10 +1,10 @@
 ---
-name: security-advisory-pr-report
-description: Post the Security Advisory PR Report to the private #codeowners Slack channel — every open security advisory in F3-Nation/f3-nation, with its fix PR (in the advisory's temporary private fork) sorted and formatted like the daily Codeowners PR Report, or listed as having no fix PR yet. Use when someone asks for the security advisory report, which advisories or GHSA fix PRs are waiting or still need work, or to remind codeowners about security fixes.
+name: security-advisory-report
+description: Post the Security Advisory Report to the private #codeowners Slack channel — every open security advisory in F3-Nation/f3-nation, with its fix PR (in the advisory's temporary private fork) sorted and formatted like the daily Codeowners PR Report, or listed as having no fix PR yet. Use when someone asks for the security advisory report, which advisories or GHSA fix PRs are waiting or still need work, or to remind codeowners about security fixes.
 compatibility: Any agent (Claude Code, Codex) with node, bash, jq, a signed-in gh, and a Slack connection that posts as the person running it (Slack's MCP server). Needs an F3-Nation org owner, security manager, or admin of F3-Nation/f3-nation.
 ---
 
-# Security Advisory PR Report
+# Security Advisory Report
 
 Fix PRs for security advisories live in each advisory's temporary private
 fork, where GitHub keeps out every integration, so the daily Codeowners PR
@@ -15,7 +15,7 @@ Slack channel **as you**. GitHub and Slack decide what you can read and where
 you can post; the checks below stop the run early, with the reason, when you
 can't.
 
-[`.github/scripts/security-advisory-pr-report.cjs`](../../../.github/scripts/security-advisory-pr-report.cjs)
+[`.github/scripts/security-advisory-report.cjs`](../../../.github/scripts/security-advisory-report.cjs)
 does the GitHub work. It sorts the PRs with
 [`scripts/pr-triage.sh`](../../../scripts/pr-triage.sh) and lays out the
 message with the same code as the daily report
@@ -50,7 +50,7 @@ private channel.
 Run from the repository root:
 
 ```bash
-node .github/scripts/security-advisory-pr-report.cjs --check
+node .github/scripts/security-advisory-report.cjs --check
 ```
 
 It checks, in order, and stops at the first failure:
@@ -89,7 +89,7 @@ would no longer check that this person belongs in the channel.
 ## 3. Build the report
 
 ```bash
-node .github/scripts/security-advisory-pr-report.cjs
+node .github/scripts/security-advisory-report.cjs
 ```
 
 It repeats step 1's checks, then reads every open advisory and its fork. It can

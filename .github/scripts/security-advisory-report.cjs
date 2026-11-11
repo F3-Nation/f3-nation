@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Security Advisory PR Report: the Codeowners PR Report (same lists, lights
+ * Security Advisory Report: the Codeowners PR Report (same lists, lights
  * and wording, from codeowners-pr-report.cjs) for the fix PRs in
  * F3-Nation/f3-nation's open security advisories. Every open advisory appears
  * once: its fix PR in the codeowners' lists, or in one of two more lists,
@@ -11,11 +11,11 @@
  * Those PRs live in each advisory's temporary private fork, which GitHub keeps
  * from every integration, workflow tokens included. So this runs on a
  * codeowner's machine with their own gh login, through the
- * security-advisory-pr-report agent skill, which posts the message to the
+ * security-advisory-report agent skill, which posts the message to the
  * private #codeowners Slack channel as that person.
  *
- *   node .github/scripts/security-advisory-pr-report.cjs --check   # access checks only
- *   node .github/scripts/security-advisory-pr-report.cjs           # checks, then the message
+ *   node .github/scripts/security-advisory-report.cjs --check   # access checks only
+ *   node .github/scripts/security-advisory-report.cjs           # checks, then the message
  *
  * Read-only, and writes no files. Prints the Slack message (Markdown) on
  * stdout; a report too long for one message is split between sections into
@@ -46,7 +46,7 @@ const SLACK_MAX_CHARS = 5000;
 // Separates messages in the output. Report text can't contain it: titles and
 // summaries are Slack-escaped, so they never hold "<" or ">".
 const MESSAGE_BREAK = "<<< next Slack message >>>";
-const SKILL = "security-advisory-pr-report";
+const SKILL = "security-advisory-report";
 
 const TOOLS = [
   [
@@ -344,7 +344,7 @@ async function buildAdvisoryReport({
           `${noPr} ${noPr === 1 ? "advisory has" : "advisories have"} no open fix PR`,
         ]
       : [],
-    title: "Security Advisory PR Report",
+    title: "Security Advisory Report",
     emptyText: "There are no open security advisories.",
     boardHint: `Run by @${login} with the \`${SKILL}\` agent skill`,
   });
@@ -367,7 +367,7 @@ if (require.main === module) {
   const checkOnly = args[0] === "--check";
   if (args.length > (checkOnly ? 1 : 0)) {
     console.error(
-      "Usage: node .github/scripts/security-advisory-pr-report.cjs [--check]",
+      "Usage: node .github/scripts/security-advisory-report.cjs [--check]",
     );
     process.exit(2);
   }
