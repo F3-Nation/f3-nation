@@ -21,11 +21,13 @@ const mocks = vi.hoisted(() => ({
   byId: vi.fn<(input: unknown) => Promise<unknown>>(),
   orgAll: vi.fn(),
   realPicker: false,
+  refresh: vi.fn(),
+  invalidateQueries: vi.fn(),
   crupdate: vi.fn<(input: unknown) => Promise<unknown>>(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: mocks.refresh }),
 }));
 vi.mock("~/lib/auth/client", () => ({
   useAdminSession: () => ({
@@ -44,7 +46,7 @@ vi.mock("@acme/ui/toast", () => ({
 vi.mock("~/orpc/react", async () => ({
   ...(await import("@tanstack/react-query")),
   ORPCError: (await import("@orpc/client")).ORPCError,
-  invalidateQueries: vi.fn(),
+  invalidateQueries: mocks.invalidateQueries,
   orpc: {
     user: {
       byId: {
@@ -137,6 +139,8 @@ const roleLessUser = {
 describe("AdminUsersModal", () => {
   beforeEach(() => {
     mocks.realPicker = false;
+    mocks.refresh.mockClear();
+    mocks.invalidateQueries.mockClear();
     vi.mocked(toast.error).mockClear();
     mocks.byId.mockReset();
     mocks.orgAll.mockReset().mockResolvedValue({
@@ -519,17 +523,39 @@ describe("AdminUsersModal", () => {
       screen.getByText("This member no longer exists. Close the form."),
     ).toBeTruthy();
     mocks.byId.mockResolvedValue({
-      user: { ...roleLessUser, homeRegionId: 10, email: "member@example.com" },
+      user: {
+        ...roleLessUser,
+        f3Name: "Recovered",
+        homeRegionId: 30,
+        email: "member@example.com",
+      },
       includePii: true,
     });
     await act(async () => {
       await queryClient.invalidateQueries({ queryKey: ["byId"] });
     });
-    await screen.findByRole("button", { name: "Save Changes" });
+    await screen.findByDisplayValue("Recovered");
     expect(
-      screen.queryByText("This member no longer exists. Close the form."),
-    ).toBeNull();
+      screen.getByLabelText<HTMLSelectElement>("Home region picker").value,
+    ).toBe("30");
+    expect(screen.queryByRole("alert")).toBeNull();
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+          .disabled,
+      ).toBe(false),
+    );
     expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mocks.crupdate).toHaveBeenCalledTimes(2));
+    expect(mocks.crupdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        id: 42,
+        f3Name: "Recovered",
+        homeRegionId: 30,
+      }),
+      expect.anything(),
+    );
   });
 
   it("confirms the named destination, cancels without saving, then saves once on confirmation", async () => {
@@ -608,8 +634,6 @@ describe("AdminUsersModal", () => {
         await screen.findByRole("button", { name: "Confirm change" }),
       );
       await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
-      expect(mocks.crupdate).toHaveBeenCalledTimes(1);
-      expect(mocks.byId).toHaveBeenCalledTimes(1);
       expect(screen.getByDisplayValue("member@example.com")).toBeTruthy();
       await waitFor(() =>
         expect(
@@ -618,6 +642,10 @@ describe("AdminUsersModal", () => {
           }).disabled,
         ).toBe(false),
       );
+      expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+      expect(mocks.byId).toHaveBeenCalledTimes(1);
+      expect(mocks.refresh).not.toHaveBeenCalled();
+      expect(mocks.invalidateQueries).not.toHaveBeenCalled();
     },
   );
 
