@@ -37,22 +37,27 @@ Nothing in this runbook deletes anything until the final, signoff-gated teardown
 
 ## Cutover (low traffic window)
 
-1. Pause the legacy ingest. Find the caller of `POST /api/ingest` on the legacy service (Cloud Scheduler is disabled in `region-pages`, so check other projects, GitHub Actions, and local launchd jobs) and disable it. Then rotate the Secret Manager secret the service reads (`CRON_SECRET` from `cron-secret-tf:latest`) so any unknown caller gets 401. Note the current version number first; the value never appears on a command line:
+1. Pause the legacy ingest. Find the caller of `POST /api/ingest` on the legacy service (Cloud Scheduler is disabled in `region-pages`, so check other projects, GitHub Actions, and local launchd jobs) and disable it. Then rotate the Secret Manager secret the service reads (`CRON_SECRET` from `cron-secret-tf:latest`) so any unknown caller gets 401. Record the version the service runs now; the value never appears on a command line:
 
    ```sh
-   gcloud secrets versions list cron-secret-tf --project region-pages --limit 1
-   openssl rand -hex 32 | gcloud secrets versions add cron-secret-tf \
-     --project region-pages --data-file=-
-   gcloud run services update f3-region-pages --project region-pages \
-     --region us-central1 --update-secrets CRON_SECRET=cron-secret-tf:latest
+   OLD=$(gcloud secrets versions list cron-secret-tf --project region-pages \
    ```
+
+--filter='state=ENABLED' --sort-by='~createTime' --limit 1 --format='value(name)')
+echo "record this: OLD=$OLD" # the service binds cron-secret-tf:latest
+openssl rand -hex 32 | gcloud secrets versions add cron-secret-tf \
+--project region-pages --data-file=-
+gcloud run services update f3-region-pages --project region-pages \
+--region us-central1 --update-secrets CRON_SECRET=cron-secret-tf:latest
+
+````
 
 2. Release the domain from the legacy project (the service keeps running):
 
-   ```sh
-   gcloud beta run domain-mappings delete --domain regions.f3nation.com \
-     --project region-pages --region us-central1
-   ```
+```sh
+gcloud beta run domain-mappings delete --domain regions.f3nation.com \
+  --project region-pages --region us-central1
+````
 
 3. Map it to the monorepo app. DNS already points at `ghs.googlehosted.com`; expect a short gap while the managed certificate issues.
 
@@ -65,7 +70,7 @@ Nothing in this runbook deletes anything until the final, signoff-gated teardown
 
    Gate: do not continue until the mapping reports `Ready` and
    `curl -fsS https://regions.f3nation.com/health` succeeds. If it is not ready
-   within 60 minutes, roll back (steps 1 and 2 of Rollback) and reschedule.
+   within 60 minutes, run the full Rollback below (all steps, including ingest restore) and reschedule.
 
 4. Point canonicals at the real domain, which also activates the regions2 307:
 
@@ -84,6 +89,7 @@ Nothing in this runbook deletes anything until the final, signoff-gated teardown
 - [ ] `curl -sI 'https://regions2.f3nation.com/<slug>?letter=a'` returns 307 to `https://regions.f3nation.com/<slug>?letter=a`.
 - [ ] `f3region.info` still lands on regions.f3nation.com.
 - [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://f3-region-pages-mx5ollfbiq-uc.a.run.app/api/ingest` returns 401 (legacy service URL, no secret).
+- [ ] Old credential: `/api/ingest` writes on success, so there is no safe authenticated probe. Instead confirm the new revision is serving 100% of traffic with `cron-secret-tf:latest` resolved to the new version, and watch its logs for 24 hours: any 401 on `/api/ingest` is the unknown caller, now rejected.
 
 ## 14 day soak
 
@@ -91,14 +97,16 @@ Daily: check Cloud Run 5xx and API 429s for `f3-region-pages` in `f3-region-page
 
 ## Rollback (any time during the soak)
 
-1. `gcloud beta run domain-mappings delete --domain regions.f3nation.com --project f3-region-pages-app --region us-central1`
-2. `gcloud beta run domain-mappings create --service f3-region-pages --domain regions.f3nation.com --project region-pages --region us-central1`
-   Gate: the reverse mapping reports `Ready` and `curl -fsS -o /dev/null https://regions.f3nation.com/` succeeds. If it stalls past 60 minutes, escalate in #region-pages; regions2 keeps serving the new app meanwhile once step 3 is done.
-3. `gcloud run services update f3-region-pages --project f3-region-pages-app --region us-central1 --update-env-vars SITE_URL=https://regions2.f3nation.com` (the 307 turns itself off; browsers do not cache a 307).
+1. Turn the redirect off first so regions2 serves the new app directly: `gcloud run services update f3-region-pages --project f3-region-pages-app --region us-central1 --update-env-vars SITE_URL=https://regions2.f3nation.com`, then confirm `curl -sI https://regions2.f3nation.com/` returns 200 (a 307 is never cached, so earlier visitors are fine).
+2. `gcloud beta run domain-mappings delete --domain regions.f3nation.com --project f3-region-pages-app --region us-central1`
+3. `gcloud beta run domain-mappings create --service f3-region-pages --domain regions.f3nation.com --project region-pages --region us-central1`
+
+   Gate: the mapping reports `Ready` and `curl -fsS -o /dev/null https://regions.f3nation.com/` succeeds. If it stalls past 60 minutes, escalate in #region-pages; regions2 keeps serving the new app meanwhile.
+
 4. Restore the ingest secret and caller, using the version number recorded before cutover:
 
    ```sh
-   OLD=<version recorded in cutover step 1>
+   OLD=12   # replace 12 with the number recorded in cutover step 1
    gcloud secrets versions access "$OLD" --secret=cron-secret-tf --project=region-pages \
      | gcloud secrets versions add cron-secret-tf --project=region-pages --data-file=-
    gcloud run services update f3-region-pages --project region-pages \
