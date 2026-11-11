@@ -1,5 +1,7 @@
 const CANONICAL_HOST = "regions.f3nation.com";
 const LEGACY_ALIAS_HOST = "regions2.f3nation.com";
+// Exact paths, so a region slug such as /health-club still redirects.
+const PASSTHROUGH_PATHS = new Set(["/health", "/favicon.ico"]);
 
 const normalizeHost = (host: string | null): string | undefined =>
   host?.split(",")[0]?.trim().toLowerCase().replace(/:\d+$/, "") ?? undefined;
@@ -15,6 +17,7 @@ export const canonicalRedirect = (
   siteUrl: string,
 ): string | null => {
   if (new URL(siteUrl).host !== CANONICAL_HOST) return null;
+  if (PASSTHROUGH_PATHS.has(url.pathname)) return null;
   if (normalizeHost(requestHost) !== LEGACY_ALIAS_HOST) return null;
   return `https://${CANONICAL_HOST}${url.pathname}${url.search}`;
 };

@@ -44,6 +44,18 @@ describe("canonicalRedirect", () => {
     ).toBe("https://regions.f3nation.com/a");
   });
 
+  it("passes /health and /favicon.ico through exactly", () => {
+    expect(
+      canonicalRedirect("regions2.f3nation.com", url("/health"), PROD),
+    ).toBeNull();
+    expect(
+      canonicalRedirect("regions2.f3nation.com", url("/favicon.ico"), PROD),
+    ).toBeNull();
+    expect(
+      canonicalRedirect("regions2.f3nation.com", url("/health-club"), PROD),
+    ).toBe("https://regions.f3nation.com/health-club");
+  });
+
   it("ignores a missing host", () => {
     expect(canonicalRedirect(null, url("/a"), PROD)).toBeNull();
   });
