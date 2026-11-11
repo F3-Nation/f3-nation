@@ -15,15 +15,34 @@ interface State {
   hasError: boolean;
 }
 
+const GOOGLE_MAPS_SCRIPT_ORIGIN = "https://maps.googleapis.com/";
+
+/**
+ * True for the `TypeError`s Google's disabled marker class throws: their top
+ * stack frame is in a script served from Google Maps. Chrome, Firefox and
+ * Safari all print a frame's script URL, and the message line before the
+ * frames holds none, so the first URL in the stack is the top frame's.
+ * An error without a stack doesn't match, so it reaches the app's error
+ * boundary rather than being hidden.
+ */
+function isGoogleMapsScriptError(error: unknown): boolean {
+  if (!(error instanceof TypeError) || typeof error.stack !== "string") {
+    return false;
+  }
+  const topFrameUrl = /https?:\/\/[^\s)]+/.exec(error.stack)?.[0];
+  return topFrameUrl?.startsWith(GOOGLE_MAPS_SCRIPT_ORIGIN) ?? false;
+}
+
 /**
  * Catches the marker errors that slip past `useGoogleMapsAuthFailed`.
  *
  * Google disables its marker class and calls `gm_authFailure` in the same
  * task, but React flushes effects it had already queued before it re-renders
  * on the new state, so a marker mounting or moving in that window still
- * throws. When the key was rejected, those errors are expected and the
- * boundary shows `fallback` (the failure is reported once by the hook).
- * Any other error is re-thrown to the app's error boundary unchanged.
+ * throws. When the key was rejected and the error comes from Google's own
+ * script, the boundary shows `fallback` (the failure is reported once by the
+ * hook). Any other error, including one from our own code after a rejection,
+ * is re-thrown to the app's error boundary unchanged so it is still reported.
  */
 export class GoogleMapsAuthFailureBoundary extends Component<Props, State> {
   state: State = { error: null, hasError: false };
@@ -34,7 +53,9 @@ export class GoogleMapsAuthFailureBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (!this.state.hasError) return this.props.children;
-    if (isGoogleMapsAuthFailed()) return this.props.fallback;
+    if (isGoogleMapsAuthFailed() && isGoogleMapsScriptError(this.state.error)) {
+      return this.props.fallback;
+    }
     throw this.state.error;
   }
 }
