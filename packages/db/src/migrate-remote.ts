@@ -19,6 +19,8 @@
  *      main's journal (planMigrations);
  *   5. shows the pending migrations and asks you to type the database name.
  * Then it runs Drizzle's migrator, which applies them in one transaction.
+ * After prod, it starts the Staging refresh image rebuild with your gh login
+ * (startRefreshRebuild), or prints the command when it can't.
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -90,10 +92,33 @@ const PHASE_MESSAGES: Record<MigratePhase, string> = {
     "The migrations were applied, but the check afterwards failed. Check the database before doing anything else.",
 };
 
+const REBUILD_ARGS = [
+  "workflow",
+  "run",
+  "rebuild-staging-refresh.yml",
+  "-R",
+  "F3-Nation/f3-nation",
+  "--ref",
+  "main",
+];
+const REBUILD_COMMAND = `gh ${REBUILD_ARGS.join(" ")}`;
+const REBUILD_RUNS_URL =
+  "https://github.com/F3-Nation/f3-nation/actions/workflows/rebuild-staging-refresh.yml";
+
+/** Migrations the rebuild alone doesn't cover: they need the full setup too. */
+const FULL_SETUP_NOTE = [
+  "If a migration you just applied creates a table or schema, changes an owner,",
+  "revokes privileges or calls audit.enable_tracking, an f3data Owner also",
+  "runs the full tooling/scripts/staging-refresh/setup.sh (it re-grants the",
+  "job's logins), then the rebuild again (docs/STAGING_REFRESH.md, \"Migrations",
+  'that need the full setup").',
+];
+
 /**
- * What to do once a migration is applied. After prod: rebuild the Staging
- * refresh image, which refuses to run while prod has a migration it doesn't
- * know (docs/STAGING_REFRESH.md). Nothing after staging.
+ * What to do once a migration is applied, when this script didn't start the
+ * rebuild itself (a failed check after the commit). After prod: rebuild the
+ * Staging refresh image, which refuses to run while prod has a migration it
+ * doesn't know (docs/STAGING_REFRESH.md). Nothing after staging.
  */
 export function afterMigrationSteps(target: RemoteEnvironment): string[] {
   if (target !== "prod") return [];
@@ -101,12 +126,70 @@ export function afterMigrationSteps(target: RemoteEnvironment): string[] {
     "",
     "Next: rebuild the Staging refresh image so the refresh and the developer",
     "snapshot know this migration (anyone with write access to the repo):",
-    "  gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main",
-    "If a migration you just applied creates a table or schema, changes an owner,",
-    "revokes privileges or calls audit.enable_tracking, an f3data Owner first",
-    "runs the full tooling/scripts/staging-refresh/setup.sh (it re-grants the",
-    "job's logins), then the rebuild (docs/STAGING_REFRESH.md, \"Migrations",
-    'that need the full setup").',
+    `  ${REBUILD_COMMAND}`,
+    ...FULL_SETUP_NOTE,
+  ];
+}
+
+export interface CommandResult {
+  status: number | null;
+  stderr: string;
+  error?: Error;
+}
+export type CommandRunner = (command: string, args: string[]) => CommandResult;
+
+export const runCommand: CommandRunner = (command, args) => {
+  const res = spawnSync(command, args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 30_000,
+  });
+  // spawnSync leaves stderr null when the command fails to start.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above
+  return { status: res.status, stderr: res.stderr ?? "", error: res.error };
+};
+
+/**
+ * After a prod migration: start the Staging refresh image rebuild with the
+ * person's own gh login, so nobody has to remember it. It only queues the
+ * workflow (a second or two); the build runs in GitHub. If gh is missing or
+ * not logged in, says how to start it by hand. Never throws: the migration is
+ * already committed, and this must not read as a failed migration.
+ */
+export function startRefreshRebuild(run: CommandRunner = runCommand): string[] {
+  let res: CommandResult;
+  try {
+    res = run("gh", REBUILD_ARGS);
+  } catch (e) {
+    res = { status: null, stderr: "", error: e as Error };
+  }
+  if (res.status === 0 && !res.error) {
+    return [
+      "",
+      "Started the Staging refresh image rebuild, so the refresh and the developer",
+      "snapshot know this migration. It runs in GitHub once CI on main is green",
+      "(a few minutes), and GitHub emails you if it fails:",
+      `  ${REBUILD_RUNS_URL}`,
+      ...FULL_SETUP_NOTE,
+    ];
+  }
+  const errorCode =
+    res.error && "code" in res.error ? res.error.code : undefined;
+  const stderrLine = res.stderr.trim().split("\n", 1).join("");
+  const why =
+    errorCode === "ENOENT"
+      ? "gh isn't installed"
+      : (res.error?.message ??
+        (stderrLine.length > 0
+          ? stderrLine
+          : `gh exited ${String(res.status)}`));
+  return [
+    "",
+    `Couldn't start the Staging refresh image rebuild (${why}).`,
+    "Start it yourself (anyone with write access to the repo), so the refresh",
+    "and the developer snapshot know this migration:",
+    `  ${REBUILD_COMMAND}`,
+    ...FULL_SETUP_NOTE,
   ];
 }
 
@@ -634,7 +717,9 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
   } finally {
     removeSnapshot(snapshot);
   }
-  for (const line of afterMigrationSteps(target)) console.log(line);
+  if (target === "prod") {
+    for (const line of startRefreshRebuild()) console.log(line);
+  }
 }
 
 if (require.main === module) {

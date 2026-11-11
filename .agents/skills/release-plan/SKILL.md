@@ -107,8 +107,8 @@ Ask for anything missing before starting:
    Database queries section from the template. Otherwise fill
    `{{NEWEST_MIGRATION_FILE}}` with the last file name listed.
 
-   For a Production plan with a migration, keep Step 2's "Rebuild the
-   Staging refresh image" item: the refresh job refuses to run once
+   For a Production plan with a migration, keep Step 2's "Check the
+   Staging refresh image rebuild" item (`pnpm db:migrate:prod` starts it): the refresh job refuses to run once
    Production is ahead of the migrations in its image. Keep the "Re-grant
    the Staging refresh login" item and the Refresh admin row only when a new
    `.sql` file creates a table or schema (`CREATE TABLE`, `CREATE SCHEMA`),
@@ -116,8 +116,8 @@ Ask for anything missing before starting:
    `audit.enable_tracking`: any of these can take away the refresh login's
    access, and only the full setup re-grants it. This is the list in
    `docs/STAGING_REFRESH.md` ("Migrations that need the full setup"); keep the
-   two the same. Otherwise delete both. Keep
-   the re-grant before the rebuild: the full setup deploys an image from the
+   two the same. Otherwise delete both. After the
+   re-grant the rebuild runs again: the full setup deploys an image from the
    release commit, and the rebuild must replace it with main's. In every
    other plan, delete all three.
 
