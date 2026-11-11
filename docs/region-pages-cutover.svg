@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 512" width="840" height="512" role="img" aria-labelledby="t d" data-diagram-type="architecture">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -16 840 528" width="840" height="528" role="img" aria-labelledby="t d" data-diagram-type="architecture">
   <title id="t">Region pages: current and proposed data path</title>
-  <desc id="d">Today visitors to regions.f3nation.com hit the legacy Cloud Run app in GCP project region-pages, which reads a Neon copy that an ingest job fills from Cloud SQL f3data. After cutover the domain maps to the monorepo app in project f3-region-pages-app, which reads f3data through the F3 API; regions2 301s to regions, and Neon sits idle for a 14-day soak before any signoff-gated teardown.</desc>
+  <desc id="d">Today visitors to regions.f3nation.com hit the legacy Cloud Run app in GCP project region-pages, which reads a Neon copy that an ingest job fills from Cloud SQL f3data. After cutover the domain maps to the monorepo app in project f3-region-pages-app, which reads f3data through the F3 API; regions2 redirects to regions with a 307 during the soak and a 301 after signoff, and Neon sits idle for a 14-day soak before any signoff-gated teardown.</desc>
   <style>
     svg { --bg: #F5F5F5; --surface: #FFFFFF; --ink: #2D3142; --muted: #4F5D75; --soft: #5A6580; --line: #4F5D75; --rule: #D9DADD; --accent: #B5401C; --accent-tint: #F2E9E6; --link: #2E5AA8; }
     @media (prefers-color-scheme: dark) {
@@ -24,7 +24,7 @@
     <marker id="arrow-accent" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#B5401C"/></marker>
     <marker id="arrow-link" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#2E5AA8"/></marker>
   </defs>
-  <rect class="bg" x="0" y="0" width="840" height="512" fill="#F5F5F5"/>
+  <rect class="bg" x="0" y="-16" width="840" height="528" fill="#F5F5F5"/>
   <g class="group">
     <rect x="24" y="24" width="792" height="216" rx="8"/>
     <rect class="mask" x="36" y="16" width="72" height="16" rx="2"/>
@@ -81,7 +81,7 @@
   </g>
   <g class="node" data-id="r2">
     <rect x="48" y="400" width="168" height="64" rx="6"/>
-    <text class="label" x="132" y="428.5" font-size="14" text-anchor="middle"><tspan x="132">regions2 alias</tspan><tspan x="132" dy="16.8">301 redirect</tspan></text>
+    <text class="label" x="132" y="428.5" font-size="14" text-anchor="middle"><tspan x="132">regions2 alias</tspan><tspan x="132" dy="16.8">307, 301 later</tspan></text>
   </g>
   <g class="node optional" data-id="idle">
     <rect x="432" y="400" width="168" height="64" rx="6"/>
