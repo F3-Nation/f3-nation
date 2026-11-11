@@ -473,17 +473,3 @@ export const EVENT_CATEGORY_LABEL_MAP: Record<string, string> =
   Object.fromEntries(EVENT_CATEGORY_OPTIONS.map((o) => [o.value, o.label]));
 
 export const API_PREFIX_V1 = "/v1";
-
-export enum ApiKeyTags {
-  API = "api",
-  API_KEY = "api-key",
-  AUTH = "auth",
-  EVENT = "event",
-  EVENT_TYPE = "event-type",
-  FEEDBACK = "feedback",
-  LOCATION = "location",
-  ORG = "org",
-  PING = "ping",
-  REQUEST = "request",
-  USER = "user",
-}
