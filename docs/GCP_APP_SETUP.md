@@ -114,6 +114,16 @@ gcloud run deploy "$CLOUDRUN_SERVICE" \
 
 The WIF pool and provider in `f3-github` are shared — **skip the creation commands if `f3-github` already exists** (it does for all apps after the first). Only run the SA + IAM + binding steps.
 
+Each deploy service account trusts exactly one GitHub environment. GitHub puts the environment a job runs in into the token's subject (`repo:F3-Nation/f3-nation:environment:<name>`), the provider maps that to `google.subject`, and the [staging](#5c-staging-service-account) and [production](#5d-production-service-account) bindings name that subject. A job in another environment, or in none, cannot impersonate the account. This is also what makes the production environment's required reviewers count on the GCP side: GitHub issues a token with the production subject only after the deployment is approved.
+
+Three things must stay in step with a binding:
+
+- The environment name in the binding matches the `staging_environment` / `prod_environment` the app's deploy workflow passes, exactly.
+- A service account that more than one environment deploys as needs one binding per environment.
+- The repository keeps GitHub's default OIDC subject format. Customizing the subject claim changes the subject, and every binding has to change with it.
+
+When a binding doesn't match, the deploy fails with a permission error on `iam.serviceAccounts.getAccessToken` the first time it calls GCP.
+
 ### 5a. Shared infrastructure (one-time, already done for existing apps)
 
 ```bash
@@ -167,10 +177,10 @@ gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
   --member="serviceAccount:${STAGING_SA}" \
   --role="roles/serviceusage.serviceUsageViewer"
 
-# Allow GitHub Actions to impersonate the staging SA
+# Allow only jobs in the staging GitHub environment to impersonate the staging SA
 gcloud iam service-accounts add-iam-policy-binding "$STAGING_SA" \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
+  --member="principal://iam.googleapis.com/projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/subject/repo:F3-Nation/f3-nation:environment:${GH_STAGING_ENV}" \
   --project="$GCP_STAGING_PROJECT"
 ```
 
@@ -200,10 +210,10 @@ gcloud projects add-iam-policy-binding "$GCP_PROD_PROJECT" \
   --member="serviceAccount:${PROD_SA}" \
   --role="roles/artifactregistry.writer"
 
-# Allow GitHub Actions to impersonate the prod SA
+# Allow only jobs in the production GitHub environment to impersonate the prod SA
 gcloud iam service-accounts add-iam-policy-binding "$PROD_SA" \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/attribute.repository/F3-Nation/f3-nation" \
+  --member="principal://iam.googleapis.com/projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/subject/repo:F3-Nation/f3-nation:environment:${GH_PROD_ENV}" \
   --project="$GCP_PROD_PROJECT"
 ```
 
@@ -316,13 +326,23 @@ For Cloud Run volume mounts, the `bucket=` value must be a bucket name only, not
 
 ## 7. Create GitHub Environments and Set Variables
 
-The staging environment needs no protection rules. The prod environment requires a reviewer so deploys need manual approval. Run all of this from inside the repo directory:
+The staging environment has no reviewer, so it deploys only from `main` and the app's release tags: that is what keeps a workflow on another branch from deploying as the staging service account. The prod environment requires a reviewer so deploys need manual approval. Run all of this from inside the repo directory:
 
 ```bash
 GH_REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
 
-# Staging — no protection rules
-gh api "repos/${GH_REPO}/environments/${GH_STAGING_ENV}" --method PUT
+# Staging — deploys only from main and the app's release tags
+gh api "repos/${GH_REPO}/environments/${GH_STAGING_ENV}" \
+  --method PUT \
+  --input - <<EOF
+{
+  "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true }
+}
+EOF
+gh api "repos/${GH_REPO}/environments/${GH_STAGING_ENV}/deployment-branch-policies" \
+  --method POST -f name=main -f type=branch
+gh api "repos/${GH_REPO}/environments/${GH_STAGING_ENV}/deployment-branch-policies" \
+  --method POST -f name="${APP_NAME}@*" -f type=tag
 
 # Production — require the current GitHub user as a reviewer before each deploy
 REVIEWER_ID=$(gh api user -q '.id')
@@ -334,6 +354,8 @@ gh api "repos/${GH_REPO}/environments/${GH_PROD_ENV}" \
 }
 EOF
 ```
+
+The staging tag policy must match the tag pattern that triggers the app's deploy workflow, and a second release line that deploys through the same environment needs a tag policy of its own. `main` is allowed because the deploy workflow's manual re-deploy runs from the branch it is dispatched on.
 
 > To add a team or additional reviewers, repeat the `gh api` call for prod with extra objects in the `reviewers` array (`"type": "Team"`, `"id": <team_id>`).
 
@@ -389,11 +411,11 @@ In the Firebase Console for each project → **App Hosting** → select the back
 - [ ] Artifact Registry repos created (staging + prod)
 - [ ] Cloud Run services created with placeholder image
 - [ ] `f3-github` WIF pool/provider exists (skip creation if already present) and the organization-level `WIF_PROVIDER` variable points at it
-- [ ] Staging SA created, IAM roles granted, WIF binding added
-- [ ] Prod SA created, IAM roles granted (including cross-project AR read on staging), WIF binding added
+- [ ] Staging SA created, IAM roles granted, WIF binding to the staging environment added
+- [ ] Prod SA created, IAM roles granted (including cross-project AR read on staging), WIF binding to the production environment added
 - [ ] Cloud SQL IAM granted to deploy/runtime SAs if the app uses Cloud SQL
 - [ ] Storage bucket IAM granted to runtime SAs if the app uses Cloud Storage buckets or volume mounts
-- [ ] GitHub environment setup complete, with `WIF_SA` set on each environment
+- [ ] GitHub environment setup complete: staging limited to `main` and release tags, prod reviewer set, `WIF_SA` set on each environment
 - [ ] Cloud Run env vars pushed for staging and prod
 - [ ] Custom domains mapped and DNS updated
 - [ ] Firebase App Hosting disconnected (if applicable)
