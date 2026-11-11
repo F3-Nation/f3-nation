@@ -31,6 +31,7 @@ describe("GET /api/regions", () => {
     const regions = [{ id: 7, name: "Test region" }];
     mocks.rows.mockResolvedValue(regions);
     const response = await GET();
+    expect(mocks.depthScan).toHaveBeenCalledWith({ select: mocks.select });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(regions);
     expect(mocks.select).toHaveBeenCalledWith({ id: orgs.id, name: orgs.name });

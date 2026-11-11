@@ -77,7 +77,7 @@ export default function UserModal({
   const [correction, setPendingCorrection] = useState<{
     input: z.infer<typeof CrupdateUserSchema>;
     destinationName: string;
-    userUpdatedAt: number;
+    userSnapshot: typeof userResponse;
   } | null>(null);
   const { data: session, update } = useAdminSession();
   const {
@@ -85,7 +85,6 @@ export default function UserModal({
     refetch: refetchUser,
     isFetching,
     isError,
-    dataUpdatedAt,
   } = useQuery({
     ...orpc.user.byId.queryOptions({
       input: {
@@ -101,7 +100,7 @@ export default function UserModal({
 
   const user = userResponse?.user;
   const pendingCorrection =
-    correction?.userUpdatedAt === dataUpdatedAt ? correction : null;
+    correction?.userSnapshot === userResponse ? correction : null;
   const isExistingUserUnavailable =
     data.id != null && (!user || isFetching || isError);
   const hasPiiAccess = userResponse?.includePii ?? false;
@@ -314,7 +313,7 @@ export default function UserModal({
                     return;
                   }
                   setPendingCorrection({
-                    userUpdatedAt: dataUpdatedAt,
+                    userSnapshot: userResponse,
                     input: submitData,
                     destinationName: destination.name,
                   });

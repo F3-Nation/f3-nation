@@ -1,4 +1,5 @@
-import { and, eq, schema } from "@acme/db";
+import { getTableColumns } from "drizzle-orm";
+import { and, eq, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
@@ -368,7 +369,11 @@ export const userRouter = {
 
       const [existingUser] = input.id
         ? await ctx.db
-            .select()
+            .select({
+              ...getTableColumns(schema.users),
+              // Request-local row version detects intervening updates, even A → B → A.
+              rowVersion: sql<string>`${schema.users}.xmin::text`,
+            })
             .from(schema.users)
             .where(eq(schema.users.id, input.id))
         : [];
@@ -638,29 +643,37 @@ export const userRouter = {
             user = existing;
           } else {
             try {
-              const result = await transactionDb
-                .insert(schema.users)
-                .values({
-                  ...rest,
-                  email: normalizedEmail ?? "",
-                })
-                .onConflictDoUpdate({
-                  target: [schema.users.id],
-                  set: updateSet,
-                  // Recheck the source used to authorize the correction at write time.
-                  setWhere:
-                    sourceAdminCorrection && existingUser?.homeRegionId != null
-                      ? eq(schema.users.homeRegionId, existingUser.homeRegionId)
-                      : undefined,
-                })
-                .returning();
+              const result =
+                sourceAdminCorrection && existingUser?.homeRegionId != null
+                  ? await transactionDb
+                      .update(schema.users)
+                      .set(updateSet)
+                      .where(
+                        and(
+                          eq(schema.users.id, existingUser.id),
+                          eq(
+                            schema.users.homeRegionId,
+                            existingUser.homeRegionId,
+                          ),
+                          sql`${schema.users}.xmin::text = ${existingUser.rowVersion}`,
+                        ),
+                      )
+                      .returning()
+                  : await transactionDb
+                      .insert(schema.users)
+                      .values({ ...rest, email: normalizedEmail ?? "" })
+                      .onConflictDoUpdate({
+                        target: [schema.users.id],
+                        set: updateSet,
+                      })
+                      .returning();
 
               const insertedUser = result[0];
               if (!insertedUser) {
                 if (sourceAdminCorrection) {
                   throw new ORPCError("CONFLICT", {
                     message:
-                      "The user's home region changed. Reload the profile and try again.",
+                      "The user changed or was deleted. Reload the profile and try again.",
                   });
                 }
                 throw new ORPCError("INTERNAL_SERVER_ERROR", {

@@ -78,8 +78,11 @@ the correction event records who made the change.
 - **AC-8** — GIVEN the member's home region changes after the exception is
   authorized but before its write, WHEN the stale request attempts to save,
   THEN it receives `CONFLICT` without overwriting the newer home region or
-  changing roles. Guard the upsert against the previously read home region;
-  a zero-row result from that guard is a conflict, not a generic save failure.
+  changing roles. Use an update guarded by the previously read home region and
+  request-local row version, including when an intervening assignment returns
+  to the original region. Deletion or any intervening row update also returns
+  `CONFLICT`; the correction cannot recreate a deleted member. A zero-row
+  result is a conflict, not a generic save failure.
 - **AC-9** — GIVEN a successful home-region correction, THEN emit an info-level
   event identifying the actor, API key when present, affected user, and old and
   new organization IDs. A rejected or rolled-back correction emits no success

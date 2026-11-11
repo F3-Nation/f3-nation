@@ -347,6 +347,35 @@ describe("AdminUsersModal", () => {
     expect(mocks.crupdate).toHaveBeenCalledTimes(1);
     await act(async () => finish({ id: 42, roles: [] }));
   });
+  it("preserves confirmation after an unchanged background refresh", async () => {
+    const queryClient = await loadMember();
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await screen.findByRole("button", { name: "Confirm change" });
+    const previous = queryClient.getQueryState([
+      "byId",
+      { id: 42, includePii: true },
+    ])?.dataUpdatedAt;
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["byId"] });
+    });
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState(["byId", { id: 42, includePii: true }])
+          ?.dataUpdatedAt,
+      ).not.toBe(previous),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    await waitFor(() =>
+      expect(mocks.crupdate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 42, homeRegionId: 20 }),
+        expect.anything(),
+      ),
+    );
+  });
+
   it("blocks confirmation during a reload and discards a superseded confirmation", async () => {
     const queryClient = await loadMember();
     fireEvent.change(screen.getByLabelText("Home region picker"), {

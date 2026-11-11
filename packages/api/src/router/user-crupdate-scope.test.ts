@@ -9,6 +9,16 @@ import type * as logger from "../logger";
 
 const mockLimit = vi.hoisted(() => vi.fn());
 const mockLogInfo = vi.hoisted(() => vi.fn());
+const mockDepthScan = vi.hoisted(() => vi.fn());
+vi.mock("../org-tree", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../org-tree")>();
+  return {
+    ...original,
+    logIfOrgTreeExceedsMaxDepth: mockDepthScan.mockImplementation(
+      original.logIfOrgTreeExceedsMaxDepth,
+    ),
+  };
+});
 vi.mock("../logger", async (importOriginal) => ({
   ...(await importOriginal<typeof logger>()),
   logInfo: mockLogInfo,
@@ -25,7 +35,15 @@ import { eq, schema } from "@acme/db";
 import { mail } from "@acme/mail";
 import { notifyWebhooks } from "../lib/notify-webhooks";
 import { ERRORS } from "@acme/shared/app/errors";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -375,6 +393,7 @@ describe("user.crupdate org scoping", () => {
         homeRegionId: regionB.id,
         roles: [{ orgId: regionB.id, roleName: "editor" }],
       });
+      expect(mockDepthScan).toHaveBeenCalledWith(db);
       expect((await readUser(target.id))?.homeRegionId).toBe(regionB.id);
       expect((await readUser(target.id))?.meta).toEqual(
         optOut ? { home_region_nudge_opt_out: true } : null,
@@ -400,8 +419,8 @@ describe("user.crupdate org scoping", () => {
   );
 
   it("honors an ancestor administrator's source permissions", async () => {
-    const source = await createRegion();
     const ancestor = await createRegion();
+    const source = await createRegion();
     await db
       .update(schema.orgs)
       .set({ orgType: "area" })
@@ -557,14 +576,15 @@ describe("user.crupdate org scoping", () => {
   it.each(["missing", "inactive", "inactive-ancestor"] as const)(
     "rejects a %s destination atomically",
     async (kind) => {
+      const parent =
+        kind === "inactive-ancestor" ? await createRegion() : undefined;
       const destination = await createRegion();
       if (kind === "inactive")
         await db
           .update(schema.orgs)
           .set({ isActive: false })
           .where(eq(schema.orgs.id, destination.id));
-      if (kind === "inactive-ancestor") {
-        const parent = await createRegion();
+      if (parent) {
         await db
           .update(schema.orgs)
           .set({ orgType: "area", isActive: false })
@@ -725,6 +745,60 @@ describe("user.crupdate org scoping", () => {
       spy.mockRestore();
     }
   });
+
+  it.each(["deleted", "moved-back"] as const)(
+    "rejects a correction when the member was %s after authorization",
+    async (change) => {
+      const target = await createUser({ homeRegionId: regionA.id });
+      onTestFinished(async () => {
+        await cleanup.user(target.id);
+      });
+      await mockAuthWithSession(adminOf(regionA));
+      const transaction = db.transaction.bind(db);
+      if (!globalThis.db)
+        throw new Error("Database fixture was not initialized");
+      const spy = vi
+        .spyOn(globalThis.db, "transaction")
+        .mockImplementationOnce(async (callback, config) => {
+          if (change === "deleted") {
+            await db.delete(schema.users).where(eq(schema.users.id, target.id));
+          } else {
+            await db
+              .update(schema.users)
+              .set({ homeRegionId: regionB.id })
+              .where(eq(schema.users.id, target.id));
+            await db
+              .update(schema.users)
+              .set({ homeRegionId: regionA.id })
+              .where(eq(schema.users.id, target.id));
+          }
+          return transaction(callback, config);
+        });
+      try {
+        await expect(
+          createTestClient().user.crupdate({
+            id: target.id,
+            email: target.email,
+            homeRegionId: regionB.id,
+            roles: [{ orgId: regionA.id, roleName: "editor" }],
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        expect(spy).toHaveBeenCalledOnce();
+        expect((await readUser(target.id))?.homeRegionId).toBe(
+          change === "deleted" ? undefined : regionA.id,
+        );
+        expect(
+          await db
+            .select()
+            .from(schema.rolesXUsersXOrg)
+            .where(eq(schema.rolesXUsersXOrg.userId, target.id)),
+        ).toEqual([]);
+        expect(mockLogInfo).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
 
   describe("PII from an admin of a role org outside the home region", () => {
     const setupPiiCase = async () => {

@@ -28,6 +28,7 @@ vi.mock("@acme/api/org-tree", () => ({
 }));
 vi.mock("~/lib/current-session", () => ({ getCurrentSession: vi.fn() }));
 
+const { logIfOrgTreeExceedsMaxDepth } = await import("@acme/api/org-tree");
 const { getCurrentSession } = await import("~/lib/current-session");
 const { GET, POST } = await import("../../../../src/app/api/onboarding/route");
 
@@ -114,6 +115,7 @@ describe("POST /api/onboarding", () => {
 
     const res = await POST(post({ ...profile, homeRegionId: 7 }));
 
+    expect(logIfOrgTreeExceedsMaxDepth).toHaveBeenCalledWith(dbMock);
     expect(res.status).toBe(200);
     const update = set.mock.calls[0]?.[0] as {
       meta: Record<string, unknown>;
