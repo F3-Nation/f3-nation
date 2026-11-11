@@ -39,7 +39,7 @@ const LISTS = [
   ["owner", "🙋 Needs a codeowner (run `/pr-review-inline`)"],
   ["local", "🧪 Needs `/pr-local-test`"],
   ["final", "✅ Needs final review, approval and merge"],
-  ["reply", "💬 Author is waiting on a reply"],
+  ["reply", "💬 Reviewer needs to reply"],
 ];
 const LIGHTS = ["🟢", "🟡", "🔴"];
 // The next step on an unclaimed PR that is past pr-review-inline.

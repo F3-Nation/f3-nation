@@ -13,9 +13,11 @@ mirror_postgres_image_status=0
 pr_triage_status=0
 github_scripts_status=0
 prt_status=0
+issue_fields_status=0
 lint_fix_status=0
 local_ports_status=0
 review_links_status=0
+gh_check_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
 pnpm run lint:ws || ws_status=$?
@@ -30,10 +32,12 @@ bash scripts/mirror-postgres-image.test.sh || mirror_postgres_image_status=$?
 bash scripts/pr-triage.test.sh || pr_triage_status=$?
 node --test .github/scripts/ || github_scripts_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
+bash .agents/skills/issue-triage/scripts/issue-fields.test.sh || issue_fields_status=$?
 bash scripts/lint-fix.test.sh || lint_fix_status=$?
 bash scripts/local-ports.test.sh || local_ports_status=$?
 node scripts/check-review-links.mjs || review_links_status=$?
 bash scripts/check-review-links.test.sh || review_links_status=$?
+bash scripts/gh-check.test.sh || gh_check_status=$?
 
 if [ "$turbo_status" -ne 0 ]; then
   exit "$turbo_status"
@@ -75,6 +79,10 @@ if [ "$prt_status" -ne 0 ]; then
   exit "$prt_status"
 fi
 
+if [ "$issue_fields_status" -ne 0 ]; then
+  exit "$issue_fields_status"
+fi
+
 if [ "$lint_fix_status" -ne 0 ]; then
   exit "$lint_fix_status"
 fi
@@ -85,6 +93,10 @@ fi
 
 if [ "$review_links_status" -ne 0 ]; then
   exit "$review_links_status"
+fi
+
+if [ "$gh_check_status" -ne 0 ]; then
+  exit "$gh_check_status"
 fi
 
 if [ "$github_scripts_status" -ne 0 ]; then
