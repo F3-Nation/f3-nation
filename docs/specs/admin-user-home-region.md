@@ -12,7 +12,7 @@ the correction event records who made the change.
 
 ## 2. Context & links
 
-- Apps affected: API and Admin.
+- Apps affected: API, Admin, and Auth registration region choices.
 - Server mutation: [user router](../../packages/api/src/router/user.ts).
 - Permission checks: [organization roles](../../packages/api/src/check-has-role-on-org.ts).
 - User interface: [Admin Users modal](../../apps/admin/src/app/_components/modal/admin-users-modal.tsx).
@@ -53,7 +53,9 @@ the correction event records who made the change.
   return `BAD_REQUEST`. Reject atomically without changing the user or roles.
   Skip destination validation when the value is unchanged, so a member homed
   in a now-inactive region remains editable. Clearing to `null` retains its
-  existing rules and is outside this change.
+  existing rules and is outside this change. The registration region list
+  excludes inactive regions and regions beneath inactive ancestors so offered
+  choices satisfy the same destination rule.
 - **AC-5** — GIVEN a permitted correction, WHEN the request also attempts an
   unauthorized role change, THEN the whole request is rejected. A successful
   correction does not create, transfer or remove roles implicitly and does not
@@ -67,7 +69,9 @@ the correction event records who made the change.
   in the Admin Users form, WHEN they save, THEN a confirmation names the
   destination and warns that they may lose profile-edit access after the move.
   Cancelling submits no mutation; confirming submits the chosen destination,
-  which is visible on a subsequent authorized read. The existing region picker
+  which is visible on a subsequent authorized read. A `CONFLICT` refreshes the
+  member before retrying; a failed refresh blocks resubmission until the member
+  can be loaded again. The existing region picker
   already lists regions and needs no expansion. The warning must not claim
   that callers with other qualifying permissions necessarily lose access.
 - **AC-8** — GIVEN the member's home region changes after the exception is

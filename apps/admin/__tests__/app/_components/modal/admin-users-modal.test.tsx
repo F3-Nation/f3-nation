@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -67,16 +68,20 @@ vi.mock("~/orpc/client", () => ({
     org: {
       accessible: () =>
         Promise.resolve({
-          orgs: [{ id: 10, name: "Source", roles: ["admin"] }],
-          total: 1,
+          orgs: [
+            { id: 10, name: "Source", roles: ["admin"] },
+            { id: 30, name: "Competing region", roles: ["admin"] },
+          ],
+          total: 2,
         }),
       all: () =>
         Promise.resolve({
           orgs: [
             { id: 10, name: "Source" },
             { id: 20, name: "Destination" },
+            { id: 30, name: "Competing region" },
           ],
-          total: 2,
+          total: 3,
         }),
     },
   },
@@ -110,7 +115,11 @@ vi.mock("@acme/ui/virtualized-combobox", () => ({
 }));
 
 const withProviders = (ui: ReactNode) => (
-  <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>
+  <QueryClientProvider
+    client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+  >
+    {ui}
+  </QueryClientProvider>
 );
 
 // A user with no roles and no home region, as user.byId returns them.
@@ -256,5 +265,78 @@ describe("AdminUsersModal", () => {
       homeRegionId: 20,
       email: "new@example.com",
     });
+  });
+  it("reloads the member after a conflict before allowing another correction", async () => {
+    await loadMember();
+    mocks.byId.mockResolvedValue({
+      user: { ...roleLessUser, homeRegionId: 30, email: "member@example.com" },
+      includePii: true,
+    });
+    mocks.crupdate.mockRejectedValueOnce(
+      new ORPCError("CONFLICT", { message: "Home region changed" }),
+    );
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm change" }),
+    );
+    await waitFor(() => expect(mocks.byId).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText<HTMLSelectElement>("Home region picker").value,
+      ).toBe("30"),
+    );
+    expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks resubmission if reloading after a conflict fails", async () => {
+    await loadMember();
+    mocks.byId.mockRejectedValue(new Error("Unavailable"));
+    mocks.crupdate.mockRejectedValueOnce(new ORPCError("CONFLICT"));
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm change" }),
+    );
+    await waitFor(() => expect(mocks.byId).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+          .disabled,
+      ).toBe(true),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("cannot submit another save while the confirmed mutation is pending", async () => {
+    await loadMember();
+    let finish!: (value: unknown) => void;
+    mocks.crupdate.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm change" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+          .disabled,
+      ).toBe(true),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ id: 42, roles: [] }));
   });
 });

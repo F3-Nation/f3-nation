@@ -79,7 +79,12 @@ export default function UserModal({
     destinationName: string;
   } | null>(null);
   const { data: session, update } = useAdminSession();
-  const { data: userResponse } = useQuery(
+  const {
+    data: userResponse,
+    refetch: refetchUser,
+    isFetching,
+    isError,
+  } = useQuery(
     orpc.user.byId.queryOptions({
       input: {
         id: data.id ?? -1,
@@ -90,7 +95,8 @@ export default function UserModal({
   );
 
   const user = userResponse?.user;
-  const isExistingUserLoading = data.id != null && !user;
+  const isExistingUserUnavailable =
+    data.id != null && (!user || isFetching || isError);
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
   const { data: regions } = useFetchAllPages({
@@ -215,7 +221,7 @@ export default function UserModal({
         toast.success("Successfully updated user");
         router.refresh();
       },
-      onError: (err) => {
+      onError: async (err) => {
         toast.error(
           err instanceof ORPCError
             ? err.code === "UNAUTHORIZED"
@@ -223,6 +229,15 @@ export default function UserModal({
               : err.message || "Failed to update user"
             : "Failed to update user",
         );
+        if (err instanceof ORPCError && err.code === "CONFLICT") {
+          // Refresh the source region so retrying requires an informed choice.
+          const refreshed = await refetchUser();
+          if (refreshed.isError) {
+            toast.error(
+              "Unable to reload this member. Close and reopen the form before trying again.",
+            );
+          }
+        }
       },
     }),
   );
@@ -246,7 +261,7 @@ export default function UserModal({
                 if (
                   crupdateUser.isPending ||
                   pendingCorrection ||
-                  isExistingUserLoading
+                  isExistingUserUnavailable
                 )
                   return;
                 // Only exclude PII fields when editing an existing user without PII access
@@ -278,7 +293,9 @@ export default function UserModal({
                     (region) => region.id === submitData.homeRegionId,
                   );
                   if (!destination) {
-                    toast.error("Select a home region before saving");
+                    toast.error(
+                      "The selected home region is no longer available. Choose another region.",
+                    );
                     return;
                   }
                   setPendingCorrection({
@@ -527,7 +544,7 @@ export default function UserModal({
                       type="submit"
                       className="w-full"
                       disabled={
-                        isExistingUserLoading ||
+                        isExistingUserUnavailable ||
                         crupdateUser.isPending ||
                         !!pendingCorrection
                       }

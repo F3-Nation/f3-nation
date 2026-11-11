@@ -319,4 +319,54 @@ describe.runIf(target.inProcess)("API-key role response contract", () => {
       }
     });
   });
+  it.each(["editor", "admin"] as const)(
+    "home-region correction uses the bearer key's own %s grant, not its owner's admin grant",
+    async (keyRole) => {
+      const source = tree.directBranch.region.id;
+      const destination = tree.unrelatedBranch.region.id;
+      const owner = await createFixtureUser({
+        roles: [{ orgId: source, roleName: "admin" }],
+      });
+      const member = await createFixtureUser();
+      fixtureUsers.push(owner, member);
+      await db
+        .update(schema.users)
+        .set({ homeRegionId: source })
+        .where(eq(schema.users.id, member.userId));
+      const key = await makeKey(
+        [{ orgId: source, roleName: keyRole }],
+        owner.userId,
+      );
+      const response = await target.invoke(
+        req("/v1/user", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${key.key}`,
+            client: "characterization",
+            "content-type": "application/json",
+            "x-forwarded-for": `10.99.0.${++requestNumber}`,
+          },
+          body: JSON.stringify({
+            id: member.userId,
+            homeRegionId: destination,
+            roles: [],
+          }),
+        }),
+      );
+      expect(response.status).toBe(keyRole === "admin" ? 200 : 401);
+      const [stored] = await db
+        .select({ homeRegionId: schema.users.homeRegionId })
+        .from(schema.users)
+        .where(eq(schema.users.id, member.userId));
+      expect(stored?.homeRegionId).toBe(
+        keyRole === "admin" ? destination : source,
+      );
+      expect(
+        await db
+          .select()
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, member.userId)),
+      ).toEqual([]);
+    },
+  );
 });

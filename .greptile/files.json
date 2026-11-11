@@ -5,6 +5,12 @@
       "description": "Source-admin home-region correction permissions, active destination validation, concurrency, confirmation and attribution; no member notifications.",
       "scope": [
         "packages/api/src/router/user*",
+        "packages/api/src/check-has-role-on-org.ts",
+        "packages/api/src/shared.ts",
+        "packages/api/src/lib/user.ts",
+        "packages/api/src/org-activity.ts",
+        "apps/auth/src/app/api/regions/**",
+        "apps/api/characterization/wire/api-key-roles.char.test.ts",
         "apps/admin/src/app/_components/modal/admin-users-modal.tsx",
         "apps/admin/__tests__/app/_components/modal/admin-users-modal.test.tsx"
       ]

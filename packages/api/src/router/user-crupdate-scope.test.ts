@@ -176,26 +176,32 @@ describe("user.crupdate org scoping", () => {
     expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
   });
 
-  it("rejects creating a user homed in an org the caller can't edit", async () => {
-    const email = `${uniqueId()}@example.com`;
-    await mockAuthWithSession(editorOf(regionA));
+  it.each(["editor", "admin"] as const)(
+    "rejects creating a user outside the caller's regions (%s)",
+    async (roleName) => {
+      const email = `${uniqueId()}@example.com`;
+      await mockAuthWithSession({
+        ...editorOf(regionA),
+        roles: [{ orgId: regionA.id, orgName: regionA.name, roleName }],
+      });
 
-    await expect(
-      createTestClient().user.crupdate({
-        email,
-        f3Name: "Planted",
-        homeRegionId: regionB.id,
-        roles: [],
-      }),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await expect(
+        createTestClient().user.crupdate({
+          email,
+          f3Name: "Planted",
+          homeRegionId: regionB.id,
+          roles: [],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
-    const [created] = await db
-      .select({ id: schema.users.id })
-      .from(schema.users)
-      .where(eq(schema.users.email, email));
-    if (created) createdUserIds.push(created.id);
-    expect(created).toBeUndefined();
-  });
+      const [created] = await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.email, email));
+      if (created) createdUserIds.push(created.id);
+      expect(created).toBeUndefined();
+    },
+  );
 
   it("creates a user homed in an org the caller can edit", async () => {
     await mockAuthWithSession(editorOf(regionA));
@@ -348,13 +354,18 @@ describe("user.crupdate org scoping", () => {
     },
   });
 
-  it.each([false, true])(
-    "lets a source admin correct a member without destination rights (API key=%s)",
-    async (apiKey) => {
+  it.each([
+    { apiKey: false, optOut: true },
+    { apiKey: true, optOut: true },
+    { apiKey: false, optOut: false },
+    { apiKey: true, optOut: false },
+  ])(
+    "lets a source admin correct a member without destination rights ($apiKey, $optOut)",
+    async ({ apiKey, optOut }) => {
       const sendMail = vi.spyOn(mail, "sendTemplateMessages");
       const target = await createUser({
         homeRegionId: regionA.id,
-        meta: { home_region_nudge_opt_out: true },
+        meta: optOut ? { home_region_nudge_opt_out: true } : null,
       });
       await grantRole(target.id, regionB.id, "editor");
       const session = apiKey ? asKey(adminOf(regionA)) : adminOf(regionA);
@@ -365,9 +376,9 @@ describe("user.crupdate org scoping", () => {
         roles: [{ orgId: regionB.id, roleName: "editor" }],
       });
       expect((await readUser(target.id))?.homeRegionId).toBe(regionB.id);
-      expect((await readUser(target.id))?.meta).toEqual({
-        home_region_nudge_opt_out: true,
-      });
+      expect((await readUser(target.id))?.meta).toEqual(
+        optOut ? { home_region_nudge_opt_out: true } : null,
+      );
       expect(sendMail).not.toHaveBeenCalled();
       expect(notifyWebhooks).not.toHaveBeenCalled();
       const roles = await db
@@ -407,6 +418,58 @@ describe("user.crupdate org scoping", () => {
       roles: [],
     });
     expect((await readUser(target.id))?.homeRegionId).toBe(regionB.id);
+  });
+
+  it.each([
+    { apiKey: false, linked: false },
+    { apiKey: true, linked: false },
+    { apiKey: false, linked: true },
+    { apiKey: true, linked: true },
+  ])(
+    "does not use an unrelated admin grant alongside source editing ($apiKey, $linked)",
+    async ({ apiKey, linked }) => {
+      const other = await createRegion();
+      const target = await createUser({ homeRegionId: regionA.id });
+      if (linked) await grantRole(target.id, other.id, "editor");
+      const session = {
+        ...editorOf(regionA),
+        roles: [
+          ...(editorOf(regionA).roles ?? []),
+          ...(adminOf(other).roles ?? []),
+        ],
+      };
+      await mockAuthWithSession(apiKey ? asKey(session) : session);
+      await expect(
+        createTestClient().user.crupdate({
+          id: target.id,
+          homeRegionId: regionB.id,
+          roles: linked ? [{ orgId: other.id, roleName: "editor" }] : [],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+      expect(mockLogInfo).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not remove a destination role without its administrator permission", async () => {
+    const target = await createUser({ homeRegionId: regionA.id });
+    await grantRole(target.id, regionB.id, "editor");
+    await mockAuthWithSession(adminOf(regionA));
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        homeRegionId: regionB.id,
+        roles: [],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+    expect(
+      await db
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .where(eq(schema.rolesXUsersXOrg.userId, target.id)),
+    ).toHaveLength(1);
+    expect(mockLogInfo).not.toHaveBeenCalled();
   });
 
   it("does not borrow an API key owner's source administrator role", async () => {
@@ -475,9 +538,18 @@ describe("user.crupdate org scoping", () => {
           roles: [],
         }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-      expect((await readUser(target.id))?.homeRegionId).toBe(
-        path === "unhomed" ? null : regionA.id,
-      );
+      if (input.email !== undefined) {
+        const rows = await db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.email, input.email));
+        createdUserIds.push(...rows.map((row) => row.id));
+        expect(rows).toEqual([]);
+      } else {
+        expect((await readUser(target.id))?.homeRegionId).toBe(
+          path === "unhomed" ? null : regionA.id,
+        );
+      }
       expect(mockLogInfo).not.toHaveBeenCalled();
     },
   );
