@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import { cleanup, createMixedOrgTree, db, uniqueId } from "@acme/api/testing";
 import { eq, schema } from "@acme/db";
@@ -23,18 +31,10 @@ const { GET } = await vi.importActual<{
 
 describe.runIf(target.inProcess)("registration region choices", () => {
   const orgIds: number[] = [];
-  let userId: number;
   let tree: Awaited<ReturnType<typeof createMixedOrgTree>>;
 
   beforeAll(async () => {
     tree = await createMixedOrgTree(orgIds);
-    const [user] = await db
-      .insert(schema.users)
-      .values({ email: `${uniqueId()}@example.invalid` })
-      .returning({ id: schema.users.id });
-    if (!user) throw new Error("Missing fixture user");
-    userId = user.id;
-    session.userId = String(userId);
     await db
       .update(schema.orgs)
       .set({ isActive: false })
@@ -46,9 +46,22 @@ describe.runIf(target.inProcess)("registration region choices", () => {
   });
 
   afterAll(async () => {
-    if (userId) await cleanup.user(userId);
     for (const id of [...orgIds].reverse()) await cleanup.org(id);
   });
+
+  const createOnboardingUser = async () => {
+    const [user] = await db
+      .insert(schema.users)
+      .values({ email: `${uniqueId()}@example.invalid` })
+      .returning({ id: schema.users.id });
+    if (!user) throw new Error("Missing fixture user");
+    onTestFinished(async () => {
+      session.userId = "";
+      await cleanup.user(user.id);
+    });
+    session.userId = String(user.id);
+    return user.id;
+  };
 
   it("offers active regions only when their ancestors are active", async () => {
     const response = await GET();
@@ -66,6 +79,7 @@ describe.runIf(target.inProcess)("registration region choices", () => {
   it.each(["inactive ancestor", "inactive region"] as const)(
     "rejects onboarding with an %s without changing the profile",
     async (reason) => {
+      const userId = await createOnboardingUser();
       const request = new Request("https://auth.test.invalid/api/onboarding", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -95,6 +109,7 @@ describe.runIf(target.inProcess)("registration region choices", () => {
     },
   );
   it("accepts onboarding into a region with active ancestors", async () => {
+    const userId = await createOnboardingUser();
     const request = new Request("https://auth.test.invalid/api/onboarding", {
       method: "POST",
       headers: { "content-type": "application/json" },

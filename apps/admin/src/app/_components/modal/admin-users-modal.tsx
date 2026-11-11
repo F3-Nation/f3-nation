@@ -94,7 +94,8 @@ export default function UserModal({
       },
       enabled: gte(data.id, 0),
     }),
-    // Keep member-load failures recoverable inside the form.
+    // Show member-load failures in this form instead of replacing the page
+    // with the error boundary; saving stays blocked while the query has failed.
     throwOnError: false,
   });
 
