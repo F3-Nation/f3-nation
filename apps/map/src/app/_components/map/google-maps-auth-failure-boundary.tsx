@@ -32,7 +32,7 @@ export class GoogleMapsAuthFailureBoundary extends Component<Props, State> {
     return { error, hasError: true };
   }
 
-  render() {
+  render(): ReactNode {
     if (!this.state.hasError) return this.props.children;
     if (isGoogleMapsAuthFailed()) return this.props.fallback;
     throw this.state.error;
