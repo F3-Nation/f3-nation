@@ -22,10 +22,17 @@
  * thresholds: 🟡 from the day an author would be nudged, 🔴 from the day
  * they'd be closed.
  *
- * Pure: everything it needs comes in as arguments.
+ * `buildReport()` and the formatters are pure; `assembleReport()` reads GitHub
+ * and is shared with the security-advisory PR report, so both reports pick
+ * and format PRs the same way.
  */
 
-const { DAYS, DAY_MS, slackEscape } = require("./pr-author-nudge.cjs");
+const {
+  DAYS,
+  DAY_MS,
+  slackEscape,
+  collectFacts,
+} = require("./pr-author-nudge.cjs");
 
 // Per list, so one long list can't push the others past Slack's limits.
 const MAX_LINES = 15;
@@ -187,24 +194,35 @@ function place(pr, facts, codeowners, slackIds) {
 }
 
 /**
- * Builds the report. `board` is pr-triage's JSON, `factsByNumber` a Map of PR
- * number to `summarize()` facts. Options: `now` (ms), `slackIds` (Map of
- * lowercase login to Slack ID), `runUrl` (the workflow run), `warnings`
- * (strings shown as ⚠️ sections, for data the report had to do without). Returns
+ * Builds the report. `board` is pr-triage's JSON, `factsByUrl` a Map of PR URL
+ * to `summarize()` facts (URLs, because PRs from several repos can share a
+ * number). Options: `now` (ms), `slackIds` (Map of lowercase login to Slack
+ * ID), `runUrl` (the workflow run), `warnings` (strings shown as ⚠️ sections,
+ * for data the report had to do without), and the wording that names the
+ * report: `title`, `emptyText` and `boardHint` (the context line's first
+ * item). A board PR's optional `ref` replaces `#<number>` in its link. Returns
  * `{ text, blocks, counts }`: the notification fallback, the Block Kit
  * blocks, and `{ listed, red, yellow }`.
  */
 function buildReport(
   board,
-  factsByNumber,
-  { now, slackIds = new Map(), runUrl, warnings = [] },
+  factsByUrl,
+  {
+    now,
+    slackIds = new Map(),
+    runUrl,
+    warnings = [],
+    title = "Codeowners PR Report",
+    emptyText = "Nothing is waiting on codeowners today.",
+    boardHint = "Full board: `pnpm pr:triage:html`",
+  },
 ) {
   const codeowners = board.codeowners ?? [];
   const lists = Object.fromEntries(LISTS.map(([key]) => [key, []]));
 
   for (const pr of board.prs ?? []) {
     if (!PR_URL.test(pr.url ?? "")) continue;
-    const facts = factsByNumber.get(pr.number);
+    const facts = factsByUrl.get(pr.url);
     // Facts are fetched after the board, so a board PR without facts closed
     // in between.
     if (!facts) continue;
@@ -216,7 +234,8 @@ function buildReport(
       ? 0
       : Math.max(0, (now - since) / DAY_MS);
     const light = lightFor(ageDays, tier);
-    const link = `<${pr.url}|#${pr.number} ${slackEscape(shorten(pr.title))}>`;
+    const ref = slackEscape(pr.ref ?? `#${pr.number}`);
+    const link = `<${pr.url}|${ref} ${slackEscape(shorten(pr.title))}>`;
     lists[placed.list].push({
       light,
       since,
@@ -252,7 +271,7 @@ function buildReport(
       {
         type: "mrkdwn",
         text: [
-          "Full board: `pnpm pr:triage:html`",
+          boardHint,
           ...(runUrl ? [`<${runUrl}|workflow run>`] : []),
           "reply in this thread to take a PR or ask for help",
         ].join(" · "),
@@ -261,7 +280,7 @@ function buildReport(
   };
 
   if (!counts.listed) {
-    const text = "Nothing is waiting on codeowners today.";
+    const text = emptyText;
     return {
       text,
       blocks: [
@@ -282,7 +301,7 @@ function buildReport(
     })
     .replace(",", "");
   const need = `${plural(counts.listed, "PR")} ${counts.listed === 1 ? "needs" : "need"} a codeowner`;
-  const header = `Codeowners PR Report · ${date} · ${need} · 🔴 ${counts.red} 🟡 ${counts.yellow}`;
+  const header = `${title} · ${date} · ${need} · 🔴 ${counts.red} 🟡 ${counts.yellow}`;
 
   const sections = [];
   for (const [key, heading] of LISTS) {
@@ -311,7 +330,7 @@ function buildReport(
   }
 
   return {
-    text: `Codeowners PR Report: ${need} (🔴 ${counts.red} 🟡 ${counts.yellow})`,
+    text: `${title}: ${need} (🔴 ${counts.red} 🟡 ${counts.yellow})`,
     blocks: [
       {
         type: "header",
@@ -325,8 +344,66 @@ function buildReport(
   };
 }
 
-/** The message as GitHub Markdown, for the job summary. */
-function toMarkdown({ blocks }) {
+/**
+ * Reads whose turn each PR is for every board, then builds the report.
+ * `sources` is `[{ owner, repo, board, base? }]`: pr-triage's JSON for each
+ * repo, and where its branch rules and team live (see `collectFacts()`).
+ * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. Other options pass through
+ * to `buildReport()`. Returns `{ report, notes }`, where `notes` are the
+ * warnings, which the report also shows.
+ */
+async function assembleReport({
+  github,
+  sources,
+  slackIdsRaw,
+  warnings = [],
+  ...options
+}) {
+  const notes = [...warnings];
+  const factsByUrl = new Map();
+  const prs = [];
+  let truncated = false;
+  let fetched = 0;
+  for (const { owner, repo, board, base } of sources) {
+    const collected = await collectFacts({ github, owner, repo, base });
+    notes.push(...collected.notes);
+    for (const pr of collected.prs)
+      factsByUrl.set(pr.url, collected.factsFor(pr));
+    prs.push(...(board.prs ?? []));
+    truncated ||= Boolean(board.truncated);
+    fetched += board.fetched ?? 0;
+  }
+  const { ids, warning } = parseSlackIds(slackIdsRaw);
+  if (warning) notes.push(warning);
+  const board = {
+    codeowners: sources[0]?.board.codeowners ?? [],
+    truncated,
+    fetched,
+    prs,
+  };
+  return {
+    report: buildReport(board, factsByUrl, {
+      ...options,
+      slackIds: ids,
+      warnings: notes,
+    }),
+    notes,
+  };
+}
+
+// Brackets in a title would end the link text early and let the title start
+// a link of its own. GitHub honors backslash escapes.
+const escapeBrackets = (label) => label.replace(/[\\[\]]/g, "\\$&");
+
+/**
+ * The message as Markdown. `lineBreak` ends each line inside a section:
+ * GitHub's job summary needs a hard break ("  \n"); Slack's Markdown input
+ * takes a plain newline. `safeLabel` defuses brackets in link text.
+ */
+function toMarkdown(
+  { blocks },
+  { lineBreak = "  \n", safeLabel = escapeBrackets } = {},
+) {
   return blocks
     .map((block) => {
       if (block.type === "header") return `### ${block.text.text}`;
@@ -334,19 +411,33 @@ function toMarkdown({ blocks }) {
         block.type === "context"
           ? block.elements.map((e) => e.text).join(" ")
           : block.text.text;
-      return (
-        text
-          // Brackets in a title would end the link text early and let the
-          // title start a link of its own.
-          .replace(
-            /<(https:[^|>]+)\|([^>]+)>/g,
-            (_, url, label) => `[${label.replace(/[\\[\]]/g, "\\$&")}](${url})`,
-          )
-          .replace(/^\*(.+?)\*/gm, "**$1**")
-          .replace(/\n/g, "  \n")
-      );
+      return text
+        .replace(
+          /<(https:[^|>]+)\|([^>]+)>/g,
+          (_, url, label) => `[${safeLabel(label)}](${url})`,
+        )
+        .replace(/^\*(.+?)\*/gm, "**$1**")
+        .replace(/\n/g, lineBreak);
     })
     .join("\n\n");
+}
+
+// "@here", "@channel" and "@everyone" in a title or a GitHub login (a user
+// can be named "here") must not notify a whole channel.
+const BROADCAST = /@(here|channel|everyone)\b/gi;
+
+/**
+ * The message as Markdown for an agent's Slack tool, which posts as the
+ * person running it and takes Markdown, not Block Kit. Same text as the
+ * Block Kit message, except that brackets in link text become parentheses
+ * (Slack's Markdown escapes aren't documented) and a zero-width space defuses
+ * broadcast mentions.
+ */
+function toSlackMarkdown(report) {
+  return toMarkdown(report, {
+    lineBreak: "\n",
+    safeLabel: (label) => label.replace(/\[/g, "(").replace(/\]/g, ")"),
+  }).replace(BROADCAST, "@\u200b$1");
 }
 
 module.exports = {
@@ -354,5 +445,7 @@ module.exports = {
   parseSlackIds,
   lightFor,
   buildReport,
+  assembleReport,
   toMarkdown,
+  toSlackMarkdown,
 };

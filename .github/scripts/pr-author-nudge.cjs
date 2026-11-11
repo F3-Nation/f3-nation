@@ -500,7 +500,7 @@ function closeBody(facts, decision) {
 // pages risk GitHub's ~10s GraphQL limit (same finding as scripts/pr-triage.sh).
 const PAGE_SIZE = 10;
 const PR_FIELDS = `
-  number title isDraft createdAt mergeable authorAssociation baseRefName
+  number url title isDraft createdAt mergeable authorAssociation baseRefName
   author { login __typename }
   labels(first: 30) { nodes { name } }
   timelineItems(last: 100, itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT,
@@ -539,13 +539,17 @@ const PR_FIELDS = `
  * Returns `{ prs, factsFor(pr, nudge = null), writersKnown, notes }`, where
  * `notes` are warnings for the workflow log. Exported so every report that
  * asks whose turn a PR is answers it with the same rules as the nudge.
+ *
+ * `base` (`{ owner, repo }`, default the PR repo) is where the branch rules and
+ * the team are read. A security advisory's temporary private fork has neither
+ * of its own: its PRs merge into the advisory's repo, under that repo's rules.
  */
-async function collectFacts({ github, owner, repo }) {
+async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
   const rules = await github.paginate(
     "GET /repos/{owner}/{repo}/rules/branches/{branch}",
     {
-      owner,
-      repo,
+      owner: base.owner,
+      repo: base.repo,
       branch: DEFAULT_BRANCH,
       per_page: 100,
     },
@@ -564,7 +568,13 @@ async function collectFacts({ github, owner, repo }) {
   try {
     const collaborators = await github.paginate(
       "GET /repos/{owner}/{repo}/collaborators",
-      { owner, repo, affiliation: "all", permission: "push", per_page: 100 },
+      {
+        owner: base.owner,
+        repo: base.repo,
+        affiliation: "all",
+        permission: "push",
+        per_page: 100,
+      },
     );
     writers = new Set(collaborators.map((c) => c.login));
   } catch (error) {
@@ -886,41 +896,9 @@ module.exports = {
 
 // Local dry run through the gh CLI: node .github/scripts/pr-author-nudge.cjs [owner/repo]
 if (require.main === module) {
-  const { execFileSync } = require("node:child_process");
+  const { createGhClient } = require("./gh-local-client.cjs");
   const [owner, repo] = (process.argv[2] ?? "F3-Nation/f3-nation").split("/");
-  const fill = (route, params) =>
-    route.replace(/\{(\w+)\}/g, (_, key) => encodeURIComponent(params[key]));
-  const gh = (args, input) =>
-    JSON.parse(
-      execFileSync("gh", args, {
-        input,
-        maxBuffer: 64 * 1024 * 1024,
-      }).toString(),
-    );
-  const github = {
-    graphql: (query, vars) => {
-      const args = ["api", "graphql", "-f", `query=${query}`];
-      for (const [k, v] of Object.entries(vars))
-        if (v != null) args.push("-F", `${k}=${v}`);
-      return gh(args).data;
-    },
-    request: async (route, params) => {
-      const [method, path] = route.split(" ");
-      if (method !== "GET")
-        throw new Error(`local runs are dry runs only (${route})`);
-      return { data: gh(["api", fill(path, params)]) };
-    },
-    paginate: async (route, params) => {
-      const path = route.split(" ")[1];
-      const query = Object.entries(params)
-        .filter(([k]) => !path.includes(`{${k}}`))
-        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-        .join("&");
-      // --slurp wraps each page in one outer array; flatten the pages.
-      const url = `${fill(path, params)}?${query}`;
-      return gh(["api", "--paginate", "--slurp", url]).flat();
-    },
-  };
+  const github = createGhClient();
   run({ github, owner, repo, dryRun: true, log: () => {} })
     .then(({ rows, slackNote, notes }) => {
       for (const note of notes) console.warn(note);

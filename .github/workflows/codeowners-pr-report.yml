@@ -65,8 +65,7 @@ jobs:
           script: |
             const fs = require('node:fs');
             const path = require('node:path');
-            const { collectFacts } = require('./.github/scripts/pr-author-nudge.cjs');
-            const { buildReport, parseSlackIds, toMarkdown } =
+            const { assembleReport, toMarkdown } =
               require('./.github/scripts/codeowners-pr-report.cjs');
             const dryRun = process.env.DRY_RUN !== 'false';
             core.setOutput('dry_run', String(dryRun));
@@ -76,22 +75,16 @@ jobs:
               const board = JSON.parse(
                 fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'board.json'), 'utf8'),
               );
-              const { prs, factsFor, notes } = await collectFacts({
+              const built = await assembleReport({
                 github,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-              });
-              for (const note of notes) core.warning(note);
-              const { ids, warning } = parseSlackIds(process.env.SLACK_IDS);
-              if (warning) core.warning(warning);
-
-              report = buildReport(board, new Map(prs.map((pr) => [pr.number, factsFor(pr)])), {
+                sources: [{ owner: context.repo.owner, repo: context.repo.repo, board }],
+                slackIdsRaw: process.env.SLACK_IDS,
                 now: Date.now(),
-                slackIds: ids,
                 runUrl: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-                // Shown in the message too: nobody opens a scheduled run's annotations.
-                warnings: [...notes, ...(warning ? [warning] : [])],
               });
+              report = built.report;
+              // Also shown in the message: nobody opens a scheduled run's annotations.
+              for (const note of built.notes) core.warning(note);
               fs.writeFileSync(
                 path.join(process.env.RUNNER_TEMP, 'slack-payload.json'),
                 JSON.stringify({ text: report.text, blocks: report.blocks }),

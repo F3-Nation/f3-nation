@@ -8,7 +8,9 @@ const {
   parseSlackIds,
   lightFor,
   buildReport,
+  assembleReport,
   toMarkdown,
+  toSlackMarkdown,
 } = require("./codeowners-pr-report.cjs");
 const { DAYS } = require("./pr-author-nudge.cjs");
 
@@ -40,8 +42,8 @@ function report(
   prs,
   { facts = {}, slackIds, truncated = false, warnings } = {},
 ) {
-  const factsByNumber = new Map(
-    prs.map((p) => [p.number, facts[p.number] ?? teamFacts]),
+  const factsByUrl = new Map(
+    prs.map((p) => [p.url, facts[p.number] ?? teamFacts]),
   );
   return buildReport(
     {
@@ -50,7 +52,7 @@ function report(
       fetched: prs.length,
       prs,
     },
-    factsByNumber,
+    factsByUrl,
     {
       now: NOW,
       slackIds:
@@ -512,4 +514,112 @@ test("a title can't start a link of its own in the job summary", () => {
     markdown,
     /\[#1 \\\]\(https:\/\/phish\.example\) \\\[x\]\(https:\/\/github\.com\/F3-Nation\/f3-nation\/pull\/1\)/,
   );
+});
+
+test("PRs from different repos with the same number are kept apart", () => {
+  const forkPr = pr(1, {
+    url: "https://github.com/F3-Nation/f3-nation-ghsa-aaaa-bbbb-cccc/pull/1",
+    ref: "GHSA-aaaa-bbbb-cccc #1",
+  });
+  const result = buildReport(
+    { codeowners: [], prs: [pr(1), forkPr] },
+    new Map([
+      [pr(1).url, teamFacts],
+      [forkPr.url, { tier: "team", reasons: [{ kind: "threads" }] }],
+    ]),
+    { now: NOW },
+  );
+  // Only the fork PR is its author's turn; each PR got its own facts.
+  assert.equal(result.counts.listed, 1);
+  assert.match(list(result, "🙋"), /\|#1 feat/);
+});
+
+test("a PR's ref replaces its number in the link", () => {
+  const owner = list(report([pr(1, { ref: "GHSA-aaaa-bbbb-cccc #1" })]), "🙋");
+  assert.match(owner, /\|GHSA-aaaa-bbbb-cccc #1 feat\(api\): change 1>/);
+});
+
+test("the report's name, empty text and board hint can be changed", () => {
+  const named = buildReport(
+    { codeowners: [], prs: [pr(1)] },
+    new Map([[pr(1).url, teamFacts]]),
+    {
+      now: NOW,
+      title: "Security Advisory PR Report",
+      boardHint: "Run by @andy",
+    },
+  );
+  assert.match(named.blocks[0].text.text, /^Security Advisory PR Report · /);
+  assert.match(named.text, /^Security Advisory PR Report: 1 PR needs/);
+  assert.match(named.blocks.at(-1).elements[0].text, /^Run by @andy · /);
+  const empty = buildReport({ codeowners: [], prs: [] }, new Map(), {
+    now: NOW,
+    emptyText: "No security advisory PRs are waiting.",
+  });
+  assert.equal(empty.text, "No security advisory PRs are waiting.");
+});
+
+test("the Slack Markdown uses plain newlines and defuses broadcasts", () => {
+  const markdown = toSlackMarkdown(
+    report([pr(1, { title: "@channel [fix](https://x.example)" }), pr(2)]),
+  );
+  assert.doesNotMatch(markdown, / {2}\n/);
+  assert.match(
+    markdown,
+    /\n• 🟢 \[#1 @\u200bchannel \(fix\)\(https:\/\/x\.example\)\]\(/,
+  );
+});
+
+test("assembleReport reads facts per repo and merges the boards", async () => {
+  const fork = "f3-nation-ghsa-aaaa-bbbb-cccc";
+  const calls = [];
+  const node = (repo, number, login) => ({
+    number,
+    url: `https://github.com/F3-Nation/${repo}/pull/${number}`,
+    title: "t",
+    isDraft: false,
+    createdAt: ago(2),
+    authorAssociation: "MEMBER",
+    author: { login, __typename: "User" },
+    timelineItems: { nodes: [] },
+    reviewThreads: { nodes: [] },
+    commits: { nodes: [] },
+  });
+  const github = {
+    paginate: async (route, params) => {
+      calls.push(`${params.repo} ${route}`);
+      return [];
+    },
+    graphql: async (_q, { repo }) => ({
+      repository: {
+        pullRequests: {
+          pageInfo: { hasNextPage: false },
+          nodes: [node(repo, 1, "amy")],
+        },
+      },
+    }),
+  };
+  const boardOf = (repo) => ({
+    codeowners: ["andy"],
+    fetched: 1,
+    prs: [pr(1, { url: `https://github.com/F3-Nation/${repo}/pull/1` })],
+  });
+  const { report: built, notes } = await assembleReport({
+    github,
+    sources: [
+      { owner: "F3-Nation", repo: "f3-nation", board: boardOf("f3-nation") },
+      {
+        owner: "F3-Nation",
+        repo: fork,
+        board: boardOf(fork),
+        base: { owner: "F3-Nation", repo: "f3-nation" },
+      },
+    ],
+    slackIdsRaw: "not json",
+    now: NOW,
+  });
+  assert.equal(built.counts.listed, 2);
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /CODEOWNERS_SLACK_IDS isn't valid JSON/);
+  assert.ok(calls.every((c) => c.startsWith("f3-nation ")));
 });
