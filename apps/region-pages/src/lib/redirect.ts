@@ -1,5 +1,5 @@
-export const CANONICAL_HOST = "regions.f3nation.com";
-export const LEGACY_ALIAS_HOST = "regions2.f3nation.com";
+const CANONICAL_HOST = "regions.f3nation.com";
+const LEGACY_ALIAS_HOST = "regions2.f3nation.com";
 
 const normalizeHost = (host: string | null): string | undefined =>
   host?.split(",")[0]?.trim().toLowerCase().replace(/:\d+$/, "") ?? undefined;
