@@ -94,7 +94,7 @@ export default function UserModal({
       },
       enabled: gte(data.id, 0),
     }),
-    // Keep failed conflict reloads recoverable inside the form.
+    // Keep member-load failures recoverable inside the form.
     throwOnError: false,
   });
 

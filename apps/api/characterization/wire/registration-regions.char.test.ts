@@ -63,7 +63,38 @@ describe.runIf(target.inProcess)("registration region choices", () => {
       rows.every((row) => Object.keys(row).sort().join(",") === "id,name"),
     ).toBe(true);
   });
-  it("rejects onboarding into a region beneath an inactive ancestor without changing the profile", async () => {
+  it.each(["inactive ancestor", "inactive region"] as const)(
+    "rejects onboarding with an %s without changing the profile",
+    async (reason) => {
+      const request = new Request("https://auth.test.invalid/api/onboarding", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          f3Name: "Fixture",
+          firstName: "Synthetic",
+          lastName: "Member",
+          homeRegionId:
+            reason === "inactive ancestor"
+              ? tree.directBranch.region.id
+              : tree.territoryBranch.region.id,
+        }),
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: "homeRegionId must be an active region",
+      });
+      const [stored] = await db
+        .select({
+          homeRegionId: schema.users.homeRegionId,
+          f3Name: schema.users.f3Name,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId));
+      expect(stored).toEqual({ homeRegionId: null, f3Name: null });
+    },
+  );
+  it("accepts onboarding into a region with active ancestors", async () => {
     const request = new Request("https://auth.test.invalid/api/onboarding", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -71,11 +102,12 @@ describe.runIf(target.inProcess)("registration region choices", () => {
         f3Name: "Fixture",
         firstName: "Synthetic",
         lastName: "Member",
-        homeRegionId: tree.directBranch.region.id,
+        homeRegionId: tree.unrelatedBranch.region.id,
       }),
     });
     const response = await POST(request);
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
     const [stored] = await db
       .select({
         homeRegionId: schema.users.homeRegionId,
@@ -83,6 +115,9 @@ describe.runIf(target.inProcess)("registration region choices", () => {
       })
       .from(schema.users)
       .where(eq(schema.users.id, userId));
-    expect(stored).toEqual({ homeRegionId: null, f3Name: null });
+    expect(stored).toEqual({
+      homeRegionId: tree.unrelatedBranch.region.id,
+      f3Name: "Fixture",
+    });
   });
 });

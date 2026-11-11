@@ -52,11 +52,11 @@ the correction event records who made the change.
   `NOT_FOUND`; WHEN it is not a region or it or an ancestor is inactive, THEN
   return `BAD_REQUEST`. Reject atomically without changing the user or roles.
   Skip destination validation when the value is unchanged, so a member homed
-  in a now-inactive region remains editable. Clearing to `null` retains its
-  existing rules and is outside this exception. The registration and onboarding region list
-  excludes inactive regions and regions beneath inactive ancestors so offered
-  choices satisfy the same destination rule. Onboarding validates submitted
-  regions against this rule before updating the profile.
+  in a now-inactive region remains editable. Clearing to `null` is not a
+  destination and keeps its existing permission rules. The registration and
+  onboarding region list excludes inactive regions and regions beneath inactive
+  ancestors so offered choices satisfy the same destination rule. Onboarding
+  validates submitted regions against this rule before updating the profile.
 - **AC-5** — GIVEN a permitted correction, WHEN the request also attempts an
   unauthorized role change, THEN the whole request is rejected. A successful
   correction does not create, transfer or remove roles implicitly and does not
