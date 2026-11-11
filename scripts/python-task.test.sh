@@ -19,9 +19,9 @@ tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/python-task-test.XXXXXX")" || exit 1
 mkdir -p "$tmp_dir/with-uv" "$tmp_dir/without-uv"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$tmp_dir/with-uv/uv"
 chmod +x "$tmp_dir/with-uv/uv"
-# The stripping cases run print-args, which prints each argument it receives
-# in brackets with bash's builtin printf. A system printf won't do: some
-# (Ubuntu 26.04's) take a leading `--` as the end of their options and drop it.
+# Use a Bash helper because the wrapper execs an external command. Some system
+# printf implementations drop `--` even after the format string; Bash's builtin
+# preserves it as data when the fixed format comes first.
 printf '%s\n' '#!/usr/bin/env bash' 'printf "[%s]" "$@"' >"$tmp_dir/with-uv/print-args"
 chmod +x "$tmp_dir/with-uv/print-args"
 export PATH="$tmp_dir/with-uv:$PATH"
