@@ -69,6 +69,13 @@ function shorten(title) {
 }
 
 /**
+ * A Slack link whose text is `ref` and the shortened title, both escaped.
+ * `url` must be one this code built or validated.
+ */
+const slackLink = (url, ref, title) =>
+  `<${url}|${slackEscape(ref)} ${slackEscape(shorten(title))}>`;
+
+/**
  * Parses the CODEOWNERS_SLACK_IDS repository variable: JSON mapping GitHub
  * login to Slack member ID. Returns `{ ids, warning }`; a bad value gives an
  * empty map and a warning, so the report still goes out without pings.
@@ -194,13 +201,47 @@ function place(pr, facts, codeowners, slackIds) {
 }
 
 /**
+ * One list as a Block Kit section: its heading and count, then a bullet per
+ * line, cut to fit Slack's limits with an "…and N more" line.
+ */
+function listSection(heading, entries) {
+  const lines = [`*${heading}* · ${entries.length}`];
+  let length = lines[0].length;
+  let shown = 0;
+  for (const entry of entries) {
+    const line = `• ${entry}`;
+    // Room is kept for the "…and N more" line.
+    if (shown === MAX_LINES || length + line.length + 40 > MAX_SECTION_CHARS)
+      break;
+    lines.push(line);
+    length += line.length + 1;
+    shown += 1;
+  }
+  if (shown < entries.length) lines.push(`…and ${entries.length - shown} more`);
+  return { type: "section", text: { type: "mrkdwn", text: lines.join("\n") } };
+}
+
+/**
+ * Whether the report lists a board PR, given its `summarize()` facts: false
+ * for a PR that is its author's turn, a draft, or in a stage a codeowner
+ * can't act on yet.
+ */
+const isListed = (pr, facts) =>
+  Boolean(facts) &&
+  PR_URL.test(pr.url ?? "") &&
+  place({ ...pr, tier: facts.tier }, facts, [], new Map()) !== null;
+
+/**
  * Builds the report. `board` is pr-triage's JSON, `factsByUrl` a Map of PR URL
  * to `summarize()` facts (URLs, because PRs from several repos can share a
  * number). Options: `now` (ms), `slackIds` (Map of lowercase login to Slack
  * ID), `runUrl` (the workflow run), `warnings` (strings shown as ⚠️ sections,
  * for data the report had to do without), and the wording that names the
  * report: `title`, `emptyText` and `boardHint` (the context line's first
- * item). A board PR's optional `ref` replaces `#<number>` in its link. Returns
+ * item). A board PR's optional `ref` replaces `#<number>` in its link.
+ * `extraLists` (`[{ heading, lines }]`, lines already in Slack mrkdwn) follow
+ * the PR lists in the same layout, and `headerExtras` (strings) end the
+ * header. Returns
  * `{ text, blocks, counts }`: the notification fallback, the Block Kit
  * blocks, and `{ listed, red, yellow }`.
  */
@@ -215,6 +256,8 @@ function buildReport(
     title = "Codeowners PR Report",
     emptyText = "Nothing is waiting on codeowners today.",
     boardHint = "Full board: `pnpm pr:triage:html`",
+    extraLists = [],
+    headerExtras = [],
   },
 ) {
   const codeowners = board.codeowners ?? [];
@@ -234,8 +277,7 @@ function buildReport(
       ? 0
       : Math.max(0, (now - since) / DAY_MS);
     const light = lightFor(ageDays, tier);
-    const ref = slackEscape(pr.ref ?? `#${pr.number}`);
-    const link = `<${pr.url}|${ref} ${slackEscape(shorten(pr.title))}>`;
+    const link = slackLink(pr.url, pr.ref ?? `#${pr.number}`, pr.title);
     lists[placed.list].push({
       light,
       since,
@@ -279,7 +321,8 @@ function buildReport(
     ],
   };
 
-  if (!counts.listed) {
+  const extras = extraLists.filter((list) => list.lines.length);
+  if (!counts.listed && !extras.length) {
     const text = emptyText;
     return {
       text,
@@ -301,36 +344,27 @@ function buildReport(
     })
     .replace(",", "");
   const need = `${plural(counts.listed, "PR")} ${counts.listed === 1 ? "needs" : "need"} a codeowner`;
-  const header = `${title} · ${date} · ${need} · 🔴 ${counts.red} 🟡 ${counts.yellow}`;
+  const summary = [`🔴 ${counts.red} 🟡 ${counts.yellow}`, ...headerExtras];
+  const header = `${title} · ${date} · ${need} · ${summary.join(" · ")}`;
 
   const sections = [];
   for (const [key, heading] of LISTS) {
     const entries = lists[key].sort(
       (a, b) => b.light - a.light || (a.since || 0) - (b.since || 0),
     );
-    if (!entries.length) continue;
-    const lines = [`*${heading}* · ${entries.length}`];
-    let length = lines[0].length;
-    let shown = 0;
-    for (const entry of entries) {
-      const line = `• ${entry.line}`;
-      // Room is kept for the "…and N more" line.
-      if (shown === MAX_LINES || length + line.length + 40 > MAX_SECTION_CHARS)
-        break;
-      lines.push(line);
-      length += line.length + 1;
-      shown += 1;
-    }
-    if (shown < entries.length)
-      lines.push(`…and ${entries.length - shown} more`);
-    sections.push({
-      type: "section",
-      text: { type: "mrkdwn", text: lines.join("\n") },
-    });
+    if (entries.length)
+      sections.push(
+        listSection(
+          heading,
+          entries.map((e) => e.line),
+        ),
+      );
   }
+  for (const { heading, lines } of extras)
+    sections.push(listSection(heading, lines));
 
   return {
-    text: `${title}: ${need} (🔴 ${counts.red} 🟡 ${counts.yellow})`,
+    text: `${title}: ${need} (${summary.join(", ")})`,
     blocks: [
       {
         type: "header",
@@ -348,8 +382,10 @@ function buildReport(
  * Reads whose turn each PR is for every board, then builds the report.
  * `sources` is `[{ owner, repo, board, base? }]`: pr-triage's JSON for each
  * repo, and where its branch rules and team live (see `collectFacts()`).
- * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. Other options pass through
- * to `buildReport()`. Returns `{ report, notes }`, where `notes` are the
+ * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. `extraLists`, when a
+ * function, gets `(board, factsByUrl)` for the merged board and returns
+ * `buildReport()`'s `extraLists`. Other options pass through to
+ * `buildReport()`. Returns `{ report, notes }`, where `notes` are the
  * warnings, which the report also shows.
  */
 async function assembleReport({
@@ -357,6 +393,7 @@ async function assembleReport({
   sources,
   slackIdsRaw,
   warnings = [],
+  extraLists = [],
   ...options
 }) {
   const notes = [...warnings];
@@ -384,6 +421,10 @@ async function assembleReport({
   return {
     report: buildReport(board, factsByUrl, {
       ...options,
+      extraLists:
+        typeof extraLists === "function"
+          ? extraLists(board, factsByUrl)
+          : extraLists,
       slackIds: ids,
       warnings: notes,
     }),
@@ -445,6 +486,8 @@ module.exports = {
   parseSlackIds,
   lightFor,
   buildReport,
+  isListed,
+  slackLink,
   assembleReport,
   toMarkdown,
   toSlackMarkdown,

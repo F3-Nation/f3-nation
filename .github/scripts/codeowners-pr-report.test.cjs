@@ -8,6 +8,7 @@ const {
   parseSlackIds,
   lightFor,
   buildReport,
+  isListed,
   assembleReport,
   toMarkdown,
   toSlackMarkdown,
@@ -622,4 +623,48 @@ test("assembleReport reads facts per repo and merges the boards", async () => {
   assert.equal(notes.length, 1);
   assert.match(notes[0], /CODEOWNERS_SLACK_IDS isn't valid JSON/);
   assert.ok(calls.every((c) => c.startsWith("f3-nation ")));
+});
+
+test("extra lists follow the PR lists, and their header notes end the header", () => {
+  const result = buildReport(
+    { codeowners: [], prs: [pr(1)] },
+    new Map([[pr(1).url, teamFacts]]),
+    {
+      now: NOW,
+      extraLists: [
+        { heading: "🚧 No open fix PR", lines: ["one", "two"] },
+        { heading: "✍️ Empty", lines: [] },
+      ],
+      headerExtras: ["2 advisories have no open fix PR"],
+    },
+  );
+  assert.match(
+    result.blocks[0].text.text,
+    / · 1 PR needs a codeowner · 🔴 0 🟡 0 · 2 advisories have no open fix PR$/,
+  );
+  const texts = result.blocks
+    .filter((b) => b.type === "section")
+    .map((b) => b.text.text);
+  assert.equal(texts.length, 2);
+  assert.match(texts[0], /^\*🙋/);
+  assert.equal(texts[1], "*🚧 No open fix PR* · 2\n• one\n• two");
+});
+
+test("extra lists alone still make a report, not the empty text", () => {
+  const result = buildReport({ codeowners: [], prs: [] }, new Map(), {
+    now: NOW,
+    extraLists: [{ heading: "🚧 No open fix PR", lines: ["one"] }],
+  });
+  assert.equal(result.blocks[0].type, "header");
+  assert.match(result.blocks[0].text.text, / · 0 PRs need a codeowner · /);
+});
+
+test("isListed matches what the report lists", () => {
+  assert.equal(isListed(pr(1), teamFacts), true);
+  assert.equal(
+    isListed(pr(1), { tier: "team", reasons: [{ kind: "threads" }] }),
+    false,
+  );
+  assert.equal(isListed(pr(1, { bucket: "THREADS" }), teamFacts), false);
+  assert.equal(isListed(pr(1), undefined), false);
 });

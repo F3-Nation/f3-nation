@@ -83,7 +83,7 @@ To set an issue's Type, Priority, Effort and App — one issue, or every open
 issue missing them — follow
 [`.agents/skills/issue-triage/SKILL.md`](.agents/skills/issue-triage/SKILL.md).
 
-To post the Codeowners PR Report for security advisories' fix PRs to the
+To post the report of open security advisories and their fix PRs to the
 private #codeowners Slack channel, follow
 [`.agents/skills/security-advisory-pr-report/SKILL.md`](.agents/skills/security-advisory-pr-report/SKILL.md).
 

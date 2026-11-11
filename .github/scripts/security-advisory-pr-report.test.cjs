@@ -6,10 +6,13 @@ const assert = require("node:assert/strict");
 const {
   REPO,
   SLACK_MAX_CHARS,
+  MESSAGE_BREAK,
+  splitMessages,
   checkAccess,
-  listAdvisoryForks,
+  listAdvisories,
   buildAdvisoryReport,
 } = require("./security-advisory-pr-report.cjs");
+const { toSlackMarkdown } = require("./codeowners-pr-report.cjs");
 
 const NOW = Date.parse("2026-11-11T14:07:00Z");
 const FORK_A = "F3-Nation/f3-nation-ghsa-aaaa-bbbb-cccc";
@@ -110,10 +113,17 @@ const boardFor = (fork, overrides = {}) => ({
   ],
 });
 
-const advisory = (ghsa, fork) => ({
+const advisory = (ghsa, fork, overrides = {}) => ({
   ghsa_id: ghsa,
+  summary: `Problem ${ghsa}`,
+  severity: "medium",
+  created_at: "2026-11-07T15:00:00Z",
   private_fork: fork ? { full_name: fork } : null,
+  ...overrides,
 });
+const GHSA_A = "GHSA-aaaa-bbbb-cccc";
+const GHSA_B = "GHSA-dddd-eeee-ffff";
+const GHSA_C = "GHSA-1111-2222-3333";
 
 // --- checkAccess -----------------------------------------------------------
 
@@ -223,22 +233,33 @@ test("a login GitHub rejects fails", async () => {
   assert.match(result.failures[0], /didn't accept your gh login/);
 });
 
-// --- listAdvisoryForks -----------------------------------------------------
+// --- listAdvisories --------------------------------------------------------
 
-test("only open advisories with a private fork are listed", async () => {
+test("every open advisory is listed, most severe then oldest first", async () => {
   const github = fakeGithub({
     advisories: {
-      triage: [advisory("GHSA-aaaa-bbbb-cccc", FORK_A)],
+      triage: [advisory(GHSA_A, FORK_A, { severity: "low" })],
       draft: [
-        advisory("GHSA-1111-2222-3333", null),
-        advisory("GHSA-dddd-eeee-ffff", FORK_B),
+        advisory(GHSA_C, null, {
+          severity: "high",
+          created_at: "2026-11-10T00:00:00Z",
+        }),
+        advisory(GHSA_B, FORK_B, {
+          severity: "high",
+          created_at: "2026-11-01T00:00:00Z",
+        }),
       ],
     },
   });
-  assert.deepEqual(await listAdvisoryForks(github), [
-    { ghsa: "GHSA-aaaa-bbbb-cccc", fork: FORK_A },
-    { ghsa: "GHSA-dddd-eeee-ffff", fork: FORK_B },
-  ]);
+  const listed = await listAdvisories(github);
+  assert.deepEqual(
+    listed.map((a) => [a.ghsa, a.fork]),
+    [
+      [GHSA_B, FORK_B],
+      [GHSA_C, null],
+      [GHSA_A, FORK_A],
+    ],
+  );
   assert.ok(
     github.calls.every(
       (c) => !c.includes("published") && !c.includes("closed"),
@@ -248,19 +269,24 @@ test("only open advisories with a private fork are listed", async () => {
 
 test("a fork outside the repository's naming is refused", async () => {
   const github = fakeGithub({
-    advisories: {
-      draft: [advisory("GHSA-aaaa-bbbb-cccc", "someone/elsewhere")],
-    },
+    advisories: { draft: [advisory(GHSA_A, "someone/elsewhere")] },
   });
   await assert.rejects(
-    listAdvisoryForks(github),
+    listAdvisories(github),
     /unexpected name: someone\/elsewhere/,
   );
 });
 
+test("an advisory ID outside GitHub's format is refused", async () => {
+  const github = fakeGithub({
+    advisories: { draft: [advisory("GHSA-x|evil", null)] },
+  });
+  await assert.rejects(listAdvisories(github), /unexpected ID: GHSA-x\|evil/);
+});
+
 test("an advisory list GitHub refuses stops the report", async () => {
   const github = fakeGithub({ advisories: { triage: httpError(403) } });
-  await assert.rejects(listAdvisoryForks(github), /HTTP 403/);
+  await assert.rejects(listAdvisories(github), /HTTP 403/);
 });
 
 // --- buildAdvisoryReport ---------------------------------------------------
@@ -270,35 +296,31 @@ const slackIdsRoute = {
     value: '{"dan":"U0DAN"}',
   },
 };
+const build = (github, triage) =>
+  buildAdvisoryReport({ github, triage, now: NOW, login: "andy" });
+const text = ({ messages }) => messages.join(`\n${MESSAGE_BREAK}\n`);
 
 test("fork PRs are listed by advisory, in the Codeowners PR Report's format", async () => {
   const github = fakeGithub({
     routes: slackIdsRoute,
-    advisories: {
-      draft: [
-        advisory("GHSA-aaaa-bbbb-cccc", FORK_A),
-        advisory("GHSA-dddd-eeee-ffff", FORK_B),
-      ],
-    },
+    advisories: { draft: [advisory(GHSA_A, FORK_A), advisory(GHSA_B, FORK_B)] },
     prsByRepo: {
       "f3-nation-ghsa-aaaa-bbbb-cccc": [prNode(FORK_A)],
       "f3-nation-ghsa-dddd-eeee-ffff": [prNode(FORK_B)],
     },
   });
-  const { message, report } = await buildAdvisoryReport({
-    github,
-    triage: (fork) =>
-      boardFor(
-        fork,
-        fork === FORK_B ? { bucket: "LOCAL", codeownerAssignees: ["dan"] } : {},
-      ),
-    now: NOW,
-    login: "andy",
-  });
-  assert.equal(report.counts.listed, 2);
+  const result = await build(github, (fork) =>
+    boardFor(
+      fork,
+      fork === FORK_B ? { bucket: "LOCAL", codeownerAssignees: ["dan"] } : {},
+    ),
+  );
+  const message = text(result);
+  assert.equal(result.report.counts.listed, 2);
+  assert.equal(result.messages.length, 1);
   assert.match(
     message,
-    /^### Security Advisory PR Report · Wed Nov 11 · 2 PRs need a codeowner/,
+    /^### Security Advisory PR Report · Wed Nov 11 · 2 PRs need a codeowner · 🔴 0 🟡 0\n/,
   );
   assert.match(
     message,
@@ -308,6 +330,7 @@ test("fork PRs are listed by advisory, in the Codeowners PR Report's format", as
     message,
     /\*\*🧪 Needs `\/pr-local-test`\*\* · 1\n• .*GHSA-dddd-eeee-ffff #1.* · <@U0DAN> · /,
   );
+  assert.doesNotMatch(message, /waiting on its author|No open fix PR/);
   assert.match(
     message,
     /Run by @andy with the `security-advisory-pr-report` agent skill/,
@@ -321,14 +344,65 @@ test("fork PRs are listed by advisory, in the Codeowners PR Report's format", as
   );
 });
 
-test("a fork PR that is its author's turn is left out, as in the daily report", async () => {
-  const fork = FORK_A;
+test("every open advisory appears once: listed, waiting on its author, or with no fix PR", async () => {
+  const FORK_C = "F3-Nation/f3-nation-ghsa-1111-2222-3333";
   const github = fakeGithub({
     routes: slackIdsRoute,
-    advisories: { draft: [advisory("GHSA-aaaa-bbbb-cccc", fork)] },
+    advisories: {
+      draft: [
+        advisory(GHSA_A, FORK_A),
+        advisory(GHSA_B, FORK_B),
+        // Its fork's only PR was closed, so triage finds no open PR.
+        advisory(GHSA_C, FORK_C, { summary: "Tokens leak", severity: "high" }),
+        advisory("GHSA-4444-5555-6666", null, {
+          summary: "No fork yet",
+          severity: null,
+          created_at: "2026-11-01T14:07:00Z",
+        }),
+      ],
+    },
+    prsByRepo: {
+      "f3-nation-ghsa-aaaa-bbbb-cccc": [prNode(FORK_A)],
+      "f3-nation-ghsa-dddd-eeee-ffff": [prNode(FORK_B, { isDraft: true })],
+    },
+  });
+  const result = await build(github, (fork) =>
+    fork === FORK_C
+      ? { codeowners: [], prs: [] }
+      : boardFor(
+          fork,
+          fork === FORK_B ? { bucket: "DRAFT", author: "dan" } : {},
+        ),
+  );
+  const message = text(result);
+  assert.match(
+    message,
+    /^### .* · 1 PR needs a codeowner · 🔴 0 🟡 0 · 2 advisories have no open fix PR\n/,
+  );
+  assert.match(
+    message,
+    /\*\*✍️ Fix PR waiting on its author\*\* · 1\n• \[GHSA-dddd-eeee-ffff #1 fix\(api\): close the hole\]\(https:\/\/github\.com\/F3-Nation\/f3-nation-ghsa-dddd-eeee-ffff\/pull\/1\) · by dan · draft\n/,
+  );
+  assert.match(
+    message,
+    /\*\*🚧 No open fix PR\*\* · 2\n• \[GHSA-1111-2222-3333 Tokens leak\]\(https:\/\/github\.com\/F3-Nation\/f3-nation\/security\/advisories\/GHSA-1111-2222-3333\) · high · opened 3d ago\n• \[GHSA-4444-5555-6666 No fork yet\]\(https:\/\/github\.com\/F3-Nation\/f3-nation\/security\/advisories\/GHSA-4444-5555-6666\) · no severity · opened 10d ago\n/,
+  );
+  for (const ghsa of [GHSA_A, GHSA_B, GHSA_C, "GHSA-4444-5555-6666"])
+    assert.equal(
+      message.split("\n").filter((line) => line.includes(ghsa)).length,
+      1,
+      `${ghsa} is on one line`,
+    );
+});
+
+test("a fix PR that is its author's turn says why", async () => {
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: { draft: [advisory(GHSA_A, FORK_A)] },
     prsByRepo: {
       "f3-nation-ghsa-aaaa-bbbb-cccc": [
-        prNode(fork, {
+        prNode(FORK_A, {
+          mergeable: "CONFLICTING",
           timelineItems: {
             nodes: [
               {
@@ -344,48 +418,33 @@ test("a fork PR that is its author's turn is left out, as in the daily report", 
       ],
     },
   });
-  const { report, message } = await buildAdvisoryReport({
-    github,
-    triage: (f) =>
-      boardFor(f, { bucket: "MANUAL", codeownerAssignees: ["dan"] }),
-    now: NOW,
-    login: "andy",
-  });
-  assert.equal(report.counts.listed, 0);
-  assert.match(
-    message,
-    /No security advisory PRs are waiting on codeowners today\./,
+  const result = await build(github, (f) =>
+    boardFor(f, { bucket: "MANUAL", codeownerAssignees: ["dan"] }),
   );
+  assert.equal(result.report.counts.listed, 0);
+  assert.match(text(result), /· by amy · merge conflict, changes requested\n/);
+  assert.doesNotMatch(text(result), /✅ Needs final review/);
 });
 
-test("no forks gives the empty message", async () => {
-  const { message } = await buildAdvisoryReport({
-    github: fakeGithub({ routes: slackIdsRoute }),
-    triage: () => assert.fail("nothing to triage"),
-    now: NOW,
-    login: "andy",
-  });
-  assert.match(
-    message,
-    /^No security advisory PRs are waiting on codeowners today\./,
+test("no open advisories gives the empty message", async () => {
+  const result = await build(fakeGithub({ routes: slackIdsRoute }), () =>
+    assert.fail("nothing to triage"),
   );
+  assert.deepEqual(result.messages, [
+    "There are no open security advisories.\n\nRun by @andy with the `security-advisory-pr-report` agent skill · reply in this thread to take a PR or ask for help",
+  ]);
 });
 
 test("a fork that can't be triaged stops the whole report", async () => {
   const github = fakeGithub({
     routes: slackIdsRoute,
-    advisories: { draft: [advisory("GHSA-aaaa-bbbb-cccc", FORK_A)] },
+    advisories: { draft: [advisory(GHSA_A, FORK_A)] },
   });
   await assert.rejects(
-    buildAdvisoryReport({
-      github,
-      triage: () => {
-        throw Object.assign(new Error("exit 1"), {
-          stderr: "HTTP 404 Not Found\n",
-        });
-      },
-      now: NOW,
-      login: "andy",
+    build(github, () => {
+      throw Object.assign(new Error("exit 1"), {
+        stderr: "HTTP 404 Not Found\n",
+      });
     }),
     /Couldn't triage GHSA-aaaa-bbbb-cccc's fork: HTTP 404 Not Found/,
   );
@@ -393,78 +452,101 @@ test("a fork that can't be triaged stops the whole report", async () => {
 
 test("unreadable Slack IDs leave a warning and no mentions", async () => {
   const github = fakeGithub({
-    advisories: { draft: [advisory("GHSA-aaaa-bbbb-cccc", FORK_A)] },
+    advisories: { draft: [advisory(GHSA_A, FORK_A)] },
     prsByRepo: { "f3-nation-ghsa-aaaa-bbbb-cccc": [prNode(FORK_A)] },
   });
-  const { message } = await buildAdvisoryReport({
-    github,
-    triage: (fork) =>
+  const message = text(
+    await build(github, (fork) =>
       boardFor(fork, { bucket: "LOCAL", codeownerAssignees: ["dan"] }),
-    now: NOW,
-    login: "andy",
-  });
+    ),
+  );
   assert.match(message, /⚠️ Couldn't read CODEOWNERS_SLACK_IDS/);
   assert.match(message, / · @dan · /);
 });
 
-test("a title can't notify the channel or start its own link", async () => {
+test("a title or summary can't notify the channel or start its own link", async () => {
   const github = fakeGithub({
     routes: slackIdsRoute,
-    advisories: { draft: [advisory("GHSA-aaaa-bbbb-cccc", FORK_A)] },
+    advisories: {
+      draft: [
+        advisory(GHSA_A, FORK_A),
+        advisory(GHSA_B, null, {
+          summary: "@channel [x](https://phish.example)",
+        }),
+      ],
+    },
     prsByRepo: { "f3-nation-ghsa-aaaa-bbbb-cccc": [prNode(FORK_A)] },
   });
-  const { message } = await buildAdvisoryReport({
-    github,
-    triage: (fork) =>
+  const message = text(
+    await build(github, (fork) =>
       boardFor(fork, {
         title: "@here <!channel> ](https://phish.example) x",
         author: "everyone",
       }),
-    now: NOW,
-    login: "andy",
-  });
-  assert.doesNotMatch(message, /@here|@everyone|<!channel>/);
+    ),
+  );
+  assert.doesNotMatch(message, /@here|@everyone|@channel|<!channel>/);
   assert.doesNotMatch(message, /\]\(https:\/\/phish/);
   assert.match(
     message,
-    /\[GHSA-aaaa-bbbb-cccc #1 @\u200bhere &lt;!channel&gt; \)\(https:\/\/phish\.example\) x\]\(https:\/\/github\.com\//,
+    /\[GHSA-aaaa-bbbb-cccc #1 @​here &lt;!channel&gt; \)\(https:\/\/phish\.example\) x\]\(https:\/\/github\.com\//,
+  );
+  assert.match(
+    message,
+    /\[GHSA-dddd-eeee-ffff @​channel \(x\)\(https:\/\/phish\.example\)\]\(https:\/\/github\.com\/F3-Nation\/f3-nation\/security\//,
   );
 });
 
-test("a message too long for Slack is refused rather than cut", async () => {
-  const forks = Array.from({ length: 40 }, (_, i) => {
-    const id = String(i).padStart(4, "0");
-    return {
-      ghsa: `GHSA-${id}-bbbb-cccc`,
-      fork: `F3-Nation/f3-nation-ghsa-${id}-bbbb-cccc`,
-    };
-  });
+test("a long report is split between sections into messages Slack accepts", async () => {
+  const ids = Array.from({ length: 40 }, (_, i) => String(i).padStart(4, "0"));
   const github = fakeGithub({
     routes: slackIdsRoute,
-    advisories: { draft: forks.map((f) => advisory(f.ghsa, f.fork)) },
+    advisories: {
+      draft: ids.map((id) =>
+        advisory(
+          `GHSA-${id}-bbbb-cccc`,
+          i(id) % 2 ? null : `F3-Nation/f3-nation-ghsa-${id}-bbbb-cccc`,
+          {
+            summary: "y".repeat(80),
+          },
+        ),
+      ),
+    },
     prsByRepo: Object.fromEntries(
-      forks.map((f) => [f.fork.split("/")[1], [prNode(f.fork)]]),
+      ids.map((id) => [
+        `f3-nation-ghsa-${id}-bbbb-cccc`,
+        [prNode(`F3-Nation/f3-nation-ghsa-${id}-bbbb-cccc`)],
+      ]),
     ),
   });
-  await assert.rejects(
-    buildAdvisoryReport({
-      github,
-      // Each PR in its own list position, across all four lists.
-      triage: (fork) => {
-        const i = Number(fork.match(/ghsa-(\d{4})/)[1]);
-        const bucket = ["INLINE", "LOCAL", "MANUAL", "REPLY"][i % 4];
-        return boardFor(fork, {
-          bucket,
-          title: "x".repeat(80),
-          codeownerAssignees: bucket === "INLINE" ? [] : ["dan"],
-          unresolvedThreads: 1,
-          threadOpeners: ["dan"],
-        });
-      },
-      now: NOW,
-      login: "andy",
-    }),
-    new RegExp(`Slack takes at most ${SLACK_MAX_CHARS}`),
+  function i(id) {
+    return Number(id);
+  }
+  const result = await build(github, (fork) => {
+    const n = Number(fork.match(/ghsa-(\d{4})/)[1]);
+    const bucket = ["INLINE", "LOCAL", "MANUAL", "REPLY"][(n / 2) % 4];
+    return boardFor(fork, {
+      bucket,
+      title: "x".repeat(80),
+      codeownerAssignees: bucket === "INLINE" ? [] : ["dan"],
+      unresolvedThreads: 1,
+      threadOpeners: ["dan"],
+    });
+  });
+  assert.ok(result.messages.length > 1);
+  for (const message of result.messages)
+    assert.ok(message.length <= SLACK_MAX_CHARS);
+  assert.match(result.messages[0], /^### Security Advisory PR Report/);
+  assert.match(result.messages.at(-1), /Run by @andy/);
+  // Nothing is lost or reordered in the split.
+  assert.equal(result.messages.join("\n\n"), toSlackMarkdown(result.report));
+});
+
+test("splitMessages packs blocks in order and refuses an oversized one", () => {
+  assert.deepEqual(splitMessages("aaa\n\nbbb\n\ncc", 8), ["aaa\n\nbbb", "cc"]);
+  assert.throws(
+    () => splitMessages("short\n\n" + "z".repeat(20), 10),
+    /A section is 20 characters/,
   );
 });
 
