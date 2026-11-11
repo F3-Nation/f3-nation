@@ -20,7 +20,9 @@ Nothing in this runbook deletes anything until the final, signoff-gated teardown
 
 - The new app reads F3 data from Cloud SQL `f3data` through `apps/api`; it has no Neon dependency.
 - Region slugs match exactly: on 2026-11-11 the full set of 573 slugs from the legacy home page payload and the 573 `<loc>` slugs in the regions2 sitemap had an empty set difference in both directions. Both use lodash `kebabCase(name)`; `region-events.json` is byte-identical between the two repos.
-- The legacy service, its Neon database, and its secrets stay untouched through the soak, so rollback is a domain mapping move.
+- The legacy service and its Neon database stay running through the soak. Cutover changes two legacy things, both reversible: ingest is paused and `cron-secret-tf` gets a new version. Rollback moves the mapping back and restores both.
+- The regions2 redirect is a 307 (temporary) during the soak, so browsers do not cache it. It becomes a 301 only at teardown signoff.
+- Expected visitor impact: the regions.f3nation.com certificate gap after the mapping moves, usually minutes. The 60 minute cap below is the rollback threshold.
 
 ## Pre-checks
 
@@ -65,7 +67,7 @@ Nothing in this runbook deletes anything until the final, signoff-gated teardown
    `curl -fsS https://regions.f3nation.com/health` succeeds. If it is not ready
    within 60 minutes, roll back (steps 1 and 2 of Rollback) and reschedule.
 
-4. Point canonicals at the real domain, which also activates the regions2 301:
+4. Point canonicals at the real domain, which also activates the regions2 307:
 
    ```sh
    gcloud run services update f3-region-pages --project f3-region-pages-app \
@@ -79,7 +81,7 @@ Nothing in this runbook deletes anything until the final, signoff-gated teardown
 - [ ] `curl -sS https://regions.f3nation.com/ | grep -o '<link rel="canonical"[^>]*>'` names regions.f3nation.com.
 - [ ] Every `<loc>` in `https://regions.f3nation.com/sitemap.xml` is on regions.f3nation.com and the region count is 573.
 - [ ] Three sample region slugs and one event page return 200.
-- [ ] `curl -sI 'https://regions2.f3nation.com/<slug>?letter=a'` returns 301 to `https://regions.f3nation.com/<slug>?letter=a`.
+- [ ] `curl -sI 'https://regions2.f3nation.com/<slug>?letter=a'` returns 307 to `https://regions.f3nation.com/<slug>?letter=a`.
 - [ ] `f3region.info` still lands on regions.f3nation.com.
 - [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://f3-region-pages-mx5ollfbiq-uc.a.run.app/api/ingest` returns 401 (legacy service URL, no secret).
 
@@ -91,12 +93,25 @@ Daily: check Cloud Run 5xx and API 429s for `f3-region-pages` in `f3-region-page
 
 1. `gcloud beta run domain-mappings delete --domain regions.f3nation.com --project f3-region-pages-app --region us-central1`
 2. `gcloud beta run domain-mappings create --service f3-region-pages --domain regions.f3nation.com --project region-pages --region us-central1`
-3. `gcloud run services update f3-region-pages --project f3-region-pages-app --region us-central1 --update-env-vars SITE_URL=https://regions2.f3nation.com` (the 301 turns itself off). Browsers that cached the 301 keep going to regions.f3nation.com, which is the legacy app again after step 2, so cached redirects still land on a working site.
-4. Re-enable the previous `cron-secret-tf` version (`gcloud secrets versions enable` it and add it back as the latest by copying with `gcloud secrets versions access <n> | gcloud secrets versions add cron-secret-tf --data-file=-`), redeploy the legacy service with `--update-secrets CRON_SECRET=cron-secret-tf:latest`, re-enable the ingest caller, and run one ingest to catch Neon up.
+   Gate: the reverse mapping reports `Ready` and `curl -fsS -o /dev/null https://regions.f3nation.com/` succeeds. If it stalls past 60 minutes, escalate in #region-pages; regions2 keeps serving the new app meanwhile once step 3 is done.
+3. `gcloud run services update f3-region-pages --project f3-region-pages-app --region us-central1 --update-env-vars SITE_URL=https://regions2.f3nation.com` (the 307 turns itself off; browsers do not cache a 307).
+4. Restore the ingest secret and caller, using the version number recorded before cutover:
+
+   ```sh
+   OLD=<version recorded in cutover step 1>
+   gcloud secrets versions access "$OLD" --secret=cron-secret-tf --project=region-pages \
+     | gcloud secrets versions add cron-secret-tf --project=region-pages --data-file=-
+   gcloud run services update f3-region-pages --project region-pages \
+     --region us-central1 --update-secrets CRON_SECRET=cron-secret-tf:latest
+   ```
+
+   Re-enable the ingest caller and confirm its next run succeeds (a new row in the legacy `ingest_runs` table).
 
 ## Teardown (later, separate, needs explicit signoff)
 
 Only after day 14 and signoff from the release lead:
+
+0. Make the regions2 redirect permanent: `gcloud run services update f3-region-pages --project f3-region-pages-app --region us-central1 --update-env-vars REGIONS2_REDIRECT_STATUS=301`.
 
 1. Move or retire `staging.f3regions.com` (it depends on Neon).
 2. Take a final Neon dump.

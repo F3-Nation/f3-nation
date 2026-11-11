@@ -5,11 +5,13 @@ import { proxy } from "@/proxy";
 
 const mockEnv = vi.hoisted(() => ({
   SITE_URL: undefined as string | undefined,
+  REGIONS2_REDIRECT_STATUS: "307",
 }));
 vi.mock("@/env", () => ({ env: mockEnv }));
 
 afterEach(() => {
   mockEnv.SITE_URL = undefined;
+  mockEnv.REGIONS2_REDIRECT_STATUS = "307";
 });
 
 const request = (host: string, forwarded?: string) =>
@@ -18,17 +20,18 @@ const request = (host: string, forwarded?: string) =>
   });
 
 describe("proxy", () => {
-  it("301s regions2 to regions once SITE_URL is regions", () => {
+  it("307s regions2 to regions once SITE_URL is regions", () => {
     mockEnv.SITE_URL = "https://regions.f3nation.com";
     const res = proxy(request("regions2.f3nation.com"));
-    expect(res.status).toBe(301);
+    expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe(
       "https://regions.f3nation.com/boise?letter=b",
     );
   });
 
-  it("prefers x-forwarded-host", () => {
+  it("uses 301 after signoff and prefers x-forwarded-host", () => {
     mockEnv.SITE_URL = "https://regions.f3nation.com";
+    mockEnv.REGIONS2_REDIRECT_STATUS = "301";
     const res = proxy(request("internal.run.app", "regions2.f3nation.com"));
     expect(res.status).toBe(301);
   });
