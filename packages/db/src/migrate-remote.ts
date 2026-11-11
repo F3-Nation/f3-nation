@@ -168,7 +168,7 @@ export function startRefreshRebuild(run: CommandRunner = runCommand): string[] {
       "",
       "Started the Staging refresh image rebuild, so the refresh and the developer",
       "snapshot know this migration. It runs in GitHub once CI on main is green",
-      "(a few minutes), and GitHub emails you if it fails:",
+      "(a few minutes). Check that it finishes green:",
       `  ${REBUILD_RUNS_URL}`,
       ...FULL_SETUP_NOTE,
     ];
