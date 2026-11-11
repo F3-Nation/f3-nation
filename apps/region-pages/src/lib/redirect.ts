@@ -7,7 +7,7 @@ const normalizeHost = (host: string | null): string | undefined =>
   host?.split(",")[0]?.trim().toLowerCase().replace(/:\d+$/, "") ?? undefined;
 
 /**
- * The 301 target for a request to the regions2 alias, or null. Inert until
+ * The redirect target for a request to the regions2 alias, or null. Inert until
  * SITE_URL points at regions.f3nation.com, so it can ship before the domain
  * moves (docs/REGION_PAGES_CUTOVER.md).
  */

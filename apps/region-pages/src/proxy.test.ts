@@ -27,6 +27,12 @@ describe("proxy", () => {
     expect(res.headers.get("location")).toBe(
       "https://regions.f3nation.com/boise?letter=b",
     );
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("stays inert while SITE_URL is unset", () => {
+    const res = proxy(request("regions2.f3nation.com"));
+    expect(res.headers.get("location")).toBeNull();
   });
 
   it("uses 301 after signoff and prefers x-forwarded-host", () => {
