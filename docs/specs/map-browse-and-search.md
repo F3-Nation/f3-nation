@@ -125,6 +125,14 @@ This does not synchronously refresh every API instance or open browser:
 other instances serve cached data until it expires, and browsers refetch on
 their own query schedule.
 
+### Google Maps unavailable
+
+- **AC-19** — GIVEN Google Maps rejects the API key (invalid key, disallowed
+  referrer, billing or quota) WHEN the map loads THEN the map is replaced by a
+  message (`role="alert"`) saying Google Maps isn't available, instead of the
+  error page. Google disables its markers when it rejects a key, so the map is
+  not kept on screen without them.
+
 ## 5. Roles & authorization (RBAC)
 
 Browsing is anonymous by design, and (as of #378) that includes the API
@@ -183,3 +191,6 @@ shared "anonymous" bucket) — a per-instance limit, not a global cap.
   - **Warn**: one middleware warning can occur on map API calls if bearer
     token API-key lookup fails (`api.auth.api_key_not_found` in `packages/api`
     shared auth middleware).
+- Browser exceptions captured in PostHog:
+  - `map.google_maps.auth_failure` — Google Maps rejected the API key on a
+    visitor's page (AC-19); reported once per page load.
