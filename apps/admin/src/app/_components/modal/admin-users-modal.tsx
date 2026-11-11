@@ -2,13 +2,23 @@
 
 import { UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import type { UserRole } from "@acme/shared/app/enums";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@acme/ui/alert-dialog";
 import { Button } from "@acme/ui/button";
 import {
   Dialog,
@@ -64,6 +74,10 @@ export default function UserModal({
 }: {
   data: DataType[ModalType.ADMIN_USERS];
 }) {
+  const [pendingCorrection, setPendingCorrection] = useState<{
+    input: z.infer<typeof CrupdateUserSchema>;
+    destinationName: string;
+  } | null>(null);
   const { data: session, update } = useAdminSession();
   const { data: userResponse } = useQuery(
     orpc.user.byId.queryOptions({
@@ -76,6 +90,7 @@ export default function UserModal({
   );
 
   const user = userResponse?.user;
+  const isExistingUserLoading = data.id != null && !user;
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
   const { data: regions } = useFetchAllPages({
@@ -228,6 +243,12 @@ export default function UserModal({
           <form
             onSubmit={form.handleSubmit(
               (data) => {
+                if (
+                  crupdateUser.isPending ||
+                  pendingCorrection ||
+                  isExistingUserLoading
+                )
+                  return;
                 // Only exclude PII fields when editing an existing user without PII access
                 let submitData: typeof data;
                 if (!hasPiiAccess && user?.id) {
@@ -247,6 +268,24 @@ export default function UserModal({
                 } else {
                   // For new users or users with PII access, send all data
                   submitData = data;
+                }
+                if (
+                  user &&
+                  submitData.homeRegionId != null &&
+                  submitData.homeRegionId !== user.homeRegionId
+                ) {
+                  const destination = regions?.find(
+                    (region) => region.id === submitData.homeRegionId,
+                  );
+                  if (!destination) {
+                    toast.error("Select a home region before saving");
+                    return;
+                  }
+                  setPendingCorrection({
+                    input: submitData,
+                    destinationName: destination.name,
+                  });
+                  return;
                 }
                 crupdateUser.mutate(submitData);
               },
@@ -484,7 +523,15 @@ export default function UserModal({
                     {canEditUser ? "Cancel" : "Close"}
                   </Button>
                   {canEditUser && (
-                    <Button type="submit" className="w-full">
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={
+                        isExistingUserLoading ||
+                        crupdateUser.isPending ||
+                        !!pendingCorrection
+                      }
+                    >
                       Save Changes
                     </Button>
                   )}
@@ -565,6 +612,38 @@ export default function UserModal({
           </form>
         </Form>
       </DialogContent>
+      <AlertDialog
+        open={pendingCorrection !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingCorrection(null);
+        }}
+      >
+        <AlertDialogContent
+          // This confirmation must sit above the scrollable editor's overlay.
+          style={{ zIndex: Z_INDEX.DIALOG_OVERLAY + 1 }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change home region?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Move this member to {pendingCorrection?.destinationName}? You may
+              lose edit access to this member after saving.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={crupdateUser.isPending}
+              onClick={() => {
+                if (!pendingCorrection || crupdateUser.isPending) return;
+                crupdateUser.mutate(pendingCorrection.input);
+                setPendingCorrection(null);
+              }}
+            >
+              Confirm change
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

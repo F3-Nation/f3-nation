@@ -5,8 +5,14 @@
  */
 
 import { vi } from "vitest";
+import type * as logger from "../logger";
 
 const mockLimit = vi.hoisted(() => vi.fn());
+const mockLogInfo = vi.hoisted(() => vi.fn());
+vi.mock("../logger", async (importOriginal) => ({
+  ...(await importOriginal<typeof logger>()),
+  logInfo: mockLogInfo,
+}));
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -16,6 +22,8 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 
 import type { Session } from "@acme/auth";
 import { eq, schema } from "@acme/db";
+import { mail } from "@acme/mail";
+import { notifyWebhooks } from "../lib/notify-webhooks";
 import { ERRORS } from "@acme/shared/app/errors";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -322,6 +330,328 @@ describe("user.crupdate org scoping", () => {
       .where(eq(schema.rolesXUsersXOrg.userId, target.id));
     expect(granted.map((role) => role.orgId)).toEqual([regionA.id]);
     expect((await readUser(target.id))?.firstName).toBeNull();
+  });
+
+  const adminOf = (region: { id: number; name: string }): Session => ({
+    ...editorOf(region),
+    roles: [{ orgId: region.id, orgName: region.name, roleName: "admin" }],
+  });
+  const asKey = (session: Session): Session => ({
+    ...session,
+    apiKey: {
+      id: 1,
+      key: "synthetic-key",
+      ownerId: session.id,
+      revokedAt: null,
+      expiresAt: null,
+      orgIds: session.roles?.map((role) => role.orgId) ?? [],
+    },
+  });
+
+  it.each([false, true])(
+    "lets a source admin correct a member without destination rights (API key=%s)",
+    async (apiKey) => {
+      const sendMail = vi.spyOn(mail, "sendTemplateMessages");
+      const target = await createUser({
+        homeRegionId: regionA.id,
+        meta: { home_region_nudge_opt_out: true },
+      });
+      await grantRole(target.id, regionB.id, "editor");
+      const session = apiKey ? asKey(adminOf(regionA)) : adminOf(regionA);
+      await mockAuthWithSession(session);
+      await createTestClient().user.crupdate({
+        id: target.id,
+        homeRegionId: regionB.id,
+        roles: [{ orgId: regionB.id, roleName: "editor" }],
+      });
+      expect((await readUser(target.id))?.homeRegionId).toBe(regionB.id);
+      expect((await readUser(target.id))?.meta).toEqual({
+        home_region_nudge_opt_out: true,
+      });
+      expect(sendMail).not.toHaveBeenCalled();
+      expect(notifyWebhooks).not.toHaveBeenCalled();
+      const roles = await db
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .where(eq(schema.rolesXUsersXOrg.userId, target.id));
+      expect(roles.map((role) => role.orgId)).toEqual([regionB.id]);
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        "api.user.home_region_corrected",
+        {
+          actorId: session.id,
+          apiKeyId: apiKey ? 1 : undefined,
+          userId: target.id,
+          fromOrgId: regionA.id,
+          toOrgId: regionB.id,
+        },
+      );
+    },
+  );
+
+  it("honors an ancestor administrator's source permissions", async () => {
+    const source = await createRegion();
+    const ancestor = await createRegion();
+    await db
+      .update(schema.orgs)
+      .set({ orgType: "area" })
+      .where(eq(schema.orgs.id, ancestor.id));
+    await db
+      .update(schema.orgs)
+      .set({ parentId: ancestor.id })
+      .where(eq(schema.orgs.id, source.id));
+    const target = await createUser({ homeRegionId: source.id });
+    await mockAuthWithSession(adminOf(ancestor));
+    await createTestClient().user.crupdate({
+      id: target.id,
+      homeRegionId: regionB.id,
+      roles: [],
+    });
+    expect((await readUser(target.id))?.homeRegionId).toBe(regionB.id);
+  });
+
+  it("does not borrow an API key owner's source administrator role", async () => {
+    const owner = await createUser({ homeRegionId: regionA.id });
+    await grantRole(owner.id, regionA.id, "admin");
+    const target = await createUser({ homeRegionId: regionA.id });
+    await mockAuthWithSession(asKey({ ...editorOf(regionA), id: owner.id }));
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        homeRegionId: regionB.id,
+        roles: [],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+    expect(mockLogInfo).not.toHaveBeenCalled();
+  });
+
+  it("does not give an unrelated administrator the correction exception", async () => {
+    const target = await createUser({ homeRegionId: regionA.id });
+    await mockAuthWithSession(adminOf(regionB));
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        homeRegionId: regionB.id,
+        roles: [],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+  });
+
+  it.each(["self", "both", "source", "new", "unhomed"] as const)(
+    "validates destinations on the %s path",
+    async (path) => {
+      const destination = await createRegion();
+      await db
+        .update(schema.orgs)
+        .set({ orgType: "ao" })
+        .where(eq(schema.orgs.id, destination.id));
+      const target = await createUser({
+        homeRegionId: path === "unhomed" ? null : regionA.id,
+      });
+      const session =
+        path === "source"
+          ? adminOf(regionA)
+          : path === "both"
+            ? {
+                ...editorOf(regionA),
+                roles: [
+                  ...(editorOf(regionA).roles ?? []),
+                  ...(editorOf(destination).roles ?? []),
+                ],
+              }
+            : await createAdminSession();
+      await mockAuthWithSession(
+        path === "self" ? { ...session, id: target.id } : session,
+      );
+      const input =
+        path === "new"
+          ? { email: `${uniqueId()}@example.invalid` }
+          : { id: target.id };
+      await expect(
+        createTestClient().user.crupdate({
+          ...input,
+          homeRegionId: destination.id,
+          roles: [],
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect((await readUser(target.id))?.homeRegionId).toBe(
+        path === "unhomed" ? null : regionA.id,
+      );
+      expect(mockLogInfo).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["missing", "inactive", "inactive-ancestor"] as const)(
+    "rejects a %s destination atomically",
+    async (kind) => {
+      const destination = await createRegion();
+      if (kind === "inactive")
+        await db
+          .update(schema.orgs)
+          .set({ isActive: false })
+          .where(eq(schema.orgs.id, destination.id));
+      if (kind === "inactive-ancestor") {
+        const parent = await createRegion();
+        await db
+          .update(schema.orgs)
+          .set({ orgType: "area", isActive: false })
+          .where(eq(schema.orgs.id, parent.id));
+        await db
+          .update(schema.orgs)
+          .set({ parentId: parent.id })
+          .where(eq(schema.orgs.id, destination.id));
+      }
+      const target = await createUser({ homeRegionId: regionA.id });
+      await mockAuthWithSession(await createAdminSession());
+      await expect(
+        createTestClient().user.crupdate({
+          id: target.id,
+          f3Name: "Should not persist",
+          homeRegionId: kind === "missing" ? 2000000000 : destination.id,
+          roles: [],
+        }),
+      ).rejects.toMatchObject({
+        code: kind === "missing" ? "NOT_FOUND" : "BAD_REQUEST",
+      });
+      expect((await readUser(target.id))?.f3Name).toBe("Original");
+      expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+      expect(mockLogInfo).not.toHaveBeenCalled();
+    },
+  );
+
+  it("permits unchanged inactive home regions and preserves null clearing", async () => {
+    const source = await createRegion();
+    await db
+      .update(schema.orgs)
+      .set({ isActive: false })
+      .where(eq(schema.orgs.id, source.id));
+    const target = await createUser({ homeRegionId: source.id });
+    await mockAuthWithSession(editorOf(source));
+    await createTestClient().user.crupdate({
+      id: target.id,
+      homeRegionId: source.id,
+      f3Name: "Renamed",
+      roles: [],
+    });
+    expect((await readUser(target.id))?.f3Name).toBe("Renamed");
+    await createTestClient().user.crupdate({
+      id: target.id,
+      homeRegionId: null,
+      roles: [],
+    });
+    expect((await readUser(target.id))?.homeRegionId).toBeNull();
+    expect(mockLogInfo).not.toHaveBeenCalled();
+  });
+
+  it("does not use the correction exception for initial placement", async () => {
+    const target = await createUser({ homeRegionId: null });
+    await grantRole(target.id, regionA.id, "editor");
+    await mockAuthWithSession(adminOf(regionA));
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        homeRegionId: regionB.id,
+        roles: [{ orgId: regionA.id, roleName: "editor" }],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect((await readUser(target.id))?.homeRegionId).toBeNull();
+  });
+
+  it("rejects an unauthorized role edit with a correction without saving or logging success", async () => {
+    const target = await createUser({ homeRegionId: regionA.id });
+    await mockAuthWithSession(adminOf(regionA));
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        homeRegionId: regionB.id,
+        roles: [{ orgId: regionB.id, roleName: "admin" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
+    });
+    expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+    expect(
+      await db
+        .select()
+        .from(schema.rolesXUsersXOrg)
+        .where(eq(schema.rolesXUsersXOrg.userId, target.id)),
+    ).toEqual([]);
+    expect(mockLogInfo).not.toHaveBeenCalled();
+  });
+
+  it("rolls back the correction if a role insert fails and emits no success event", async () => {
+    const target = await createUser({ homeRegionId: regionA.id });
+    const roleOrg = await createRegion();
+    await mockAuthWithSession(await createAdminSession());
+    const transaction = db.transaction.bind(db);
+    if (!globalThis.db) throw new Error("Database fixture was not initialized");
+    // Remove the authorized role target between authorization and persistence:
+    // the role foreign key fails after the profile update in the transaction.
+    const spy = vi
+      .spyOn(globalThis.db, "transaction")
+      .mockImplementationOnce(async (callback, config) => {
+        await db.delete(schema.orgs).where(eq(schema.orgs.id, roleOrg.id));
+        return transaction(callback, config);
+      });
+    try {
+      await expect(
+        createTestClient().user.crupdate({
+          id: target.id,
+          homeRegionId: regionB.id,
+          roles: [{ orgId: roleOrg.id, roleName: "editor" }],
+        }),
+      ).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+      expect(spy).toHaveBeenCalledOnce();
+      expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+      expect(
+        await db
+          .select()
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, target.id)),
+      ).toEqual([]);
+      expect(mockLogInfo).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("rejects a stale correction after authorization without overwriting a competing move or changing roles", async () => {
+    const target = await createUser({ homeRegionId: regionA.id });
+    const competing = await createRegion();
+    await mockAuthWithSession(adminOf(regionA));
+    const transaction = db.transaction.bind(db);
+    if (!globalThis.db) throw new Error("Database fixture was not initialized");
+    const spy = vi
+      .spyOn(globalThis.db, "transaction")
+      .mockImplementationOnce(async (callback, config) => {
+        await db
+          .update(schema.users)
+          .set({ homeRegionId: competing.id })
+          .where(eq(schema.users.id, target.id));
+        return transaction(callback, config);
+      });
+    try {
+      await expect(
+        createTestClient().user.crupdate({
+          id: target.id,
+          homeRegionId: regionB.id,
+          roles: [{ orgId: regionA.id, roleName: "editor" }],
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(spy).toHaveBeenCalledOnce();
+      expect((await readUser(target.id))?.homeRegionId).toBe(competing.id);
+      expect(
+        await db
+          .select()
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, target.id)),
+      ).toEqual([]);
+      expect(mockLogInfo).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   describe("PII from an admin of a role org outside the home region", () => {

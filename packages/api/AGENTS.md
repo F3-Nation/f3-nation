@@ -52,9 +52,15 @@ A procedure tier is not authorization. `protectedProcedure` proves a session;
 - A mutation that moves a record (`orgId`, `parentId`, `aoId`, `locationId`,
   `seriesId`, any foreign id) authorizes the caller on **both** source and
   destination. Use `requireEditorOnRescope`, which returns `NOT_FOUND` for a
-  missing target before the permission check.
+  missing target before the permission check. The narrow
+  [home-region correction exception](../../docs/specs/admin-user-home-region.md)
+  permits an administrator of an existing member's stored, non-null home region
+  to select another active region without destination editing rights. API keys
+  must hold that administrator access themselves. Profile, PII and role-grant
+  checks still apply; a stale source home region returns `CONFLICT`.
 - Verify every foreign id in input exists, is active, and belongs to an org
-  the caller can edit, before writing.
+  the caller can edit, before writing, except for the destination permission
+  exemption for home-region corrections described above.
 - Anonymous or `publicReadProcedure` paths:
   - Force `isActive` on the row, its series and its full ancestor org chain
     (`orgAndAncestorsAreActive` / `ancestorOrgsAreActive`), and `!isPrivate`

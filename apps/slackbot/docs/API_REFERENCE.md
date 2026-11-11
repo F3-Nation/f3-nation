@@ -229,6 +229,14 @@ Individual occurrences of events (can be standalone or part of a series).
 **PII fields** (`email`, `phone`, `emergencyContact`, etc.) require `includePii=true`
 query param and admin role.
 
+For `POST /v1/user`, a key with its own administrator access to an existing
+member's current home region can correct that region without editing rights
+in the destination. The destination must be an active region with active
+ancestors. Role assignments and private fields keep their existing permission
+checks; a correction does not transfer roles or notify the member. A stale
+correction returns `409 CONFLICT`; reload the member before retrying. See the
+[home-region correction spec](../../../docs/specs/admin-user-home-region.md).
+
 ---
 
 ### position
