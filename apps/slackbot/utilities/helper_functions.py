@@ -926,10 +926,11 @@ _URL_IN_TEXT = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 
 
 def usable_invite_link(saved: str | None) -> str | None:
-    """The first http(s) URL in a region's saved Slack invite link, or None if it holds none.
+    """The first http(s) URL in a region's saved Slack invite link, minus trailing punctuation.
 
-    A saved link can be Slack's whole share message ("Join me on Slack -- ... from any device: https://...")
-    rather than a bare URL. Sending that text as a link gives the FNG a broken link, so keep only the URL.
+    Returns None when the text has no URL or the first one has no host. A saved link can be Slack's whole share
+    message ("Join me on Slack -- ... from any device: https://...") rather than a bare URL, and sending that text
+    as a link gives the recipient a broken link.
     """
     match = _URL_IN_TEXT.search(saved or "")
     if not match:

@@ -531,7 +531,9 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
                 actions.DOWNRANGE_INVITE_SHARING: _get_radio_value(current_values, actions.DOWNRANGE_INVITE_SHARING)
                 or region_record.downrange_invite_sharing
                 or "request_only",
-                actions.DOWNRANGE_INVITE_LINK: _get_text_value(current_values, actions.DOWNRANGE_INVITE_LINK)
+                actions.DOWNRANGE_INVITE_LINK: usable_invite_link(
+                    _get_text_value(current_values, actions.DOWNRANGE_INVITE_LINK)
+                )
                 or usable_invite_link(region_record.downrange_invite_link)
                 or "",
                 actions.DOWNRANGE_CHANNEL_POSTING: _get_radio_value(current_values, actions.DOWNRANGE_CHANNEL_POSTING)
@@ -1003,7 +1005,15 @@ def handle_downrange_settings(
     form_data = BlockView(blocks=copy.deepcopy(DOWNRANGE_ADMIN_BLOCKS)).get_selected_values(body)
 
     region_record.downrange_invite_sharing = safe_get(form_data, actions.DOWNRANGE_INVITE_SHARING) or "request_only"
-    region_record.downrange_invite_link = usable_invite_link(safe_get(form_data, actions.DOWNRANGE_INVITE_LINK))
+    submitted_link = safe_get(form_data, actions.DOWNRANGE_INVITE_LINK)
+    invite_link = usable_invite_link(submitted_link)
+    if submitted_link and not invite_link:
+        # Keep the saved link rather than clear it as a side effect of unusable input; an empty box still clears it.
+        logger.warning(
+            f"Downrange settings for team {region_record.team_id}: invite link had no usable URL, kept the saved one"
+        )
+        invite_link = usable_invite_link(region_record.downrange_invite_link)
+    region_record.downrange_invite_link = invite_link
     region_record.downrange_channel_posting = safe_get(form_data, actions.DOWNRANGE_CHANNEL_POSTING) or "off"
     region_record.downrange_channel = safe_get(form_data, actions.DOWNRANGE_CHANNEL) or None
 

@@ -74,11 +74,11 @@ def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict,
         ),
         ContextBlock(
             element=ContextElement(
-                initial_value="This creates his F3 Nation profile, emails him the Slack invite "
-                "and lists you as his battle buddy. He's welcomed in Slack once he joins."
+                initial_value="This emails him the Slack invite and makes sure he has an F3 Nation profile. "
+                "He's welcomed in Slack once he joins."
                 if usable_invite_link(region_record.downrange_invite_link)
                 else ":warning: This region has no Slack invite link, so he won't get a welcome email. "
-                f"{FNG_SET_INVITE_LINK} This still creates his F3 Nation profile and lists you as his battle buddy."
+                f"{FNG_SET_INVITE_LINK} He still gets an F3 Nation profile."
             )
         ),
     ]
