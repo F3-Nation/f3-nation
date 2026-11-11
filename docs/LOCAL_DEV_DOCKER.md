@@ -672,9 +672,9 @@ These are per-machine settings, so put them in your own shell profile (for examp
    export NODE_OPTIONS="--max-old-space-size=4096"
    ```
 
-   The limit applies to each Node process, so the worst case is about the limit times `TURBO_CONCURRENCY`. Keep that product below the memory you actually have, or the system swaps or kills processes instead. `NODE_OPTIONS` also applies to every other Node program you run from that shell.
+   The limit caps the JavaScript heap of each Node process, not total memory. One task can start several Node processes (Vitest runs its test files in worker processes, for example), and each process also uses memory outside its heap, so the limit times `TURBO_CONCURRENCY` underestimates the real peak. Leave plenty of headroom below the memory you actually have, or the system swaps or kills processes instead. `NODE_OPTIONS` also applies to every other Node program you run from that shell.
 
-3. **On WSL 2, give the VM more memory.** WSL 2 caps its VM at part of the Windows host's memory. To raise the cap, create or edit `%UserProfile%\.wslconfig` on Windows:
+3. **On WSL 2, give the VM more memory.** WSL 2 caps its VM at part of the Windows host's memory. First check the current cap: the `total` column of `free -h` inside your distro. Pick a value above it that still leaves a few GB for Windows itself; a fixed number can lower the cap on a host with more memory. Then create or edit `%UserProfile%\.wslconfig` on Windows. For example, on a 16 GB host:
 
    ```ini
    [wsl2]
@@ -683,7 +683,7 @@ These are per-machine settings, so put them in your own shell profile (for examp
 
    Then run `wsl --shutdown` from PowerShell and reopen your distro. Check the new total with `free -h`. With more memory you may not need the other two settings.
 
-If one task runs out of heap even on its own (run it alone, e.g. `pnpm typecheck`), that task's memory use has grown, so open an issue that names it rather than only raising the limit.
+If one task runs out of heap even on its own, that task's memory use has grown, so open an issue that names it rather than only raising the limit. Run it alone with `pnpm --filter <package> <task>` (for example `pnpm --filter f3-map typecheck`); the root scripts such as `pnpm typecheck` run that task in every workspace through Turbo.
 
 ### Postgres won't start
 
