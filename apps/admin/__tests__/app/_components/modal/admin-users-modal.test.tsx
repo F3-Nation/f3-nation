@@ -85,8 +85,8 @@ vi.mock("~/orpc/client", () => ({
   },
 }));
 
-// Most form tests replace only the picker value boundary; transition tests
-// exercise the real popover so disabled behavior is not supplied by the mock.
+// Most tests use a native select because the virtualized list needs layout.
+// Popup-dependent cases enable the real picker and stub ResizeObserver.
 vi.mock("@acme/ui/virtualized-combobox", async (importOriginal) => {
   const actual = await importOriginal<typeof comboboxModule>();
   return {
@@ -266,57 +266,77 @@ describe("AdminUsersModal", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
-  it("closes the real open picker during refetch and preserves its value after recovery", async () => {
-    mocks.realPicker = true;
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe = vi.fn();
-        unobserve = vi.fn();
-        disconnect = vi.fn();
-      },
-    );
-    mocks.byId.mockResolvedValue({
-      user: { ...roleLessUser, homeRegionId: 10, email: "member@example.com" },
-      includePii: true,
-    });
-    const queryClient = createQueryClient();
-    render(withProviders(<AdminUsersModal data={{ id: 42 }} />, queryClient));
-    await screen.findByDisplayValue("member@example.com");
-    const trigger = (await screen.findByText("Source")).closest("button")!;
-    fireEvent.click(trigger);
-    await screen.findByRole("button", { name: "Clear" });
-    let finish!: (value: unknown) => void;
-    mocks.orgAll.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-    );
-    await act(async () => {
-      void queryClient.invalidateQueries({ queryKey: [["org", "all"]] });
-    });
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Clear" })).toBeNull(),
-    );
-    expect(screen.getByText("Source").closest("button")!.disabled).toBe(true);
-    await act(async () => {
-      finish({ orgs: [{ id: 10, name: "Source" }], total: 1 });
-    });
-    await waitFor(() =>
-      expect(screen.getByText("Source").closest("button")!.disabled).toBe(
-        false,
-      ),
-    );
-    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() =>
-      expect(mocks.crupdate).toHaveBeenCalledWith(
-        expect.objectContaining({ homeRegionId: 10 }),
-        expect.anything(),
-      ),
-    );
-  });
+  it.each(["regions", "member"])(
+    "closes the real open picker during %s refetch and preserves its value",
+    async (refreshTarget) => {
+      mocks.realPicker = true;
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe = vi.fn();
+          unobserve = vi.fn();
+          disconnect = vi.fn();
+        },
+      );
+      mocks.byId.mockResolvedValue({
+        user: {
+          ...roleLessUser,
+          homeRegionId: 10,
+          email: "member@example.com",
+        },
+        includePii: true,
+      });
+      const queryClient = createQueryClient();
+      render(withProviders(<AdminUsersModal data={{ id: 42 }} />, queryClient));
+      await screen.findByDisplayValue("member@example.com");
+      const trigger = (await screen.findByText("Source")).closest("button")!;
+      fireEvent.click(trigger);
+      await screen.findByRole("button", { name: "Clear" });
+      let finish!: (value: unknown) => void;
+      const pending = new Promise((resolve) => {
+        finish = resolve;
+      });
+      if (refreshTarget === "regions")
+        mocks.orgAll.mockReturnValueOnce(pending);
+      else mocks.byId.mockReturnValueOnce(pending);
+      await act(async () => {
+        void queryClient.invalidateQueries({
+          queryKey: refreshTarget === "regions" ? [["org", "all"]] : ["byId"],
+        });
+      });
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Clear" })).toBeNull(),
+      );
+      expect(screen.getByText("Source").closest("button")!.disabled).toBe(true);
+      await act(async () => {
+        finish(
+          refreshTarget === "regions"
+            ? { orgs: [{ id: 10, name: "Source" }], total: 1 }
+            : {
+                user: {
+                  ...roleLessUser,
+                  homeRegionId: 10,
+                  email: "member@example.com",
+                },
+                includePii: true,
+              },
+        );
+      });
+      await waitFor(() =>
+        expect(screen.getByText("Source").closest("button")!.disabled).toBe(
+          false,
+        ),
+      );
+      expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+      await waitFor(() =>
+        expect(mocks.crupdate).toHaveBeenCalledWith(
+          expect.objectContaining({ homeRegionId: 10 }),
+          expect.anything(),
+        ),
+      );
+    },
+  );
 
   it("blocks the picker and saving until the first region load succeeds", async () => {
     let finish!: (value: unknown) => void;
@@ -452,8 +472,8 @@ describe("AdminUsersModal", () => {
     expect(mocks.crupdate).not.toHaveBeenCalled();
   });
 
-  it("explains a deleted member after a conflict without switching to creation", async () => {
-    await loadMember();
+  it("keeps a missing member hidden through pending and failed refreshes until data recovers", async () => {
+    const queryClient = await loadMember();
     mocks.byId.mockResolvedValue({ user: null, includePii: false });
     mocks.crupdate.mockRejectedValueOnce(new ORPCError("CONFLICT"));
     fireEvent.change(screen.getByLabelText("Home region picker"), {
@@ -470,6 +490,45 @@ describe("AdminUsersModal", () => {
     expect(screen.queryByRole("button", { name: "Save Changes" })).toBeNull();
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
     expect(screen.queryByRole("combobox")).toBeNull();
+    expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+    let rejectRefresh!: (error: Error) => void;
+    mocks.byId.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRefresh = reject;
+        }),
+    );
+    await act(async () => {
+      void queryClient.invalidateQueries({ queryKey: ["byId"] });
+    });
+    await waitFor(() =>
+      expect(queryClient.isFetching({ queryKey: ["byId"] })).toBe(1),
+    );
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(
+      screen.getByText("This member no longer exists. Close the form."),
+    ).toBeTruthy();
+    await act(async () => {
+      rejectRefresh(new Error("Unavailable"));
+    });
+    await screen.findByText(
+      "Unable to load this member. Close and reopen the form to try again.",
+    );
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(
+      screen.getByText("This member no longer exists. Close the form."),
+    ).toBeTruthy();
+    mocks.byId.mockResolvedValue({
+      user: { ...roleLessUser, homeRegionId: 10, email: "member@example.com" },
+      includePii: true,
+    });
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["byId"] });
+    });
+    await screen.findByRole("button", { name: "Save Changes" });
+    expect(
+      screen.queryByText("This member no longer exists. Close the form."),
+    ).toBeNull();
     expect(mocks.crupdate).toHaveBeenCalledTimes(1);
   });
 
@@ -524,6 +583,44 @@ describe("AdminUsersModal", () => {
       email: "new@example.com",
     });
   });
+  it.each([
+    [
+      new ORPCError("UNAUTHORIZED"),
+      "You are not authorized to update this user",
+    ],
+    [
+      new ORPCError("BAD_REQUEST", {
+        message: "Home region is no longer active",
+      }),
+      "Home region is no longer active",
+    ],
+    [new Error("Internal details"), "Failed to update user"],
+  ])(
+    "reports rejected corrections without reloading or retrying: %s",
+    async (error, message) => {
+      await loadMember();
+      mocks.crupdate.mockRejectedValueOnce(error);
+      fireEvent.change(screen.getByLabelText("Home region picker"), {
+        target: { value: "20" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Confirm change" }),
+      );
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+      expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+      expect(mocks.byId).toHaveBeenCalledTimes(1);
+      expect(screen.getByDisplayValue("member@example.com")).toBeTruthy();
+      await waitFor(() =>
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", {
+            name: "Save Changes",
+          }).disabled,
+        ).toBe(false),
+      );
+    },
+  );
+
   it("reloads the member after a conflict before allowing another correction", async () => {
     await loadMember();
     mocks.byId.mockResolvedValue({

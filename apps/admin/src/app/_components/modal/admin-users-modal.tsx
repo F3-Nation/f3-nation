@@ -103,8 +103,7 @@ export default function UserModal({
     correction?.userSnapshot === userResponse ? correction : null;
   const isExistingUserUnavailable =
     data.id != null && (!user || isFetching || isError);
-  const isMemberMissing =
-    data.id != null && !isFetching && !isError && userResponse?.user === null;
+  const isMemberMissing = data.id != null && userResponse?.user === null;
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
   const {

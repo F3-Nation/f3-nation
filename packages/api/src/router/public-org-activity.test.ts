@@ -741,6 +741,13 @@ describe("public reads exclude inactive organization hierarchies", () => {
       branches.inactiveRegion!.regionId,
     ]);
     expect(inactive.total).toBe(1);
+    const inactiveCount = await client.org.count({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+      activeAncestorsOnly: false,
+    });
+    expect(inactiveCount.count).toBe(1);
   });
 
   it("opts signed-in organization choices into active-ancestor filtering", async () => {
