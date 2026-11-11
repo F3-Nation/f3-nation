@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -83,3 +84,70 @@ def test_approval_dm_sends_only_the_url_from_a_saved_share_message(monkeypatch):
 
     link_block = send.chat_postMessage.call_args.kwargs["blocks"][1]
     assert link_block["text"]["text"] == f"*Invite link:* {INVITE_URL}"
+
+
+def region_info_blocks(saved):
+    return downrange._build_region_info_blocks(
+        has_slack=True,
+        target_settings=SlackSettings(
+            team_id="T_TARGET", downrange_invite_sharing="proactive", downrange_invite_link=saved
+        ),
+        target_team_id="T_TARGET",
+        target_org_id=42,
+        selected_org_name="Target",
+        requester_team_id="T_REQUESTER",
+        requester_user_id="U_REQUESTER",
+        requester_name="Requester",
+        requester_region_name="Home",
+        requester_email="",
+    )
+
+
+def test_proactive_sharing_shows_only_the_url_from_a_saved_share_message():
+    labels = [getattr(block, "label", None) for block in region_info_blocks(SHARE_MESSAGE)]
+
+    assert INVITE_URL in labels
+    assert SHARE_MESSAGE not in labels
+
+
+def test_proactive_sharing_without_a_url_falls_back_to_requesting_an_invite():
+    blocks = region_info_blocks("Join me on Slack")
+
+    assert not any("Here is their invite link" in str(getattr(block, "label", "")) for block in blocks)
+    assert all("Join me on Slack" != getattr(block, "label", None) for block in blocks)
+
+
+@pytest.mark.parametrize(
+    "saved, prefilled", [(SHARE_MESSAGE, INVITE_URL), ("Join me on Slack", None)], ids=["share", "no_url"]
+)
+def test_region_select_restores_admin_form_with_only_a_valid_url(monkeypatch, saved, prefilled):
+    monkeypatch.setattr(
+        downrange,
+        "get_user",
+        MagicMock(return_value=SimpleNamespace(user_id=None, user_name="Admin", email=None)),
+    )
+    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: (None, None, None))
+    monkeypatch.setattr(
+        downrange.DbManager,
+        "get",
+        lambda *_a, **_k: SimpleNamespace(
+            name="Region", website=None, email=None, twitter=None, facebook=None, instagram=None
+        ),
+    )
+    client = MagicMock()
+
+    downrange.handle_region_select(
+        {
+            "user": {"id": "U_ADMIN"},
+            "actions": [{"selected_option": {"value": "8", "text": {"text": "Target"}}}],
+            "view": {"id": "V_TEST", "private_metadata": json.dumps({"is_admin": True}), "state": {"values": {}}},
+        },
+        client,
+        MagicMock(),
+        {},
+        SlackSettings(team_id="T1", org_id=7, downrange_invite_link=saved),
+    )
+
+    element = invite_link_element(client)
+    assert element["type"] == "url_text_input"
+    assert element.get("initial_value") == prefilled

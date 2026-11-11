@@ -935,7 +935,11 @@ def usable_invite_link(saved: str | None) -> str | None:
     if not match:
         return None
     url = match.group(0).rstrip(".,;:!?)]}")
-    return url if urlparse(url).netloc else None
+    try:
+        netloc = urlparse(url).netloc
+    except ValueError:  # e.g. an unmatched IPv6 bracket ("https://[::1")
+        return None
+    return url if netloc else None
 
 
 def safe_convert(value: str | None, conversion, args: list = None, default=None):

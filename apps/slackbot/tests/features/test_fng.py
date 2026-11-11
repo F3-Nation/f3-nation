@@ -191,9 +191,18 @@ def test_without_invite_link_no_email_goes_out_and_submitter_is_told_to_get_an_a
     )
 
 
-def test_invite_link_saved_inside_slacks_share_message_emails_just_the_url(monkeypatch):
+SHARE_MESSAGE = (
+    f"Join me on Slack -- it\u2019s a faster, simpler way to work. Sign up here, from any device: {INVITE_LINK}"
+)
+# Saved invite links the handler must reduce to the bare URL before sending.
+SAVED_LINKS = pytest.mark.parametrize(
+    "saved", [INVITE_LINK, f"  {INVITE_LINK}  ", SHARE_MESSAGE], ids=["bare", "padded", "share"]
+)
+
+
+@SAVED_LINKS
+def test_saved_invite_link_emails_just_the_url(monkeypatch, saved):
     _, send, view = patch_db(monkeypatch)
-    saved = f"Join me on Slack -- it\u2019s a faster, simpler way to work. Sign up here, from any device: {INVITE_LINK}"
 
     fng.handle_fng_form(submission(), MagicMock(), MagicMock(), {}, region_record(downrange_invite_link=saved))
 
@@ -201,28 +210,31 @@ def test_invite_link_saved_inside_slacks_share_message_emails_just_the_url(monke
     assert view.call_args.kwargs["level"] == constants.AlertLevel.SUCCESS
 
 
-def test_failed_email_dms_the_buddy_the_link(monkeypatch):
+@SAVED_LINKS
+def test_failed_email_dms_the_buddy_the_link(monkeypatch, saved):
     _, send, view = patch_db(monkeypatch)
     send.return_value = False
     client = MagicMock()
 
-    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record(downrange_invite_link=saved))
 
     dm = client.chat_postMessage.call_args.kwargs
-    assert dm["channel"] == "U_BUDDY" and INVITE_LINK in dm["text"]
+    assert dm["channel"] == "U_BUDDY"
+    assert dm["text"].endswith(f"Please text him this link: {INVITE_LINK}")
     assert view.call_args.kwargs["level"] == constants.AlertLevel.WARNING
     assert "DMed you" in view.call_args.kwargs["text"] and INVITE_LINK not in view.call_args.kwargs["text"]
 
 
-def test_failed_email_and_dm_fall_back_to_the_link_in_the_result(monkeypatch):
+@SAVED_LINKS
+def test_failed_email_and_dm_fall_back_to_the_link_in_the_result(monkeypatch, saved):
     _, send, view = patch_db(monkeypatch)
     send.return_value = False
     client = MagicMock()
     client.chat_postMessage.side_effect = SlackApiError("cannot_dm", {"error": "cannot_dm_bot"})
 
-    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record(downrange_invite_link=saved))
 
-    assert INVITE_LINK in view.call_args.kwargs["text"]
+    assert view.call_args.kwargs["text"].endswith(f"please text him {INVITE_LINK}")
 
 
 def test_unlinked_workspace_creates_nothing(monkeypatch):

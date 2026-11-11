@@ -1181,6 +1181,7 @@ INVITE_URL = "https://join.slack.com/t/f3boone/shared_invite/zt-abc"
         ("Join me on Slack -- sign up here", None),
         ("join.slack.com/t/f3boone", None),
         ("https://", None),
+        ("https://[::1", None),
         ("", None),
         ("   ", None),
         (None, None),
