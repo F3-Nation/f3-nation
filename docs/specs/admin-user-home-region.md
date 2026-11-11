@@ -73,10 +73,12 @@ the correction event records who made the change.
   which is visible on a subsequent authorized read. A `CONFLICT` refreshes the
   member before retrying; a failed refresh blocks resubmission until the member
   can be loaded again. A missing member is identified explicitly and cannot
-  become a creation form. Region-list failures show an error and block the
-  picker and submission until the list loads successfully. The home-region
-  picker requests only active regions with
-  active ancestors through the opt-in organization filter. The member's current
+  become a creation form; its fields are hidden. While the region list is
+  loading, refreshing or has failed, the picker closes and all saves and
+  confirmations are blocked; a failure also shows an error. Confirmation
+  rechecks that its destination remains in the loaded list. The home-region
+  picker requests only active regions with active ancestors through the opt-in
+  organization filter. The member's current
   home region remains visible even when it is no longer eligible for a new
   assignment, preserving unchanged-value edits. The warning must not claim
   that callers with other qualifying permissions necessarily lose access.

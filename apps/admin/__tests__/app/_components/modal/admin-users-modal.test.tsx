@@ -8,10 +8,11 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast } from "@acme/ui/toast";
+import type * as comboboxModule from "@acme/ui/virtualized-combobox";
 
 import AdminUsersModal from "~/app/_components/modal/admin-users-modal";
 import { createQueryClient } from "~/orpc/query-client";
@@ -19,6 +20,7 @@ import { createQueryClient } from "~/orpc/query-client";
 const mocks = vi.hoisted(() => ({
   byId: vi.fn<(input: unknown) => Promise<unknown>>(),
   orgAll: vi.fn(),
+  realPicker: false,
   crupdate: vi.fn<(input: unknown) => Promise<unknown>>(),
 }));
 
@@ -83,35 +85,33 @@ vi.mock("~/orpc/client", () => ({
   },
 }));
 
-// The virtualized picker needs browser layout; exercise its value/onSelect
-// boundary here while retaining the real form, confirmation and mutation.
-vi.mock("@acme/ui/virtualized-combobox", () => ({
-  VirtualizedCombobox: ({
-    value,
-    options,
-    onSelect,
-    disabled,
-  }: {
-    disabled?: boolean;
-    value?: string;
-    options: { value: string; label: string }[];
-    onSelect: (value: string) => void;
-  }) => (
-    <select
-      disabled={disabled}
-      aria-label="Home region picker"
-      value={value ?? ""}
-      onChange={(event) => onSelect(event.target.value)}
-    >
-      <option value="">None</option>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
+// Most form tests replace only the picker value boundary; transition tests
+// exercise the real popover so disabled behavior is not supplied by the mock.
+vi.mock("@acme/ui/virtualized-combobox", async (importOriginal) => {
+  const actual = await importOriginal<typeof comboboxModule>();
+  return {
+    VirtualizedCombobox: (
+      props: ComponentProps<typeof actual.VirtualizedCombobox>,
+    ) =>
+      mocks.realPicker ? (
+        <actual.VirtualizedCombobox {...props} />
+      ) : (
+        <select
+          disabled={props.disabled}
+          aria-label="Home region picker"
+          value={props.value ?? ""}
+          onChange={(event) => props.onSelect?.(event.target.value)}
+        >
+          <option value="">None</option>
+          {props.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ),
+  };
+});
 
 const withProviders = (ui: ReactNode, queryClient = createQueryClient()) => {
   queryClient.setDefaultOptions({
@@ -136,6 +136,7 @@ const roleLessUser = {
 
 describe("AdminUsersModal", () => {
   beforeEach(() => {
+    mocks.realPicker = false;
     vi.mocked(toast.error).mockClear();
     mocks.byId.mockReset();
     mocks.orgAll.mockReset().mockResolvedValue({
@@ -151,6 +152,7 @@ describe("AdminUsersModal", () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   // React deduplicates this warning, so check it before other user loads.
@@ -264,6 +266,146 @@ describe("AdminUsersModal", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
+  it("closes the real open picker during refetch and preserves its value after recovery", async () => {
+    mocks.realPicker = true;
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe = vi.fn();
+        unobserve = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
+    mocks.byId.mockResolvedValue({
+      user: { ...roleLessUser, homeRegionId: 10, email: "member@example.com" },
+      includePii: true,
+    });
+    const queryClient = createQueryClient();
+    render(withProviders(<AdminUsersModal data={{ id: 42 }} />, queryClient));
+    await screen.findByDisplayValue("member@example.com");
+    const trigger = (await screen.findByText("Source")).closest("button")!;
+    fireEvent.click(trigger);
+    await screen.findByRole("button", { name: "Clear" });
+    let finish!: (value: unknown) => void;
+    mocks.orgAll.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(async () => {
+      void queryClient.invalidateQueries({ queryKey: [["org", "all"]] });
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Clear" })).toBeNull(),
+    );
+    expect(screen.getByText("Source").closest("button")!.disabled).toBe(true);
+    await act(async () => {
+      finish({ orgs: [{ id: 10, name: "Source" }], total: 1 });
+    });
+    await waitFor(() =>
+      expect(screen.getByText("Source").closest("button")!.disabled).toBe(
+        false,
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(mocks.crupdate).toHaveBeenCalledWith(
+        expect.objectContaining({ homeRegionId: 10 }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("blocks the picker and saving until the first region load succeeds", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.orgAll.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    mocks.byId.mockResolvedValue({
+      user: { ...roleLessUser, homeRegionId: 10, email: "member@example.com" },
+      includePii: true,
+    });
+    render(withProviders(<AdminUsersModal data={{ id: 42 }} />));
+    await screen.findByDisplayValue("member@example.com");
+    expect(
+      screen.getByLabelText<HTMLSelectElement>("Home region picker").disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+        .disabled,
+    ).toBe(true);
+    await act(async () => {
+      fireEvent.submit(
+        screen.getByRole("button", { name: "Save Changes" }).closest("form")!,
+      );
+    });
+    expect(mocks.crupdate).not.toHaveBeenCalled();
+    await act(async () => {
+      finish({ orgs: [{ id: 10, name: "Source" }], total: 1 });
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+          .disabled,
+      ).toBe(false),
+    );
+    expect(
+      screen.getByLabelText<HTMLSelectElement>("Home region picker").disabled,
+    ).toBe(false);
+  });
+
+  it("blocks confirmation during a region refresh and rejects a removed destination", async () => {
+    const queryClient = await loadMember();
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await screen.findByRole("button", { name: "Confirm change" });
+    let finish!: (value: unknown) => void;
+    mocks.orgAll.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(async () => {
+      void queryClient.invalidateQueries({ queryKey: [["org", "all"]] });
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", {
+          name: "Confirm change",
+        }).disabled,
+      ).toBe(true),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    expect(mocks.crupdate).not.toHaveBeenCalled();
+    await act(async () => {
+      finish({ orgs: [{ id: 10, name: "Source" }], total: 1 });
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", {
+          name: "Confirm change",
+        }).disabled,
+      ).toBe(false),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    expect(toast.error).toHaveBeenCalledWith(
+      "The selected home region is no longer available. Choose another region.",
+    );
+    expect(mocks.crupdate).not.toHaveBeenCalled();
+  });
+
   it("reports a failed region refresh and disables its picker", async () => {
     const queryClient = await loadMember();
     mocks.orgAll.mockRejectedValue(new Error("Region lookup failed"));
@@ -325,11 +467,9 @@ describe("AdminUsersModal", () => {
       "This member no longer exists",
     );
     expect(screen.getByRole("heading", { name: "Edit User" })).toBeTruthy();
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
-        .disabled,
-    ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.queryByRole("button", { name: "Save Changes" })).toBeNull();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryByRole("combobox")).toBeNull();
     expect(mocks.crupdate).toHaveBeenCalledTimes(1);
   });
 

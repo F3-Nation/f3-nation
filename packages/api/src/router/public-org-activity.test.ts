@@ -709,6 +709,40 @@ describe("public reads exclude inactive organization hierarchies", () => {
     expect(result.total).toBe(expected.length);
   });
 
+  it("intersects inactive status with the active-ancestor filter for lists and counts", async () => {
+    await mockAuthWithSession(createNoPermissionSession());
+    const client = createTestClient();
+    const filter = {
+      orgTypes: ["region"] as const,
+      searchTerm: prefix,
+      statuses: ["inactive"] as const,
+      activeAncestorsOnly: true,
+    };
+    const listed = await client.org.all({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+    });
+    const counted = await client.org.count({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+    });
+    expect(listed.orgs).toEqual([]);
+    expect(listed.total).toBe(0);
+    expect(counted.count).toBe(0);
+    const inactive = await client.org.all({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+      activeAncestorsOnly: false,
+    });
+    expect(inactive.orgs.map((org) => org.id)).toEqual([
+      branches.inactiveRegion!.regionId,
+    ]);
+    expect(inactive.total).toBe(1);
+  });
+
   it("opts signed-in organization choices into active-ancestor filtering", async () => {
     await mockAuthWithSession(createNoPermissionSession());
     const client = createTestClient();

@@ -307,6 +307,7 @@ export default function UserModal({
 
         <Form {...form}>
           <form
+            hidden={isMemberMissing}
             onSubmit={form.handleSubmit(
               (data) => {
                 if (
@@ -539,7 +540,14 @@ export default function UserModal({
                             {user?.homeRegion?.homeRegionName}
                           </div>
                         ) : (
+                          // Remount when unavailable to close any open popup; the
+                          // combobox disabled prop only disables its trigger.
                           <VirtualizedCombobox
+                            key={
+                              isRegionsUnavailable || isExistingUserUnavailable
+                                ? "unavailable"
+                                : "available"
+                            }
                             disabled={
                               isRegionsUnavailable || isExistingUserUnavailable
                             }
@@ -714,6 +722,18 @@ export default function UserModal({
                   isRegionsUnavailable
                 )
                   return;
+                if (
+                  !regions.some(
+                    (region) =>
+                      region.id === pendingCorrection.input.homeRegionId,
+                  )
+                ) {
+                  toast.error(
+                    "The selected home region is no longer available. Choose another region.",
+                  );
+                  setPendingCorrection(null);
+                  return;
+                }
                 crupdateUser.mutate(pendingCorrection.input);
                 setPendingCorrection(null);
               }}
