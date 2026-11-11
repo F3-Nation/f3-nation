@@ -103,9 +103,17 @@ export default function UserModal({
     correction?.userSnapshot === userResponse ? correction : null;
   const isExistingUserUnavailable =
     data.id != null && (!user || isFetching || isError);
+  const isMemberMissing =
+    data.id != null && !isFetching && !isError && userResponse?.user === null;
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
-  const { data: regions } = useFetchAllPages({
+  const {
+    data: regions,
+    isError: isRegionsError,
+    isFetching: isRegionsFetching,
+    isPending: isRegionsPending,
+  } = useFetchAllPages({
+    throwOnError: false,
     path: ["org", "all"],
     queryKey: ["org.all.activeHomeRegions"],
     fetchPage: async ({ pageIndex, pageSize }) => {
@@ -119,6 +127,8 @@ export default function UserModal({
     },
   });
 
+  const isRegionsUnavailable =
+    isRegionsError || isRegionsFetching || isRegionsPending;
   const homeRegionOptions = (regions ?? []).map((region) => ({
     value: String(region.id),
     label: region.name,
@@ -275,10 +285,20 @@ export default function UserModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            {!canEditUser ? "View" : user?.id ? "Edit" : "Add"} User
+            {data.id == null ? "Add" : !canEditUser ? "View" : "Edit"} User
           </DialogTitle>
         </DialogHeader>
 
+        {isMemberMissing && (
+          <p role="alert" className="text-destructive">
+            This member no longer exists. Close the form.
+          </p>
+        )}
+        {isRegionsError && (
+          <p role="alert" className="text-destructive">
+            Unable to load home regions. Close and reopen the form to try again.
+          </p>
+        )}
         {isError && (
           <p role="alert" className="text-destructive">
             Unable to load this member. Close and reopen the form to try again.
@@ -292,7 +312,8 @@ export default function UserModal({
                 if (
                   crupdateUser.isPending ||
                   pendingCorrection ||
-                  isExistingUserUnavailable
+                  isExistingUserUnavailable ||
+                  isRegionsUnavailable
                 )
                   return;
                 // Only exclude PII fields when editing an existing user without PII access
@@ -320,7 +341,7 @@ export default function UserModal({
                   submitData.homeRegionId != null &&
                   submitData.homeRegionId !== user.homeRegionId
                 ) {
-                  const destination = regions?.find(
+                  const destination = regions.find(
                     (region) => region.id === submitData.homeRegionId,
                   );
                   if (!destination) {
@@ -519,6 +540,9 @@ export default function UserModal({
                           </div>
                         ) : (
                           <VirtualizedCombobox
+                            disabled={
+                              isRegionsUnavailable || isExistingUserUnavailable
+                            }
                             value={
                               field.value === null || field.value === undefined
                                 ? undefined
@@ -572,6 +596,7 @@ export default function UserModal({
                       className="w-full"
                       disabled={
                         isExistingUserUnavailable ||
+                        isRegionsUnavailable ||
                         crupdateUser.isPending ||
                         !!pendingCorrection
                       }
@@ -676,12 +701,17 @@ export default function UserModal({
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction
-              disabled={crupdateUser.isPending || isExistingUserUnavailable}
+              disabled={
+                crupdateUser.isPending ||
+                isExistingUserUnavailable ||
+                isRegionsUnavailable
+              }
               onClick={() => {
                 if (
                   !pendingCorrection ||
                   crupdateUser.isPending ||
-                  isExistingUserUnavailable
+                  isExistingUserUnavailable ||
+                  isRegionsUnavailable
                 )
                   return;
                 crupdateUser.mutate(pendingCorrection.input);

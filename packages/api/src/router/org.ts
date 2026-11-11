@@ -77,7 +77,7 @@ const orgFilterSchema = z.object({
   activeAncestorsOnly: queryBooleanSchema
     .optional()
     .describe(
-      "If true, return only active organizations with active ancestors, regardless of the status filter. Omitted or false preserves signed-in status filtering; anonymous reads are always active-only.",
+      "If true, also require the organization and every ancestor to be active. This narrows the status filter rather than replacing it. Omitted or false preserves signed-in status filtering; anonymous reads always apply this check.",
     ),
   parentOrgIds: arrayOrSingle(z.coerce.number())
     .optional()

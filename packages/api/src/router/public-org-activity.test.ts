@@ -691,6 +691,24 @@ describe("public reads exclude inactive organization hierarchies", () => {
     ).toBe(5);
   });
 
+  it("never relaxes anonymous ancestor filtering when explicitly disabled", async () => {
+    await mockAuthWithSession(null);
+    const result = await createTestClient().org.all({
+      orgTypes: ["region"],
+      searchTerm: prefix,
+      statuses: ["active", "inactive"],
+      activeAncestorsOnly: false,
+      pageSize: 100,
+    });
+    const expected = ["activeA", "activeB", "inactiveAO"]
+      .map((label) => branches[label]!.regionId)
+      .sort((a, b) => a - b);
+    expect(result.orgs.map((org) => org.id).sort((a, b) => a - b)).toEqual(
+      expected,
+    );
+    expect(result.total).toBe(expected.length);
+  });
+
   it("opts signed-in organization choices into active-ancestor filtering", async () => {
     await mockAuthWithSession(createNoPermissionSession());
     const client = createTestClient();

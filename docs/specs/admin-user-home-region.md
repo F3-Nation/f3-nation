@@ -72,7 +72,10 @@ the correction event records who made the change.
   Cancelling submits no mutation; confirming submits the chosen destination,
   which is visible on a subsequent authorized read. A `CONFLICT` refreshes the
   member before retrying; a failed refresh blocks resubmission until the member
-  can be loaded again. The home-region picker requests only active regions with
+  can be loaded again. A missing member is identified explicitly and cannot
+  become a creation form. Region-list failures show an error and block the
+  picker and submission until the list loads successfully. The home-region
+  picker requests only active regions with
   active ancestors through the opt-in organization filter. The member's current
   home region remains visible even when it is no longer eligible for a new
   assignment, preserving unchanged-value edits. The warning must not claim

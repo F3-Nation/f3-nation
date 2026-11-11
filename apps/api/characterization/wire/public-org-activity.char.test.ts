@@ -123,6 +123,30 @@ describe.runIf(target.sharesDatabase)("public organization activity", () => {
       await db.delete(schema.orgs).where(eq(schema.orgs.id, id));
   });
 
+  it("does not relax anonymous REST filtering with activeAncestorsOnly=false", async () => {
+    const query = new URLSearchParams({
+      searchTerm: prefix,
+      orgTypes: "ao",
+      activeAncestorsOnly: "false",
+    });
+    query.append("statuses", "active");
+    query.append("statuses", "inactive");
+    const result = await target.invoke(
+      req(`/v1/org?${query}`, {
+        headers: { ...headers(false), client: "characterization" },
+      }),
+    );
+    expect(result.status).toBe(200);
+    const listed = (await result.json()) as {
+      orgs: { id: number }[];
+      total: number;
+    };
+    expect(listed.orgs.map((org) => org.id)).toEqual(
+      branches.slice(0, 1).map((branch) => branch.aoId),
+    );
+    expect(listed.total).toBe(1);
+  });
+
   it.each(["true", "false", "invalid"])(
     "parses the signed-in active-ancestor filter over REST: %s",
     async (flag) => {

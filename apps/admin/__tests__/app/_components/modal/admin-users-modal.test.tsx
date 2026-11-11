@@ -11,6 +11,8 @@ import {
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { toast } from "@acme/ui/toast";
+
 import AdminUsersModal from "~/app/_components/modal/admin-users-modal";
 import { createQueryClient } from "~/orpc/query-client";
 
@@ -88,12 +90,15 @@ vi.mock("@acme/ui/virtualized-combobox", () => ({
     value,
     options,
     onSelect,
+    disabled,
   }: {
+    disabled?: boolean;
     value?: string;
     options: { value: string; label: string }[];
     onSelect: (value: string) => void;
   }) => (
     <select
+      disabled={disabled}
       aria-label="Home region picker"
       value={value ?? ""}
       onChange={(event) => onSelect(event.target.value)}
@@ -131,6 +136,7 @@ const roleLessUser = {
 
 describe("AdminUsersModal", () => {
   beforeEach(() => {
+    vi.mocked(toast.error).mockClear();
     mocks.byId.mockReset();
     mocks.orgAll.mockReset().mockResolvedValue({
       orgs: [
@@ -256,6 +262,75 @@ describe("AdminUsersModal", () => {
       ),
     );
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("reports a failed region refresh and disables its picker", async () => {
+    const queryClient = await loadMember();
+    mocks.orgAll.mockRejectedValue(new Error("Region lookup failed"));
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: [["org", "all"]] });
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Unable to load home regions",
+    );
+    expect(
+      screen.getByLabelText<HTMLSelectElement>("Home region picker").disabled,
+    ).toBe(true);
+    expect(screen.getByRole("heading", { name: "Edit User" })).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.crupdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a destination removed from the region list before saving", async () => {
+    const queryClient = await loadMember();
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    mocks.orgAll.mockResolvedValue({
+      orgs: [{ id: 10, name: "Source" }],
+      total: 1,
+    });
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: [["org", "all"]] });
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("option", { name: "Destination" })).toBeNull(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "The selected home region is no longer available. Choose another region.",
+      ),
+    );
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(mocks.crupdate).not.toHaveBeenCalled();
+  });
+
+  it("explains a deleted member after a conflict without switching to creation", async () => {
+    await loadMember();
+    mocks.byId.mockResolvedValue({ user: null, includePii: false });
+    mocks.crupdate.mockRejectedValueOnce(new ORPCError("CONFLICT"));
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm change" }),
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "This member no longer exists",
+    );
+    expect(screen.getByRole("heading", { name: "Edit User" })).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.crupdate).toHaveBeenCalledTimes(1);
   });
 
   it("confirms the named destination, cancels without saving, then saves once on confirmation", async () => {
@@ -394,6 +469,11 @@ describe("AdminUsersModal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     await screen.findByRole("button", { name: "Confirm change" });
+    const response = queryClient.getQueryData([
+      "byId",
+      { id: 42, includePii: true },
+    ]);
+    mocks.byId.mockImplementation(async () => structuredClone(response));
     const previous = queryClient.getQueryState([
       "byId",
       { id: 42, includePii: true },
