@@ -61,7 +61,9 @@ A procedure tier is not authorization. `protectedProcedure` proves a session;
   checks still apply; a stale source home region returns `CONFLICT`.
 - Verify every foreign id in input exists and is active before writing. Also
   verify it belongs to an org the caller can edit; only this permission check
-  is waived for the home-region correction destination described above.
+  is waived for the home-region correction destination described above. An
+  unchanged home region is not revalidated, so profiles remain editable when
+  their existing region becomes inactive.
 - Anonymous or `publicReadProcedure` paths:
   - Force `isActive` on the row, its series and its full ancestor org chain
     (`orgAndAncestorsAreActive` / `ancestorOrgsAreActive`), and `!isPrivate`

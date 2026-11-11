@@ -187,7 +187,7 @@ apps/auth/
 │   │   │   │   └── revoke/route.ts            # Token revocation (RFC 7009)
 │   │   │   ├── verify-email/route.ts          # Email MFA send/verify
 │   │   │   ├── check-user/route.ts            # Email existence check
-│   │   │   ├── regions/route.ts               # Active regions for registration
+│   │   │   ├── regions/route.ts               # Region choices with active ancestors
 │   │   │   ├── register/route.ts              # New user creation via F3 API
 │   │   │   ├── onboarding/route.ts            # Profile completion (legacy)
 │   │   │   ├── session/route.ts               # Enhanced session info
@@ -338,9 +338,9 @@ Client App → GET /api/oauth/userinfo
 | `GET/POST` | `/api/auth/[...nextauth]` | NextAuth.js dynamic handler. Manages sessions, CSRF, sign-in/sign-out.                                                                     |
 | `POST`     | `/api/verify-email`       | Send or verify an email MFA code. Body: `{ email, action?, code? }`. Rate-limited: 10 req/min per IP.                                      |
 | `POST`     | `/api/check-user`         | Check if an email exists in `public.users`. Body: `{ email }`. Returns `{ exists: boolean }`.                                              |
-| `GET`      | `/api/regions`            | Returns active regions (`orgType='region'`, `isActive=true`) for the registration dropdown. Returns `[{ id, name }]`.                      |
+| `GET`      | `/api/regions`            | Returns regions with active ancestors for registration and onboarding. Returns `[{ id, name }]`.                                           |
 | `POST`     | `/api/register`           | Create a new user via the F3 API. Body: `{ email, code, firstName, lastName, ... }`. 401 unless `code` is the emailed sign-in code. 5/min. |
-| `POST`     | `/api/onboarding`         | Save user profile (f3Name, firstName, lastName) and mark onboarding complete. Requires active session.                                     |
+| `POST`     | `/api/onboarding`         | Save profile and optional home region, requiring an active region with active ancestors; mark onboarding complete. Requires a session.     |
 | `GET`      | `/api/session`            | Returns enriched user profile data (f3Name, firstName, lastName, email, avatarUrl, onboardingCompleted).                                   |
 | `GET`      | `/api/health`             | Returns `{ status: "ok" }`. Used as a Cloud Run liveness probe.                                                                            |
 

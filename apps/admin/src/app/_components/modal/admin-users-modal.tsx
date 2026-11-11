@@ -74,9 +74,10 @@ export default function UserModal({
 }: {
   data: DataType[ModalType.ADMIN_USERS];
 }) {
-  const [pendingCorrection, setPendingCorrection] = useState<{
+  const [correction, setPendingCorrection] = useState<{
     input: z.infer<typeof CrupdateUserSchema>;
     destinationName: string;
+    userUpdatedAt: number;
   } | null>(null);
   const { data: session, update } = useAdminSession();
   const {
@@ -84,17 +85,22 @@ export default function UserModal({
     refetch: refetchUser,
     isFetching,
     isError,
-  } = useQuery(
-    orpc.user.byId.queryOptions({
+    dataUpdatedAt,
+  } = useQuery({
+    ...orpc.user.byId.queryOptions({
       input: {
         id: data.id ?? -1,
         includePii: true, // Request PII to check if we have access
       },
       enabled: gte(data.id, 0),
     }),
-  );
+    // Keep failed conflict reloads recoverable inside the form.
+    throwOnError: false,
+  });
 
   const user = userResponse?.user;
+  const pendingCorrection =
+    correction?.userUpdatedAt === dataUpdatedAt ? correction : null;
   const isExistingUserUnavailable =
     data.id != null && (!user || isFetching || isError);
   const hasPiiAccess = userResponse?.includePii ?? false;
@@ -224,9 +230,11 @@ export default function UserModal({
       onError: async (err) => {
         toast.error(
           err instanceof ORPCError
-            ? err.code === "UNAUTHORIZED"
-              ? "You are not authorized to update this user"
-              : err.message || "Failed to update user"
+            ? err.code === "CONFLICT"
+              ? "This profile changed. Reloading the latest values replaces your unsaved edits."
+              : err.code === "UNAUTHORIZED"
+                ? "You are not authorized to update this user"
+                : err.message || "Failed to update user"
             : "Failed to update user",
         );
         if (err instanceof ORPCError && err.code === "CONFLICT") {
@@ -253,6 +261,12 @@ export default function UserModal({
             {!canEditUser ? "View" : user?.id ? "Edit" : "Add"} User
           </DialogTitle>
         </DialogHeader>
+
+        {isError && (
+          <p role="alert" className="text-destructive">
+            Unable to load this member. Close and reopen the form to try again.
+          </p>
+        )}
 
         <Form {...form}>
           <form
@@ -299,6 +313,7 @@ export default function UserModal({
                     return;
                   }
                   setPendingCorrection({
+                    userUpdatedAt: dataUpdatedAt,
                     input: submitData,
                     destinationName: destination.name,
                   });
@@ -649,9 +664,14 @@ export default function UserModal({
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction
-              disabled={crupdateUser.isPending}
+              disabled={crupdateUser.isPending || isExistingUserUnavailable}
               onClick={() => {
-                if (!pendingCorrection || crupdateUser.isPending) return;
+                if (
+                  !pendingCorrection ||
+                  crupdateUser.isPending ||
+                  isExistingUserUnavailable
+                )
+                  return;
                 crupdateUser.mutate(pendingCorrection.input);
                 setPendingCorrection(null);
               }}

@@ -23,6 +23,9 @@ const dbMock = {
 };
 
 vi.mock("~/lib/db", () => ({ db: dbMock }));
+vi.mock("@acme/api/org-tree", () => ({
+  logIfOrgTreeExceedsMaxDepth: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("~/lib/current-session", () => ({ getCurrentSession: vi.fn() }));
 
 const { getCurrentSession } = await import("~/lib/current-session");
@@ -164,7 +167,8 @@ describe("POST /api/onboarding", () => {
     const { sql, params } = new PgDialect().sqlToQuery(where);
     expect(sql).toContain('"org_type"');
     expect(sql).toContain('"is_active"');
-    expect(params).toEqual(expect.arrayContaining([7, "region", true]));
+    expect(params).toEqual(expect.arrayContaining([7, "region"]));
+    expect(sql).toContain('"is_active" = false');
   });
 
   it("lets a page loaded before the region field existed finish", async () => {

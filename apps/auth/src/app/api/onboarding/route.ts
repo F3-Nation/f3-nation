@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { orgAndAncestorsAreActive } from "@acme/api/org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "@acme/api/org-tree";
 import { and, eq } from "@acme/db";
 import { orgs, users } from "@acme/db/schema/schema";
 
@@ -58,11 +60,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // The home region is optional here so a page loaded before this field
-  // existed can still finish onboarding. When one is sent it has to be an
-  // active region, the same set /api/regions offers.
+  // Optional region selection preserves profile-only onboarding. Selected
+  // regions must satisfy the same ancestor-activity rule as the picker.
   const homeRegionId = body.homeRegionId ?? null;
   if (homeRegionId !== null) {
+    void logIfOrgTreeExceedsMaxDepth(db);
     // orgs.id is a 32-bit integer; a larger id would make the query throw.
     const validId =
       Number.isInteger(homeRegionId) &&
@@ -76,7 +78,7 @@ export async function POST(request: NextRequest) {
             and(
               eq(orgs.id, homeRegionId),
               eq(orgs.orgType, "region"),
-              eq(orgs.isActive, true),
+              orgAndAncestorsAreActive(orgs.id),
             ),
           )
           .limit(1)

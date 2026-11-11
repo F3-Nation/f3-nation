@@ -10,6 +10,8 @@
         "packages/api/src/lib/user.ts",
         "packages/api/src/org-activity.ts",
         "apps/auth/src/app/api/regions/**",
+        "apps/auth/src/app/api/onboarding/**",
+        "apps/api/characterization/wire/registration-regions.char.test.ts",
         "apps/api/characterization/wire/api-key-roles.char.test.ts",
         "apps/admin/src/app/_components/modal/admin-users-modal.tsx",
         "apps/admin/__tests__/app/_components/modal/admin-users-modal.test.tsx"

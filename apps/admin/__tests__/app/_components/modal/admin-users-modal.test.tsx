@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminUsersModal from "~/app/_components/modal/admin-users-modal";
+import { createQueryClient } from "~/orpc/query-client";
 
 const mocks = vi.hoisted(() => ({
   byId: vi.fn<(input: unknown) => Promise<unknown>>(),
@@ -114,13 +115,13 @@ vi.mock("@acme/ui/virtualized-combobox", () => ({
   ),
 }));
 
-const withProviders = (ui: ReactNode) => (
-  <QueryClientProvider
-    client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-  >
-    {ui}
-  </QueryClientProvider>
-);
+const withProviders = (ui: ReactNode, queryClient = createQueryClient()) => {
+  queryClient.setDefaultOptions({
+    ...queryClient.getDefaultOptions(),
+    queries: { ...queryClient.getDefaultOptions().queries, retry: false },
+  });
+  return <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>;
+};
 
 // A user with no roles and no home region, as user.byId returns them.
 const roleLessUser = {
@@ -153,7 +154,7 @@ describe("AdminUsersModal", () => {
     });
     mocks.byId.mockReturnValue(byId);
     const consoleError = vi.spyOn(console, "error");
-    const queryClient = new QueryClient();
+    const queryClient = createQueryClient();
 
     try {
       render(
@@ -210,9 +211,11 @@ describe("AdminUsersModal", () => {
       user: { ...roleLessUser, homeRegionId: 10, email: "member@example.com" },
       includePii: true,
     });
-    render(withProviders(<AdminUsersModal data={{ id: 42 }} />));
+    const queryClient = createQueryClient();
+    render(withProviders(<AdminUsersModal data={{ id: 42 }} />, queryClient));
     await screen.findByDisplayValue("member@example.com");
     await screen.findByRole("option", { name: "Destination" });
+    return queryClient;
   };
 
   it("confirms the named destination, cancels without saving, then saves once on confirmation", async () => {
@@ -303,6 +306,9 @@ describe("AdminUsersModal", () => {
       await screen.findByRole("button", { name: "Confirm change" }),
     );
     await waitFor(() => expect(mocks.byId).toHaveBeenCalledTimes(2));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Unable to load this member",
+    );
     await waitFor(() =>
       expect(
         screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
@@ -310,6 +316,7 @@ describe("AdminUsersModal", () => {
       ).toBe(true),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.queryByRole("button", { name: "Confirm change" })).toBeNull();
     expect(mocks.crupdate).toHaveBeenCalledTimes(1);
   });
 
@@ -336,7 +343,53 @@ describe("AdminUsersModal", () => {
       ).toBe(true),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.queryByRole("button", { name: "Confirm change" })).toBeNull();
     expect(mocks.crupdate).toHaveBeenCalledTimes(1);
     await act(async () => finish({ id: 42, roles: [] }));
+  });
+  it("blocks confirmation during a reload and discards a superseded confirmation", async () => {
+    const queryClient = await loadMember();
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await screen.findByRole("button", { name: "Confirm change" });
+    let finish!: (value: unknown) => void;
+    mocks.byId.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(async () => {
+      void queryClient.invalidateQueries({ queryKey: ["byId"] });
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", {
+          name: "Confirm change",
+        }).disabled,
+      ).toBe(true),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    expect(mocks.crupdate).not.toHaveBeenCalled();
+    await act(async () =>
+      finish({
+        user: {
+          ...roleLessUser,
+          homeRegionId: 30,
+          email: "member@example.com",
+        },
+        includePii: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Confirm change" }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.getByLabelText<HTMLSelectElement>("Home region picker").value,
+    ).toBe("30");
   });
 });
