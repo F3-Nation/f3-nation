@@ -54,8 +54,12 @@ function installHandler() {
     // switching to its fallback, or its markers would crash the page.
     try {
       previous?.();
-    } catch {
-      // Swallowed deliberately: that handler's failure is its owner's concern.
+    } catch (err) {
+      // reportError hands the error to the page's error handlers as if it
+      // were uncaught, where PostHog's exception autocapture records it,
+      // without throwing here. Browsers without it drop the error rather than
+      // throw from this callback.
+      if ("reportError" in window) window.reportError(err);
     }
     if (authFailed) return;
     authFailed = true;

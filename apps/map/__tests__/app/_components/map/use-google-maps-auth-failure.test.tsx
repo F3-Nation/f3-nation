@@ -3,7 +3,8 @@
  * marker the map mounts or moves afterwards throws. The map unmounts on the
  * signal this hook exposes; these tests pin that the signal fires from
  * Google's `gm_authFailure` callback, survives a remount, keeps any handler
- * already on `window`, and is reported to PostHog once.
+ * already on `window` (reporting its throws as uncaught errors), and is
+ * reported to PostHog once.
  */
 
 import { act, renderHook } from "@testing-library/react";
@@ -42,6 +43,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete window.gm_authFailure;
+  vi.unstubAllGlobals();
 });
 
 describe("useGoogleMapsAuthFailed", () => {
@@ -118,7 +120,25 @@ describe("useGoogleMapsAuthFailed", () => {
     expect(existing).toHaveBeenCalledTimes(1);
   });
 
-  it("still unmounts the map when an existing gm_authFailure handler throws", async () => {
+  it("hands an existing gm_authFailure handler's throw to reportError and still unmounts the map", async () => {
+    const thrown = new Error("third-party handler failed");
+    window.gm_authFailure = () => {
+      throw thrown;
+    };
+    const reportError = vi.fn();
+    vi.stubGlobal("reportError", reportError);
+    const useGoogleMapsAuthFailed = await loadHook();
+    const { result } = renderHook(() => useGoogleMapsAuthFailed());
+
+    fireAuthFailure();
+
+    expect(reportError).toHaveBeenCalledExactlyOnceWith(thrown);
+    expect(result.current).toBe(true);
+    expect(captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it("still unmounts the map when an existing handler throws in a browser without reportError", async () => {
+    expect("reportError" in window).toBe(false);
     window.gm_authFailure = () => {
       throw new Error("third-party handler failed");
     };
