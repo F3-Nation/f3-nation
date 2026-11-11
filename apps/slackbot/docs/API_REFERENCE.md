@@ -120,6 +120,11 @@ Organizations are hierarchical: `nation → sector → territory → area → re
 `logoUrl`, `website`, `email`, `twitter`, `facebook`, `instagram`, `lastAnnualReview`,
 `meta`, `created`, `updated`, `aoCount`, `parentOrgName`, `parentOrgType`
 
+`GET /v1/org` and `GET /v1/org/count` accept optional
+`activeAncestorsOnly=true` to require the organization and all ancestors to be
+active. Omitted or `false` preserves signed-in status filtering; anonymous
+listing always requires active ancestors.
+
 **`orgType` values:** `"ao"` | `"region"` | `"area"` | `"territory"` | `"sector"` | `"nation"`
 
 ---

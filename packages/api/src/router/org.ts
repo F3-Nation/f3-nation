@@ -19,7 +19,11 @@ import {
 import type { AppDb } from "@acme/db/client";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
-import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import {
+  arrayOrSingle,
+  parseSorting,
+  queryBooleanSchema,
+} from "@acme/shared/app/functions";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { ORG_ALL_SORT_IDS } from "@acme/shared/app/org-sorting";
 import type { OrgAllSortId } from "@acme/shared/app/org-sorting";
@@ -69,6 +73,11 @@ const orgFilterSchema = z.object({
     .optional()
     .describe(
       `Filter organizations by status. Matches orgs with ANY of the given statuses (${IsActiveStatus.join(", ")}).`,
+    ),
+  activeAncestorsOnly: queryBooleanSchema
+    .optional()
+    .describe(
+      "If true, return only active organizations with active ancestors, regardless of the status filter. Omitted or false preserves signed-in status filtering; anonymous reads are always active-only.",
     ),
   parentOrgIds: arrayOrSingle(z.coerce.number())
     .optional()
@@ -171,7 +180,9 @@ function buildOrgWhereClause(params: {
 
   return and(
     inArray(org.orgType, input.orgTypes),
-    isAnonymous ? orgAndAncestorsAreActive(org.id) : undefined,
+    isAnonymous || input.activeAncestorsOnly
+      ? orgAndAncestorsAreActive(org.id)
+      : undefined,
     !effectiveStatuses
       ? eq(org.isActive, true)
       : !effectiveStatuses.length ||
@@ -326,7 +337,8 @@ export const orgRouter = {
 
       const { editableOrgIds, isNationAdmin } = editableResult;
 
-      if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
+      if (!ctx.session?.user || input.activeAncestorsOnly)
+        void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const where = buildOrgWhereClause({
         input,
         editableOrgIds,
@@ -438,6 +450,7 @@ export const orgRouter = {
 
       const { editableOrgIds, isNationAdmin } = editableResult;
 
+      if (input.activeAncestorsOnly) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const where = buildOrgWhereClause({
         input,
         editableOrgIds,

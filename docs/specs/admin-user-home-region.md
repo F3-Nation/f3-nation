@@ -72,8 +72,10 @@ the correction event records who made the change.
   Cancelling submits no mutation; confirming submits the chosen destination,
   which is visible on a subsequent authorized read. A `CONFLICT` refreshes the
   member before retrying; a failed refresh blocks resubmission until the member
-  can be loaded again. The existing region picker
-  already lists regions and needs no expansion. The warning must not claim
+  can be loaded again. The home-region picker requests only active regions with
+  active ancestors through the opt-in organization filter. The member's current
+  home region remains visible even when it is no longer eligible for a new
+  assignment, preserving unchanged-value edits. The warning must not claim
   that callers with other qualifying permissions necessarily lose access.
 - **AC-8** — GIVEN the member's home region changes after the exception is
   authorized but before its write, WHEN the stale request attempts to save,

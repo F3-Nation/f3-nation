@@ -5,13 +5,14 @@
  */
 
 import { vi } from "vitest";
+import type * as orgTree from "../org-tree";
 import type * as logger from "../logger";
 
 const mockLimit = vi.hoisted(() => vi.fn());
 const mockLogInfo = vi.hoisted(() => vi.fn());
 const mockDepthScan = vi.hoisted(() => vi.fn());
 vi.mock("../org-tree", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../org-tree")>();
+  const original = await importOriginal<typeof orgTree>();
   return {
     ...original,
     logIfOrgTreeExceedsMaxDepth: mockDepthScan.mockImplementation(

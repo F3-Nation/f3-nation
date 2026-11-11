@@ -16,6 +16,7 @@ import { createQueryClient } from "~/orpc/query-client";
 
 const mocks = vi.hoisted(() => ({
   byId: vi.fn<(input: unknown) => Promise<unknown>>(),
+  orgAll: vi.fn(),
   crupdate: vi.fn<(input: unknown) => Promise<unknown>>(),
 }));
 
@@ -75,15 +76,7 @@ vi.mock("~/orpc/client", () => ({
           ],
           total: 2,
         }),
-      all: () =>
-        Promise.resolve({
-          orgs: [
-            { id: 10, name: "Source" },
-            { id: 20, name: "Destination" },
-            { id: 30, name: "Competing region" },
-          ],
-          total: 3,
-        }),
+      all: mocks.orgAll,
     },
   },
 }));
@@ -139,6 +132,14 @@ const roleLessUser = {
 describe("AdminUsersModal", () => {
   beforeEach(() => {
     mocks.byId.mockReset();
+    mocks.orgAll.mockReset().mockResolvedValue({
+      orgs: [
+        { id: 10, name: "Source" },
+        { id: 20, name: "Destination" },
+        { id: 30, name: "Competing region" },
+      ],
+      total: 3,
+    });
     mocks.crupdate.mockReset().mockResolvedValue({ id: 42, roles: [] });
   });
 
@@ -217,6 +218,45 @@ describe("AdminUsersModal", () => {
     await screen.findByRole("option", { name: "Destination" });
     return queryClient;
   };
+
+  it("requests eligible destinations and keeps a filtered-out current region visible", async () => {
+    mocks.orgAll.mockResolvedValue({
+      orgs: [{ id: 20, name: "Destination" }],
+      total: 1,
+    });
+    mocks.byId.mockResolvedValue({
+      user: {
+        ...roleLessUser,
+        homeRegionId: 10,
+        homeRegion: {
+          homeRegionId: 10,
+          homeRegionName: "Current retired region",
+        },
+        email: "member@example.com",
+      },
+      includePii: true,
+    });
+    render(withProviders(<AdminUsersModal data={{ id: 42 }} />));
+    await screen.findByDisplayValue("member@example.com");
+    await screen.findByRole("option", { name: "Current retired region" });
+    expect(
+      screen.getByLabelText<HTMLSelectElement>("Home region picker").value,
+    ).toBe("10");
+    expect(mocks.orgAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgTypes: ["region"],
+        activeAncestorsOnly: true,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(mocks.crupdate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 42, homeRegionId: 10 }),
+        expect.anything(),
+      ),
+    );
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
 
   it("confirms the named destination, cancels without saving, then saves once on confirmation", async () => {
     await loadMember();

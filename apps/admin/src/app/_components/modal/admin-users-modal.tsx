@@ -107,16 +107,33 @@ export default function UserModal({
   const router = useRouter();
   const { data: regions } = useFetchAllPages({
     path: ["org", "all"],
-    queryKey: ["org.all.everyRegion"],
+    queryKey: ["org.all.activeHomeRegions"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
         orgTypes: ["region"],
+        activeAncestorsOnly: true,
         pageIndex,
         pageSize,
       });
       return { items: orgs, total };
     },
   });
+
+  const homeRegionOptions = (regions ?? []).map((region) => ({
+    value: String(region.id),
+    label: region.name,
+  }));
+  if (
+    user?.homeRegionId != null &&
+    !homeRegionOptions.some(
+      (option) => option.value === String(user.homeRegionId),
+    )
+  ) {
+    homeRegionOptions.push({
+      value: String(user.homeRegionId),
+      label: user.homeRegion?.homeRegionName ?? "Current home region",
+    });
+  }
 
   // Get orgs where user has admin role (required to manage access)
   const { data: accessibleOrgs } = useFetchAllPages({
@@ -507,12 +524,7 @@ export default function UserModal({
                                 ? undefined
                                 : String(field.value)
                             }
-                            options={
-                              regions?.map((region) => ({
-                                value: region.id.toString(),
-                                label: region.name,
-                              })) ?? []
-                            }
+                            options={homeRegionOptions}
                             searchPlaceholder="Select a home region"
                             onSelect={(value) => {
                               if (Array.isArray(value)) {

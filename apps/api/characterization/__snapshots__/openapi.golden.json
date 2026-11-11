@@ -12266,6 +12266,29 @@
           {
             "allowEmptyValue": true,
             "allowReserved": true,
+            "in": "query",
+            "name": "activeAncestorsOnly",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ],
+              "description": "If true, return only active organizations with active ancestors, regardless of the status filter. Omitted or false preserves signed-in status filtering; anonymous reads are always active-only."
+            }
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
             "explode": true,
             "in": "query",
             "name": "parentOrgIds",
@@ -14059,6 +14082,29 @@
               "type": "array"
             },
             "style": "deepObject"
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
+            "name": "activeAncestorsOnly",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ],
+              "description": "If true, return only active organizations with active ancestors, regardless of the status filter. Omitted or false preserves signed-in status filtering; anonymous reads are always active-only."
+            }
           },
           {
             "allowEmptyValue": true,
