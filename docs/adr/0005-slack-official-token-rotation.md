@@ -67,10 +67,10 @@ new service.**
   existing hourly job. Every refresh takes a per-workspace Postgres advisory
   lock, re-reads the row, and refreshes only if the token is still near expiry.
   It saves before releasing the lock. The refresh itself uses `slack_sdk`'s
-  `TokenRotator`. Bolt's own rotation window is set shorter than the store's,
-  so a token reaches Bolt already fresh and Bolt's unlocked refresh only
-  runs as a fallback. Saves never replace a token with one that expires
-  earlier, so a late fallback write can't overwrite a newer token.
+  `TokenRotator`. Bolt never refreshes: the store hands Bolt the access token
+  without its expiry or refresh token, so Bolt treats the installation as
+  non-rotating and its built-in rotation never runs. Saves never replace a
+  token with one that expires earlier.
 - **The TypeScript API only reads.** It reads `slack_spaces.bot_token` as it
   does today and never refreshes. The hourly sweep keeps quiet workspaces'
   tokens fresh, so the API never depends on the Slackbot service being up.
@@ -78,7 +78,9 @@ new service.**
   app, every reader goes through the getter or the API's table read, and the
   same code runs against long-lived tokens. A token with no expiry is treated
   as non-rotating. Existing installations are then moved to rotating tokens
-  with Slack's `oauth.v2.exchange`, without users having to reinstall.
+  with Slack's `oauth.v2.exchange`, without users having to reinstall. Slack
+  exchanges a token only once (`token_already_exchanged`), so if an exchange's
+  response is lost before it is saved, that workspace has to reinstall the app.
 
 ## Alternatives considered
 
@@ -137,8 +139,9 @@ rotation.
   the same workspace. Readers re-read the row and retry once.
 - **The encryption key is a new secret to manage.** Losing it makes every
   refresh token unreadable, so every workspace would have to reinstall.
-  Because each refresh re-encrypts with the current key, a key change needs
-  the old key kept available only until the next sweep has run.
+  A key change re-encrypts every row's refresh token with the new key under
+  the workspace lock, without calling Slack, and the old key is retired only
+  after a check finds no row still encrypted with it.
 - **Anyone who can read the database and the Slackbot's secrets can still mint
   tokens.** Encryption protects database dumps, backups and snapshots, not a
   compromised Slackbot runtime.
