@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import time
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from scripts import hourly_runner, refresh_slack_tokens
 from tests import postgres_fixture
 from tests.scripts.test_f3versary_hourly_runner import silence_other_jobs
+from utilities.slack_tokens import refresh
 
 isolated_postgres = postgres_fixture.isolated_postgres
 
@@ -104,6 +106,41 @@ def test_sweep_continues_after_failure(isolated_postgres, monkeypatch, caplog):
     assert len(seen) == 2
     assert result == {"refreshed": 1, "failed": 1, "skipped": 0}
     assert "secret-looking message" not in caplog.text
+    failed = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
+    assert [r.json_fields for r in failed] == [
+        {"event": "slack.token.refresh_failed", "team_id": "T_A", "path": "sweep", "error_type": "RuntimeError"}
+    ]
+    assert failed[0].levelno == logging.ERROR
+    [complete] = [r for r in caplog.records if r.getMessage() == "slack.token.sweep_complete"]
+    assert complete.levelno == logging.WARNING
+    assert complete.json_fields == {"event": "slack.token.sweep_complete", "refreshed": 1, "failed": 1, "skipped": 0}
+
+
+@postgres_fixture.requires_postgres
+def test_sweep_does_not_log_failures_refresh_already_logged(isolated_postgres, monkeypatch, caplog):
+    _seed(isolated_postgres, "T_A", timedelta(hours=1))
+
+    def fake_refresh(team_id, **_):
+        raise refresh.TokenSaveError("saving the bot token failed with OperationalError")
+
+    monkeypatch.setattr(refresh_slack_tokens, "refresh_if_needed", fake_refresh)
+
+    assert refresh_slack_tokens.refresh_expiring_tokens() == {"refreshed": 0, "failed": 1, "skipped": 0}
+    assert not [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
+
+
+@postgres_fixture.requires_postgres
+def test_sweep_complete_is_info_without_failures(isolated_postgres, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    _seed(isolated_postgres, "T_A", timedelta(hours=1))
+    monkeypatch.setattr(
+        refresh_slack_tokens, "refresh_if_needed", lambda team_id, **_: _bot(team_id, int(time.time()) + 43200)
+    )
+
+    refresh_slack_tokens.refresh_expiring_tokens()
+
+    [complete] = [r for r in caplog.records if r.getMessage() == "slack.token.sweep_complete"]
+    assert complete.levelno == logging.INFO
 
 
 @postgres_fixture.requires_postgres

@@ -15,11 +15,23 @@ from datetime import datetime, timezone
 
 from f3_data_models.models import SlackSpace
 from f3_data_models.utils import session_scope
+from slack_sdk.errors import SlackClientError
 from sqlalchemy import select
 
-from utilities.slack_tokens.refresh import SWEEP_WINDOW_MINUTES, _to_epoch, refresh_if_needed
+from utilities.slack_tokens.crypto import TokenDecryptError
+from utilities.slack_tokens.refresh import (
+    SWEEP_WINDOW_MINUTES,
+    TokenSaveError,
+    _to_epoch,
+    log_refresh_failure,
+    refresh_if_needed,
+)
 
 logger = logging.getLogger(__name__)
+
+# `refresh_if_needed` logs these itself (a decrypt failure, a failed save, or a
+# Slack or network error from the rotation call); anything else is logged here.
+_LOGGED_BY_REFRESH = (TokenDecryptError, TokenSaveError, SlackClientError, OSError)
 
 
 def refresh_expiring_tokens() -> dict[str, int]:
@@ -27,14 +39,18 @@ def refresh_expiring_tokens() -> dict[str, int]:
 
     Returns counts of workspaces processed:
 
-    - `refreshed`: the stored token's expiry changed. Every refresh issues a
-      new expiry and a token-less comparison keeps this script out of the
-      token-access boundary.
-    - `skipped`: selected, but no refresh was needed by the time its lock was
-      held (another process refreshed first, or the lock timed out).
-    - `failed`: refreshing raised. `refresh_if_needed` has already logged
-      `slack.token.refresh_failed` or `slack.token.decrypt_failed` with the
-      error type.
+    - `refreshed`: the expiry returned differs from the one selected, so the
+      token was refreshed, by this sweep or by another process after the
+      selection. Every refresh issues a new expiry, and comparing expiries
+      rather than tokens keeps this script out of the token-access boundary.
+    - `skipped`: the expiry is unchanged (the lock timed out, or the save guard
+      or Slack's rotator left the token as it was), or the row no longer holds
+      a token.
+    - `failed`: refreshing raised. Each failure is logged with the error type
+      only, as `slack.token.refresh_failed` or `slack.token.decrypt_failed`.
+
+    `slack.token.sweep_complete` carries the counts, at WARNING when any
+    workspace failed.
 
     One workspace's failure never stops the others. Non-rotating rows have no
     expiry and are never selected.
@@ -52,7 +68,9 @@ def refresh_expiring_tokens() -> dict[str, int]:
     for team_id, old_expiry in due:
         try:
             bot = refresh_if_needed(team_id, minutes_before_expiration=SWEEP_WINDOW_MINUTES, path="sweep")
-        except Exception:
+        except Exception as e:
+            if not isinstance(e, _LOGGED_BY_REFRESH):
+                log_refresh_failure(team_id, e, path="sweep")
             counts["failed"] += 1
             continue
         if bot is not None and bot.bot_token_expires_at != old_expiry:
@@ -60,7 +78,8 @@ def refresh_expiring_tokens() -> dict[str, int]:
         else:
             counts["skipped"] += 1
 
-    logger.info(
+    logger.log(
+        logging.WARNING if counts["failed"] else logging.INFO,
         "slack.token.sweep_complete",
         extra={"json_fields": {"event": "slack.token.sweep_complete", **counts}},
     )

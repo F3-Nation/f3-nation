@@ -8,8 +8,9 @@ refreshes, so two unserialized refreshes can each save a token the other just
 revoked. The transaction-scoped lock is released by commit or rollback, so a
 pooled connection never keeps it after an exception.
 
-`refresh_if_needed` is the only caller of `decrypt_refresh_token`. Every `Bot`
-this module returns has `bot_refresh_token=None`.
+The refresh token is decrypted only by `refresh_if_needed`, to call Slack, and
+by `crypto.reencrypt_refresh_token` for the re-key CLI, which never sees the
+plaintext. Every `Bot` this module returns has `bot_refresh_token=None`.
 """
 
 import logging
@@ -192,11 +193,6 @@ def write_locked_row(row: SlackSpace, bot: Bot, *, path: str) -> bool:
     _write(row, bot)
     _flush(session, row.team_id, path)
     return True
-
-
-def log_save_failure(team_id: str, error: Exception, *, path: str) -> None:
-    """Log `slack.token.refresh_failed` with the error's type and Slack error code only."""
-    _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **_error_fields(error))
 
 
 def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = None) -> bool:
