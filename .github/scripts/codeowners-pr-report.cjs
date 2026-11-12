@@ -408,10 +408,11 @@ function buildReport(
  * Reads whose turn each PR is for every board, then builds the report.
  * `sources` is `[{ owner, repo, board, base? }]`: pr-triage's JSON for each
  * repo, and where its branch rules and team live (see `collectFacts()`).
- * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. `extraLists` and
- * `headerExtras`, when functions, get `(board, factsByUrl, slackIds)` for the
- * merged board and return `buildReport()`'s option of that name. Other options pass
- * through to `buildReport()`. Returns `{ report, notes }`, where `notes` are
+ * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. `extraLists`,
+ * `headerExtras` and `boardHint`, when functions, get
+ * `(board, factsByUrl, slackIds)` for the merged board and return
+ * `buildReport()`'s option of that name. Other options pass through to
+ * `buildReport()`. Returns `{ report, notes }`, where `notes` are
  * the warnings, each once, which the report also shows.
  */
 async function assembleReport({
@@ -421,6 +422,7 @@ async function assembleReport({
   warnings = [],
   extraLists = [],
   headerExtras = [],
+  boardHint,
   ...options
 }) {
   const notes = [...warnings];
@@ -454,6 +456,8 @@ async function assembleReport({
       ...options,
       extraLists: resolve(extraLists),
       headerExtras: resolve(headerExtras),
+      // Left out when unset, so buildReport()'s default applies.
+      ...(boardHint === undefined ? {} : { boardHint: resolve(boardHint) }),
       slackIds: ids,
       warnings: uniqueNotes,
     }),

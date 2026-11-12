@@ -410,7 +410,8 @@ async function buildAdvisoryReport({
     capLists: false,
     title: "Security Advisory Report",
     emptyText: "There are no open security advisories.",
-    boardHint: `Run by @${login} with the \`${SKILL}\` agent skill`,
+    boardHint: (board, factsByUrl, slackIds) =>
+      `Run by ${mention(login, slackIds)} with the \`${SKILL}\` agent skill`,
   });
   return { report, messages: splitMessages(toSlackMarkdown(report)) };
 }

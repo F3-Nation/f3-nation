@@ -643,6 +643,19 @@ test("no open advisories gives the empty message", async () => {
   ]);
 });
 
+test("the footer mentions a runner who is in CODEOWNERS_SLACK_IDS", async () => {
+  const result = await buildAdvisoryReport({
+    github: fakeGithub({ routes: slackIdsRoute }),
+    triage: () => assert.fail("nothing to triage"),
+    now: NOW,
+    login: "dan",
+  });
+  assert.match(
+    result.messages[0],
+    /\nRun by <@U0DAN> with the `security-advisory-report` agent skill · /,
+  );
+});
+
 test("a fork that can't be triaged stops the whole report", async () => {
   const github = fakeGithub({
     routes: slackIdsRoute,
