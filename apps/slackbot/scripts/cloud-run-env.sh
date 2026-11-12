@@ -42,7 +42,6 @@ declare -A SECRET_MAP=(
   [F3_API_KEY]="f3-api-key"
   [MAP_REVALIDATION_KEY]="map-revalidation-key"
   [STRAVA_CLIENT_SECRET]="strava-client-secret"
-  [ADMIN_BOT_TOKEN]="admin-bot-token"
   [EMAIL_SERVER]="email-server"
 )
 
@@ -62,6 +61,7 @@ ENV_FILE_VARS=(
   DATABASE_SCHEMA
   ACHIEVEMENTS_ALPHA_TESTING_ORG_IDS
   ADMIN_CHANNEL_ID
+  ADMIN_TEAM_ID
   STRAVA_CLIENT_ID
   HOME_REGION_NUDGE_DAY
   HOME_REGION_NUDGE_HOUR
@@ -302,10 +302,16 @@ for var in "${!PLAIN_VARS[@]}"; do
 done
 
 # Per-environment env vars (from env file, not secrets)
+# --update-env-vars never removes a key, so an unset ADMIN_TEAM_ID goes to
+# --remove-env-vars, and ADMIN_BOT_TOKEN (replaced by ADMIN_TEAM_ID) leaves the
+# running service and job through --remove-secrets.
+REMOVE_ENV_VARS=()
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
   [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
+  [[ -z "$value" && "$var" == "ADMIN_TEAM_ID" ]] && REMOVE_ENV_VARS+=("$var")
 done
+REMOVE_SECRETS_ARG="ADMIN_BOT_TOKEN"
 
 # Deployment classification is derived from the selected target, never from
 # arbitrary values in the env file or the caller's shell.
@@ -341,11 +347,18 @@ join_dict_args() {
 UPDATE_ENV_VARS_ARG="$(join_dict_args "${UPDATE_ARGS[@]}")"
 UPDATE_SECRETS_ARG="$(join_dict_args "${SECRET_ARGS[@]}")"
 
+REMOVE_ENV_FLAGS=()
+if [[ ${#REMOVE_ENV_VARS[@]} -gt 0 ]]; then
+  REMOVE_ENV_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ENV_VARS[*]}")")
+fi
+
 gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
   --update-env-vars "$UPDATE_ENV_VARS_ARG" \
   --update-secrets "$UPDATE_SECRETS_ARG" \
+  --remove-secrets "$REMOVE_SECRETS_ARG" \
+  ${REMOVE_ENV_FLAGS[@]+"${REMOVE_ENV_FLAGS[@]}"} \
   --quiet
 
 if gcloud run jobs describe "$SCRIPTS_JOB_NAME" \
@@ -357,6 +370,8 @@ if gcloud run jobs describe "$SCRIPTS_JOB_NAME" \
     --region "$REGION" \
     --update-env-vars "$UPDATE_ENV_VARS_ARG" \
     --update-secrets "$UPDATE_SECRETS_ARG" \
+    --remove-secrets "$REMOVE_SECRETS_ARG" \
+    ${REMOVE_ENV_FLAGS[@]+"${REMOVE_ENV_FLAGS[@]}"} \
     --quiet
 else
   echo "WARNING: Cloud Run Job $SCRIPTS_JOB_NAME does not exist in $PROJECT; skipping job env update."

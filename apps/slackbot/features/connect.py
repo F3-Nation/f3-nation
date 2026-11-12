@@ -56,6 +56,26 @@ def _get_requester_slack_space(team_id):
     return slack_space or None
 
 
+def _admin_client(logger: Logger):
+    """Client for the admin workspace named by ADMIN_TEAM_ID, or None when admin notifications aren't configured."""
+    admin_team_id = os.environ.get("ADMIN_TEAM_ID")
+    if not admin_team_id:
+        logger.warning(
+            "slack.token.admin_team_missing",
+            extra={"json_fields": {"event": "slack.token.admin_team_missing", "reason": "unset"}},
+        )
+        return None
+    admin_client = slack_client_for_team(admin_team_id)
+    if admin_client is None:
+        logger.warning(
+            "slack.token.admin_team_missing",
+            extra={
+                "json_fields": {"event": "slack.token.admin_team_missing", "reason": "no_row", "team_id": admin_team_id}
+            },
+        )
+    return admin_client
+
+
 def _notify_admin_request_unverified(body: dict, logger: Logger):
     channel_id = (
         safe_get(body, "container", "channel_id")
@@ -63,11 +83,13 @@ def _notify_admin_request_unverified(body: dict, logger: Logger):
         or safe_get(body, "channel", "channel_id")
     )
     user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
-    admin_token = os.environ.get("ADMIN_BOT_TOKEN")
-    if not channel_id or not user_id or not admin_token:
+    if not channel_id or not user_id:
+        return
+    admin_client = _admin_client(logger)
+    if admin_client is None:
         return
     try:
-        WebClient(token=admin_token).chat_postEphemeral(
+        admin_client.chat_postEphemeral(
             channel=channel_id,
             user=user_id,
             text=(
@@ -295,11 +317,12 @@ def handle_existing_region_selection(
             ]
         ),
     ]
-    if os.environ.get("ADMIN_BOT_TOKEN") and os.environ.get("ADMIN_CHANNEL_ID"):
+    admin_channel_id = os.environ.get("ADMIN_CHANNEL_ID")
+    send_client = _admin_client(logger) if admin_channel_id else None
+    if send_client is not None:
         try:
-            send_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"))
             send_client.chat_postMessage(
-                channel=os.environ.get("ADMIN_CHANNEL_ID"),
+                channel=admin_channel_id,
                 text="Region Connection Request",
                 blocks=blocks,
                 metadata=metadata,
@@ -427,7 +450,8 @@ def handle_approve_connection(
         )
         message_ts = safe_get(body, "container", "message_ts") or safe_get(body, "message", "ts")
 
-        if channel_id and message_ts and os.environ.get("ADMIN_BOT_TOKEN"):
+        admin_client = _admin_client(logger) if channel_id and message_ts else None
+        if admin_client is not None:
             admin_blocks = [
                 HeaderBlock(text="Region Connection Request - Approved"),
                 SectionBlock(
@@ -438,7 +462,6 @@ def handle_approve_connection(
                     )
                 ),
             ]
-            admin_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"))
             admin_client.chat_update(
                 channel=channel_id,
                 ts=message_ts,

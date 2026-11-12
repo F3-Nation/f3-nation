@@ -250,13 +250,14 @@ def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
         assert env_assignments.count(f"SLACKBOT_ENV={classification}") == 1
         assert env_assignments.count(f"EMAIL_FROM={sender}") == 1
         assert not any(assignment.startswith("EMAIL_SERVER=") for assignment in env_assignments)
+        assert call[call.index("--remove-env-vars") + 1] == "ADMIN_TEAM_ID"
 
         secret_arg = call[call.index("--update-secrets") + 1]
         assert secret_arg.startswith("^__F3_ENV_DELIM__^")
         secret_assignments = [part.lstrip("^") for part in secret_arg.split("__F3_ENV_DELIM__")]
         assert secret_assignments.count("EMAIL_SERVER=email-server:latest") == 1
         assert not any(assignment.startswith("SENDGRID_API_KEY=") for assignment in secret_assignments)
-        assert "--remove-secrets" not in call
+        assert call[call.index("--remove-secrets") + 1] == "ADMIN_BOT_TOKEN"
 
     secret_pushes = [call for call in calls if call[:3] == ["secrets", "versions", "add"]]
     assert len(secret_pushes) == 1
@@ -301,7 +302,7 @@ def test_legacy_secret_rollback_access_uses_metadata_and_grants_only(
     update_calls = [call for call in calls if call[:3] in (["run", "services", "update"], ["run", "jobs", "update"])]
     assert len(update_calls) == 2
     for call in update_calls:
-        assert "--remove-secrets" not in call
+        assert call[call.index("--remove-secrets") + 1] == "ADMIN_BOT_TOKEN"
         assert "SENDGRID_API_KEY" not in call[call.index("--update-secrets") + 1]
 
 
