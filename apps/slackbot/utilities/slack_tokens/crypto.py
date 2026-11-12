@@ -8,9 +8,14 @@ Failures raise `TokenDecryptError` with a fixed message and no chained cause,
 so key material and ciphertext never reach logs or tracebacks.
 """
 
+import logging
 import os
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
+
+from utilities import constants
+
+logger = logging.getLogger(__name__)
 
 _ENV_VAR = "SLACK_TOKEN_ENCRYPTION_KEY"
 
@@ -44,3 +49,21 @@ def decrypt_refresh_token(ciphertext: str) -> str:
     except (InvalidToken, ValueError, TypeError):
         pass
     raise TokenDecryptError("refresh token could not be decrypted")
+
+
+def check_encryption_key() -> bool:
+    """Log `slack.token.encryption_key_invalid` at ERROR if the key list is unset or unparseable.
+
+    Called where the app and the hourly job start, so a missing or broken key
+    shows up at deploy time instead of at the first refresh. Skipped in local
+    development, where the key is optional. Never logs key material.
+    """
+    if constants.LOCAL_DEVELOPMENT:
+        return True
+    try:
+        _cipher()
+    except TokenDecryptError:
+        event = "slack.token.encryption_key_invalid"
+        logger.error(event, extra={"json_fields": {"event": event}})
+        return False
+    return True

@@ -1,8 +1,12 @@
+import logging
+
 import pytest
 from cryptography.fernet import Fernet
 
+from utilities import constants
 from utilities.slack_tokens.crypto import (
     TokenDecryptError,
+    check_encryption_key,
     decrypt_refresh_token,
     encrypt_refresh_token,
 )
@@ -76,3 +80,41 @@ def test_malformed_key_raises_without_leaking_it(monkeypatch):
         encrypt_refresh_token("xoxe-1-abc")
     assert "super-secret" not in str(exc.value)
     assert exc.value.__cause__ is None
+
+
+def _key_invalid_records(caplog):
+    return [r for r in caplog.records if r.getMessage() == "slack.token.encryption_key_invalid"]
+
+
+@pytest.mark.parametrize("value", [None, "", "set-yourself", "not-a-key,also-not"])
+def test_check_encryption_key_logs_error_when_unset_or_unparseable(monkeypatch, caplog, value):
+    monkeypatch.setattr(constants, "LOCAL_DEVELOPMENT", False)
+    if value is None:
+        monkeypatch.delenv(ENV, raising=False)
+    else:
+        monkeypatch.setenv(ENV, value)
+
+    with caplog.at_level(logging.ERROR):
+        assert check_encryption_key() is False
+
+    [record] = _key_invalid_records(caplog)
+    assert record.levelno == logging.ERROR
+    assert record.json_fields == {"event": "slack.token.encryption_key_invalid"}
+    if value:
+        assert value not in caplog.text
+
+
+def test_check_encryption_key_accepts_a_key_list(monkeypatch, caplog):
+    monkeypatch.setattr(constants, "LOCAL_DEVELOPMENT", False)
+    monkeypatch.setenv(ENV, f"{_key()},{_key()}")
+
+    assert check_encryption_key() is True
+    assert _key_invalid_records(caplog) == []
+
+
+def test_check_encryption_key_is_skipped_in_local_development(monkeypatch, caplog):
+    monkeypatch.setattr(constants, "LOCAL_DEVELOPMENT", True)
+    monkeypatch.delenv(ENV, raising=False)
+
+    assert check_encryption_key() is True
+    assert _key_invalid_records(caplog) == []

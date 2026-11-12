@@ -126,6 +126,12 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+# The env file is the only source for these values: a var it omits stays unset
+# rather than keeping a value inherited from the caller's shell.
+for var in "${ENV_FILE_VARS[@]}" "${!SECRET_MAP[@]}"; do
+  unset "$var"
+done
+
 # Safely parse the env file without sourcing to prevent execution of arbitrary shell code
 while IFS= read -r line || [[ -n "$line" ]]; do
   # Skip blank lines and comments
@@ -142,6 +148,28 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   fi
 done < "$ENV_FILE"
 unset _env_key _env_val
+
+# Validate SLACK_TOKEN_ENCRYPTION_KEY before any cloud call. A pushed bad value
+# makes every stored refresh token unreadable. Each comma-separated entry must
+# have a Fernet key's shape (32 bytes, url-safe base64); a placeholder fails.
+# Empty leaves the existing secret unchanged.
+validate_token_encryption_key() {
+  local value="${SLACK_TOKEN_ENCRYPTION_KEY:-}" entry
+  local -a entries
+  [[ -z "$value" ]] && return 0
+  IFS=',' read -ra entries <<<"$value"
+  [[ "$value" == *, ]] && entries+=("")
+  for entry in "${entries[@]}"; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"
+    entry="${entry%"${entry##*[![:space:]]}"}"
+    if [[ ! "$entry" =~ ^[A-Za-z0-9_-]{43}=$ ]]; then
+      echo "Error: SLACK_TOKEN_ENCRYPTION_KEY must be comma-separated Fernet keys (44-char url-safe base64)."
+      echo "Generate one with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+      return 1
+    fi
+  done
+}
+validate_token_encryption_key || exit 1
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
@@ -188,6 +216,11 @@ push_secret() {
 
   echo "  UPDATE: $secret_id"
   printf '%s' "$value" | gcloud secrets versions add "$secret_id" --project "$project" --data-file=-
+
+  # Earlier versions of the token encryption key are kept: a version holding a
+  # key that rows are still encrypted with is the only way to read them, and
+  # losing it forces every rotating workspace to reinstall.
+  [[ "$secret_id" == "slack-token-encryption-key" ]] && return 0
 
   # Delete all previous versions (keep only the one we just created)
   latest="$(gcloud secrets versions list "$secret_id" --project "$project" \
