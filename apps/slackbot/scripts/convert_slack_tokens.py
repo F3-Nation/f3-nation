@@ -1,8 +1,16 @@
 """Convert workspaces' long-lived bot tokens to rotating ones with `oauth.v2.exchange`.
 
-Run only after token rotation is enabled on the Slack app. Conversion can't be
-undone, and Slack exchanges a token only once: a workspace whose exchange
-response is lost before it is saved has to reinstall the app.
+Conversion can't be undone, and Slack exchanges a token only once: a
+workspace whose exchange response is lost before it is saved has to reinstall
+the app. Run it only once all of these hold:
+
+- token rotation is enabled on the Slack app;
+- the settings-JSON `bot_token` copy is gone (the migration that drops it has
+  run), so no long-lived copy outlives the conversion;
+- the GCS installation files have been imported and deleted;
+- on production, staging has run on rotating tokens for its soak period.
+
+The settings-JSON copy is also checked per workspace.
 
     python scripts/convert_slack_tokens.py (--team-id T... [--team-id T...] | --all --limit N) [--dry-run]
 
@@ -14,6 +22,8 @@ exchange is the last step before the write. Each workspace prints one line,
 - `converted`: the rotating token, its expiry and the encrypted refresh token
   are committed.
 - `skipped`: the row already holds a rotating token.
+- `blocked:settings_token`: the row's `settings` JSON still holds a
+  `bot_token`; nothing is exchanged and the row is unchanged.
 - `would_convert`: `--dry-run` only; the row would be exchanged.
 - `failed:<slack error code>`: Slack rejected the exchange; the row is
   unchanged. `failed:no_token` means there is no row or no stored token.
@@ -25,7 +35,7 @@ exchange is the last step before the write. Each workspace prints one line,
   the exchange call itself, Slack may still have exchanged the token.
 
 `--dry-run` calls nothing and writes nothing. Exits 1 if any workspace is
-`failed`, `needs_reinstall` or `error`. Tokens are never printed or logged.
+`blocked`, `failed`, `needs_reinstall` or `error`. Tokens are never printed or logged.
 """
 
 import argparse
@@ -45,7 +55,7 @@ from sqlalchemy import select
 from utilities import constants
 from utilities.slack_tokens.refresh import (
     locked_row,
-    log_save_failure,
+    log_refresh_failure,
     save_bot_locked,
     write_locked_row,
 )
@@ -95,7 +105,7 @@ def _save_retry(team_id: str, bot: Optional[Bot]) -> str:
                 return "converted"
         except Exception as e:
             # Logs the error type only: the exception text can embed the token.
-            log_save_failure(team_id, e, path=f"{_PATH}.save_retry")
+            log_refresh_failure(team_id, e, path=f"{_PATH}.save_retry")
     return "needs_reinstall"
 
 
@@ -108,6 +118,9 @@ def _convert_team(team_id: str, dry_run: bool) -> str:
                 return "failed:no_token"
             if row.bot_token_expires_at is not None:
                 return "skipped"
+            if isinstance(row.settings, dict) and row.settings.get("bot_token") is not None:
+                # Converting would leave this long-lived copy valid in the database.
+                return "blocked:settings_token"
             if dry_run:
                 return "would_convert"
             try:
@@ -156,7 +169,7 @@ def main(argv: list[str]) -> int:
         except Exception as e:
             # The class name only: exception text can embed request or token data.
             status = f"error:{type(e).__name__}"
-        failed = failed or status.startswith(("failed", "needs_reinstall", "error"))
+        failed = failed or status.startswith(("blocked", "failed", "needs_reinstall", "error"))
         print(f"{team_id} {status}")
     return 1 if failed else 0
 

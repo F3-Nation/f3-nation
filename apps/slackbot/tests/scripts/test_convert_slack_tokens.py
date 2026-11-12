@@ -73,7 +73,7 @@ def exchange(monkeypatch):
     return fake
 
 
-def _seed(engine, team_id, *, token=LONG_LIVED, expires_in=None):
+def _seed(engine, team_id, *, token=LONG_LIVED, expires_in=None, settings=None):
     with Session(engine) as session:
         session.add(
             SlackSpace(
@@ -84,6 +84,7 @@ def _seed(engine, team_id, *, token=LONG_LIVED, expires_in=None):
                 bot_user_id="U_OLD",
                 bot_scopes="chat:write",
                 bot_token_expires_at=None if expires_in is None else datetime.now(timezone.utc) + expires_in,
+                settings=settings,
             )
         )
         session.commit()
@@ -111,6 +112,23 @@ def test_converts_non_rotating_row(isolated_postgres, exchange, capsys):
     assert capsys.readouterr().out.splitlines() == ["T1 converted"]
     assert exchange.tokens == [LONG_LIVED]
     _assert_converted(isolated_postgres, "T1")
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_settings_token_copy_blocks_conversion(isolated_postgres, exchange, capsys, dry_run):
+    _seed(isolated_postgres, "T30", settings={"bot_token": LONG_LIVED, "region": "R"})
+    _seed(isolated_postgres, "T31", settings={"bot_token": None, "region": "R"})
+    before = _row(isolated_postgres, "T30")
+
+    argv = ["--team-id", "T30", "--team-id", "T31"] + (["--dry-run"] if dry_run else [])
+    assert converter.main(argv) == 1
+
+    expected_t31 = "would_convert" if dry_run else "converted"
+    out = capsys.readouterr().out
+    assert out.splitlines() == ["T30 blocked:settings_token", f"T31 {expected_t31}"]
+    assert LONG_LIVED not in out
+    assert exchange.tokens == ([] if dry_run else [LONG_LIVED])
+    assert _row(isolated_postgres, "T30") == before
 
 
 def test_skips_rotating_row(isolated_postgres, exchange, capsys):
