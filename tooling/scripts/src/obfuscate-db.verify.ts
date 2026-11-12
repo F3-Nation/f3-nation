@@ -49,12 +49,14 @@ import {
   unreviewedColumns,
 } from "./obfuscate-db.columns";
 import { isLoremRich, isLoremText } from "./obfuscate-db.lorem";
-import { quoteQualified } from "./db-url";
+import { libpqEnv, quoteIdent, quoteQualified } from "./db-url";
+import type { FkEdge } from "./staging-refresh.checks";
 import { fkEdges, planKeptFks } from "./staging-refresh.checks";
 import {
   PRESERVED_TABLES,
   SNAPSHOT_EMAIL_SINK,
   SNAPSHOT_TABLES,
+  SNAPSHOT_WINDOW,
 } from "./staging-refresh.config";
 import {
   dropFksAndTruncate,
@@ -847,15 +849,35 @@ async function sweepForEmails(
 
 const SNAPSHOT_DB = "f3_snapshot";
 const SNAPSHOT_COPY_DB = "f3_snapshot_copy";
+const SNAPSHOT_LOAD_DB = "f3_snapshot_load";
+const { daysBack: WINDOW_BACK, daysAhead: WINDOW_AHEAD } = SNAPSHOT_WINDOW;
 const dbUrl = (db: string) => {
   const url = new URL(DATABASE_URL);
   url.pathname = `/${db}`;
   return url.toString();
 };
 
+/** Rows of `e.table` whose non-null FK columns match no `e.refTable` row. */
+async function danglingFor(sql: postgres.Sql, e: FkEdge): Promise<number> {
+  const match = e.columns
+    .map((c, i) => `r.${quoteIdent(e.refColumns[i]!)} = t.${quoteIdent(c)}`)
+    .join(" AND ");
+  const set = e.columns
+    .map((c) => `t.${quoteIdent(c)} IS NOT NULL`)
+    .join(" AND ");
+  const [row] = await sql.unsafe<{ n: number }[]>(
+    `SELECT count(*)::int AS n FROM ${quoteQualified(e.table)} t
+     WHERE ${set} AND NOT EXISTS (
+       SELECT 1 FROM ${quoteQualified(e.refTable)} r WHERE ${match})`,
+  );
+  return row?.n ?? 0;
+}
+
 /**
  * A clone of the planted, not yet obfuscated sandbox for the snapshot
- * checks, plus an empty database to stand in for the refresh's copy.
+ * checks, an empty database to stand in for the refresh's copy, and a
+ * second clone to stand in for a developer's seeded database that the
+ * published file is loaded into.
  * CREATE DATABASE … TEMPLATE needs no other session on the template.
  */
 async function cloneForSnapshot(): Promise<void> {
@@ -866,6 +888,9 @@ async function cloneForSnapshot(): Promise<void> {
   try {
     await admin.unsafe(`CREATE DATABASE ${SNAPSHOT_DB} TEMPLATE ${DB_NAME}`);
     await admin.unsafe(`CREATE DATABASE ${SNAPSHOT_COPY_DB}`);
+    await admin.unsafe(
+      `CREATE DATABASE ${SNAPSHOT_LOAD_DB} TEMPLATE ${DB_NAME}`,
+    );
   } finally {
     await admin.end();
   }
@@ -899,9 +924,15 @@ async function verifySnapshotMode(
   const work = mkdtempSync(path.join(os.tmpdir(), "f3-snapshot-verify-"));
   try {
     // Instances on both sides of each edge of the window, with link rows,
-    // blasts and counts.
+    // blasts, counts and an attendance row (with a type and free-text meta).
     const planted = new Map<number, number>();
-    for (const offset of [-31, -30, 90, 91]) {
+    const plantedAttendance = new Map<number, number>();
+    for (const offset of [
+      -WINDOW_BACK - 1,
+      -WINDOW_BACK,
+      WINDOW_AHEAD,
+      WINDOW_AHEAD + 1,
+    ]) {
       const [row] = await snap<{ id: number }[]>`
         INSERT INTO event_instances (org_id, is_active, highlight, start_date,
           name, preblast, backblast, pax_count, fng_count)
@@ -915,6 +946,32 @@ async function verifySnapshotMode(
       await snap`
         INSERT INTO event_instances_x_event_types (event_instance_id, event_type_id)
         SELECT ${row.id}, min(id) FROM event_types`;
+      const [att] = await snap<{ id: number }[]>`
+        INSERT INTO attendance (user_id, event_instance_id, is_planned, meta)
+        SELECT min(id), ${row.id}, false,
+          '{"note": "Jane Smith carpools from 123 Main Street"}'::jsonb
+        FROM users
+        RETURNING id`;
+      if (!att) throw new Error("Harness bug: could not plant attendance");
+      plantedAttendance.set(offset, att.id);
+      await snap`
+        INSERT INTO attendance_x_attendance_types (attendance_id, attendance_type_id)
+        SELECT ${att.id}, min(id) FROM attendance_types`;
+    }
+    // The local seed has no achievements, so plant one to award.
+    const [award] = await snap<{ n: number }[]>`
+      WITH ach AS (
+        INSERT INTO achievements (name) VALUES ('Snapshot probe') RETURNING id),
+      ins AS (
+        INSERT INTO achievements_x_users (achievement_id, user_id, award_year,
+          award_period, meta)
+        SELECT ach.id, (SELECT min(id) FROM users), 1901, 1,
+          '{"citation": "Jane Smith, 123 Main Street"}'::jsonb
+        FROM ach
+        RETURNING 1)
+      SELECT count(*)::int AS n FROM ins`;
+    if (award?.n !== 1) {
+      throw new Error("Harness bug: could not plant an achievement award");
     }
 
     // Inside the window: a private series and one under it, a private
@@ -948,6 +1005,10 @@ async function verifySnapshotMode(
       await snap`
         INSERT INTO event_instances_x_event_types (event_instance_id, event_type_id)
         SELECT ${row.id}, min(id) FROM event_types`;
+      await snap`
+        INSERT INTO attendance (user_id, event_instance_id, is_planned, meta)
+        SELECT min(id), ${row.id}, false, '{"note": "private probe"}'::jsonb
+        FROM users`;
     }
     await snap`
       UPDATE users
@@ -1009,7 +1070,7 @@ async function verifySnapshotMode(
       WHERE id = (SELECT min(id) FROM orgs)`;
     await snap`
       UPDATE event_instances SET location_id = ${locs.shared}
-      WHERE id IN (${privateInstances[0]!}, ${planted.get(90)!})`;
+      WHERE id IN (${privateInstances[0]!}, ${planted.get(WINDOW_AHEAD)!})`;
 
     const trim = await trimSnapshot(snap);
     const ids = [...planted.values()];
@@ -1026,14 +1087,15 @@ async function verifySnapshotMode(
         AND event_instance_id NOT IN (SELECT id FROM event_instances)`;
     const [outside] = await snap<{ n: number }[]>`
       SELECT count(*)::int AS n FROM event_instances
-      WHERE start_date NOT BETWEEN current_date - 30 AND current_date + 90`;
+      WHERE start_date NOT BETWEEN current_date - ${WINDOW_BACK}::int
+        AND current_date + ${WINDOW_AHEAD}::int`;
     const [blasts] = await snap<{ n: number }[]>`
       SELECT count(*)::int AS n FROM event_instances
       WHERE preblast IS NOT NULL OR backblast IS NOT NULL
         OR preblast_rich IS NOT NULL OR backblast_rich IS NOT NULL`;
-    const keptIds = [planted.get(-30), planted.get(90)];
+    const keptIds = [planted.get(-WINDOW_BACK), planted.get(WINDOW_AHEAD)];
     check(
-      "snapshot trim keeps exactly the -30..+90 day window, with link rows and counts",
+      `snapshot trim keeps exactly the -${WINDOW_BACK}..+${WINDOW_AHEAD} day window, with link rows and counts`,
       survivors.length === 2 &&
         survivors.every(
           (r, i) =>
@@ -1082,6 +1144,36 @@ async function verifySnapshotMode(
       metaLeft?.n === 0,
       `${metaLeft?.n ?? "?"} user(s) still have meta`,
     );
+    const attIds = [...plantedAttendance.values()];
+    const keptAtt = [
+      plantedAttendance.get(-WINDOW_BACK),
+      plantedAttendance.get(WINDOW_AHEAD),
+    ];
+    const attSurvivors = await snap<{ id: number; types: number }[]>`
+      SELECT a.id, (SELECT count(*)::int FROM attendance_x_attendance_types x
+                    WHERE x.attendance_id = a.id) AS types
+      FROM attendance a WHERE a.id IN ${snap(attIds)} ORDER BY a.id`;
+    // The local seed has no attendance, so only the two kept edge rows may
+    // remain: not the outside-window rows, nor those on private instances.
+    const [attTotal] = await snap<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM attendance`;
+    check(
+      "snapshot trim keeps attendance only on kept instances, with its types",
+      attSurvivors.length === 2 &&
+        attSurvivors.every((r, i) => r.id === keptAtt[i] && r.types === 1) &&
+        attTotal?.n === 2,
+      `${attSurvivors.length}/2 edge rows kept, ${attTotal?.n ?? "?"} attendance row(s) left in all (expected 2)`,
+    );
+    const [attMeta] = await snap<{ attendance: number; awards: number }[]>`
+      SELECT
+        (SELECT count(*) FROM attendance WHERE meta IS NOT NULL)::int AS attendance,
+        (SELECT count(*) FROM achievements_x_users
+         WHERE meta IS NOT NULL)::int AS awards`;
+    check(
+      "snapshot trim clears attendance.meta and achievements_x_users.meta",
+      attMeta?.attendance === 0 && attMeta.awards === 0,
+      `${attMeta?.attendance ?? "?"} attendance and ${attMeta?.awards ?? "?"} award row(s) still have meta`,
+    );
     check(
       "snapshot trim nulls every blast",
       blasts?.n === 0,
@@ -1108,7 +1200,7 @@ async function verifySnapshotMode(
       "snapshot trim empties every table outside SNAPSHOT_TABLES",
       populated.length === 0 && others.length > 0,
       populated.length === 0
-        ? `${others.length} tables empty (attendance, slack_*, api_keys, auth.*, history, …)`
+        ? `${others.length} tables empty (slack_*, api_keys, update_requests, auth.*, history, …)`
         : `still populated: ${populated.join(", ")}`,
     );
 
@@ -1179,6 +1271,128 @@ async function verifySnapshotMode(
       `delivered ${published}x; tar [${listing.join(", ")}]; ${tableData} TABLE DATA entries; ` +
         `row counts ${miscounted.length === 0 ? "match" : `differ: ${miscounted.join(", ")}`}`,
     );
+    const attendanceTables = [
+      "public.attendance",
+      "public.attendance_x_attendance_types",
+      "public.achievements_x_users",
+    ];
+    const emptyAttendance = attendanceTables.filter(
+      (t) => !shipped.tables[t]?.rows,
+    );
+    check(
+      "the manifest lists attendance, its types and awards, with rows",
+      emptyAttendance.length === 0,
+      emptyAttendance.length === 0
+        ? attendanceTables
+            .map((t) => `${t}: ${shipped.tables[t]?.rows}`)
+            .join(", ")
+        : `missing or empty: ${emptyAttendance.join(", ")}`,
+    );
+
+    // Must replay RESTORE_SCRIPT in packages/db/src/load-snapshot-lib.ts
+    // (change both together), into a seeded database: only the dump's TABLE
+    // DATA entries, as data-only SQL with triggers off behind a TRUNCATE …
+    // CASCADE of the manifest's tables, applied by psql in one transaction.
+    // With triggers off Postgres checks no FK, so check every one here.
+    const loadUrl = dbUrl(SNAPSHOT_LOAD_DB);
+    const dumpFile = path.join(extracted, "snapshot.dump");
+    const loadList = path.join(work, "load.list");
+    const loadSql = path.join(work, "load.sql");
+    const tocLines = execFileSync(pgRestore, ["-l", dumpFile], {
+      encoding: "utf8",
+    })
+      .split("\n")
+      .filter((l) => /^[0-9]+; [0-9]+ [0-9]+ TABLE DATA /.test(l));
+    writeFileSync(loadList, `${tocLines.join("\n")}\n`);
+    writeFileSync(
+      loadSql,
+      "SET client_min_messages = warning;\n" +
+        `TRUNCATE TABLE ${Object.keys(shipped.tables).map(quoteQualified).join(", ")} CASCADE;\n` +
+        execFileSync(
+          pgRestore,
+          [
+            "--data-only",
+            "--disable-triggers",
+            "--no-owner",
+            "-L",
+            loadList,
+            "-f",
+            "-",
+            dumpFile,
+          ],
+          { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
+        ),
+    );
+    const psql = process.env.PG_BIN_DIR
+      ? path.join(process.env.PG_BIN_DIR, "psql")
+      : "psql";
+    const applied = spawnSync(
+      psql,
+      [
+        "-q",
+        "-o",
+        "/dev/null",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "--single-transaction",
+        "-f",
+        loadSql,
+      ],
+      { env: { ...process.env, ...libpqEnv(loadUrl) }, stdio: "pipe" },
+    );
+    if (applied.error) throw applied.error;
+    if (applied.status !== 0) {
+      throw new Error(
+        `psql could not load the published dump (exit ${applied.status}): ${applied.stderr.toString().slice(-500)}`,
+      );
+    }
+    const load = postgres(loadUrl, { max: 1, onnotice: () => undefined });
+    try {
+      const loadMiscounted: string[] = [];
+      for (const [t, { rows }] of Object.entries(shipped.tables)) {
+        const [row] = await load.unsafe<{ n: number }[]>(
+          `SELECT count(*)::int AS n FROM ${quoteQualified(t)}`,
+        );
+        if (row?.n !== rows) loadMiscounted.push(`${t} ${row?.n}/${rows}`);
+      }
+      const dangling: string[] = [];
+      const edges = (await fkEdges(load, ["public"])).filter((e) =>
+        Object.hasOwn(shipped.tables, e.table),
+      );
+      for (const e of edges) {
+        const n = await danglingFor(load, e);
+        if (n) dangling.push(`${e.name} (${n})`);
+      }
+      // Negative control: with triggers off, orphan an attendance row and
+      // the detector must count it.
+      const attEdge = edges.find(
+        (e) =>
+          e.table === "public.attendance" &&
+          e.refTable === "public.event_instances",
+      );
+      const probe = await load.reserve();
+      let caught = 0;
+      try {
+        await probe`BEGIN`;
+        await probe`SET LOCAL session_replication_role = replica`;
+        await probe`
+          DELETE FROM event_instances
+          WHERE id = (SELECT min(event_instance_id) FROM attendance)`;
+        caught = attEdge ? await danglingFor(probe, attEdge) : 0;
+      } finally {
+        await probe`ROLLBACK`;
+        probe.release();
+      }
+      check(
+        "a loaded snapshot matches the manifest's row counts and every FK resolves",
+        loadMiscounted.length === 0 && dangling.length === 0 && caught > 0,
+        `${loadMiscounted.length === 0 ? "counts match" : `counts differ: ${loadMiscounted.join(", ")}`}; ` +
+          `${edges.length} FKs checked, ${dangling.length === 0 ? "none dangling" : `dangling: ${dangling.join(", ")}`}; ` +
+          `orphaned attendance probe ${caught > 0 ? `caught (${caught})` : "NOT caught"}`,
+      );
+    } finally {
+      await load.end();
+    }
 
     const dumpedData = execFileSync(
       pgRestore,
@@ -1227,6 +1441,38 @@ async function verifySnapshotMode(
       floorError.includes("public.event_instances has 0 rows") &&
         floorDelivered === 0,
       `${floorError ? "refused" : "NOT refused"}, delivered ${floorDelivered}x`,
+    );
+
+    // The probe above stops at event_instances, so empty attendance alone.
+    const attReserved = await snap.reserve();
+    let attFloorDelivered = 0;
+    let attFloorError = "";
+    try {
+      await attReserved`BEGIN`;
+      // attendance_x_attendance_types cascades with it.
+      await attReserved`DELETE FROM attendance`;
+      await publishSnapshot({
+        sql: attReserved,
+        copyUrl: snapUrl,
+        work: publishWork,
+        migration: { tag: "harness", createdAt: 0 },
+        window: trim.window,
+        deliver: () => {
+          attFloorDelivered += 1;
+          return Promise.resolve("delivered");
+        },
+      });
+    } catch (e) {
+      attFloorError = e instanceof Error ? e.message : String(e);
+    } finally {
+      await attReserved`ROLLBACK`;
+      attReserved.release();
+    }
+    check(
+      "an empty attendance table stops the snapshot before it is published",
+      attFloorError.includes("public.attendance has 0 rows") &&
+        attFloorDelivered === 0,
+      `${attFloorError ? "refused" : "NOT refused"}, delivered ${attFloorDelivered}x`,
     );
 
     await snap`ALTER TABLE orgs ADD COLUMN snapshot_probe text`;
