@@ -18,6 +18,7 @@ from utilities.helper_functions import (
     safe_convert,
     safe_get,
     update_local_region_records,
+    usable_invite_link,
 )
 from utilities.slack import actions
 from utilities.slack.orm import (
@@ -34,6 +35,7 @@ from utilities.slack.orm import (
     PlainTextInputElement,
     RadioButtonsElement,
     SectionBlock,
+    URLInputElement,
     as_selector_options,
 )
 
@@ -200,12 +202,12 @@ def _build_region_info_blocks(
     if (
         target_settings
         and target_settings.downrange_invite_sharing == "proactive"
-        and target_settings.downrange_invite_link
+        and usable_invite_link(target_settings.downrange_invite_link)
     ):
         blocks.append(
             SectionBlock(label=f":white_check_mark: *{selected_org_name}* is on Slack! Here is their invite link:")
         )
-        blocks.append(SectionBlock(label=target_settings.downrange_invite_link))
+        blocks.append(SectionBlock(label=usable_invite_link(target_settings.downrange_invite_link)))
         blocks.append(
             ContextBlock(
                 element=ContextElement(
@@ -378,7 +380,7 @@ DOWNRANGE_ADMIN_BLOCKS = [
     InputBlock(
         label="Slack invite link",
         action=actions.DOWNRANGE_INVITE_LINK,
-        element=PlainTextInputElement(
+        element=URLInputElement(
             placeholder="https://join.slack.com/t/your-workspace/...",
         ),
         optional=True,
@@ -432,7 +434,7 @@ def build_downrange_menu(body: dict, client: WebClient, logger: Logger, context:
         form.set_initial_values(
             {
                 actions.DOWNRANGE_INVITE_SHARING: region_record.downrange_invite_sharing or "request_only",
-                actions.DOWNRANGE_INVITE_LINK: region_record.downrange_invite_link or "",
+                actions.DOWNRANGE_INVITE_LINK: usable_invite_link(region_record.downrange_invite_link) or "",
                 actions.DOWNRANGE_CHANNEL_POSTING: region_record.downrange_channel_posting or "off",
                 actions.DOWNRANGE_CHANNEL: region_record.downrange_channel,
             }
@@ -529,8 +531,10 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
                 actions.DOWNRANGE_INVITE_SHARING: _get_radio_value(current_values, actions.DOWNRANGE_INVITE_SHARING)
                 or region_record.downrange_invite_sharing
                 or "request_only",
-                actions.DOWNRANGE_INVITE_LINK: _get_text_value(current_values, actions.DOWNRANGE_INVITE_LINK)
-                or region_record.downrange_invite_link
+                actions.DOWNRANGE_INVITE_LINK: usable_invite_link(
+                    _get_text_value(current_values, actions.DOWNRANGE_INVITE_LINK)
+                )
+                or usable_invite_link(region_record.downrange_invite_link)
                 or "",
                 actions.DOWNRANGE_CHANNEL_POSTING: _get_radio_value(current_values, actions.DOWNRANGE_CHANNEL_POSTING)
                 or region_record.downrange_channel_posting
@@ -755,7 +759,7 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    invite_link = region_record.downrange_invite_link
+    invite_link = usable_invite_link(region_record.downrange_invite_link)
 
     if not invite_link:
         # Admin needs to set the invite link first
@@ -1001,7 +1005,15 @@ def handle_downrange_settings(
     form_data = BlockView(blocks=copy.deepcopy(DOWNRANGE_ADMIN_BLOCKS)).get_selected_values(body)
 
     region_record.downrange_invite_sharing = safe_get(form_data, actions.DOWNRANGE_INVITE_SHARING) or "request_only"
-    region_record.downrange_invite_link = safe_get(form_data, actions.DOWNRANGE_INVITE_LINK) or None
+    submitted_link = safe_get(form_data, actions.DOWNRANGE_INVITE_LINK)
+    invite_link = usable_invite_link(submitted_link)
+    if submitted_link and not invite_link:
+        # Keep the saved link rather than clear it as a side effect of unusable input; an empty box still clears it.
+        logger.warning(
+            f"Downrange settings for team {region_record.team_id}: invite link had no usable URL, kept the saved one"
+        )
+        invite_link = usable_invite_link(region_record.downrange_invite_link)
+    region_record.downrange_invite_link = invite_link
     region_record.downrange_channel_posting = safe_get(form_data, actions.DOWNRANGE_CHANNEL_POSTING) or "off"
     region_record.downrange_channel = safe_get(form_data, actions.DOWNRANGE_CHANNEL) or None
 
