@@ -117,9 +117,8 @@ export type FeedbackSchema = z.infer<typeof feedbackSchema>;
 export const filterButtonClassName =
   "text-sm w-full whitespace-nowrap font-semibold pointer-events-auto flex items-center justify-center gap-2 rounded-md bg-card px-2 py-1 shadow-sm text-foreground";
 
-// Basic is just signed in
-// Editor can change data for their region
-// Admin can change anything
+// Descriptive access level per route; nothing reads it to enforce access.
+// Real checks live in apps/admin/src/proxy.ts and the API procedures.
 type AuthType = "none" | "admin" | "basic" | "editor";
 
 interface RouteBase {
@@ -234,7 +233,7 @@ export const routes = {
       __auth: "none",
     },
   },
-} as const;
+} as const satisfies Routes;
 
 export enum Permissions {
   ADMIN = "admin",
