@@ -402,7 +402,7 @@ export const apiKeyRouter = {
             );
           }
 
-          return { ...apiKey, secret: generatedKey };
+          return { ...apiKey, key: generatedKey, secret: generatedKey };
         });
       } catch (error) {
         if (isUniqueError(error)) {

@@ -1190,7 +1190,9 @@ export const apiKeys = pgTable(
   "api_keys",
   {
     id: serial().primaryKey().notNull(),
-    key: varchar().notNull(),
+    key: varchar(),
+    keyHash: varchar("key_hash", { length: 64 }),
+    keyHint: varchar("key_hint", { length: 4 }),
     name: varchar().notNull(),
     description: varchar(),
     ownerId: integer("owner_id"),
@@ -1206,6 +1208,7 @@ export const apiKeys = pgTable(
   },
   (table) => [
     unique("api_keys_key_key").on(table.key),
+    unique("api_keys_key_hash_key").on(table.keyHash),
     foreignKey({
       columns: [table.ownerId],
       foreignColumns: [users.id],

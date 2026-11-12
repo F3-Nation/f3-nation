@@ -189,40 +189,45 @@ option list is explicit; join tables do not have an updated column. Keys are
 listed in declared constraint order. Personal data remains in historical
 snapshots under the approved reader access; this is not an anonymized dataset.
 
-| Table                         | Primary key                                       | Ignore            | Redact |
-| ----------------------------- | ------------------------------------------------- | ----------------- | ------ |
-| achievements                  | id                                                | updated           | (none) |
-| achievements_x_users          | achievement_id, user_id, award_year, award_period | (none)            | (none) |
-| api_keys                      | id                                                | updated           | key    |
-| attendance                    | id                                                | updated           | (none) |
-| attendance_types              | id                                                | updated           | (none) |
-| attendance_x_attendance_types | attendance_id, attendance_type_id                 | (none)            | (none) |
-| event_instances               | id                                                | updated           | (none) |
-| event_instances_x_event_types | event_instance_id, event_type_id                  | (none)            | (none) |
-| event_tags                    | id                                                | updated           | (none) |
-| event_tags_x_event_instances  | event_instance_id, event_tag_id                   | (none)            | (none) |
-| event_tags_x_events           | event_id, event_tag_id                            | (none)            | (none) |
-| event_types                   | id                                                | updated           | (none) |
-| events                        | id                                                | updated           | (none) |
-| events_x_event_types          | event_id, event_type_id                           | (none)            | (none) |
-| locations                     | id                                                | updated           | (none) |
-| orgs                          | id                                                | updated, ao_count | (none) |
-| orgs_x_slack_spaces           | org_id, slack_space_id                            | (none)            | (none) |
-| permissions                   | id                                                | updated           | (none) |
-| positions                     | id                                                | updated           | (none) |
-| positions_x_orgs_x_users      | position_id, org_id, user_id                      | (none)            | (none) |
-| roles                         | id                                                | updated           | (none) |
-| roles_x_api_keys_x_org        | role_id, api_key_id, org_id                       | (none)            | (none) |
-| roles_x_permissions           | role_id, permission_id                            | (none)            | (none) |
-| roles_x_users_x_org           | role_id, user_id, org_id                          | (none)            | (none) |
-| update_requests               | id                                                | updated           | token  |
-| users                         | id                                                | updated           | (none) |
+| Table                         | Primary key                                       | Ignore            | Redact        |
+| ----------------------------- | ------------------------------------------------- | ----------------- | ------------- |
+| achievements                  | id                                                | updated           | (none)        |
+| achievements_x_users          | achievement_id, user_id, award_year, award_period | (none)            | (none)        |
+| api_keys                      | id                                                | updated           | key, key_hash |
+| attendance                    | id                                                | updated           | (none)        |
+| attendance_types              | id                                                | updated           | (none)        |
+| attendance_x_attendance_types | attendance_id, attendance_type_id                 | (none)            | (none)        |
+| event_instances               | id                                                | updated           | (none)        |
+| event_instances_x_event_types | event_instance_id, event_type_id                  | (none)            | (none)        |
+| event_tags                    | id                                                | updated           | (none)        |
+| event_tags_x_event_instances  | event_instance_id, event_tag_id                   | (none)            | (none)        |
+| event_tags_x_events           | event_id, event_tag_id                            | (none)            | (none)        |
+| event_types                   | id                                                | updated           | (none)        |
+| events                        | id                                                | updated           | (none)        |
+| events_x_event_types          | event_id, event_type_id                           | (none)            | (none)        |
+| locations                     | id                                                | updated           | (none)        |
+| orgs                          | id                                                | updated, ao_count | (none)        |
+| orgs_x_slack_spaces           | org_id, slack_space_id                            | (none)            | (none)        |
+| permissions                   | id                                                | updated           | (none)        |
+| positions                     | id                                                | updated           | (none)        |
+| positions_x_orgs_x_users      | position_id, org_id, user_id                      | (none)            | (none)        |
+| roles                         | id                                                | updated           | (none)        |
+| roles_x_api_keys_x_org        | role_id, api_key_id, org_id                       | (none)            | (none)        |
+| roles_x_permissions           | role_id, permission_id                            | (none)            | (none)        |
+| roles_x_users_x_org           | role_id, user_id, org_id                          | (none)            | (none)        |
+| update_requests               | id                                                | updated           | token         |
+| users                         | id                                                | updated           | (none)        |
 
 Adding a sensitive source column requires masking review before writes begin.
 Renaming or dropping a masked column requires reviewed reconfiguration in the
 same migration. Stale masked-column names fail source writes until corrected.
 Changing masking configuration cannot sanitize previously collected history;
 any historical remediation requires a separate reviewed decision.
+
+api_keys also redacts key_hash, the sha256 of the key. A later migration
+re-ran enable_tracking with the wider redact list before backfilling the hash,
+so no history row records a hash. key_hint (the key's last four characters)
+is not redacted: it is the display hint the admin UI already shows.
 
 Helper interface: audit.enable_tracking(target, ignore_cols, redact_cols), with
 explicit empty defaults; table activation supplies each table's options.
