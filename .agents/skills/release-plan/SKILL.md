@@ -116,10 +116,10 @@ Ask for anything missing before starting:
    `audit.enable_tracking`: any of these can take away the refresh login's
    access, and only the full setup re-grants it. This is the list in
    `docs/STAGING_REFRESH.md` ("Migrations that need the full setup"); keep the
-   two the same. Otherwise delete both. After the
-   re-grant the rebuild runs again: the full setup deploys an image from the
-   release commit, and the rebuild must replace it with main's. In every
-   other plan, delete all three.
+   two the same. Otherwise delete both. Keep the re-grant above the rebuild
+   check: the full setup deploys an image from the release commit, so the
+   rebuild must be started once more after it to replace that image with
+   main's. In every other plan, delete all three.
 
 4. **Skim the linked PRs only for risk.** For each changelog entry, read the
    PR title and, if needed, the first lines of its body. You are looking for

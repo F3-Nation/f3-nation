@@ -48,7 +48,6 @@ jobs:
       contents: read
       checks: read # read CI check runs on github.sha
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REQUIRED: >-
         build lint typecheck format-check test-coverage security-audit
         db-schema-sync obfuscate-db-verify
@@ -61,13 +60,15 @@ jobs:
           echo "::error::Run this from main (--ref main), not ${GITHUB_REF}."
           exit 1
 
-      # pnpm db:migrate:prod starts this right after a prod migration, possibly
-      # moments after a push to main, before CI has created its checks; the wait
-      # below fails when none of them exist yet. So first wait (up to 15
-      # minutes) for every required check to appear on this commit.
+      # A dispatch soon after a push to main can start before CI has created
+      # its checks, and the wait below fails when none of them exist. So first
+      # wait for every required check to appear on this commit.
       - name: Wait for CI to start on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for _ in $(seq 1 60); do
+          attempts=60 interval=15
+          for _ in $(seq 1 "${attempts}"); do
             names="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
               --jq '.check_runs[].name')"
             missing=""
@@ -75,9 +76,9 @@ jobs:
               grep -qxF "${name}" <<<"${names}" || missing="${missing} ${name}"
             done
             if [[ -z "${missing}" ]]; then exit 0; fi
-            sleep 15
+            sleep "${interval}"
           done
-          echo "::error::CI didn't start these checks on ${GITHUB_SHA} within 15 minutes:${missing}"
+          echo "::error::CI didn't start these checks on ${GITHUB_SHA} within $((attempts * interval / 60)) minutes:${missing}"
           exit 1
 
       - name: Wait for CI to pass on this commit
@@ -93,6 +94,8 @@ jobs:
       # The wait above fails only when none of the named checks exist, so also
       # require each one: present on this commit, and its latest run green.
       - name: Every required check passed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
             --jq '.check_runs[] | [.name, .id, (.conclusion // "pending")] | @tsv')"

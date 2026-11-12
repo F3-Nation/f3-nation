@@ -105,7 +105,11 @@ const REBUILD_COMMAND = `gh ${REBUILD_ARGS.join(" ")}`;
 const REBUILD_RUNS_URL =
   "https://github.com/F3-Nation/f3-nation/actions/workflows/rebuild-staging-refresh.yml";
 
-/** Migrations the rebuild alone doesn't cover: they need the full setup too. */
+/**
+ * Migrations the rebuild alone doesn't cover: they need the full setup too.
+ * The same list as docs/STAGING_REFRESH.md ("Migrations that need the full
+ * setup"); change both together.
+ */
 const FULL_SETUP_NOTE = [
   "If a migration you just applied creates a table or schema, changes an owner,",
   "revokes privileges or calls audit.enable_tracking, an f3data Owner also",
@@ -151,10 +155,10 @@ export const runCommand: CommandRunner = (command, args) => {
 
 /**
  * After a prod migration: start the Staging refresh image rebuild with the
- * person's own gh login, so nobody has to remember it. It only queues the
- * workflow (a second or two); the build runs in GitHub. If gh is missing or
- * not logged in, says how to start it by hand. Never throws: the migration is
- * already committed, and this must not read as a failed migration.
+ * person's own gh login, so nobody has to remember it. gh only queues the
+ * workflow; the build runs in GitHub. On any failure it returns the reason
+ * and the command to run by hand. Never throws: the migration is already
+ * committed, and this must not read as a failed migration.
  */
 export function startRefreshRebuild(run: CommandRunner = runCommand): string[] {
   let res: CommandResult;

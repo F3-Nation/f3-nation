@@ -212,8 +212,8 @@ The job refuses to run while prod has a migration its image doesn't know
 (`… migration(s) this build's … _journal.json doesn't know`), so rebuild it
 after every prod migration. `pnpm db:migrate:prod` starts it for you when it
 applies one, with your own `gh` login, and prints the link to the run. If it
-can't (no `gh`, or not logged in), it prints the command instead. Anyone with
-write access to the repo can run it, with no Google Cloud access:
+can't start it, it prints why and the command instead. Anyone with write
+access to the repo can run it, with no Google Cloud access:
 
 ```bash
 gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
@@ -242,9 +242,10 @@ That applies when a new `.sql` file:
 - revokes privileges (`REVOKE`), or
 - calls `audit.enable_tracking`.
 
-Then the Owner runs the full setup, and the rebuild runs again after it
-(`pnpm db:migrate:prod` already started one, before the setup): the full
-setup also deploys an image from its own checkout, so the rebuild goes last.
+Then the Owner runs the full setup, and someone with write access starts the
+rebuild once more after it, even if `pnpm db:migrate:prod` already started
+one: the full setup also deploys an image from its own checkout, so the
+rebuild goes last.
 Running the full setup when it wasn't needed is harmless. Missing it shows up
 as `permission denied` from `pg_dump` or `the job's login doesn't own …`.
 
