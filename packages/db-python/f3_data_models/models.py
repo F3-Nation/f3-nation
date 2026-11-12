@@ -357,6 +357,11 @@ class SlackSpace(Base):
         team_id (str): The Slack-internal unique identifier for the Slack team.
         workspace_name (Optional[str]): The name of the Slack workspace.
         bot_token (Optional[str]): The bot token for the Slack workspace.
+        bot_id (Optional[str]): The Slack bot ID for the workspace's installation.
+        bot_user_id (Optional[str]): The Slack user ID of the workspace's bot user.
+        bot_scopes (Optional[str]): The bot's granted scopes, comma-separated as the Slack SDK stores them.
+        bot_token_expires_at (Optional[datetime]): When the bot token expires. Null means the token does not rotate.
+        bot_refresh_token_encrypted (Optional[str]): The Slack refresh token as ciphertext only; never plaintext.
         settings (Optional[Dict[str, Any]]): Slack Bot settings for the Slack workspace.
         created (datetime): The timestamp when the record was created.
         updated (datetime): The timestamp when the record was last updated.
@@ -368,6 +373,11 @@ class SlackSpace(Base):
     team_id: Mapped[str] = mapped_column(VARCHAR, unique=True)
     workspace_name: Mapped[Optional[str]]
     bot_token: Mapped[Optional[str]]
+    bot_id: Mapped[Optional[str]]
+    bot_user_id: Mapped[Optional[str]]
+    bot_scopes: Mapped[Optional[str]]
+    bot_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    bot_refresh_token_encrypted: Mapped[Optional[str]] = mapped_column(TEXT)
     settings: Mapped[Optional[Dict[str, Any]]]
     created: Mapped[dt_create]
     updated: Mapped[dt_update]

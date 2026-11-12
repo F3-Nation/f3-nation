@@ -170,6 +170,14 @@ export const slackSpaces = pgTable(
     teamId: varchar("team_id").notNull(),
     workspaceName: varchar("workspace_name"),
     botToken: varchar("bot_token"),
+    botId: varchar("bot_id"),
+    botUserId: varchar("bot_user_id"),
+    botScopes: varchar("bot_scopes"),
+    botTokenExpiresAt: timestamp("bot_token_expires_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
+    botRefreshTokenEncrypted: text("bot_refresh_token_encrypted"),
     settings: jsonb().$type<SlackSpacesMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)

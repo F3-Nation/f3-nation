@@ -246,6 +246,13 @@
       "when": 1793996023567,
       "tag": "0034_slack_user_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794498164736,
+      "tag": "0035_slack_token_rotation",
+      "breakpoints": true
     }
   ]
 }
