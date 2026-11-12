@@ -43,7 +43,9 @@ def test_fngs_contacts_hear_he_joined_even_if_the_welcome_dm_fails(monkeypatch):
 
 
 def test_team_join_survives_a_failed_fng_lookup(monkeypatch):
-    monkeypatch.setattr(welcome, "notify_fng_joined", MagicMock(side_effect=RuntimeError("db down")))
+    # His email is in the team_join event, and a traceback would log whatever message the failure carried.
+    error = RuntimeError("Key (email)=(john@example.com) already exists")
+    monkeypatch.setattr(welcome, "notify_fng_joined", MagicMock(side_effect=error))
     logger = MagicMock()
 
     client = MagicMock()
@@ -52,6 +54,7 @@ def test_team_join_survives_a_failed_fng_lookup(monkeypatch):
     )
 
     logger.error.assert_called_once()
+    assert "exc_info" not in logger.error.call_args.kwargs and "john@example.com" not in repr(logger.error.call_args)
     client.chat_postMessage.assert_called_once_with(channel="U_FNG", blocks=[{"type": "section"}], text="Welcome!")
 
 

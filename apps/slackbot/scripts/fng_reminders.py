@@ -8,10 +8,11 @@ from datetime import datetime, time, timedelta
 
 import pytz
 from f3_data_models.models import Org_x_SlackSpace, SlackSpace, SlackUser, User
-from f3_data_models.utils import DbManager
+from f3_data_models.utils import DbManager, session_scope
 from slack_sdk import WebClient
-from sqlalchemy import cast, func, literal
+from sqlalchemy import cast, func, literal, text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Session
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -29,6 +30,7 @@ REMINDER_HOUR = 17  # US/Central, same as the home region nudge
 MAX_REMINDERS = 3
 CATCH_UP_DAYS = 7  # a reminder that couldn't be delivered on its day, the last one included, is retried daily this long
 FNG_META_REMINDERS_SENT = "fng_reminders_sent"  # {contact's user id (str): reminders he has received}
+LOCK_TIMEOUT = "5s"  # how long a run waits for another writer's lock on the FNG's row
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +52,6 @@ def send_fng_reminders(force: bool = False):
             logger.error(
                 "fng.reminders_region_failed error_type=%s",
                 type(exc).__name__,
-                exc_info=exc,
                 extra={
                     "json_fields": {
                         "event": "fng.reminders_region_failed",
@@ -83,7 +84,6 @@ def _remind_space(space: SlackSpace, org_x_space: Org_x_SlackSpace, now: datetim
             logger.error(
                 "fng.reminder_failed error_type=%s",
                 type(exc).__name__,
-                exc_info=exc,
                 extra={
                     "json_fields": {
                         "event": "fng.reminder_failed",
@@ -96,13 +96,10 @@ def _remind_space(space: SlackSpace, org_x_space: Org_x_SlackSpace, now: datetim
     return sent
 
 
-def save_reminders_sent(user_id: int, received: dict[str, int]) -> None:
-    """Sets only the reminder counts in ``User.meta``, merging in the database, so a profile edit saved while the DMs
-    went out isn't overwritten by the copy of ``meta`` this job read before sending. Only this job writes the key, so
-    replacing it whole is safe."""
-    DbManager.update_record(
-        User,
-        user_id,
+def save_reminders_sent(session: Session, user_id: int, received: dict[str, int]) -> None:
+    """Sets only the reminder counts in ``User.meta``, merging in the database, so the rest of ``meta`` is left as
+    stored. Only this job writes the key, so replacing it whole is safe."""
+    session.query(User).filter(User.id == user_id).update(
         {
             # meta can be SQL NULL or JSON null (how the ORM stores None); either would turn the merge into NULL or
             # an array.
@@ -110,6 +107,7 @@ def save_reminders_sent(user_id: int, received: dict[str, int]) -> None:
                 literal({FNG_META_REMINDERS_SENT: received}, JSONB)
             )
         },
+        synchronize_session=False,
     )
 
 
@@ -123,26 +121,27 @@ def _remind_fng(
     # missed or failed run catches up the next day (once, even if several were missed), and a contact whose DM
     # failed is retried without repeating it to the one who got it.
     due = min(days // interval, MAX_REMINDERS)
-    received = safe_get(fng.meta, FNG_META_REMINDERS_SENT) or {}
-    behind = [user_id for user_id in fng_contact_ids(fng) if received.get(str(user_id), 0) < due]
-    if not behind:
+    if not _contacts_behind(fng, due):
         return 0
     if DbManager.find_first_record(
         SlackUser, filters=[SlackUser.user_id == fng.id, SlackUser.slack_team_id == space.team_id]
     ):
         return 0  # he joined
-    contact = html.escape(" · ".join(filter(None, (fng.phone, fng.email))), quote=False)
-    text = f"*{fng_display_name(fng)}* hasn't joined Slack with the email from /fng yet, {days} days later."
-    text += f" A text or call from you might help: {contact}." if contact else " A text from you might help."
-    if settings.downrange_invite_link:
-        text += f" Here's the invite link to send him: {settings.downrange_invite_link}"
-    if due == MAX_REMINDERS:
-        text += " This is the last reminder."
-    delivered = dm_fng_contacts(client, space.team_id, fng, text, logger, contact_ids=behind)
-    if delivered:
-        received = {**received, **{str(user_id): due for user_id in delivered}}
-        save_reminders_sent(fng.id, received)
-    else:
+    # A forced run during the scheduled one, or a redelivered run, would otherwise read the same counts and DM
+    # everyone twice, so the counts are claimed under his row lock before sending. The lock is released before any
+    # Slack call; an overlapping run reads the claim and sends nothing. A run that dies mid-send loses that reminder
+    # rather than repeating it.
+    claim = _claim_reminder(settings, fng.id, days, due)
+    if claim is None:
+        return 0
+    previous, message = claim
+    try:
+        delivered = dm_fng_contacts(client, space.team_id, fng, message, logger, contact_ids=list(previous))
+    except Exception:
+        _safe_hand_back(space, fng.id, previous, due)
+        raise
+    _safe_hand_back(space, fng.id, {user_id: n for user_id, n in previous.items() if user_id not in delivered}, due)
+    if not delivered:
         logger.warning(
             "fng.reminder_undeliverable",
             extra={
@@ -155,6 +154,89 @@ def _remind_fng(
             },
         )
     return len(delivered)
+
+
+def _contacts_behind(fng: User, due: int) -> list[int]:
+    received = safe_get(fng.meta, FNG_META_REMINDERS_SENT) or {}
+    return [user_id for user_id in fng_contact_ids(fng) if received.get(str(user_id), 0) < due]
+
+
+def _lock_fng(session: Session, user_id: int) -> User | None:
+    # Held only for a read and a write, so waiting is short; the timeout bounds a writer that holds it longer. When
+    # claiming, its error writes nothing, so he is retried in the next day's catch-up.
+    session.execute(text("SELECT set_config('lock_timeout', :timeout, true)"), {"timeout": LOCK_TIMEOUT})
+    return session.query(User).filter(User.id == user_id).with_for_update().one_or_none()
+
+
+def _claim_reminder(
+    settings: SlackSettings, user_id: int, days: int, due: int
+) -> tuple[dict[int, int | None], str] | None:
+    """Records ``due`` for every contact still behind. Returns their counts from before the claim and the reminder
+    text, or None if there is nothing to send."""
+    with session_scope() as session:
+        fng = _lock_fng(session, user_id)
+        if fng is None:
+            return None  # deleted since the job read him
+        behind = _contacts_behind(fng, due)
+        if not behind:
+            return None
+        received = safe_get(fng.meta, FNG_META_REMINDERS_SENT) or {}
+        save_reminders_sent(session, user_id, {**received, **{str(contact_id): due for contact_id in behind}})
+        return {contact_id: received.get(str(contact_id)) for contact_id in behind}, _reminder_text(
+            settings, fng, days, due
+        )
+
+
+def _safe_hand_back(space: SlackSpace, user_id: int, previous: dict[int, int | None], due: int) -> None:
+    """Hands back the claim without letting a failure replace the send's own error. A failed hand-back leaves the
+    contacts counted as reminded, so it gets its own event."""
+    try:
+        _hand_back(user_id, previous, due)
+    except Exception as exc:
+        logger.error(
+            "fng.reminder_hand_back_failed error_type=%s",
+            type(exc).__name__,
+            extra={
+                "json_fields": {
+                    "event": "fng.reminder_hand_back_failed",
+                    "team_id": space.team_id,
+                    "user_id": user_id,
+                    "due": due,
+                    "error_type": type(exc).__name__,
+                }
+            },
+        )
+
+
+def _hand_back(user_id: int, previous: dict[int, int | None], due: int) -> None:
+    """Restores the pre-claim counts of contacts who didn't get the reminder, so the next run retries them. A count
+    that is no longer ``due`` was written by a later run and is kept."""
+    if not previous:
+        return
+    with session_scope() as session:
+        fng = _lock_fng(session, user_id)
+        if fng is None:
+            return
+        received = dict(safe_get(fng.meta, FNG_META_REMINDERS_SENT) or {})
+        for contact_id, count in previous.items():
+            if received.get(str(contact_id)) != due:
+                continue
+            if count is None:
+                del received[str(contact_id)]
+            else:
+                received[str(contact_id)] = count
+        save_reminders_sent(session, user_id, received)
+
+
+def _reminder_text(settings: SlackSettings, fng: User, days: int, due: int) -> str:
+    contact = html.escape(" · ".join(filter(None, (fng.phone, fng.email))), quote=False)
+    message = f"*{fng_display_name(fng)}* hasn't joined Slack with the email from /fng yet, {days} days later."
+    message += f" A text or call from you might help: {contact}." if contact else " A text from you might help."
+    if settings.downrange_invite_link:
+        message += f" Here's the invite link to send him: {settings.downrange_invite_link}"
+    if due == MAX_REMINDERS:
+        message += " This is the last reminder."
+    return message
 
 
 if __name__ == "__main__":
