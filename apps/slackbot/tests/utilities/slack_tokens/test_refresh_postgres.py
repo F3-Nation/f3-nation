@@ -1,6 +1,7 @@
 import logging
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -362,3 +363,58 @@ def test_lock_timeout_returns_stored_token(isolated_postgres, rotator, caplog):
     assert rotator.calls == 0
     assert bot.bot_token == STORED_TOKEN
     assert "slack.token.lock_timeout" in _events(caplog)
+
+
+def _exception_chain_text(error):
+    parts = []
+    while error is not None:
+        parts.append(str(error))
+        error = error.__cause__ or error.__context__
+    return " ".join(parts)
+
+
+@contextmanager
+def _row_lock_held(engine):
+    # A writer that skips the advisory lock holds the row lock, so the token
+    # UPDATE waits past `lock_timeout` and the database rejects it.
+    with engine.connect() as holder:
+        holder.execute(text("SELECT 1 FROM slack_spaces WHERE team_id = :t FOR UPDATE"), {"t": TEAM_ID})
+        try:
+            yield
+        finally:
+            holder.rollback()
+
+
+def test_refresh_save_failure_is_logged_and_sanitized(isolated_postgres, rotator, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    before = _row(isolated_postgres)
+
+    with _row_lock_held(isolated_postgres):
+        with pytest.raises(refresh.TokenSaveError) as raised:
+            refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    assert rotator.calls == 1
+    assert _row(isolated_postgres) == before
+    chain = _exception_chain_text(raised.value)
+    assert NEW_TOKEN not in chain and "gAAAA" not in chain
+    assert raised.value.__cause__ is None and raised.value.__context__ is None
+    failed = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
+    assert len(failed) == 1
+    assert failed[0].json_fields["error_type"] == "OperationalError"
+    assert all(NEW_TOKEN not in r.getMessage() and NEW_TOKEN not in str(r.json_fields) for r in failed)
+    assert all(NEW_TOKEN not in r.getMessage() for r in caplog.records)
+
+
+def test_save_bot_failure_is_logged_and_sanitized(isolated_postgres, caplog):
+    _seed(isolated_postgres, expires_in=None, refresh_token=None)
+    before = _row(isolated_postgres)
+
+    with _row_lock_held(isolated_postgres):
+        with pytest.raises(refresh.TokenSaveError) as raised:
+            refresh.save_bot_locked(_offered(expires_at=_now() + timedelta(hours=12)), team_id=TEAM_ID)
+
+    assert _row(isolated_postgres) == before
+    assert NEW_TOKEN not in _exception_chain_text(raised.value)
+    assert raised.value.__cause__ is None and raised.value.__context__ is None
+    assert "slack.token.refresh_failed" in _events(caplog)
+    assert all(NEW_TOKEN not in r.getMessage() for r in caplog.records)

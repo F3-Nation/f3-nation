@@ -25,7 +25,7 @@ from slack_sdk.errors import SlackApiError, SlackTokenRotationError
 from slack_sdk.oauth.installation_store import Bot
 from slack_sdk.oauth.token_rotation import TokenRotator
 from sqlalchemy import select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from utilities import constants
@@ -41,6 +41,10 @@ _LOCK_TIMEOUT_PGCODE = "55P03"
 
 class TokenLockTimeout(Exception):
     """Another process held the workspace's token lock past `lock_timeout`."""
+
+
+class TokenSaveError(Exception):
+    """The database rejected a token write; the transaction rolled back."""
 
 
 def _rotator() -> TokenRotator:
@@ -147,10 +151,29 @@ def _write(row: SlackSpace, bot: Bot) -> None:
     )
 
 
+def _flush(session: Session, team_id: str, path: str) -> None:
+    """Send the token write now, so a database failure is logged and sanitized here.
+
+    SQLAlchemy's exception text includes the bound parameters, which here are
+    the token and refresh-token ciphertext. The replacement error is raised
+    outside the `except` block so the original is neither its cause nor its
+    context.
+    """
+    failure = None
+    try:
+        session.flush()
+    except SQLAlchemyError as e:
+        failure = _error_fields(e)
+    if failure is not None:
+        _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **failure)
+        raise TokenSaveError(f"saving the bot token failed with {failure['error_type']}")
+
+
 def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = None) -> bool:
     """Write the bot's token fields under the workspace lock, creating the row if needed.
 
     Returns False without writing when the save guard rejects the token.
+    Raises `TokenSaveError` if the database rejects the write.
     `workspace_name` is written only when the row is created.
     """
     with _locked(team_id) as (session, row):
@@ -160,6 +183,7 @@ def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = N
         elif not _guard_allows(row, bot):
             return False
         _write(row, bot)
+        _flush(session, team_id, "save_bot_locked")
         return True
 
 
@@ -190,9 +214,12 @@ def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str
     Lock, re-read, refresh if still due, write and commit all happen in one
     transaction, so a process that waited on the lock sees the token the other
     one saved and doesn't call Slack again.
+
+    Raises `TokenSaveError` if saving the refreshed token fails. Slack has
+    already issued the new token by then, and it is lost with the rollback.
     """
     try:
-        with _locked(team_id) as (_session, row):
+        with _locked(team_id) as (session, row):
             if row is None or not row.bot_token:
                 return None
             stored = _bot_from_row(row)
@@ -224,6 +251,7 @@ def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str
             if not _guard_allows(row, rotated):
                 return stored
             _write(row, rotated)
+            _flush(session, team_id, path)
             _log(logging.INFO, "slack.token.refreshed", team_id, path=path)
             return _bot_from_row(row)
     except TokenLockTimeout:
