@@ -27,7 +27,7 @@ from slack_sdk.oauth.installation_store import Bot
 from slack_sdk.oauth.token_rotation import TokenRotator
 from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from utilities import constants
 from utilities.slack_tokens.crypto import TokenDecryptError, decrypt_refresh_token, encrypt_refresh_token
@@ -173,6 +173,21 @@ def _flush(session: Session, team_id: str, path: str) -> None:
     if failure is not None:
         _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **failure)
         raise TokenSaveError(f"saving the bot token failed with {failure['error_type']}")
+
+
+def write_locked_row(row: SlackSpace, bot: Bot, *, path: str) -> None:
+    """Write the bot's token fields to a row yielded by `locked_row` and flush them.
+
+    For callers that must call Slack while holding the lock, so they can't use
+    `save_bot_locked`, which takes the lock itself. Applies no save guard: the
+    caller has already checked the row. Raises `TokenSaveError` if the database
+    rejects the write; the change commits only when the `locked_row` block exits.
+    """
+    session = object_session(row)
+    if session is None:
+        raise ValueError("write_locked_row needs a row yielded by locked_row")
+    _write(row, bot)
+    _flush(session, row.team_id, path)
 
 
 def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = None) -> bool:
