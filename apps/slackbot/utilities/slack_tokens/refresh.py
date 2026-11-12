@@ -1,0 +1,231 @@
+"""The only code that refreshes Slack bot tokens or writes token fields.
+
+Every write to a workspace's token fields runs in one transaction holding a
+per-workspace `pg_advisory_xact_lock`. Slack revokes access tokens from earlier
+refreshes and accepts concurrent refreshes, so two unserialized refreshes can
+each save a token the other just revoked. The transaction-scoped lock is
+released by commit or rollback, so a pooled connection never keeps it after an
+exception.
+
+The decrypted refresh token lives only inside `refresh_if_needed`. Every `Bot`
+this module returns has `bot_refresh_token=None`.
+"""
+
+import logging
+import os
+import re
+import time
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from typing import Iterator, Optional, Tuple
+
+from f3_data_models.models import SlackSpace
+from f3_data_models.utils import session_scope
+from slack_sdk.errors import SlackApiError, SlackTokenRotationError
+from slack_sdk.oauth.installation_store import Bot
+from slack_sdk.oauth.token_rotation import TokenRotator
+from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
+
+from utilities import constants
+from utilities.slack_tokens.crypto import TokenDecryptError, decrypt_refresh_token, encrypt_refresh_token
+
+logger = logging.getLogger(__name__)
+
+STORE_WINDOW_MINUTES = 120
+SWEEP_WINDOW_MINUTES = 180
+
+_LOCK_TIMEOUT_PGCODE = "55P03"
+
+
+class TokenLockTimeout(Exception):
+    """Another process held the workspace's token lock past `lock_timeout`."""
+
+
+def _rotator() -> TokenRotator:
+    return TokenRotator(
+        client_id=os.environ[constants.SLACK_CLIENT_ID],
+        client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
+    )
+
+
+def _log(level: int, event: str, team_id: str, **fields) -> None:
+    logger.log(level, event, extra={"json_fields": {"event": event, "team_id": team_id, **fields}})
+
+
+def _error_fields(error: Exception) -> dict:
+    """The exception type and Slack error code only: slack_sdk messages can embed request data."""
+    name = type(error).__name__
+    fields = {"error_type": name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) else "Exception"}
+    api_error = error.api_error if isinstance(error, SlackTokenRotationError) else error
+    if isinstance(api_error, SlackApiError):
+        code = getattr(api_error.response, "get", lambda _key: None)("error")
+        if isinstance(code, str) and re.fullmatch(r"[a-z0-9_]{1,64}", code):
+            fields["error_code"] = code
+    return fields
+
+
+def _to_epoch(value: Optional[datetime]) -> Optional[int]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return int(value.timestamp())
+
+
+def _to_datetime(epoch: Optional[int]) -> Optional[datetime]:
+    return None if epoch is None else datetime.fromtimestamp(epoch, tz=timezone.utc)
+
+
+def _bot_from_row(row: SlackSpace) -> Bot:
+    created = row.created or datetime.now(timezone.utc)
+    if created.tzinfo is None:
+        # `created` is stored as naive UTC.
+        created = created.replace(tzinfo=timezone.utc)
+    return Bot(
+        team_id=row.team_id,
+        team_name=row.workspace_name,
+        bot_token=row.bot_token,
+        bot_id=row.bot_id,
+        bot_user_id=row.bot_user_id,
+        bot_scopes=row.bot_scopes or "",
+        bot_refresh_token=None,
+        bot_token_expires_at=_to_epoch(row.bot_token_expires_at),
+        installed_at=created,
+    )
+
+
+@contextmanager
+def _locked(team_id: str) -> Iterator[Tuple[Session, Optional[SlackSpace]]]:
+    with session_scope() as session:
+        session.execute(text("SET LOCAL lock_timeout = '5s'"))
+        try:
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+                {"k": "slack_token:" + team_id},
+            )
+        except OperationalError as e:
+            if getattr(e.orig, "pgcode", None) == _LOCK_TIMEOUT_PGCODE:
+                raise TokenLockTimeout(team_id) from None
+            raise
+        row = session.scalars(select(SlackSpace).where(SlackSpace.team_id == team_id)).one_or_none()
+        yield session, row
+
+
+@contextmanager
+def locked_row(team_id: str) -> Iterator[Optional[SlackSpace]]:
+    """Yield the workspace row inside a transaction holding its token lock.
+
+    Changes to the row commit when the block exits normally and roll back if it
+    raises. Raises `TokenLockTimeout` if the lock isn't acquired in time.
+    """
+    with _locked(team_id) as (_session, row):
+        yield row
+
+
+def _guard_allows(row: SlackSpace, bot: Bot) -> bool:
+    """A null stored expiry never blocks; a rotating token is replaced only by one expiring no earlier."""
+    stored = _to_epoch(row.bot_token_expires_at)
+    if stored is None:
+        return True
+    return bot.bot_token_expires_at is not None and bot.bot_token_expires_at >= stored
+
+
+def _write(row: SlackSpace, bot: Bot) -> None:
+    row.bot_token = bot.bot_token
+    # Bolt's request context carries no scopes and may lack IDs; keep stored values then.
+    if bot.bot_id:
+        row.bot_id = bot.bot_id
+    if bot.bot_user_id:
+        row.bot_user_id = bot.bot_user_id
+    if bot.bot_scopes:
+        row.bot_scopes = ",".join(bot.bot_scopes)
+    row.bot_token_expires_at = _to_datetime(bot.bot_token_expires_at)
+    row.bot_refresh_token_encrypted = (
+        encrypt_refresh_token(bot.bot_refresh_token) if bot.bot_refresh_token is not None else None
+    )
+
+
+def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = None) -> bool:
+    """Write the bot's token fields under the workspace lock, creating the row if needed.
+
+    Returns False without writing when the save guard rejects the token.
+    `workspace_name` is written only when the row is created.
+    """
+    with _locked(team_id) as (session, row):
+        if row is None:
+            row = SlackSpace(team_id=team_id, workspace_name=workspace_name)
+            session.add(row)
+        elif not _guard_allows(row, bot):
+            return False
+        _write(row, bot)
+        return True
+
+
+def save_context_token(team_id: str, context: dict) -> bool:
+    """Save the non-rotating bot token from Bolt's request context."""
+    bot = Bot(
+        team_id=team_id,
+        bot_token=context["bot_token"],
+        bot_id=context.get("bot_id"),
+        bot_user_id=context.get("bot_user_id"),
+        installed_at=time.time(),
+    )
+    return save_bot_locked(bot, team_id=team_id)
+
+
+def load_bot(team_id: str) -> Optional[Bot]:
+    """Read the stored token without locking, refreshing or decrypting."""
+    with session_scope() as session:
+        row = session.scalars(select(SlackSpace).where(SlackSpace.team_id == team_id)).one_or_none()
+        if row is None or not row.bot_token:
+            return None
+        return _bot_from_row(row)
+
+
+def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str) -> Optional[Bot]:
+    """Return the workspace's bot, refreshing it first if it expires within the window.
+
+    Lock, re-read, refresh if still due, write and commit all happen in one
+    transaction, so a process that waited on the lock sees the token the other
+    one saved and doesn't call Slack again.
+    """
+    try:
+        with _locked(team_id) as (_session, row):
+            if row is None or not row.bot_token:
+                return None
+            stored = _bot_from_row(row)
+            expires_at = stored.bot_token_expires_at
+            if expires_at is None or expires_at > time.time() + minutes_before_expiration * 60:
+                return stored
+
+            try:
+                if row.bot_refresh_token_encrypted is None:
+                    raise TokenDecryptError("no refresh token is stored for a rotating bot token")
+                refresh_token = decrypt_refresh_token(row.bot_refresh_token_encrypted)
+            except TokenDecryptError:
+                _log(logging.ERROR, "slack.token.decrypt_failed", team_id, path=path)
+                raise
+
+            rotating = _bot_from_row(row)
+            rotating.bot_refresh_token = refresh_token
+            try:
+                rotated = _rotator().perform_bot_token_rotation(
+                    bot=rotating, minutes_before_expiration=minutes_before_expiration
+                )
+            except Exception as e:
+                _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **_error_fields(e))
+                raise
+            if rotated is None:
+                return stored
+            if rotated.bot_refresh_token is None:
+                rotated.bot_refresh_token = refresh_token
+            if not _guard_allows(row, rotated):
+                return stored
+            _write(row, rotated)
+            _log(logging.INFO, "slack.token.refreshed", team_id, path=path)
+            return _bot_from_row(row)
+    except TokenLockTimeout:
+        _log(logging.WARNING, "slack.token.lock_timeout", team_id, path=path)
+        return load_bot(team_id)
