@@ -470,6 +470,36 @@ test("an advisory list longer than the PR lists' cap names every advisory", asyn
   for (const m of result.messages) assert.ok(m.length <= SLACK_MAX_CHARS);
 });
 
+test("a PR list longer than the daily report's cap names every fix PR", async () => {
+  const ids = Array.from({ length: 16 }, (_, i) => String(i).padStart(4, "0"));
+  const forkFor = (id) => `F3-Nation/f3-nation-ghsa-${id}-bbbb-cccc`;
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: {
+      draft: ids.map((id) => advisory(`GHSA-${id}-bbbb-cccc`, forkFor(id))),
+    },
+    prsByRepo: Object.fromEntries(
+      ids.map((id) => [
+        `f3-nation-ghsa-${id}-bbbb-cccc`,
+        [prNode(forkFor(id), { title: "z".repeat(150) })],
+      ]),
+    ),
+  });
+  const result = await build(github, (fork) =>
+    boardFor(fork, { title: "z".repeat(150) }),
+  );
+  const message = text(result);
+  assert.equal(result.report.counts.listed, 16);
+  for (const id of ids)
+    assert.ok(
+      message.includes(`https://github.com/${forkFor(id)}/pull/1`),
+      `${forkFor(id)}'s fix PR is linked`,
+    );
+  assert.doesNotMatch(message, /…and \d+ more/);
+  assert.doesNotMatch(message, /waiting on its author|No open fix PR/);
+  for (const m of result.messages) assert.ok(m.length <= SLACK_MAX_CHARS);
+});
+
 test("a base-repo warning shared by every fork is shown once", async () => {
   const github = fakeGithub({
     routes: slackIdsRoute,

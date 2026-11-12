@@ -267,7 +267,8 @@ const isListed = (pr, facts) =>
  * item). A board PR's optional `ref` replaces `#<number>` in its link.
  * `extraLists` (`[{ heading, lines }]`, lines already in Slack mrkdwn) follow
  * the PR lists in the same layout, with no line cap (a long one continues in
- * further sections), and `headerExtras` (strings) end the header. Returns
+ * further sections), and `headerExtras` (strings) end the header.
+ * `capLists: false` lifts the PR lists' line cap the same way. Returns
  * `{ text, blocks, counts }`: the notification fallback, the Block Kit
  * blocks, and `{ listed, red, yellow }`.
  */
@@ -284,6 +285,7 @@ function buildReport(
     boardHint = "Full board: `pnpm pr:triage:html`",
     extraLists = [],
     headerExtras = [],
+    capLists = true,
   },
 ) {
   const codeowners = board.codeowners ?? [];
@@ -378,13 +380,10 @@ function buildReport(
     const entries = lists[key].sort(
       (a, b) => b.light - a.light || (a.since || 0) - (b.since || 0),
     );
-    if (entries.length)
-      sections.push(
-        listSection(
-          heading,
-          entries.map((e) => e.line),
-        ),
-      );
+    if (!entries.length) continue;
+    const lines = entries.map((e) => e.line);
+    if (capLists) sections.push(listSection(heading, lines));
+    else sections.push(...fullListSections(heading, lines));
   }
   // Uncapped: an extra list must name every entry.
   for (const { heading, lines } of extras)

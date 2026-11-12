@@ -13,6 +13,12 @@ test("a mutation is found wherever it sits in the document", () => {
   assert.ok(hasMutation("query A { viewer { login } }\nmutation B { x }"));
 });
 
+test("a comment can't hide a mutation by holding string quotes", () => {
+  assert.ok(hasMutation('# """\nmutation M { addStar { x } }\n# """'));
+  assert.ok(hasMutation('# "\nmutation M { x }\n# "'));
+  assert.ok(hasMutation('query { a(b: """\nmutation M { x }'));
+});
+
 test("a read-only query passes, even when a string or comment says mutation", () => {
   assert.ok(!hasMutation("query { viewer { login } }"));
   assert.ok(!hasMutation('query { search(query: "mutation") { issueCount } }'));

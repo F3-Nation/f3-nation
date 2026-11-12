@@ -371,6 +371,8 @@ async function buildAdvisoryReport({
           ]
         : [];
     },
+    // advisoryLists() skips every placed PR, so each must be printed.
+    capLists: false,
     title: "Security Advisory Report",
     emptyText: "There are no open security advisories.",
     boardHint: `Run by @${login} with the \`${SKILL}\` agent skill`,

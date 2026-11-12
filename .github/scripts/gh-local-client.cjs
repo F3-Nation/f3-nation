@@ -33,17 +33,18 @@ function gh(args) {
   }
 }
 
+// Block strings, strings and comments as one alternation, so the token that
+// starts first wins: a `"""` inside a comment stays part of the comment. An
+// unterminated string matches nothing, leaving its text to be checked.
+const IGNORED_TOKEN =
+  /"""(?:\\"""|[\s\S])*?"""|"(?:\\.|[^"\\\n\r])*"|#[^\n\r]*/g;
+
 /**
  * Whether a GraphQL document holds a mutation anywhere, once strings and
  * comments (which GraphQL ignores, so they can hide one) are removed.
  */
 const hasMutation = (query) =>
-  /\bmutation\b/.test(
-    String(query)
-      .replace(/"""[\s\S]*?"""/g, "")
-      .replace(/"(?:\\.|[^"\\\n])*"/g, "")
-      .replace(/#[^\n\r]*/g, ""),
-  );
+  /\bmutation\b/.test(String(query).replace(IGNORED_TOKEN, " "));
 
 function createGhClient() {
   return {
