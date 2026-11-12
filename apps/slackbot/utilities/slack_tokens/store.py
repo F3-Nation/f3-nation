@@ -9,7 +9,7 @@ token, which Bolt treats as a non-rotating installation.
 import logging
 from typing import Optional
 
-from slack_sdk.errors import SlackApiError, SlackTokenRotationError
+from slack_sdk.errors import SlackClientError
 from slack_sdk.oauth.installation_store import Bot, Installation
 from slack_sdk.oauth.installation_store.installation_store import InstallationStore
 
@@ -51,11 +51,10 @@ class SlackSpaceInstallationStore(InstallationStore):
             return None
         try:
             bot = refresh_if_needed(team_id, minutes_before_expiration=STORE_WINDOW_MINUTES, path="authorize")
-        except Exception as e:
+        except (TokenDecryptError, TokenSaveError, SlackClientError, OSError):
             # Failures are logged by refresh.py. The stored token may still be valid, so a refresh
-            # problem doesn't fail the request; Slack rejects the token if it is not.
-            if not isinstance(e, (TokenDecryptError, TokenSaveError)) and not _is_slack_error(e):
-                raise
+            # problem or an unreachable Slack API doesn't fail the request; Slack rejects the token
+            # if it is not.
             bot = load_bot(team_id)
         return _non_rotating(bot)
 
@@ -87,7 +86,3 @@ class SlackSpaceInstallationStore(InstallationStore):
                 row.bot_token = None
                 row.bot_token_expires_at = None
                 row.bot_refresh_token_encrypted = None
-
-
-def _is_slack_error(error: Exception) -> bool:
-    return isinstance(error, (SlackApiError, SlackTokenRotationError))

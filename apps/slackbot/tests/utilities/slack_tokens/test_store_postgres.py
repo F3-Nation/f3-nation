@@ -2,6 +2,7 @@ import time
 from contextlib import contextmanager
 from datetime import timedelta
 from unittest.mock import MagicMock
+from urllib.error import URLError
 
 import pytest
 from slack_bolt.authorization.authorize import InstallationStoreAuthorize
@@ -97,6 +98,20 @@ def test_find_bot_returns_none_for_unknown_workspace(isolated_postgres, rotator)
 def test_find_bot_returns_stored_token_when_refresh_fails(isolated_postgres, monkeypatch):
     _seed(isolated_postgres, expires_in=timedelta(minutes=30))
     failing = FakeRotator(error=SlackApiError("boom", {"error": "invalid_refresh_token"}))
+    monkeypatch.setattr(refresh, "_rotator", lambda: failing)
+
+    bot = SlackSpaceInstallationStore().find_bot(enterprise_id=None, team_id=TEAM_ID)
+
+    assert failing.calls == 1
+    assert bot.bot_token == STORED_TOKEN
+    assert bot.bot_token_expires_at is None
+    assert bot.bot_refresh_token is None
+
+
+@pytest.mark.parametrize("error", [URLError("unreachable"), TimeoutError("timed out")])
+def test_find_bot_returns_stored_token_when_slack_is_unreachable(isolated_postgres, monkeypatch, error):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    failing = FakeRotator(error=error)
     monkeypatch.setattr(refresh, "_rotator", lambda: failing)
 
     bot = SlackSpaceInstallationStore().find_bot(enterprise_id=None, team_id=TEAM_ID)
