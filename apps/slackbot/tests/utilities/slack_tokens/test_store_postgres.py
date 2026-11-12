@@ -1,3 +1,4 @@
+import logging
 import time
 from contextlib import contextmanager
 from datetime import timedelta
@@ -128,6 +129,40 @@ def test_find_bot_returns_stored_token_when_decrypt_fails(isolated_postgres, rot
     assert rotator.calls == 0
     assert bot.bot_token == STORED_TOKEN
     assert bot.bot_token_expires_at is None
+
+
+def test_find_bot_logs_and_raises_unexpected_errors(isolated_postgres, monkeypatch, caplog):
+    def broken(team_id, **kwargs):
+        raise RuntimeError(f"unexpected failure carrying {STORED_TOKEN}")
+
+    monkeypatch.setattr(store, "refresh_if_needed", broken)
+
+    with pytest.raises(RuntimeError):
+        SlackSpaceInstallationStore().find_bot(enterprise_id=None, team_id=TEAM_ID)
+
+    [record] = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
+    assert record.levelno == logging.ERROR
+    assert record.json_fields == {
+        "event": "slack.token.refresh_failed",
+        "team_id": TEAM_ID,
+        "path": "authorize",
+        "error_type": "RuntimeError",
+    }
+    assert STORED_TOKEN not in caplog.text
+
+
+def test_save_refused_by_guard_logs_warning(isolated_postgres, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(hours=11))
+    before = _row(isolated_postgres)
+
+    SlackSpaceInstallationStore().save(_installation(bot_token_expires_at=int(time.time()) + 3600))
+
+    assert _row(isolated_postgres) == before
+    [record] = [
+        r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.install_refused"
+    ]
+    assert record.levelno == logging.WARNING
+    assert record.json_fields == {"event": "slack.token.install_refused", "team_id": TEAM_ID}
 
 
 def test_delete_bot_clears_credentials(isolated_postgres):

@@ -1,13 +1,14 @@
-"""The only code that refreshes Slack bot tokens or writes token fields.
+"""Refreshes Slack bot tokens and guards every write to a workspace's token fields.
 
-Every write to a workspace's token fields runs in one transaction holding a
-per-workspace `pg_advisory_xact_lock`. Slack revokes access tokens from earlier
-refreshes and accepts concurrent refreshes, so two unserialized refreshes can
-each save a token the other just revoked. The transaction-scoped lock is
-released by commit or rollback, so a pooled connection never keeps it after an
-exception.
+Token columns are written only by `utilities/slack_tokens` and the operator
+CLIs in `scripts/`, always through `save_bot_locked` or `locked_row`, so every
+write runs in one transaction holding a per-workspace `pg_advisory_xact_lock`.
+Slack revokes access tokens from earlier refreshes and accepts concurrent
+refreshes, so two unserialized refreshes can each save a token the other just
+revoked. The transaction-scoped lock is released by commit or rollback, so a
+pooled connection never keeps it after an exception.
 
-The decrypted refresh token lives only inside `refresh_if_needed`. Every `Bot`
+`refresh_if_needed` is the only caller of `decrypt_refresh_token`. Every `Bot`
 this module returns has `bot_refresh_token=None`.
 """
 
@@ -68,6 +69,11 @@ def _error_fields(error: Exception) -> dict:
         if isinstance(code, str) and re.fullmatch(r"[a-z0-9_]{1,64}", code):
             fields["error_code"] = code
     return fields
+
+
+def log_refresh_failure(team_id: str, error: Exception, *, path: str) -> None:
+    """Log `slack.token.refresh_failed` at ERROR with the error's type and Slack error code only."""
+    _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **_error_fields(error))
 
 
 def _to_epoch(value: Optional[datetime]) -> Optional[int]:
@@ -220,23 +226,33 @@ def load_bot(team_id: str) -> Optional[Bot]:
         return _bot_from_row(row)
 
 
+def _due(bot: Bot, minutes_before_expiration: int) -> bool:
+    """Whether a rotating token expires within the window; a null expiry never does."""
+    expires_at = bot.bot_token_expires_at
+    return expires_at is not None and expires_at <= time.time() + minutes_before_expiration * 60
+
+
 def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str) -> Optional[Bot]:
     """Return the workspace's bot, refreshing it first if it expires within the window.
 
-    Lock, re-read, refresh if still due, write and commit all happen in one
-    transaction, so a process that waited on the lock sees the token the other
-    one saved and doesn't call Slack again.
+    A token with no expiry or outside the window is returned from an unlocked
+    read, so most calls never wait on the lock. Otherwise lock, re-read,
+    refresh if still due, write and commit all happen in one transaction, so a
+    process that waited on the lock sees the token the other one saved and
+    doesn't call Slack again.
 
     Raises `TokenSaveError` if saving the refreshed token fails. Slack has
     already issued the new token by then, and it is lost with the rollback.
     """
+    unlocked = load_bot(team_id)
+    if unlocked is None or not _due(unlocked, minutes_before_expiration):
+        return unlocked
     try:
         with _locked(team_id) as (session, row):
             if row is None or not row.bot_token:
                 return None
             stored = _bot_from_row(row)
-            expires_at = stored.bot_token_expires_at
-            if expires_at is None or expires_at > time.time() + minutes_before_expiration * 60:
+            if not _due(stored, minutes_before_expiration):
                 return stored
 
             try:
@@ -254,7 +270,7 @@ def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str
                     bot=rotating, minutes_before_expiration=minutes_before_expiration
                 )
             except Exception as e:
-                _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **_error_fields(e))
+                log_refresh_failure(team_id, e, path=path)
                 raise
             if rotated is None:
                 return stored

@@ -140,6 +140,22 @@ def test_fresh_token_not_refreshed(isolated_postgres, rotator):
     assert bot.bot_token == STORED_TOKEN
 
 
+@pytest.mark.parametrize("expires_in", [None, timedelta(hours=5)])
+def test_token_not_due_returns_without_taking_the_lock(isolated_postgres, rotator, monkeypatch, expires_in):
+    _seed(isolated_postgres, expires_in=expires_in)
+
+    def forbidden(team_id):
+        raise AssertionError("a token that isn't due must not take the workspace lock")
+
+    monkeypatch.setattr(refresh, "_locked", forbidden)
+
+    bot = refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    assert rotator.calls == 0
+    assert bot.bot_token == STORED_TOKEN
+    assert bot.bot_refresh_token is None
+
+
 def test_near_expiry_refreshes_and_persists(isolated_postgres, rotator, caplog):
     _seed(isolated_postgres, expires_in=timedelta(minutes=30))
     caplog.set_level(logging.INFO)

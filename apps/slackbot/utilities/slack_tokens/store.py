@@ -19,6 +19,7 @@ from utilities.slack_tokens.refresh import (
     TokenSaveError,
     load_bot,
     locked_row,
+    log_refresh_failure,
     refresh_if_needed,
     save_bot_locked,
 )
@@ -35,7 +36,13 @@ def _non_rotating(bot: Optional[Bot]) -> Optional[Bot]:
 
 class SlackSpaceInstallationStore(InstallationStore):
     def save(self, installation: Installation) -> None:
-        save_bot_locked(installation.to_bot(), team_id=installation.team_id, workspace_name=installation.team_name)
+        saved = save_bot_locked(
+            installation.to_bot(), team_id=installation.team_id, workspace_name=installation.team_name
+        )
+        if not saved:
+            # The save guard refused a token expiring earlier than the stored rotating one.
+            event = "slack.token.install_refused"
+            logger.warning(event, extra={"json_fields": {"event": event, "team_id": installation.team_id}})
 
     def save_bot(self, bot: Bot) -> None:
         save_bot_locked(bot, team_id=bot.team_id)
@@ -56,6 +63,10 @@ class SlackSpaceInstallationStore(InstallationStore):
             # problem or an unreachable Slack API doesn't fail the request; Slack rejects the token
             # if it is not.
             bot = load_bot(team_id)
+        except Exception as e:
+            # Bolt logs an authorize exception only at INFO, so record it at ERROR before it propagates.
+            log_refresh_failure(team_id, e, path="authorize")
+            raise
         return _non_rotating(bot)
 
     def find_installation(
