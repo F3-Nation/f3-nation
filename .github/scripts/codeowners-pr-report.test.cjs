@@ -143,14 +143,14 @@ test("claimed and LOCAL goes to 🧪, mentioning the claimer and the held result
       pr(1, {
         bucket: "LOCAL",
         codeownerAssignees: ["dan"],
-        note: "last local test said don't approve yet; gave up waiting on Qodo",
+        note: "last local test said don't approve yet; merge conflicts",
       }),
     ]),
     "🧪",
   );
   const line = lineFor(local, 1);
   assert.match(line, /<@U0DAN> · last local test said don't approve yet · 1d$/);
-  assert.doesNotMatch(line, /Qodo/);
+  assert.doesNotMatch(line, /merge conflicts/);
 });
 
 test("claimed and MANUAL goes to ✅", () => {
@@ -266,9 +266,7 @@ test("an exempt PR is listed even when it is the author's turn", () => {
 
 test("buckets that aren't the codeowners' turn are left out", () => {
   const result = report(
-    ["BOTS", "THREADS", "DRAFT", "SKIP"].map((bucket, i) =>
-      pr(i + 1, { bucket }),
-    ),
+    ["THREADS", "DRAFT", "SKIP"].map((bucket, i) => pr(i + 1, { bucket })),
   );
   assert.equal(result.counts.listed, 0);
 });
