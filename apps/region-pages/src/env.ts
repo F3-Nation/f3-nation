@@ -18,7 +18,7 @@ export const env = createEnv({
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
     // Canonical public origin for metadata, Open Graph URLs and the sitemap.
     SITE_URL: z.url().optional(),
-    // regions2 alias redirect: temporary during the cutover soak, 301 after signoff.
+    // regions2 alias redirect status: 307 is sent no-store so it can be undone; 301 is permanent.
     REGIONS2_REDIRECT_STATUS: z.enum(["301", "307"]).default("307"),
     GA_MEASUREMENT_ID: z
       .string()

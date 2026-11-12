@@ -7,9 +7,9 @@ const normalizeHost = (host: string | null): string | undefined =>
   host?.split(",")[0]?.trim().toLowerCase().replace(/:\d+$/, "") ?? undefined;
 
 /**
- * The redirect target for a request to the regions2 alias, or null. Inert until
- * SITE_URL points at regions.f3nation.com, so it can ship before the domain
- * moves (docs/REGION_PAGES_CUTOVER.md).
+ * The canonical-host target for a request to the regions2 alias, or null.
+ * Null unless siteUrl's host is the canonical host, so the alias keeps serving
+ * the app until the canonical domain points here.
  */
 export const canonicalRedirect = (
   requestHost: string | null,

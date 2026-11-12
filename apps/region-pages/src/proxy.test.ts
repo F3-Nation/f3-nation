@@ -40,6 +40,10 @@ describe("proxy", () => {
     mockEnv.REGIONS2_REDIRECT_STATUS = "301";
     const res = proxy(request("internal.run.app", "regions2.f3nation.com"));
     expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe(
+      "https://regions.f3nation.com/boise?letter=b",
+    );
+    expect(res.headers.get("cache-control")).toBeNull();
   });
 
   it("passes through while SITE_URL is regions2", () => {

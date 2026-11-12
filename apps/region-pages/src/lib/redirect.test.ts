@@ -16,7 +16,7 @@ describe("canonicalRedirect", () => {
   it("stays inert on staging", () => {
     expect(
       canonicalRedirect(
-        "staging.regions.f3nation.com",
+        "regions2.f3nation.com",
         url("/boise"),
         "https://staging.regions.f3nation.com",
       ),

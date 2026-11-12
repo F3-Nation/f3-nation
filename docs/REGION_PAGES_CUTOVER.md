@@ -28,8 +28,9 @@ The domain mapping lives in `f3-region-pages-app`, so the release lead runs the 
 - [ ] `curl -fsS https://regions2.f3nation.com/health` succeeds.
 - [ ] API per-IP rate limit headroom is acceptable for a cold crawl after the canonical change.
 - [ ] Production `SITE_URL` is recorded and is not regions.f3nation.com, and `REGIONS2_REDIRECT_STATUS` is unset or 307.
-- [ ] After the release containing the regions2 redirect `curl -sI https://regions2.f3nation.com/` still returns 200 (stop on any redirect).
 - [ ] A release containing the regions2 redirect (`apps/region-pages/src/proxy.ts`) is deployed to prod. It is inert until `SITE_URL` changes.
+- [ ] After that deploy, `curl -sI https://regions2.f3nation.com/` still returns 200 (stop on any redirect).
+- [ ] The account running the cutover is a verified owner of the domain: `gcloud domains list-user-verified` lists `f3nation.com` (or `regions.f3nation.com`).
 - [ ] Neon backup is less than 7 days old (else take a fresh `pg_dump -Fc`).
 - [ ] Record the current state:
   - `gcloud beta run domain-mappings list --project region-pages --region us-central1`
@@ -41,12 +42,14 @@ The domain mapping lives in `f3-region-pages-app`, so the release lead runs the 
 
    ```sh
    # The service binds cron-secret-tf:latest; confirm, then record the version.
+   set -euo pipefail
    gcloud run services describe f3-region-pages --project region-pages \
      --region us-central1 --format='value(spec.template.spec.containers[0].env)'
    OLD=$(gcloud secrets versions list cron-secret-tf --project region-pages \
      --filter='state=ENABLED' --sort-by='~createTime' --limit 1 \
      --format='value(name)')
    echo "record this: OLD=$OLD"
+   [ -n "$OLD" ] || { echo "no enabled cron-secret-tf version found; stop" >&2; exit 1; }
    openssl rand -hex 32 | gcloud secrets versions add cron-secret-tf \
      --project region-pages --data-file=-
    gcloud run services update f3-region-pages --project region-pages \
@@ -107,11 +110,12 @@ Daily: check Cloud Run 5xx and API 429s for `f3-region-pages` in `f3-region-page
 4. Restore the ingest secret and caller, using the version number recorded before cutover:
 
    ```sh
-   OLD=12   # replace 12 with the number recorded in cutover step 1
-   gcloud secrets versions access "$OLD" --secret=cron-secret-tf --project=region-pages \
-     | gcloud secrets versions add cron-secret-tf --project=region-pages --data-file=-
+   set -euo pipefail
+   OLD=12   # replace 12 with the version number recorded in cutover step 1
+   gcloud secrets versions describe "$OLD" --secret=cron-secret-tf \
+     --project=region-pages --format='value(state)' | grep -qx ENABLED
    gcloud run services update f3-region-pages --project region-pages \
-     --region us-central1 --update-secrets CRON_SECRET=cron-secret-tf:latest
+     --region us-central1 --update-secrets "CRON_SECRET=cron-secret-tf:$OLD"
    ```
 
    Re-enable the ingest caller and confirm its next run succeeds (a new row in the legacy `ingest_runs` table).
@@ -121,6 +125,8 @@ Daily: check Cloud Run 5xx and API 429s for `f3-region-pages` in `f3-region-page
 Only after day 14 and signoff from the release lead:
 
 1. Make the regions2 redirect permanent: `gcloud run services update f3-region-pages --project f3-region-pages-app --region us-central1 --update-env-vars REGIONS2_REDIRECT_STATUS=301`.
+
+   Gate: `curl -sI 'https://regions2.f3nation.com/<slug>' | grep -E '^HTTP/[0-9.]+ 301'` matches and `curl -fsS -o /dev/null https://regions.f3nation.com/` succeeds. If either fails, set `REGIONS2_REDIRECT_STATUS=307` again and investigate before continuing.
 
 2. Move or retire `staging.f3regions.com` (it depends on Neon).
 3. Take a final Neon dump.
