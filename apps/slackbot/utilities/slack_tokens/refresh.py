@@ -187,11 +187,23 @@ def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = N
         return True
 
 
+def has_context_token(context: dict) -> bool:
+    """Whether Bolt's request context carries a bot token."""
+    return bool(context.get("bot_token"))
+
+
 def save_context_token(team_id: str, context: dict) -> bool:
-    """Save the non-rotating bot token from Bolt's request context."""
+    """Save the non-rotating bot token from Bolt's request context.
+
+    Returns False without writing if the context has no token or the save
+    guard refuses it (the stored token is rotating).
+    """
+    if not has_context_token(context):
+        return False
+    bot_token = context["bot_token"]
     bot = Bot(
         team_id=team_id,
-        bot_token=context["bot_token"],
+        bot_token=bot_token,
         bot_id=context.get("bot_id"),
         bot_user_id=context.get("bot_user_id"),
         installed_at=time.time(),

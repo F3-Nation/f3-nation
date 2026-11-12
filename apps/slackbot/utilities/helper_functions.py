@@ -517,6 +517,22 @@ def update_local_slack_users(slack_user: SlackUser = None) -> None:
     SLACK_USERS.update(selected)
 
 
+def _parse_stored_settings(slack_space: SlackSpace | None, team_id: str) -> SlackSettings | None:
+    """The workspace's stored settings, or None if the row has none or they are invalid."""
+    settings = safe_get(slack_space, "settings")
+    if isinstance(settings, str):
+        try:
+            settings = json.loads(settings)
+        except (TypeError, json.JSONDecodeError):
+            return None
+    if not isinstance(settings, Mapping) or settings.get("team_id") != team_id:
+        return None
+    try:
+        return SlackSettings(**settings)
+    except (TypeError, ValueError):
+        return None
+
+
 def get_region_record(team_id: str, body, context, client, logger) -> SlackSettings:
     if not REGION_RECORDS:
         update_local_region_records()
@@ -525,6 +541,16 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
     team_domain = safe_get(body, "team", "domain")
 
     if not region_record:
+        slack_space_record: SlackSpace | None = DbManager.find_first_record(
+            SlackSpace, filters=[SlackSpace.team_id == team_id]
+        )
+        # Another process may have configured this workspace after this one
+        # loaded its cache; its settings are the source of truth.
+        stored = _parse_stored_settings(slack_space_record, team_id)
+        if stored:
+            REGION_RECORDS[team_id] = stored
+            return stored
+
         try:
             team_info = client.team_info()
             team_name = team_info["team"]["name"]
@@ -546,11 +572,12 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
         # The installation store creates the row (with its token) at install time,
         # so normally this only fills in the settings; the token is never written here.
-        slack_space_record: SlackSpace | None = DbManager.find_first_record(
-            SlackSpace, filters=[SlackSpace.team_id == team_id]
-        )
+        # Settings that exist but failed to parse are left for an operator to repair.
         if slack_space_record:
-            DbManager.update_record(SlackSpace, slack_space_record.id, {SlackSpace.settings: region_record.__dict__})
+            if slack_space_record.settings is None:
+                DbManager.update_record(
+                    SlackSpace, slack_space_record.id, {SlackSpace.settings: region_record.__dict__}
+                )
         else:
             slack_space_record = DbManager.create_record(
                 SlackSpace(team_id=team_id, workspace_name=team_name, settings=region_record.__dict__)

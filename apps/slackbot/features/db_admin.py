@@ -23,7 +23,7 @@ from utilities.helper_functions import (
 )
 from utilities.slack import actions, orm
 from utilities.slack_tokens.client import slack_client_for_team
-from utilities.slack_tokens.refresh import save_context_token
+from utilities.slack_tokens.refresh import has_context_token, load_bot, save_context_token
 
 
 def build_db_admin_form(
@@ -226,13 +226,13 @@ def handle_update_bot_token(
     context: dict,
     region_record: SlackSettings,
 ):
-    if save_context_token(region_record.team_id, context):
+    if not has_context_token(context) or save_context_token(region_record.team_id, context):
         return
+    stored = load_bot(region_record.team_id)
     user_id = safe_get(body, "user", "id")
-    if user_id:
-        client.chat_postEphemeral(
+    if stored and stored.bot_token_expires_at and user_id:
+        client.chat_postMessage(
             channel=user_id,
-            user=user_id,
             text="This workspace uses rotating tokens; reinstall the app instead.",
         )
 

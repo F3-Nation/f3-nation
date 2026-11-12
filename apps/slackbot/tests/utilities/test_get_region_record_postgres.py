@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,6 +15,7 @@ from tests.utilities.slack_tokens.test_refresh_postgres import (
     encryption_key,  # noqa: F401  (autouse fixture)
 )
 from utilities import helper_functions
+from utilities.database.orm import SlackSettings
 
 pytestmark = postgres_fixture.requires_postgres
 isolated_postgres = postgres_fixture.isolated_postgres
@@ -74,3 +76,24 @@ def test_get_region_record_creates_row_without_token_when_missing(isolated_postg
     assert workspace_name == "Client Team Name"
     assert bot_token is None
     assert "xoxb" not in settings
+
+
+def test_get_region_record_keeps_settings_configured_elsewhere(isolated_postgres):
+    # Another instance configured the workspace after this process cached the regions.
+    _seed(isolated_postgres, expires_in=None, refresh_token=None)
+    configured = SlackSettings(team_id=TEAM_ID, org_id=77, workspace_name="Configured", canvas_channel="C_CANVAS")
+    with Session(isolated_postgres) as session:
+        session.execute(
+            text("UPDATE slack_spaces SET settings = CAST(:s AS json) WHERE team_id = :t"),
+            {"s": json.dumps(configured.__dict__), "t": TEAM_ID},
+        )
+        session.commit()
+    helper_functions.REGION_RECORDS["T_OTHER"] = SlackSettings(team_id="T_OTHER")
+
+    record = helper_functions.get_region_record(TEAM_ID, {}, {}, _slack_client(), MagicMock())
+
+    assert record.org_id == 77
+    assert record.canvas_channel == "C_CANVAS"
+    assert helper_functions.REGION_RECORDS[TEAM_ID] is record
+    stored = json.loads(_space_rows(isolated_postgres)[0][2])
+    assert stored["org_id"] == 77 and stored["canvas_channel"] == "C_CANVAS"
