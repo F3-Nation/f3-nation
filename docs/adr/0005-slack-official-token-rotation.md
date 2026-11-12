@@ -1,4 +1,4 @@
-# ADR 0005: Slack bot token rotation with the official SDK, no new services
+# ADR 0005: Slack bot token rotation with the official SDK
 
 - **Date:** 2026-11-11
 - **Author(s):** @evanpetzoldt
@@ -15,13 +15,11 @@ Today each workspace's token exists in several places that drift apart:
 
 - Bolt's OAuth installation store, a `FileInstallationStore` on a GCS bucket
   mounted only into the Slackbot service.
-- `slack_spaces.bot_token`, which the TypeScript API reads to post to Slack.
-- A `bot_token` key inside the `slack_spaces.settings` JSON, which Python
-  features and scheduled jobs read. The service copies the token from Bolt's
-  request context into both columns when it sees a different one.
-
-The Slackbot is run by volunteers. Any design has to avoid new services and new
-components whose failure stops the bot from working.
+- `slack_spaces.bot_token`, which the TypeScript API reads to post to Slack,
+  and which some Python features and scheduled jobs also read directly.
+- A `bot_token` key inside the `slack_spaces.settings` JSON, which other
+  Python features and scheduled jobs read. The service copies the token from
+  Bolt's request context into both columns when it sees a different one.
 
 Slack offers [token rotation](https://docs.slack.dev/authentication/using-token-rotation):
 access tokens expire after 12 hours and are renewed with a refresh token. Bolt
@@ -46,8 +44,7 @@ current one, and a stolen refresh token stays useful for a long time.
 ## Decision
 
 **Enable Slack token rotation using Bolt's and `slack_sdk`'s official rotation
-support, keep every credential in the existing `slack_spaces` row, and add no
-new service.**
+support, keep every credential in the existing `slack_spaces` row.**
 
 - **One store, one row per workspace.** A custom Bolt `InstallationStore`
   backed by `slack_spaces` replaces the GCS `FileInstallationStore`. The row
@@ -64,15 +61,19 @@ new service.**
 - **Only Python refreshes, one refresh per workspace at a time.** Refreshes
   happen in the store's lookup, which Bolt calls on every request, in the
   getter when a token is near expiry, and in a sweep at the start of the
-  existing hourly job. Every refresh takes a per-workspace Postgres advisory
-  lock, re-reads the row, and refreshes only if the token is still near expiry.
-  It saves before releasing the lock. The refresh itself uses `slack_sdk`'s
-  `TokenRotator`. Bolt never refreshes: the store hands Bolt the access token
-  without its expiry or refresh token, so Bolt treats the installation as
-  non-rotating and its built-in rotation never runs. Saves never replace a
-  token with one that expires earlier.
+  existing hourly job. Every refresh runs in one database transaction that
+  takes a per-workspace transaction-level advisory lock
+  (`pg_advisory_xact_lock`), re-reads the row, refreshes only if the token is
+  still near expiry, and saves before the transaction commits and releases the
+  lock. The refresh itself uses `slack_sdk`'s `TokenRotator`. Bolt never
+  refreshes: the store hands Bolt the access token without its expiry or
+  refresh token, so Bolt treats the installation as non-rotating and its
+  built-in rotation never runs. Saves never replace a token with one that
+  expires earlier. A token with no expiry never blocks a save, so an exchange
+  or reinstall always replaces it.
 - **The TypeScript API only reads.** It reads `slack_spaces.bot_token` as it
-  does today and never refreshes. The hourly sweep keeps quiet workspaces'
+  does today and never refreshes. On `token_revoked` it re-reads the row and
+  retries once. The hourly sweep keeps quiet workspaces'
   tokens fresh, so the API never depends on the Slackbot service being up.
 - **Rotation is the last step.** Before rotation is enabled on the production
   app, every reader goes through the getter or the API's table read, and the
@@ -136,7 +137,15 @@ rotation.
   Any copy outside `slack_spaces` is a bug. Tests and review must catch new
   ones.
 - **In-flight calls can hit `token_revoked`** when another process refreshes
-  the same workspace. Readers re-read the row and retry once.
+  the same workspace. Python readers and the TypeScript API re-read the row
+  and retry once.
+- **A leaked refresh token stays useful for a long time.** Rotation narrows
+  where it can leak rather than removing the risk: the refresh token is
+  encrypted at rest and is only ever decrypted inside the Slackbot's refresh
+  code. It never reaches the API, Slack metadata, the settings JSON or the GCS
+  bucket, which are the paths access tokens have leaked through. Recovering
+  from a leaked refresh token means revoking that workspace's tokens and
+  reinstalling.
 - **The encryption key is a new secret to manage.** Losing it makes every
   refresh token unreadable, so every workspace would have to reinstall.
   A key change re-encrypts every row's refresh token with the new key under
