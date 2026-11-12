@@ -25,7 +25,7 @@ Public, anonymous directory of F3 regions and their weekly workouts at
   60 s cache, edits show within about 11 minutes (spec AC-13 allows an hour). Region pages are on-demand ISR; `/` and `/sitemap.xml` render per
   request from the cached data.
 - **Env** (`.env.example`): `F3_API_BASE_URL`, `F3_CHANNEL`, `SITE_URL`,
-  `GA_MEASUREMENT_ID`. No secrets.
+  `REGIONS2_REDIRECT_STATUS`, `GA_MEASUREMENT_ID`. No secrets.
 
 ## Rules
 

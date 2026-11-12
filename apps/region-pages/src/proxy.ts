@@ -6,8 +6,8 @@ import { canonicalRedirect } from "@/lib/redirect";
 import { nonEmpty } from "@/lib/site";
 
 export function proxy(request: NextRequest) {
-  // Only an explicit SITE_URL activates the redirect; the getSiteUrl()
-  // production fallback must not turn it on before cutover step 4.
+  // Only an explicit SITE_URL activates the redirect: getSiteUrl() falls back to
+  // the production origin, which would turn it on wherever SITE_URL is unset.
   const siteUrl = nonEmpty(env.SITE_URL);
   if (!siteUrl) return NextResponse.next();
   const host =
