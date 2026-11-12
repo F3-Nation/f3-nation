@@ -247,7 +247,7 @@ You should see output ending with:
 
 ### 3. (Optional) Add a Google Maps API key
 
-You don't need a real key to build, run the tests, or pass `pnpm ci:local` — only to see the map itself. `pnpm local:setup` copies `.env.example`, whose placeholder value (`F3_GOOGLE_API_KEY=your-google-maps-api-key-here`) is enough to satisfy env validation; the apps start, but the map tiles won't render. Don't blank the variable out — the map and admin env schemas require it to be non-empty, so an empty value fails `pnpm dev` and `pnpm build`. To get a real key:
+You don't need a real key to build, run the tests, or pass `pnpm ci:local` — only to see the map itself. `pnpm local:setup` copies `.env.example`, whose placeholder value (`F3_GOOGLE_API_KEY=your-google-maps-api-key-here`) is enough to satisfy env validation; the apps start, but Google rejects the key, so the map app shows a "Google Maps isn't available" message instead of the map. Don't blank the variable out — the map and admin env schemas require it to be non-empty, so an empty value fails `pnpm dev` and `pnpm build`. To get a real key:
 
 1. Go to [console.cloud.google.com/google/maps-apis](https://console.cloud.google.com/google/maps-apis/)
 2. Create a project and enable **Maps JavaScript API** and **Places API (New)**
@@ -421,9 +421,9 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 
 ### Google Maps
 
-| Variable            | Value      | Meaning                                                                                                                                                                                                |
-| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `F3_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key, read by the map and admin apps. They start with the `.env.example` placeholder instead of a real key (the map is just blank), but an empty value fails env validation. |
+| Variable            | Value      | Meaning                                                                                                                                                                                                                                    |
+| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `F3_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key, read by the map and admin apps. They start with the `.env.example` placeholder instead of a real key (the map app shows a "Google Maps isn't available" message), but an empty value fails env validation. |
 
 ---
 
