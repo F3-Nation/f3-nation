@@ -537,7 +537,6 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
         settings_starters = {
             "team_id": team_id,
-            "bot_token": context["bot_token"],
             "workspace_name": team_name,
         }
         region_record = SlackSettings(**settings_starters)
@@ -545,13 +544,17 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
             settings_starters.update({"org_id": org_record.id})
             region_record = SlackSettings(**settings_starters)
 
-        slack_space_record = SlackSpace(
-            team_id=team_id,
-            workspace_name=team_name,
-            bot_token=context["bot_token"],
-            settings=region_record.__dict__,
+        # The installation store creates the row (with its token) at install time,
+        # so normally this only fills in the settings; the token is never written here.
+        slack_space_record: SlackSpace | None = DbManager.find_first_record(
+            SlackSpace, filters=[SlackSpace.team_id == team_id]
         )
-        slack_space_record: SlackSpace = DbManager.create_record(slack_space_record)
+        if slack_space_record:
+            DbManager.update_record(SlackSpace, slack_space_record.id, {SlackSpace.settings: region_record.__dict__})
+        else:
+            slack_space_record = DbManager.create_record(
+                SlackSpace(team_id=team_id, workspace_name=team_name, settings=region_record.__dict__)
+            )
 
         if org_record and LOCAL_DEVELOPMENT:
             # Connect the org to the slack space
@@ -578,17 +581,6 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
         org_id = org_record.id if org_record else None
         populate_users(client, team_id, org_id)
-
-    else:
-        # Update the bot token if it has changed
-        if context.get("bot_token") and context.get("bot_token") != region_record.bot_token:
-            region_record.bot_token = context["bot_token"]
-            DbManager.update_record(
-                SlackSpace,
-                safe_get(DbManager.find_first_record(SlackSpace, filters=[SlackSpace.team_id == team_id]), "id"),
-                {SlackSpace.settings: region_record.__dict__, SlackSpace.bot_token: context["bot_token"]},
-            )
-            REGION_RECORDS[team_id] = region_record
 
     return region_record
 

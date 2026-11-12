@@ -74,7 +74,7 @@ def test_deny_uses_current_db_token_and_ignores_legacy_metadata_token(monkeypatc
     lookup = MagicMock(return_value=requester_space)
     client_factory = MagicMock()
     monkeypatch.setattr(connect, "_get_requester_slack_space", lookup)
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     body = {
         "message": {
             "metadata": {
@@ -90,8 +90,7 @@ def test_deny_uses_current_db_token_and_ignores_legacy_metadata_token(monkeypatc
     connect.handle_deny_connection(body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="TREQUESTER"))
 
     lookup.assert_called_once_with("TREQUESTER")
-    client_factory.assert_called_once()
-    assert client_factory.call_args.kwargs["token"] == "current-db-token"
+    client_factory.assert_called_once_with("TREQUESTER")
     client_factory.return_value.chat_postMessage.assert_called_once()
 
 
@@ -99,7 +98,7 @@ def test_deny_rejects_missing_or_invalid_workspace_without_using_legacy_token(mo
     lookup = MagicMock(return_value=None)
     client_factory = MagicMock()
     monkeypatch.setattr(connect, "_get_requester_slack_space", lookup)
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     body = {
         "message": {
             "metadata": {
@@ -161,7 +160,7 @@ def test_approve_uses_requester_workspace_client_without_admin_context(monkeypat
     monkeypatch.setattr(connect, "get_user", get_user)
     monkeypatch.setattr(connect, "update_local_region_records", MagicMock())
     client_factory = MagicMock()
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     monkeypatch.delenv("ADMIN_BOT_TOKEN", raising=False)
     body = {
         "user": {"id": "U_ADMIN"},
@@ -187,7 +186,7 @@ def test_approve_uses_requester_workspace_client_without_admin_context(monkeypat
         SlackSettings(team_id="TADMIN"),
     )
 
-    assert client_factory.call_args.kwargs["token"] == "current-db-token"
+    client_factory.assert_called_once_with("TREQUESTER")
     assert get_user.call_args.args[2] is client_factory.return_value
     assert client_factory.return_value.chat_postMessage.call_args.kwargs["channel"] == "U_REQUESTER"
 
@@ -205,7 +204,7 @@ def test_approve_rejects_unexpected_workspace_settings_before_database_writes(mo
     monkeypatch.setattr(connect.DbManager, "create_record", create_record)
     monkeypatch.setattr(connect.DbManager, "update_records", update_records)
     client_factory = MagicMock()
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     body = {
         "message": {
             "metadata": {
@@ -297,7 +296,7 @@ def test_approve_unlinked_requester_does_not_connect_workspace(monkeypatch):
     get_user = MagicMock(side_effect=UnlinkedSlackIdentityError())
     monkeypatch.setattr(connect, "get_user", get_user)
     client_factory = MagicMock()
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     body = {
         "message": {"metadata": {"event_payload": {"team_id": "TREQUESTER", "user_id": "U_REQUESTER", "region_id": 7}}}
     }
@@ -312,3 +311,22 @@ def test_approve_unlinked_requester_does_not_connect_workspace(monkeypatch):
     db_manager.create_record.assert_not_called()
     db_manager.update_records.assert_not_called()
     client_factory.return_value.chat_postMessage.assert_not_called()
+
+
+def test_approve_without_installed_requester_client_notifies_admin_and_does_not_write(monkeypatch):
+    requester_space = SimpleNamespace(settings={"team_id": "TREQUESTER", "org_id": 1}, id=12)
+    monkeypatch.setattr(connect, "_get_requester_slack_space", MagicMock(return_value=requester_space))
+    monkeypatch.setattr(connect, "slack_client_for_team", MagicMock(return_value=None))
+    notify = MagicMock()
+    monkeypatch.setattr(connect, "_notify_admin_request_unverified", notify)
+    db_manager = MagicMock()
+    monkeypatch.setattr(connect, "DbManager", db_manager)
+    logger = MagicMock()
+    body = {"message": {"metadata": {"event_payload": {"team_id": "TREQUESTER", "region_id": 7}}}}
+
+    connect.handle_approve_connection(body, MagicMock(), logger, {}, SlackSettings(team_id="TADMIN"))
+
+    notify.assert_called_once()
+    logger.warning.assert_called_once_with("Unable to resolve requester workspace credentials for connection approval.")
+    db_manager.create_record.assert_not_called()
+    db_manager.update_records.assert_not_called()

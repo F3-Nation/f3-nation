@@ -22,6 +22,8 @@ from utilities.helper_functions import (
     trigger_map_revalidation,
 )
 from utilities.slack import actions, orm
+from utilities.slack_tokens.client import slack_client_for_team
+from utilities.slack_tokens.refresh import save_context_token
 
 
 def build_db_admin_form(
@@ -224,17 +226,14 @@ def handle_update_bot_token(
     context: dict,
     region_record: SlackSettings,
 ):
-    bot_token = safe_get(context, "bot_token")
-
-    if bot_token:
-        region_record.bot_token = bot_token
-        DbManager.update_records(
-            cls=SlackSpace,
-            filters=[SlackSpace.team_id == region_record.team_id],
-            fields={
-                SlackSpace.bot_token: bot_token,
-                SlackSpace.settings: region_record.__dict__,
-            },
+    if save_context_token(region_record.team_id, context):
+        return
+    user_id = safe_get(body, "user", "id")
+    if user_id:
+        client.chat_postEphemeral(
+            channel=user_id,
+            user=user_id,
+            text="This workspace uses rotating tokens; reinstall the app instead.",
         )
 
 
@@ -261,7 +260,9 @@ def handle_send_admin_announcement(
             slack_admin_ids = {safe_get(u, 1, "slack_id") for u in admin_users if safe_get(u, 1, "slack_id")}
             for slack_user_id in slack_admin_ids:
                 try:
-                    slack_client = WebClient(slack_space.settings.get("bot_token"))
+                    slack_client = slack_client_for_team(slack_space.team_id)
+                    if slack_client is None:
+                        break
                     slack_client.chat_postMessage(
                         channel=slack_user_id,
                         blocks=[announcement_text],

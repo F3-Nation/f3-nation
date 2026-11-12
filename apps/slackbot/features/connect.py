@@ -32,6 +32,7 @@ from utilities.helper_functions import (
     update_local_region_records,
 )
 from utilities.slack.actions import LOADING_ID
+from utilities.slack_tokens.client import slack_client_for_team
 
 CONNECT_EXISTING_REGION = "connect_existing_region"
 CREATE_NEW_REGION = "create_new_region"
@@ -48,13 +49,11 @@ SLACK_TEAM_ID_PATTERN = re.compile(r"T[A-Z0-9]+\Z")
 
 
 def _get_requester_slack_space(team_id):
-    """Resolve the install credentials from the DB, never from Slack metadata."""
+    """Resolve the installed workspace from the DB, never from Slack metadata."""
     if not isinstance(team_id, str) or not SLACK_TEAM_ID_PATTERN.fullmatch(team_id):
         return None
     slack_space = DbManager.find_first_record(SlackSpace, [SlackSpace.team_id == team_id])
-    if not slack_space or not safe_get(slack_space, "bot_token"):
-        return None
-    return slack_space
+    return slack_space or None
 
 
 def _notify_admin_request_unverified(body: dict, logger: Logger):
@@ -351,8 +350,11 @@ def handle_approve_connection(
         logger.warning("Unable to parse requester workspace settings for connection approval.")
         _notify_admin_request_unverified(body, logger)
         return
-    region_record.bot_token = slack_space_record.bot_token
-    requester_client = WebClient(token=slack_space_record.bot_token)
+    requester_client = slack_client_for_team(team_id)
+    if requester_client is None:
+        logger.warning("Unable to resolve requester workspace credentials for connection approval.")
+        _notify_admin_request_unverified(body, logger)
+        return
     org_record = DbManager.get(Org, metadata.get("region_id"))
     region_record.org_id = org_record.id
     slack_user_id = metadata.get("user_id")
@@ -408,8 +410,7 @@ def handle_approve_connection(
     ]
     if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=slack_space_record.bot_token)
-            send_client.chat_postMessage(
+            requester_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Approved",
                 blocks=blocks,
@@ -454,7 +455,8 @@ def handle_deny_connection(body: dict, client: WebClient, logger: Logger, contex
     metadata = safe_get(body, "message", "metadata") or {}
     metadata = metadata.get("event_payload") or {}
     slack_space_record = _get_requester_slack_space(metadata.get("team_id"))
-    if not slack_space_record:
+    send_client = slack_client_for_team(metadata.get("team_id")) if slack_space_record else None
+    if send_client is None:
         logger.warning("Unable to resolve requester workspace credentials for connection denial.")
         return
     blocks = [
@@ -465,7 +467,6 @@ def handle_deny_connection(body: dict, client: WebClient, logger: Logger, contex
     ]
     if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=slack_space_record.bot_token)
             send_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Denied",
