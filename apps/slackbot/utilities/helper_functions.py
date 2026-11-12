@@ -29,7 +29,6 @@ from f3_data_models.models import (
 from f3_data_models.utils import DbManager, session_scope
 from slack_bolt.oauth.oauth_settings import OAuthSettings
 from slack_sdk.errors import SlackApiError
-from slack_sdk.oauth.installation_store import FileInstallationStore
 from slack_sdk.oauth.state_store import FileOAuthStateStore
 from slack_sdk.web import SlackResponse, WebClient
 from sqlalchemy import select, text
@@ -38,6 +37,7 @@ from sqlalchemy.dialects.postgresql import insert
 from utilities import constants, storage
 from utilities.constants import LOCAL_DEVELOPMENT
 from utilities.database.orm import SlackSettings
+from utilities.slack_tokens.store import SlackSpaceInstallationStore
 
 REGION_RECORDS: Dict[str, SlackSettings] = {}
 SLACK_USERS: Dict[tuple[str, str], SlackUser] = {}
@@ -126,7 +126,8 @@ def get_oauth_settings():
             client_id=os.environ[constants.SLACK_CLIENT_ID],
             client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
             scopes=os.environ[constants.SLACK_SCOPES].split(","),
-            installation_store=FileInstallationStore(base_dir="/mnt/oauth_installations"),
+            installation_store=SlackSpaceInstallationStore(),
+            installation_store_bot_only=True,
             state_store=FileOAuthStateStore(expiration_seconds=600, base_dir="/mnt/oauth_states"),
         )
 
