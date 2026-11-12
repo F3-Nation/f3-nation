@@ -178,7 +178,7 @@ def send_preblast_reminders(force: bool = False):
             try:
                 slack_client = slack_client_for_team(preblast.slack_settings.team_id)
             except Exception as e:
-                print(f"Error getting Slack client for team {preblast.slack_settings.team_id}: {e}")
+                print(f"Error getting Slack client for team {preblast.slack_settings.team_id}: {type(e).__name__}")
                 continue
         if slack_client:
             blocks: List[orm.BaseBlock] = [

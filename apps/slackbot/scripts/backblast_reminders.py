@@ -154,7 +154,8 @@ def send_backblast_reminders(force=False):
                     try:
                         slack_client = slack_client_for_team(backblast.slack_settings.team_id)
                     except Exception as e:
-                        print(f"Error getting Slack client for team {backblast.slack_settings.team_id}: {e}")
+                        team_id = backblast.slack_settings.team_id
+                        print(f"Error getting Slack client for team {team_id}: {type(e).__name__}")
                         continue
                     if slack_client is None:
                         continue

@@ -230,7 +230,7 @@ def send_q_lineup_message(
     try:
         slack_client = slack_client_for_team(slack_settings.team_id)
     except Exception as e:
-        print(f"Error getting Slack client for team {slack_settings.team_id}: {e}")
+        print(f"Error getting Slack client for team {slack_settings.team_id}: {type(e).__name__}")
         return
     if slack_client:
         if update_channel_id:

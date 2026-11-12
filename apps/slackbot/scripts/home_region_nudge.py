@@ -198,9 +198,13 @@ def send_home_region_nudges(force: bool = False):
 
         try:
             client = slack_client_for_team(team_id)
-            if client is None:
-                print(f"No Slack installation for team {team_id}, skipping user {user_id}")
-                continue
+        except Exception as e:
+            print(f"Error getting Slack client for team {team_id}: {type(e).__name__}")
+            continue
+        if client is None:
+            print(f"No Slack installation for team {team_id}, skipping user {user_id}")
+            continue
+        try:
             client.chat_postMessage(
                 channel=slack_user.slack_id,
                 text=plain_text,
