@@ -436,7 +436,7 @@ test("every open fix PR appears once, and every advisory without one", async () 
   );
   assert.match(
     message,
-    /\*\*✍️ Fix PR waiting on its author\*\* · 1\n• \[GHSA-dddd-eeee-ffff #1 fix\(api\): close the hole\]\(https:\/\/github\.com\/F3-Nation\/f3-nation-ghsa-dddd-eeee-ffff\/pull\/1\) · by dan · draft\n/,
+    /\*\*✍️ Fix PR waiting on its author\*\* · 1\n• \[GHSA-dddd-eeee-ffff #1 fix\(api\): close the hole\]\(https:\/\/github\.com\/F3-Nation\/f3-nation-ghsa-dddd-eeee-ffff\/pull\/1\) · by <@U0DAN> · draft\n/,
   );
   assert.match(
     message,
@@ -630,7 +630,7 @@ test("a fix PR that is its author's turn says why", async () => {
     boardFor(f, { bucket: "MANUAL", codeownerAssignees: ["dan"] }),
   );
   assert.equal(result.report.counts.listed, 0);
-  assert.match(text(result), /· by amy · merge conflict, changes requested\n/);
+  assert.match(text(result), /· by @amy · merge conflict, changes requested\n/);
   assert.doesNotMatch(text(result), /✅ Needs final review/);
 });
 

@@ -409,8 +409,8 @@ function buildReport(
  * `sources` is `[{ owner, repo, board, base? }]`: pr-triage's JSON for each
  * repo, and where its branch rules and team live (see `collectFacts()`).
  * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. `extraLists` and
- * `headerExtras`, when functions, get `(board, factsByUrl)` for the merged
- * board and return `buildReport()`'s option of that name. Other options pass
+ * `headerExtras`, when functions, get `(board, factsByUrl, slackIds)` for the
+ * merged board and return `buildReport()`'s option of that name. Other options pass
  * through to `buildReport()`. Returns `{ report, notes }`, where `notes` are
  * the warnings, each once, which the report also shows.
  */
@@ -448,7 +448,7 @@ async function assembleReport({
     prs,
   };
   const resolve = (option) =>
-    typeof option === "function" ? option(board, factsByUrl) : option;
+    typeof option === "function" ? option(board, factsByUrl, ids) : option;
   return {
     report: buildReport(board, factsByUrl, {
       ...options,
@@ -513,6 +513,7 @@ function toSlackMarkdown(report) {
 module.exports = {
   MAX_LINES,
   parseSlackIds,
+  mention,
   lightFor,
   buildReport,
   isListed,

@@ -29,10 +29,11 @@ const path = require("node:path");
 const {
   assembleReport,
   isListed,
+  mention,
   slackLink,
   toSlackMarkdown,
 } = require("./codeowners-pr-report.cjs");
-const { DAY_MS, slackEscape } = require("./pr-author-nudge.cjs");
+const { DAY_MS } = require("./pr-author-nudge.cjs");
 
 const REPO = { owner: "F3-Nation", repo: "f3-nation" };
 // Open advisories; published and closed ones have nothing left to merge.
@@ -244,7 +245,7 @@ const withoutOpenPr = (advisories, board, factsByUrl) => {
  * The two lists that put every open advisory in the report: open fix PRs the
  * codeowners' lists leave out, and advisories with no open fix PR.
  */
-function advisoryLists(advisories, board, factsByUrl, now) {
+function advisoryLists(advisories, board, factsByUrl, slackIds, now) {
   const prsByFork = openPrsByFork(board, factsByUrl);
   const waiting = [];
   const noPr = [];
@@ -274,7 +275,7 @@ function advisoryLists(advisories, board, factsByUrl, now) {
       waiting.push(
         [
           slackLink(pr.url, pr.ref, pr.title),
-          `by ${slackEscape(pr.author)}`,
+          `by ${mention(pr.author, slackIds)}`,
           authorWait(pr, facts),
         ].join(" · "),
       );
@@ -393,9 +394,9 @@ async function buildAdvisoryReport({
     slackIdsRaw,
     warnings,
     now,
-    extraLists: (board, factsByUrl) => {
+    extraLists: (board, factsByUrl, slackIds) => {
       checkBoardHasFacts(advisories, board, factsByUrl);
-      return advisoryLists(advisories, board, factsByUrl, now);
+      return advisoryLists(advisories, board, factsByUrl, slackIds, now);
     },
     headerExtras: (board, factsByUrl) => {
       const noPr = withoutOpenPr(advisories, board, factsByUrl).length;
