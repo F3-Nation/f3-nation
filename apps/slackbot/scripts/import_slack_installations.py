@@ -9,6 +9,9 @@ the bucket the previous release stored them in.
 Each workspace prints one line, `<team_id> <status>`:
 
 - `imported`: the file's bot id, bot user id, scopes and token were saved.
+- `imported_new`: a file with no `slack_spaces` row; the row was created from
+  it, named after the file's team name. Without it the workspace would stop
+  working once the release reads credentials only from `slack_spaces`.
 - `backfilled`: no file, so the row's own token was checked with `auth.test`
   to fill the bot id, bot user id and scopes.
 - `skipped_rotating`: the row already holds a rotating token. Its file holds an
@@ -24,9 +27,11 @@ Exits 1 if any workspace is `auth_failed` or `error`. Tokens are never printed.
 """
 
 import argparse
+import glob
 import os
 import sys
 import time
+from functools import partial
 from typing import Optional
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -44,6 +49,23 @@ def _stored_tokens() -> list[tuple[str, Optional[str]]]:
     with session_scope() as session:
         rows = session.execute(select(SlackSpace.team_id, SlackSpace.bot_token).order_by(SlackSpace.team_id)).all()
         return [(team_id, bot_token) for team_id, bot_token in rows]
+
+
+def _file_team_ids(installations_dir: str) -> list[str]:
+    """Team ids of the workspace (non-enterprise) installation files, from their `none-<team_id>` directories."""
+    paths = glob.glob(os.path.join(glob.escape(installations_dir), "none-*", "bot-latest"))
+    team_ids = {os.path.basename(os.path.dirname(path))[len("none-") :] for path in paths}
+    return sorted(team_id for team_id in team_ids if team_id and team_id != "none")
+
+
+def _import_new_team(team_id: str, store: FileInstallationStore, dry_run: bool) -> str:
+    file_bot = store.find_bot(enterprise_id=None, team_id=team_id)
+    if file_bot is None:
+        return "no_token"
+    if dry_run:
+        return "imported_new"
+    saved = save_bot_locked(file_bot, team_id=team_id, workspace_name=file_bot.team_name)
+    return "imported_new" if saved else "skipped_rotating"
 
 
 def _backfill_bot(team_id: str, token: str) -> Bot:
@@ -93,10 +115,18 @@ def main(argv: list[str]) -> int:
 
     # The previous release wrote the files without a client_id; adding one changes the directory layout.
     store = FileInstallationStore(base_dir=args.installations_dir)
+    stored = _stored_tokens()
+    known = {team_id for team_id, _token in stored}
+    work = [(team_id, partial(_import_team, team_id, token, store, args.dry_run)) for team_id, token in stored]
+    work += [
+        (team_id, partial(_import_new_team, team_id, store, args.dry_run))
+        for team_id in _file_team_ids(args.installations_dir)
+        if team_id not in known
+    ]
     failed = False
-    for team_id, token in _stored_tokens():
+    for team_id, step in work:
         try:
-            status = _import_team(team_id, token, store, args.dry_run)
+            status = step()
         except Exception as e:
             # The class name only: exception text can embed request or token data.
             status = f"error:{type(e).__name__}"

@@ -53,11 +53,13 @@ def _row(engine, team_id):
         return (row.bot_token, row.bot_id, row.bot_user_id, row.bot_scopes, row.bot_token_expires_at)
 
 
-def _write_file(directory, team_id):
+def _write_file(directory, team_id, *, team_name=None, enterprise_id=None):
     # Production wrote the files without a client_id.
     FileInstallationStore(base_dir=str(directory)).save_bot(
         Bot(
+            enterprise_id=enterprise_id,
             team_id=team_id,
+            team_name=team_name,
             bot_token=FILE_TOKEN,
             bot_id="B_FILE",
             bot_user_id="U_FILE",
@@ -190,3 +192,33 @@ def test_one_bad_team_does_not_stop_the_run(isolated_postgres, tmp_path, capsys)
     assert capsys.readouterr().out.splitlines() == ["T13 error:JSONDecodeError", "T14 imported"]
     assert _row(isolated_postgres, "T14")[0] == FILE_TOKEN
     assert _row(isolated_postgres, "T13")[0] == ROW_TOKEN
+
+
+def _workspace_name(engine, team_id):
+    with Session(engine) as session:
+        row = session.scalars(select(SlackSpace).where(SlackSpace.team_id == team_id)).one_or_none()
+        return None if row is None else row.workspace_name
+
+
+def test_imports_file_without_a_row(isolated_postgres, tmp_path, capsys):
+    _seed(isolated_postgres, "T20")
+    _write_file(tmp_path, "T20")
+    _write_file(tmp_path, "T21", team_name="Orphan Team")
+    _write_file(tmp_path, "T22", enterprise_id="E1")
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T20 imported", "T21 imported_new"]
+    assert _row(isolated_postgres, "T21") == (FILE_TOKEN, "B_FILE", "U_FILE", "chat:write,users:read", None)
+    assert _workspace_name(isolated_postgres, "T21") == "Orphan Team"
+    assert _workspace_name(isolated_postgres, "T22") is None
+
+
+def test_dry_run_reports_file_without_a_row_and_writes_nothing(isolated_postgres, tmp_path, capsys):
+    _write_file(tmp_path, "T23", team_name="Orphan Team")
+
+    assert importer.main(["--installations-dir", str(tmp_path), "--dry-run"]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T23 imported_new"]
+    with Session(isolated_postgres) as session:
+        assert session.scalars(select(SlackSpace).where(SlackSpace.team_id == "T23")).one_or_none() is None
