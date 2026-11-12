@@ -38,6 +38,7 @@ declare -A SECRET_MAP=(
   [DATABASE_PASSWORD]="database-password"
   [SECRET_ADMIN_PASSWORD]="secret-admin-password"
   [PASSWORD_ENCRYPT_KEY]="password-encrypt-key"
+  [SLACK_TOKEN_ENCRYPTION_KEY]="slack-token-encryption-key"
   [F3_API_KEY]="f3-api-key"
   [MAP_REVALIDATION_KEY]="map-revalidation-key"
   [STRAVA_CLIENT_SECRET]="strava-client-secret"
