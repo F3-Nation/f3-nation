@@ -3,8 +3,12 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@acme/auth";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
+import { constantTimeEqual } from "@acme/shared/server/constant-time-equal";
 import { env } from "~/env";
 import { logError, logInfo, logWarn } from "~/lib/logging";
+
+// constantTimeEqual needs node:crypto.
+export const runtime = "nodejs";
 
 // Regeneration of `/` fetches the slow map endpoints, so allow generous time
 // but never hang the revalidation forever.
@@ -46,7 +50,10 @@ export async function POST(request: Request) {
   try {
     // Check for internal API key authentication (from API app)
     const apiKey = request.headers.get("x-api-key");
-    const isInternalRequest = apiKey === env.SUPER_ADMIN_API_KEY;
+    const isInternalRequest = constantTimeEqual(
+      apiKey,
+      env.SUPER_ADMIN_API_KEY,
+    );
 
     if (!isInternalRequest) {
       logInfo("map.revalidate.session_check", {});

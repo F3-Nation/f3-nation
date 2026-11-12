@@ -6,8 +6,6 @@ export interface SendVerificationRequestServerParams {
   apiKey: string;
   identifier: string;
   url: string;
-  server: string;
-  from: string;
   token: string;
 }
 
@@ -39,7 +37,7 @@ function getInternalApiUrl(params: { url: string }): string {
 
 export const sendOtpVerificationRequestServer: NodemailerConfig["sendVerificationRequest"] =
   async (params) => {
-    const { identifier, url, provider, token } = params;
+    const { identifier, url, token } = params;
 
     const internalUrl = getInternalApiUrl({ url });
 
@@ -50,12 +48,6 @@ export const sendOtpVerificationRequestServer: NodemailerConfig["sendVerificatio
         apiKey: env.SUPER_ADMIN_API_KEY,
         identifier,
         url,
-        // @auth/core's NodemailerConfig["server"] type resolves to `any` under
-        // nodemailer 10 (its bundled provider types still import nodemailer's
-        // pre-v10 SMTPTransport namespace shape); assert the plain connection
-        // string this app always configures it with (see email-provider.ts).
-        server: provider.server as string,
-        from: provider.from,
         token,
       }),
     });

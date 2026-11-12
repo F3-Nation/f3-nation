@@ -24,6 +24,7 @@ import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { getTrustedClientIp } from "@acme/shared/common/client-ip";
 import { isDevelopment } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
+import { constantTimeEqual } from "@acme/shared/server/constant-time-equal";
 
 import { jwksFetchFailure } from "./jwks-failure";
 import { logError, logWarn } from "./logger";
@@ -282,7 +283,7 @@ export const userSessionAdminProcedure = adminProcedure.use(
 export const revalidateAuthProcedure = withSessionAndDb.use(
   ({ context, next }) => {
     const apiKey = context.reqHeaders?.get("x-api-key") ?? "";
-    if (env.SUPER_ADMIN_API_KEY && apiKey === env.SUPER_ADMIN_API_KEY) {
+    if (constantTimeEqual(apiKey, env.SUPER_ADMIN_API_KEY)) {
       return next({ context });
     }
 

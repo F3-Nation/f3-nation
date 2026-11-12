@@ -1,11 +1,8 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-
 import {
   PROXY_CLIENT_IP_HEADER,
   PROXY_SECRET_HEADER,
 } from "@acme/shared/common/client-ip";
-
-const digest = (value: string) => createHash("sha256").update(value).digest();
+import { constantTimeEqual } from "@acme/shared/server/constant-time-equal";
 
 /**
  * The client IP a trusted proxy reported in `x-f3-client-ip`, or null unless
@@ -20,5 +17,5 @@ export function getProxiedClientIp(
   const presented = headers?.get(PROXY_SECRET_HEADER);
   const clientIp = headers?.get(PROXY_CLIENT_IP_HEADER)?.trim();
   if (!presented || !clientIp) return null;
-  return timingSafeEqual(digest(presented), digest(secret)) ? clientIp : null;
+  return constantTimeEqual(presented, secret) ? clientIp : null;
 }
