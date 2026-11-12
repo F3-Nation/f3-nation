@@ -22,12 +22,14 @@ const httpError = (status) =>
 
 /**
  * A fake gh client. `routes` maps "GET /path" (placeholders filled) to data or
- * an Error; `prsByRepo` maps a repo name to its open PR nodes for GraphQL.
+ * an Error; `prsByRepo` maps a repo name to its open PR nodes for GraphQL;
+ * `collaborators` is the base repo's collaborator list, or an Error.
  */
 function fakeGithub({
   routes = {},
   advisories = { draft: [] },
   prsByRepo = {},
+  collaborators = [{ login: "andy" }, { login: "dan" }],
 }) {
   const calls = [];
   const fill = (route, params) =>
@@ -54,8 +56,10 @@ function fakeGithub({
         return value;
       }
       if (key.includes("/rules/branches/")) return [];
-      if (key.endsWith("/collaborators"))
-        return [{ login: "andy" }, { login: "dan" }];
+      if (key.endsWith("/collaborators")) {
+        if (collaborators instanceof Error) throw collaborators;
+        return collaborators;
+      }
       return answer(key);
     },
     graphql: async (_query, { repo }) => {
@@ -224,6 +228,39 @@ test("someone who can't read the repository fails", async () => {
   assert.match(result.failures[0], /@eve can't see/);
 });
 
+test("an unexpected error checking the org role fails with GitHub's reason", async () => {
+  const result = await checkAccess({
+    github: fakeGithub({
+      routes: {
+        "GET /user": { login: "andy" },
+        "GET /orgs/F3-Nation/security-advisories": httpError(502),
+      },
+    }),
+    has: () => true,
+    signedIn: () => true,
+  });
+  assert.deepEqual(result.failures, [
+    "Couldn't check your org role (HTTP 502).",
+  ]);
+});
+
+test("an unexpected error checking repository access fails with GitHub's reason", async () => {
+  const result = await checkAccess({
+    github: fakeGithub({
+      routes: {
+        "GET /user": { login: "andy" },
+        "GET /orgs/F3-Nation/security-advisories": httpError(404),
+        "GET /repos/F3-Nation/f3-nation": new Error("connection reset"),
+      },
+    }),
+    has: () => true,
+    signedIn: () => true,
+  });
+  assert.deepEqual(result.failures, [
+    "Couldn't check your access to F3-Nation/f3-nation (connection reset).",
+  ]);
+});
+
 test("a login GitHub rejects fails", async () => {
   const result = await checkAccess({
     github: fakeGithub({ routes: { "GET /user": httpError(401) } }),
@@ -344,7 +381,7 @@ test("fork PRs are listed by advisory, in the Codeowners PR Report's format", as
   );
 });
 
-test("every open advisory appears once: listed, waiting on its author, or with no fix PR", async () => {
+test("every open fix PR appears once, and every advisory without one", async () => {
   const FORK_C = "F3-Nation/f3-nation-ghsa-1111-2222-3333";
   const github = fakeGithub({
     routes: slackIdsRoute,
@@ -393,6 +430,58 @@ test("every open advisory appears once: listed, waiting on its author, or with n
       1,
       `${ghsa} is on one line`,
     );
+});
+
+test("a fix PR that closed after triage leaves its advisory with no open fix PR", async () => {
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: { draft: [advisory(GHSA_A, FORK_A)] },
+    // Triage saw the PR; by the time facts are read it has closed.
+    prsByRepo: {},
+  });
+  const message = text(await build(github, (fork) => boardFor(fork)));
+  assert.match(
+    message,
+    /^### .* · 0 PRs need a codeowner · 🔴 0 🟡 0 · 1 advisory has no open fix PR\n/,
+  );
+  assert.match(
+    message,
+    /\*\*🚧 No open fix PR\*\* · 1\n• \[GHSA-aaaa-bbbb-cccc /,
+  );
+  assert.doesNotMatch(message, /waiting on its author|\/pull\/1/);
+});
+
+test("an advisory list longer than the PR lists' cap names every advisory", async () => {
+  const ids = Array.from({ length: 20 }, (_, i) => String(i).padStart(4, "0"));
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: {
+      draft: ids.map((id) =>
+        advisory(`GHSA-${id}-bbbb-cccc`, null, { summary: "z".repeat(150) }),
+      ),
+    },
+  });
+  const result = await build(github, () => ({ codeowners: [], prs: [] }));
+  const message = text(result);
+  for (const id of ids) assert.match(message, new RegExp(`GHSA-${id}-bbbb`));
+  assert.doesNotMatch(message, /…and \d+ more/);
+  assert.match(message, /\*\*🚧 No open fix PR\*\* · 20\n/);
+  assert.match(message, /\*\*🚧 No open fix PR\*\* \(continued\)\n/);
+  for (const m of result.messages) assert.ok(m.length <= SLACK_MAX_CHARS);
+});
+
+test("a base-repo warning shared by every fork is shown once", async () => {
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: { draft: [advisory(GHSA_A, FORK_A), advisory(GHSA_B, FORK_B)] },
+    prsByRepo: {
+      "f3-nation-ghsa-aaaa-bbbb-cccc": [prNode(FORK_A)],
+      "f3-nation-ghsa-dddd-eeee-ffff": [prNode(FORK_B)],
+    },
+    collaborators: httpError(403),
+  });
+  const message = text(await build(github, (fork) => boardFor(fork)));
+  assert.equal(message.match(/Couldn't list collaborators/g)?.length, 1);
 });
 
 test("a fix PR that is its author's turn says why", async () => {

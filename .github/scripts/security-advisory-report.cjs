@@ -3,10 +3,10 @@
 /**
  * Security Advisory Report: the Codeowners PR Report (same lists, lights
  * and wording, from codeowners-pr-report.cjs) for the fix PRs in
- * F3-Nation/f3-nation's open security advisories. Every open advisory appears
- * once: its fix PR in the codeowners' lists, or in one of two more lists,
- * "Fix PR waiting on its author" (a draft, or the author's turn) and "No open
- * fix PR".
+ * F3-Nation/f3-nation's open security advisories. Two more lists follow, so
+ * every open advisory is in the report: each open fix PR appears once, in the
+ * codeowners' lists or under "Fix PR waiting on its author" (a draft, or the
+ * author's turn), and an advisory without one under "No open fix PR".
  *
  * Those PRs live in each advisory's temporary private fork, which GitHub keeps
  * from every integration, workflow tokens included. So this runs on a
@@ -19,8 +19,9 @@
  *
  * Read-only, and writes no files. Prints the Slack message (Markdown) on
  * stdout; a report too long for one message is split between sections into
- * several, separated by a MESSAGE_BREAK line. Exits 1 with the reasons on stderr when a check fails or any
- * advisory or fork can't be read: a partial list would leave advisories out.
+ * several, separated by a MESSAGE_BREAK line. Exits 1 with the reasons on
+ * stderr when a check fails or any advisory or fork can't be read: a partial
+ * list would leave advisories out.
  */
 
 const { execFileSync, spawnSync } = require("node:child_process");
@@ -63,6 +64,8 @@ const installed = (tool) =>
   !spawnSync(tool, ["--version"], { stdio: "ignore" }).error;
 const ghSignedIn = () =>
   spawnSync("gh", ["auth", "status"], { stdio: "ignore" }).status === 0;
+// GitHub's answer when the caller lacks access; any other error is a failure.
+const isDenied = (error) => error?.status === 403 || error?.status === 404;
 
 /**
  * Whether the person running this can see every open advisory. Advisory
@@ -96,8 +99,13 @@ async function checkAccess({ github, has = installed, signedIn = ghSignedIn }) {
       per_page: 1,
     });
     return { failures: [], login, role: "org owner or security manager" };
-  } catch {
-    // Not one of those; a repository admin also sees every advisory.
+  } catch (error) {
+    // A 403 or 404 means neither; a repository admin also sees every advisory.
+    if (!isDenied(error))
+      return {
+        login,
+        failures: [`Couldn't check your org role (${error.message}).`],
+      };
   }
   try {
     const { data } = await github.request("GET /repos/{owner}/{repo}", REPO);
@@ -107,8 +115,14 @@ async function checkAccess({ github, has = installed, signedIn = ghSignedIn }) {
         login,
         role: `admin of ${REPO.owner}/${REPO.repo}`,
       };
-  } catch {
-    // Treated as no access below.
+  } catch (error) {
+    if (!isDenied(error))
+      return {
+        login,
+        failures: [
+          `Couldn't check your access to ${REPO.owner}/${REPO.repo} (${error.message}).`,
+        ],
+      };
   }
   return {
     login,
@@ -186,18 +200,34 @@ function authorWait(pr, facts) {
 }
 
 /**
- * The two lists that put every open advisory in the report: fix PRs the
- * codeowners' lists leave out, and advisories with no open fix PR.
+ * Board PRs still open when facts were collected, by fork. Facts are read
+ * after triage from the open PRs, so a board PR without facts has closed.
  */
-function advisoryLists(advisories, board, factsByUrl, now) {
+function openPrsByFork(board, factsByUrl) {
   const prsByFork = new Map();
   for (const pr of board.prs ?? []) {
+    if (!factsByUrl.has(pr.url)) continue;
     const fork = pr.url?.match(
       /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\//,
     )?.[1];
     if (!prsByFork.has(fork)) prsByFork.set(fork, []);
     prsByFork.get(fork).push(pr);
   }
+  return prsByFork;
+}
+
+/** Advisories with no open fix PR. */
+const withoutOpenPr = (advisories, board, factsByUrl) => {
+  const prsByFork = openPrsByFork(board, factsByUrl);
+  return advisories.filter((a) => !prsByFork.get(a.fork)?.length);
+};
+
+/**
+ * The two lists that put every open advisory in the report: open fix PRs the
+ * codeowners' lists leave out, and advisories with no open fix PR.
+ */
+function advisoryLists(advisories, board, factsByUrl, now) {
+  const prsByFork = openPrsByFork(board, factsByUrl);
   const waiting = [];
   const noPr = [];
   for (const advisory of advisories) {
@@ -325,12 +355,6 @@ async function buildAdvisoryReport({
     );
   }
 
-  const withPr = new Set(
-    sources
-      .filter((s) => s.board.prs.length)
-      .map((s) => `${s.owner}/${s.repo}`),
-  );
-  const noPr = advisories.filter((a) => !withPr.has(a.fork)).length;
   const { report } = await assembleReport({
     github,
     sources,
@@ -339,11 +363,14 @@ async function buildAdvisoryReport({
     now,
     extraLists: (board, factsByUrl) =>
       advisoryLists(advisories, board, factsByUrl, now),
-    headerExtras: noPr
-      ? [
-          `${noPr} ${noPr === 1 ? "advisory has" : "advisories have"} no open fix PR`,
-        ]
-      : [],
+    headerExtras: (board, factsByUrl) => {
+      const noPr = withoutOpenPr(advisories, board, factsByUrl).length;
+      return noPr
+        ? [
+            `${noPr} ${noPr === 1 ? "advisory has" : "advisories have"} no open fix PR`,
+          ]
+        : [];
+    },
     title: "Security Advisory Report",
     emptyText: "There are no open security advisories.",
     boardHint: `Run by @${login} with the \`${SKILL}\` agent skill`,

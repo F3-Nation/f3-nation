@@ -33,10 +33,22 @@ function gh(args) {
   }
 }
 
+/**
+ * Whether a GraphQL document holds a mutation anywhere, once strings and
+ * comments (which GraphQL ignores, so they can hide one) are removed.
+ */
+const hasMutation = (query) =>
+  /\bmutation\b/.test(
+    String(query)
+      .replace(/"""[\s\S]*?"""/g, "")
+      .replace(/"(?:\\.|[^"\\\n])*"/g, "")
+      .replace(/#[^\n\r]*/g, ""),
+  );
+
 function createGhClient() {
   return {
     graphql: async (query, vars = {}) => {
-      if (/^\s*mutation\b/.test(query))
+      if (hasMutation(query))
         throw new Error("local runs are read-only (GraphQL mutation)");
       const args = ["api", "graphql", "-f", `query=${query}`];
       for (const [k, v] of Object.entries(vars))
@@ -64,4 +76,4 @@ function createGhClient() {
   };
 }
 
-module.exports = { createGhClient };
+module.exports = { createGhClient, hasMutation };

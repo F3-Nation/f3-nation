@@ -21,9 +21,10 @@ does the GitHub work. It sorts the PRs with
 message with the same code as the daily report
 ([`codeowners-pr-report.cjs`](../../../.github/scripts/codeowners-pr-report.cjs)),
 so the lists, lights and wording match. Two lists follow them, so every open
-advisory appears once: fix PRs waiting on their author (a draft, or the
-author's turn) and advisories with no open fix PR. It only reads, and writes
-no files.
+advisory is in the report: each open fix PR appears once, in the codeowners'
+lists or among fix PRs waiting on their author (a draft, or the author's
+turn), and every advisory without one under "No open fix PR". It only reads,
+and writes no files.
 
 The channel is fixed: **#codeowners, Slack channel ID `C0CBH5D4ULU`**, a
 private channel.

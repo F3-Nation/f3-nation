@@ -222,6 +222,32 @@ function listSection(heading, entries) {
 }
 
 /**
+ * One list as Block Kit sections with every line in them: past Slack's
+ * section limit, the list continues in another section under the same
+ * heading.
+ */
+function fullListSections(heading, entries) {
+  const sections = [];
+  let lines = [`*${heading}* · ${entries.length}`];
+  let length = lines[0].length;
+  for (const entry of entries) {
+    const line = `• ${entry}`;
+    if (lines.length > 1 && length + line.length + 1 > MAX_SECTION_CHARS) {
+      sections.push(lines.join("\n"));
+      lines = [`*${heading}* (continued)`];
+      length = lines[0].length;
+    }
+    lines.push(line);
+    length += line.length + 1;
+  }
+  sections.push(lines.join("\n"));
+  return sections.map((text) => ({
+    type: "section",
+    text: { type: "mrkdwn", text },
+  }));
+}
+
+/**
  * Whether the report lists a board PR, given its `summarize()` facts: false
  * for a PR that is its author's turn, a draft, or in a stage a codeowner
  * can't act on yet.
@@ -240,8 +266,8 @@ const isListed = (pr, facts) =>
  * report: `title`, `emptyText` and `boardHint` (the context line's first
  * item). A board PR's optional `ref` replaces `#<number>` in its link.
  * `extraLists` (`[{ heading, lines }]`, lines already in Slack mrkdwn) follow
- * the PR lists in the same layout, and `headerExtras` (strings) end the
- * header. Returns
+ * the PR lists in the same layout, with no line cap (a long one continues in
+ * further sections), and `headerExtras` (strings) end the header. Returns
  * `{ text, blocks, counts }`: the notification fallback, the Block Kit
  * blocks, and `{ listed, red, yellow }`.
  */
@@ -360,8 +386,9 @@ function buildReport(
         ),
       );
   }
+  // Uncapped: an extra list must name every entry.
   for (const { heading, lines } of extras)
-    sections.push(listSection(heading, lines));
+    sections.push(...fullListSections(heading, lines));
 
   return {
     text: `${title}: ${need} (${summary.join(", ")})`,
@@ -382,11 +409,11 @@ function buildReport(
  * Reads whose turn each PR is for every board, then builds the report.
  * `sources` is `[{ owner, repo, board, base? }]`: pr-triage's JSON for each
  * repo, and where its branch rules and team live (see `collectFacts()`).
- * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. `extraLists`, when a
- * function, gets `(board, factsByUrl)` for the merged board and returns
- * `buildReport()`'s `extraLists`. Other options pass through to
- * `buildReport()`. Returns `{ report, notes }`, where `notes` are the
- * warnings, which the report also shows.
+ * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. `extraLists` and
+ * `headerExtras`, when functions, get `(board, factsByUrl)` for the merged
+ * board and return `buildReport()`'s option of that name. Other options pass
+ * through to `buildReport()`. Returns `{ report, notes }`, where `notes` are
+ * the warnings, each once, which the report also shows.
  */
 async function assembleReport({
   github,
@@ -394,6 +421,7 @@ async function assembleReport({
   slackIdsRaw,
   warnings = [],
   extraLists = [],
+  headerExtras = [],
   ...options
 }) {
   const notes = [...warnings];
@@ -412,23 +440,25 @@ async function assembleReport({
   }
   const { ids, warning } = parseSlackIds(slackIdsRaw);
   if (warning) notes.push(warning);
+  // Sources that share a base repo report its access problems once each.
+  const uniqueNotes = [...new Set(notes)];
   const board = {
     codeowners: sources[0]?.board.codeowners ?? [],
     truncated,
     fetched,
     prs,
   };
+  const resolve = (option) =>
+    typeof option === "function" ? option(board, factsByUrl) : option;
   return {
     report: buildReport(board, factsByUrl, {
       ...options,
-      extraLists:
-        typeof extraLists === "function"
-          ? extraLists(board, factsByUrl)
-          : extraLists,
+      extraLists: resolve(extraLists),
+      headerExtras: resolve(headerExtras),
       slackIds: ids,
-      warnings: notes,
+      warnings: uniqueNotes,
     }),
-    notes,
+    notes: uniqueNotes,
   };
 }
 
