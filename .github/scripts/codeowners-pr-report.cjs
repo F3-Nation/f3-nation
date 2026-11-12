@@ -142,7 +142,7 @@ function place(pr, facts, codeowners, slackIds) {
   const claimed = claimers.length > 0;
   const mentions = (logins) =>
     logins.map((l) => mention(l, slackIds)).join(" ");
-  const author = slackEscape(pr.author);
+  const author = mention(pr.author, slackIds);
   // The held local-test result, without the triage note's bot details.
   const held = (pr.note ?? "")
     .split("; ")
@@ -178,7 +178,7 @@ function place(pr, facts, codeowners, slackIds) {
       list: "owner",
       details: [
         `by ${author}`,
-        `claimed by ${claimers.map((l) => `@${slackEscape(l)}`).join(", ")}, review not run yet`,
+        `claimed by ${mentions(claimers)}, review not run yet`,
       ],
     };
   }

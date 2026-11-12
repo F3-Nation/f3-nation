@@ -90,14 +90,13 @@ test("unclaimed PRs go to 🙋, however they are assigned", () => {
   assert.equal(list(result, "✅"), undefined);
 });
 
-test("🙋 names the next step past pr-review-inline and pings nobody", () => {
+test("🙋 names the next step past pr-review-inline", () => {
   const owner = list(
     report([pr(1, { bucket: "LOCAL" }), pr(2, { bucket: "MERGE" })]),
     "🙋",
   );
-  assert.match(lineFor(owner, 1), /by amy · next: `\/pr-local-test`/);
+  assert.match(lineFor(owner, 1), /by @amy · next: `\/pr-local-test`/);
   assert.match(lineFor(owner, 2), /approved, needs merge/);
-  assert.doesNotMatch(owner, /<@/);
 });
 
 test("an unclaimed PR held after a local test shows the held result", () => {
@@ -131,13 +130,21 @@ test("🙋 marks outside contributors", () => {
     report([pr(1)], { facts: { 1: { tier: "outside", reasons: [] } } }),
     "🙋",
   );
-  assert.match(lineFor(owner, 1), /by amy \(outside contributor\)/);
+  assert.match(lineFor(owner, 1), /by @amy \(outside contributor\)/);
 });
 
 test("claimed but not reviewed stays in 🙋 as review not run yet", () => {
   const owner = list(report([pr(1, { codeownerAssignees: ["dan"] })]), "🙋");
-  assert.match(lineFor(owner, 1), /claimed by @dan, review not run yet/);
-  assert.doesNotMatch(owner, /<@U0DAN>/);
+  assert.match(lineFor(owner, 1), /claimed by <@U0DAN>, review not run yet/);
+});
+
+test("🙋 mentions a mapped author and leaves an unmapped one as text", () => {
+  const owner = list(
+    report([pr(1, { author: "Andy" }), pr(2, { author: "amy" })]),
+    "🙋",
+  );
+  assert.match(lineFor(owner, 1), /by <@U0ANDY> · /);
+  assert.match(lineFor(owner, 2), /by @amy · /);
 });
 
 test("claimed and LOCAL goes to 🧪, mentioning the claimer and the held result", () => {
@@ -186,7 +193,7 @@ test("a codeowner's own PR needs a different codeowner to approve", () => {
   );
   assert.match(
     lineFor(final, 1),
-    /by luis · <@U0DAN> · needs a different codeowner to approve/,
+    /by @luis · <@U0DAN> · needs a different codeowner to approve/,
   );
 });
 
@@ -397,7 +404,7 @@ test("a hostile title or login is escaped, including inside the link", () => {
   const line = lineFor(list(result, "🙋"), 1);
   assert.match(
     line,
-    /\|#1 &lt;!channel&gt; &amp; &lt;https:\/\/evil\.example\|click&gt;> · by &lt;!here&gt; ·/,
+    /\|#1 &lt;!channel&gt; &amp; &lt;https:\/\/evil\.example\|click&gt;> · by @&lt;!here&gt; ·/,
   );
   assert.equal((line.match(/</g) ?? []).length, 1);
 });
