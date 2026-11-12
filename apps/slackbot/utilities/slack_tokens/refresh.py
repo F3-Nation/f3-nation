@@ -175,19 +175,28 @@ def _flush(session: Session, team_id: str, path: str) -> None:
         raise TokenSaveError(f"saving the bot token failed with {failure['error_type']}")
 
 
-def write_locked_row(row: SlackSpace, bot: Bot, *, path: str) -> None:
+def write_locked_row(row: SlackSpace, bot: Bot, *, path: str) -> bool:
     """Write the bot's token fields to a row yielded by `locked_row` and flush them.
 
     For callers that must call Slack while holding the lock, so they can't use
-    `save_bot_locked`, which takes the lock itself. Applies no save guard: the
-    caller has already checked the row. Raises `TokenSaveError` if the database
-    rejects the write; the change commits only when the `locked_row` block exits.
+    `save_bot_locked`, which takes the lock itself. Returns False without
+    writing when the save guard rejects the token. Raises `TokenSaveError` if
+    the database rejects the write; the change commits only when the
+    `locked_row` block exits.
     """
     session = object_session(row)
     if session is None:
         raise ValueError("write_locked_row needs a row yielded by locked_row")
+    if not _guard_allows(row, bot):
+        return False
     _write(row, bot)
     _flush(session, row.team_id, path)
+    return True
+
+
+def log_save_failure(team_id: str, error: Exception, *, path: str) -> None:
+    """Log `slack.token.refresh_failed` with the error's type and Slack error code only."""
+    _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **_error_fields(error))
 
 
 def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = None) -> bool:

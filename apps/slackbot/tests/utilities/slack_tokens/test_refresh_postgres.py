@@ -223,6 +223,31 @@ def test_save_bot_rejects_null_over_rotating(isolated_postgres):
     assert _row(isolated_postgres) == before
 
 
+def test_write_locked_row_rejects_null_over_rotating(isolated_postgres):
+    _seed(isolated_postgres, expires_in=timedelta(hours=12))
+    before = _row(isolated_postgres)
+
+    with refresh.locked_row(TEAM_ID) as row:
+        written = refresh.write_locked_row(row, _offered(expires_at=None, refresh_token=None), path="test")
+
+    assert written is False
+    assert _row(isolated_postgres) == before
+
+
+def test_write_locked_row_writes_over_null_expiry(isolated_postgres):
+    _seed(isolated_postgres, expires_in=None, refresh_token=None)
+    expires_at = _now() + timedelta(hours=12)
+
+    with refresh.locked_row(TEAM_ID) as row:
+        written = refresh.write_locked_row(row, _offered(expires_at=expires_at), path="test")
+
+    assert written is True
+    stored = _row(isolated_postgres)
+    assert stored["bot_token"] == NEW_TOKEN
+    assert int(stored["bot_token_expires_at"].timestamp()) == int(expires_at.timestamp())
+    assert decrypt_refresh_token(stored["bot_refresh_token_encrypted"]) == NEW_REFRESH
+
+
 def test_save_over_null_expiry_writes_rotating_token(isolated_postgres):
     _seed(isolated_postgres, expires_in=None, refresh_token=None)
     expires_at = _now() + timedelta(hours=12)

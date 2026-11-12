@@ -43,7 +43,12 @@ from slack_sdk.oauth.installation_store import Bot
 from sqlalchemy import select
 
 from utilities import constants
-from utilities.slack_tokens.refresh import locked_row, save_bot_locked, write_locked_row
+from utilities.slack_tokens.refresh import (
+    locked_row,
+    log_save_failure,
+    save_bot_locked,
+    write_locked_row,
+)
 
 SAVE_RETRIES = 2
 _PATH = "convert_slack_tokens"
@@ -88,9 +93,9 @@ def _save_retry(team_id: str, bot: Optional[Bot]) -> str:
         try:
             if save_bot_locked(bot, team_id=team_id):
                 return "converted"
-        except Exception:
-            # Logged by refresh.py where it is a database error; the token lives only in `bot`.
-            continue
+        except Exception as e:
+            # Logs the error type only: the exception text can embed the token.
+            log_save_failure(team_id, e, path=f"{_PATH}.save_retry")
     return "needs_reinstall"
 
 
@@ -106,7 +111,9 @@ def _convert_team(team_id: str, dry_run: bool) -> str:
             if dry_run:
                 return "would_convert"
             try:
-                response = WebClient().oauth_v2_exchange(
+                # No retry handlers: a retried request after a dropped connection
+                # could exchange the token a second time.
+                response = WebClient(retry_handlers=[]).oauth_v2_exchange(
                     client_id=os.environ[constants.SLACK_CLIENT_ID],
                     client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
                     token=row.bot_token,
@@ -116,7 +123,8 @@ def _convert_team(team_id: str, dry_run: bool) -> str:
                 return "needs_reinstall" if code == "token_already_exchanged" else f"failed:{code}"
             exchanged = True
             bot = _bot_from_exchange(team_id, row, response)
-            write_locked_row(row, bot, path=_PATH)
+            if not write_locked_row(row, bot, path=_PATH):
+                return "skipped"
         # Reached only after `locked_row` committed the write.
         return "converted"
     except Exception:

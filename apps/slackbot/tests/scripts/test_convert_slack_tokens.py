@@ -1,3 +1,4 @@
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -45,6 +46,8 @@ class FakeExchange:
 
     def __call__(self, client, *, token, client_id, client_secret):
         assert (client_id, client_secret) == ("client-id", "client-secret")
+        # A retried HTTP request could exchange the token twice.
+        assert client.retry_handlers == []
         self.tokens.append(token)
         if self.error:
             raise SlackApiError("secret-bearing message " + token, {"ok": False, "error": self.error})
@@ -175,16 +178,30 @@ def test_save_failure_after_exchange_retries_save_only(isolated_postgres, exchan
     _assert_converted(isolated_postgres, "T6")
 
 
-def test_save_failure_every_time_reports_needs_reinstall(isolated_postgres, exchange, monkeypatch, capsys):
+def test_save_failure_every_time_reports_needs_reinstall(isolated_postgres, exchange, monkeypatch, capsys, caplog):
     _seed(isolated_postgres, "T7")
     calls = _failing_flush(monkeypatch, failures=None)
 
-    assert converter.main(["--team-id", "T7"]) == 1
+    with caplog.at_level(logging.ERROR):
+        assert converter.main(["--team-id", "T7"]) == 1
 
     assert capsys.readouterr().out.splitlines() == ["T7 needs_reinstall"]
     assert exchange.tokens == [LONG_LIVED]
     assert len(calls) == 3
     assert _row(isolated_postgres, "T7") == (LONG_LIVED, None, None)
+    retry_failures = [
+        r.json_fields
+        for r in caplog.records
+        if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"
+        and r.json_fields.get("path") == "convert_slack_tokens.save_retry"
+    ]
+    expected = {
+        "event": "slack.token.refresh_failed",
+        "team_id": "T7",
+        "path": "convert_slack_tokens.save_retry",
+        "error_type": "TokenSaveError",
+    }
+    assert retry_failures == [expected, expected]
 
 
 def test_commit_failure_after_exchange_retries_save_only(isolated_postgres, exchange, monkeypatch, capsys):
@@ -205,6 +222,16 @@ def test_commit_failure_after_exchange_retries_save_only(isolated_postgres, exch
     assert capsys.readouterr().out.splitlines() == ["T8 converted"]
     assert exchange.tokens == [LONG_LIVED]
     _assert_converted(isolated_postgres, "T8")
+
+
+def test_refused_write_reports_skipped(isolated_postgres, exchange, monkeypatch, capsys):
+    _seed(isolated_postgres, "T14")
+    monkeypatch.setattr(refresh, "_guard_allows", lambda row, bot: False)
+
+    assert converter.main(["--team-id", "T14"]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T14 skipped"]
+    assert _row(isolated_postgres, "T14") == (LONG_LIVED, None, None)
 
 
 def test_limit_caps_batch(isolated_postgres, exchange, capsys):
