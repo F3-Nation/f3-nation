@@ -137,10 +137,11 @@ async function checkAccess({ github, has = installed, signedIn = ghSignedIn }) {
 /**
  * Every open advisory, most severe first, then oldest first:
  * `[{ ghsa, summary, severity, createdAt, fork }]`, where `fork` is its
- * temporary private fork's full name, or null.
+ * temporary private fork's full name, or null. An advisory that changes
+ * state between the per-state reads is kept once, as last read.
  */
 async function listAdvisories(github) {
-  const advisories = [];
+  const byId = new Map();
   for (const state of ADVISORY_STATES) {
     const page = await github.paginate(
       "GET /repos/{owner}/{repo}/security-advisories",
@@ -156,7 +157,7 @@ async function listAdvisories(github) {
         throw new Error(
           `${advisory.ghsa_id}'s private fork has an unexpected name: ${fork}`,
         );
-      advisories.push({
+      byId.set(advisory.ghsa_id, {
         ghsa: advisory.ghsa_id,
         summary: advisory.summary ?? "",
         severity: advisory.severity ?? null,
@@ -169,7 +170,7 @@ async function listAdvisories(github) {
     const i = SEVERITIES.indexOf(a.severity);
     return i === -1 ? SEVERITIES.length : i;
   };
-  return advisories.sort(
+  return [...byId.values()].sort(
     (a, b) =>
       rank(a) - rank(b) ||
       (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0),
@@ -214,6 +215,23 @@ function openPrsByFork(board, factsByUrl) {
     prsByFork.get(fork).push(pr);
   }
   return prsByFork;
+}
+
+/**
+ * Throws when facts hold an open PR that triage's board lacks: it opened or
+ * reopened between the two reads, and the report would leave it out.
+ */
+function checkBoardHasFacts(advisories, board, factsByUrl) {
+  const onBoard = new Set((board.prs ?? []).map((pr) => pr.url));
+  for (const url of factsByUrl.keys()) {
+    if (onBoard.has(url)) continue;
+    const ghsa = advisories.find(
+      (a) => a.fork && url.startsWith(`https://github.com/${a.fork}/pull/`),
+    )?.ghsa;
+    throw new Error(
+      `${url}${ghsa ? ` (${ghsa})` : ""} opened while the report was being read. Run it again.`,
+    );
+  }
 }
 
 /** Advisories with no open fix PR. */
@@ -269,14 +287,24 @@ function advisoryLists(advisories, board, factsByUrl, now) {
 }
 
 /**
- * pr-triage's board for one fork. Review bots can't reach a temporary private
- * fork, so the triage doesn't wait on them.
+ * The environment for pr-triage: the caller's, minus every PR_TRIAGE_*
+ * override (a test fixture, page limit or codeowner list would make the live
+ * report wrong). Review bots can't reach a temporary private fork, so the
+ * triage doesn't wait on them.
  */
+const triageEnv = (env) => ({
+  ...Object.fromEntries(
+    Object.entries(env).filter(([key]) => !key.startsWith("PR_TRIAGE_")),
+  ),
+  PR_TRIAGE_BOT_TIMEOUT_SECS: "0",
+});
+
+/** pr-triage's board for one fork. */
 function triageFork(fork) {
   const script = path.join(__dirname, "..", "..", "scripts", "pr-triage.sh");
   return JSON.parse(
     execFileSync("bash", [script, "-R", fork, "--json"], {
-      env: { ...process.env, PR_TRIAGE_BOT_TIMEOUT_SECS: "0" },
+      env: triageEnv(process.env),
       maxBuffer: 64 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     }).toString(),
@@ -324,6 +352,10 @@ async function buildAdvisoryReport({
         `Couldn't triage ${ghsa}'s fork: ${String(error.stderr ?? error.message).trim()}`,
       );
     }
+    if (board.truncated)
+      throw new Error(
+        `Triage of ${ghsa}'s fork (${fork}) stopped at its page limit, so some fix PRs would be left out.`,
+      );
     // Every fork numbers its PRs from 1; the advisory ID tells them apart.
     const prs = (board.prs ?? []).map((pr) => ({
       ...pr,
@@ -361,8 +393,10 @@ async function buildAdvisoryReport({
     slackIdsRaw,
     warnings,
     now,
-    extraLists: (board, factsByUrl) =>
-      advisoryLists(advisories, board, factsByUrl, now),
+    extraLists: (board, factsByUrl) => {
+      checkBoardHasFacts(advisories, board, factsByUrl);
+      return advisoryLists(advisories, board, factsByUrl, now);
+    },
     headerExtras: (board, factsByUrl) => {
       const noPr = withoutOpenPr(advisories, board, factsByUrl).length;
       return noPr
@@ -387,6 +421,7 @@ module.exports = {
   splitMessages,
   checkAccess,
   listAdvisories,
+  triageFork,
   buildAdvisoryReport,
 };
 

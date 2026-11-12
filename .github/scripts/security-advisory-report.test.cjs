@@ -2,6 +2,9 @@
 
 // Run with: node --test .github/scripts/security-advisory-report.test.cjs
 const test = require("node:test");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const assert = require("node:assert/strict");
 const {
   REPO,
@@ -10,6 +13,7 @@ const {
   splitMessages,
   checkAccess,
   listAdvisories,
+  triageFork,
   buildAdvisoryReport,
 } = require("./security-advisory-report.cjs");
 const { toSlackMarkdown } = require("./codeowners-pr-report.cjs");
@@ -304,6 +308,20 @@ test("every open advisory is listed, most severe then oldest first", async () =>
   );
 });
 
+test("an advisory read in both states is listed once, as last read", async () => {
+  const github = fakeGithub({
+    advisories: {
+      triage: [advisory(GHSA_A, FORK_A, { severity: "low" })],
+      draft: [advisory(GHSA_A, FORK_A, { severity: "high" })],
+    },
+  });
+  const listed = await listAdvisories(github);
+  assert.deepEqual(
+    listed.map((a) => [a.ghsa, a.severity]),
+    [[GHSA_A, "high"]],
+  );
+});
+
 test("a fork outside the repository's naming is refused", async () => {
   const github = fakeGithub({
     advisories: { draft: [advisory(GHSA_A, "someone/elsewhere")] },
@@ -512,6 +530,77 @@ test("a base-repo warning shared by every fork is shown once", async () => {
   });
   const message = text(await build(github, (fork) => boardFor(fork)));
   assert.equal(message.match(/Couldn't list collaborators/g)?.length, 1);
+});
+
+test("an advisory read in both states appears once in the report", async () => {
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: {
+      triage: [advisory(GHSA_C, null)],
+      draft: [advisory(GHSA_C, null)],
+    },
+  });
+  const message = text(
+    await build(github, () => ({ codeowners: [], prs: [] })),
+  );
+  assert.equal(
+    message.split("\n").filter((line) => line.includes(GHSA_C)).length,
+    1,
+  );
+  assert.match(message, /\*\*🚧 No open fix PR\*\* · 1\n/);
+});
+
+test("a truncated triage board stops the report", async () => {
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: { draft: [advisory(GHSA_A, FORK_A)] },
+    prsByRepo: { "f3-nation-ghsa-aaaa-bbbb-cccc": [prNode(FORK_A)] },
+  });
+  await assert.rejects(
+    build(github, (fork) => ({ ...boardFor(fork), truncated: true })),
+    /Triage of GHSA-aaaa-bbbb-cccc's fork \(F3-Nation\/f3-nation-ghsa-aaaa-bbbb-cccc\) stopped at its page limit/,
+  );
+});
+
+test("a fix PR that opened after triage stops the report", async () => {
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: { draft: [advisory(GHSA_A, FORK_A)] },
+    // Triage saw no PR; by the time facts are read one is open.
+    prsByRepo: { "f3-nation-ghsa-aaaa-bbbb-cccc": [prNode(FORK_A)] },
+  });
+  await assert.rejects(
+    build(github, () => ({ codeowners: [], prs: [] })),
+    /f3-nation-ghsa-aaaa-bbbb-cccc\/pull\/1 \(GHSA-aaaa-bbbb-cccc\) opened while the report was being read/,
+  );
+});
+
+test("triage ignores the caller's PR_TRIAGE_* overrides", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "triage-env-"));
+  // A stand-in for bash that prints the PR_TRIAGE_* variables it was given.
+  fs.writeFileSync(
+    path.join(dir, "bash"),
+    [
+      "#!/usr/bin/env node",
+      "const env = Object.entries(process.env)",
+      '  .filter(([k]) => k.startsWith("PR_TRIAGE_"))',
+      "  .map(([k, v]) => `${k}=${v}`)",
+      "  .sort();",
+      "process.stdout.write(JSON.stringify({ env }));",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  const saved = { ...process.env };
+  t.after(() => {
+    process.env = saved;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  process.env.PATH = `${dir}${path.delimiter}${process.env.PATH}`;
+  process.env.PR_TRIAGE_FIXTURE = "/tmp/fixture.json";
+  process.env.PR_TRIAGE_MAX_PAGES = "1";
+  process.env.PR_TRIAGE_CODEOWNERS = "eve";
+  assert.deepEqual(triageFork(FORK_A).env, ["PR_TRIAGE_BOT_TIMEOUT_SECS=0"]);
 });
 
 test("a fix PR that is its author's turn says why", async () => {
