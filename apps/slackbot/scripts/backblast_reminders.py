@@ -32,6 +32,7 @@ from sqlalchemy.orm import aliased
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import current_date_cst, safe_get
 from utilities.slack import actions, orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 MSG_TEMPLATE = "Hey there, {q_name}! I hope that the {event_name} on {event_date} at {event_ao} went well! I have not seen a backblast posted for this event yet... Please click the button below to fill out the backblast so we can track those stats!"  # noqa
 
@@ -137,14 +138,12 @@ def send_backblast_reminders(force=False):
                 event_ao=backblast.org.name,
             )
 
-            slack_bot_token = backblast.slack_settings.bot_token
             backblast_reminder_days = backblast.slack_settings.backblast_reminder_days
             if backblast_reminder_days is None:
                 backblast_reminder_days = 5
 
             if (
-                slack_bot_token
-                and backblast.slack_user_id
+                backblast.slack_user_id
                 and not safe_get(backblast.event.meta, "backblast_reminder_dismissed")
                 and backblast.event.series_exception != Series_Exception.closed
             ):
@@ -152,7 +151,13 @@ def send_backblast_reminders(force=False):
                     backblast_reminder_days > 0
                     and (current_date_cst() - backblast.event.start_date).days <= backblast_reminder_days
                 ):
-                    slack_client = WebClient(slack_bot_token)
+                    try:
+                        slack_client = slack_client_for_team(backblast.slack_settings.team_id)
+                    except Exception as e:
+                        print(f"Error getting Slack client for team {backblast.slack_settings.team_id}: {e}")
+                        continue
+                    if slack_client is None:
+                        continue
                     blocks = [
                         orm.SectionBlock(label=msg),
                         orm.ActionsBlock(

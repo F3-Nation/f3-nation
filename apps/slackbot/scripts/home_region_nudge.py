@@ -15,9 +15,9 @@ from sqlalchemy import case, func
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utilities.database.orm import SlackSettings
 from utilities.helper_functions import safe_get
 from utilities.slack import actions, orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 # --- Configuration via environment variables ---
 NUDGE_DAY = int(os.getenv("HOME_REGION_NUDGE_DAY", "21"))
@@ -119,18 +119,15 @@ def send_home_region_nudges(force: bool = False):
             continue
         user_rows[row.user_id].append(row)
 
-    # Build Slack client lookup: org_id -> team_id, team_id -> SlackSettings
+    # Build lookup: org_id -> team_id
     slack_space_records: list[tuple[SlackSpace, Org_x_SlackSpace]] = DbManager.find_join_records2(
         SlackSpace,
         Org_x_SlackSpace,
         filters=[True],
     )
     org_to_team_id: dict[int, str] = {}
-    team_id_to_settings: dict[str, SlackSettings] = {}
     for ss, oxss in slack_space_records:
-        settings = SlackSettings(**ss.settings)
         org_to_team_id[oxss.org_id] = ss.team_id
-        team_id_to_settings[ss.team_id] = settings
 
     # Cache all region names upfront to avoid repeated DB calls
     all_regions: list[Org] = DbManager.find_records(Org, filters=[Org.org_type == "region"])
@@ -176,11 +173,6 @@ def send_home_region_nudges(force: bool = False):
             print(f"No Slack workspace found for region {home_region_id}, skipping user {user_id}")
             continue
 
-        settings = team_id_to_settings.get(team_id)
-        if not settings or not settings.bot_token:
-            print(f"No bot token for team {team_id}, skipping user {user_id}")
-            continue
-
         slack_user = DbManager.find_first_record(
             SlackUser,
             filters=[SlackUser.user_id == user_id, SlackUser.slack_team_id == team_id],
@@ -204,8 +196,11 @@ def send_home_region_nudges(force: bool = False):
             f"you post a lot in {other_region_name}. Would you like to switch your home region?"
         )
 
-        client = WebClient(token=settings.bot_token)
         try:
+            client = slack_client_for_team(team_id)
+            if client is None:
+                print(f"No Slack installation for team {team_id}, skipping user {user_id}")
+                continue
             client.chat_postMessage(
                 channel=slack_user.slack_id,
                 text=plain_text,

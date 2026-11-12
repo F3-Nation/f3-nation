@@ -55,6 +55,7 @@ from sqlalchemy.orm import Session
 from utilities import constants
 from utilities.database.orm import SlackSettings
 from utilities.database.orm.views import EventAttendance, EventInstanceExpanded
+from utilities.slack_tokens.client import slack_client_for_team
 
 # ---------------------------------------------------------------------------
 # Period calculations
@@ -430,7 +431,6 @@ class RegionAchievementGroup:
 
     team_id: str
     slack_settings: SlackSettings
-    bot_token: str
     # Map of achievement_id -> list of (AwardedUserInfo, CandidateAward)
     achievements: Dict[int, List[Tuple[AwardedUserInfo, CandidateAward]]]
 
@@ -585,7 +585,6 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
             region_groups[team_id] = RegionAchievementGroup(
                 team_id=team_id,
                 slack_settings=settings,
-                bot_token=slack_space.bot_token,
                 achievements={},
             )
 
@@ -612,10 +611,6 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
         send_option = settings.achievement_send_option or "post_summary"
         achievement_channel = settings.achievement_channel
 
-        if not group.bot_token:
-            print(f"[{team_id}] No bot token available. Skipping.")
-            continue
-
         if dry_run:
             print(f"[DRY-RUN] [{team_id}] Would post achievements with option: {send_option}")
             for ach_id, user_awards in group.achievements.items():
@@ -625,7 +620,14 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
                 print(f"  - {ach_name}: {', '.join(users)}")
             continue
 
-        client = WebClient(group.bot_token)
+        try:
+            client = slack_client_for_team(team_id)
+        except Exception as e:
+            print(f"[{team_id}] Error getting Slack client: {type(e).__name__}. Skipping.")
+            continue
+        if client is None:
+            print(f"[{team_id}] No Slack installation available. Skipping.")
+            continue
 
         if send_option == "post_individually":
             _post_individually(client, achievement_channel, group, achievements_by_id, team_id)

@@ -52,7 +52,7 @@ def run(
     monkeypatch.setattr(fng_reminders, "save_reminders_sent", MagicMock())
     dm = MagicMock(return_value=list(delivered), side_effect=dm_side_effect)
     monkeypatch.setattr(fng_reminders, "dm_fng_contacts", dm)
-    monkeypatch.setattr(fng_reminders, "WebClient", MagicMock())
+    monkeypatch.setattr(fng_reminders, "slack_client_for_team", MagicMock())
     monkeypatch.setattr(fng_reminders, "logger", MagicMock())
     fng_reminders.send_fng_reminders(force=force)
     return dm

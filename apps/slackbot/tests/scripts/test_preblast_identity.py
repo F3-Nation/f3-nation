@@ -338,7 +338,7 @@ def test_reminder_delivers_once_per_event_type_to_selected_recipient(query_data,
         query_data.session.add(query_data.models.EventType_x_EventInstance(event_instance_id=1, event_type_id=2))
         query_data.session.commit()
     client = Mock()
-    monkeypatch.setattr(preblast_reminders, "WebClient", lambda *args, **kwargs: client)
+    monkeypatch.setattr(preblast_reminders, "slack_client_for_team", lambda *args, **kwargs: client)
 
     preblast_reminders.send_preblast_reminders(force=True)
 
@@ -367,7 +367,7 @@ def test_reminder_preserves_event_eligibility(query_data, monkeypatch, event_val
     query_data.session.query(query_data.models.EventInstance).update(event_values)
     query_data.session.commit()
     client = Mock()
-    monkeypatch.setattr(preblast_reminders, "WebClient", lambda *args, **kwargs: client)
+    monkeypatch.setattr(preblast_reminders, "slack_client_for_team", lambda *args, **kwargs: client)
 
     preblast_reminders.send_preblast_reminders(force=True)
 
@@ -381,7 +381,7 @@ def test_automatic_preblast_sends_once_per_event_type(query_data, monkeypatch, t
         query_data.session.add(query_data.models.EventType_x_EventInstance(event_instance_id=1, event_type_id=2))
         query_data.session.commit()
     client = Mock()
-    monkeypatch.setattr(auto_preblast_send, "WebClient", lambda *args, **kwargs: client)
+    monkeypatch.setattr(auto_preblast_send, "slack_client_for_team", lambda *args, **kwargs: client)
     send = Mock()
     monkeypatch.setattr(auto_preblast_send.event_preblast, "send_preblast", send)
 
@@ -419,7 +419,7 @@ def test_automatic_preblast_preserves_eligibility(query_data, monkeypatch, event
     query_data.session.commit()
     send = Mock()
     monkeypatch.setattr(auto_preblast_send.event_preblast, "send_preblast", send)
-    monkeypatch.setattr(auto_preblast_send, "WebClient", Mock())
+    monkeypatch.setattr(auto_preblast_send, "slack_client_for_team", Mock())
 
     auto_preblast_send.send_automated_preblasts(force=True)
 
@@ -485,7 +485,7 @@ def test_automatic_preblast_all_option_preserves_open_q_event(query_data, monkey
     query_data.session.commit()
     send = Mock()
     monkeypatch.setattr(auto_preblast_send.event_preblast, "send_preblast", send)
-    monkeypatch.setattr(auto_preblast_send, "WebClient", Mock())
+    monkeypatch.setattr(auto_preblast_send, "slack_client_for_team", Mock())
 
     auto_preblast_send.send_automated_preblasts(force=True)
 

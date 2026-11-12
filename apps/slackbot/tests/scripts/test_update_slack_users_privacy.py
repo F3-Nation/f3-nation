@@ -26,7 +26,7 @@ def test_nonproduction_sync_returns_before_database_or_slack_calls(monkeypatch, 
     monkeypatch.setattr(update_slack_users.DbManager, "find_records", find_records)
     monkeypatch.setattr(update_slack_users.DbManager, "find_join_records2", find_join_records2)
     monkeypatch.setattr(update_slack_users.DbManager, "update_record", update_record)
-    monkeypatch.setattr(update_slack_users, "WebClient", web_client)
+    monkeypatch.setattr(update_slack_users, "slack_client_for_team", web_client)
 
     update_slack_users.update_slack_users(force=force)
 
@@ -111,7 +111,7 @@ def test_production_sync_imports_slack_name_and_avatar(monkeypatch, caplog, init
             }
         ]
     }
-    monkeypatch.setattr(update_slack_users, "WebClient", Mock(return_value=client))
+    monkeypatch.setattr(update_slack_users, "slack_client_for_team", Mock(return_value=client))
 
     update_slack_users.update_slack_users()
 
@@ -152,7 +152,9 @@ def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplo
         "profile": {"display_name": "Updated Name", "image_512": "updated-avatar"},
     }
     monkeypatch.setattr(
-        update_slack_users, "WebClient", lambda **_k: SimpleNamespace(users_list=lambda: {"members": [member, member]})
+        update_slack_users,
+        "slack_client_for_team",
+        lambda *_a, **_k: SimpleNamespace(users_list=lambda: {"members": [member, member]}),
     )
     updates = []
     monkeypatch.setattr(update_slack_users.DbManager, "update_record", lambda *a: updates.append(a))
@@ -236,7 +238,9 @@ def test_sync_failure_logs_safe_context_and_continues(monkeypatch, caplog, error
         completed.append("continued")
         return {"members": []}
 
-    monkeypatch.setattr(update_slack_users, "WebClient", lambda **_kwargs: SimpleNamespace(users_list=users_list))
+    monkeypatch.setattr(
+        update_slack_users, "slack_client_for_team", lambda *_a, **_kwargs: SimpleNamespace(users_list=users_list)
+    )
     with caplog.at_level(logging.ERROR, logger=update_slack_users.__name__):
         assert update_slack_users.update_slack_users() is None
     assert completed == ["failed", "continued"]

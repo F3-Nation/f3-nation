@@ -8,8 +8,6 @@ stale within hours. Features that need a client get one from
 import ast
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_DIRS = {"tests", ".venv", "node_modules", "build", "coverage", "__pycache__"}
 EXCLUDED_PREFIXES = ("utilities/slack_tokens/",)
@@ -39,11 +37,9 @@ def _called_name(node: ast.Call):
     return func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
 
 
-def _violations(*, include_scripts: bool):
+def _violations():
     found = []
     for path, rel in _source_files():
-        if not include_scripts and rel.startswith("scripts/"):
-            continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and node.attr in TOKEN_NAMES:
@@ -64,10 +60,11 @@ def _violations(*, include_scripts: bool):
     return sorted(found)
 
 
-@pytest.mark.xfail(strict=True, reason="scheduled jobs still read bot_token until they move to the token module")
+def test_scan_covers_features_and_scripts():
+    scanned = {rel for _, rel in _source_files()}
+    assert "features/downrange.py" in scanned
+    assert any(rel.startswith("scripts/") for rel in scanned)
+
+
 def test_no_token_access_outside_token_module():
-    assert _violations(include_scripts=True) == []
-
-
-def test_no_token_access_outside_token_module_and_scripts():
-    assert _violations(include_scripts=False) == []
+    assert _violations() == []
