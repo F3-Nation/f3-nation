@@ -293,12 +293,16 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
    emptied. The trim refuses if a kept table has a foreign key into an
    emptied one. Private event series (and series under them) and private
    event instances (and instances of a private series) are deleted with
-   their link rows. `event_instances` keeps only `start_date` from 30 days
-   back to 90 days ahead (about 150k of ~1.76M rows), with their link rows.
-   `preblast`, `backblast`, `preblast_rich` and `backblast_rich` are set to
-   NULL; `pax_count` and `fng_count` are kept. `users.meta` is set to NULL:
-   the obfuscator only scrubs emails and phones in it, and its profile
-   answers are free text. Before trimming, the job refuses if a kept table
+   their link rows. `event_instances` keeps only `start_date` inside
+   `SNAPSHOT_WINDOW` (days before and after the export date), with their
+   link rows. `attendance` is a link row too, so it keeps only rows on a
+   kept instance, and `attendance_x_attendance_types` goes with it;
+   `achievements_x_users` is not windowed. `preblast`, `backblast`,
+   `preblast_rich` and `backblast_rich` are set to NULL; `pax_count` and
+   `fng_count` are kept. `users.meta`, `attendance.meta` and
+   `achievements_x_users.meta` are set to NULL: the obfuscator only scrubs
+   emails and phones in the first two and copies award rows untouched, and
+   the rest is free text. Before trimming, the job refuses if a kept table
    has a column that isn't in `obfuscate-db.columns.txt`.
 6. **Leak scan, package and publish.**
    - verify-target runs again on the trimmed copy, so the scan covers
@@ -306,9 +310,8 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
      other than `dev.staging-email-sink+<tag>@f3nation.local`, any phone
      number that isn't one of the obfuscator's `555-` fakes, and any Slack
      mention (`<@U…>` / `<@W…>`) whose id isn't an obfuscator `Uf3…` id.
-   - `orgs`, `users`, `event_types`, `events` and `event_instances` must
-     each have rows (`SNAPSHOT_REQUIRED_TABLES`), so an empty copy can't
-     replace a good snapshot.
+   - Every table in `SNAPSHOT_REQUIRED_TABLES` must have rows, so an empty
+     copy can't replace a good snapshot.
    - If either check fails, nothing is built or uploaded. Otherwise a
      `pg_dump --data-only --format=custom` of the kept tables, plus
      `manifest.json`, goes into one uncompressed tar:
@@ -816,10 +819,14 @@ legacy. Two things are specific to them:
    so the real-copy suite is exercised on every PR too.
 5. Checks the developer snapshot on a clone of the planted sandbox,
    obfuscated with the `@f3nation.local` sink: the trim keeps exactly the
-   −30/+90-day window (with link rows and counts) and nulls every blast; it
-   empties every other table; the leak scan passes; an unreviewed column on
-   a kept table is refused; and a planted address stops the run before the
-   file is built or delivered. It then runs `staging-refresh --snapshot-only`
+   `SNAPSHOT_WINDOW` window (with link rows, counts and attendance), nulls
+   every blast and the `meta` of users, attendance and awards; it empties
+   every other table; the leak scan passes; the manifest lists attendance,
+   its types and awards with rows; the published file, restored the way
+   `pnpm db:load:snapshot` restores it (before the loader seeds dev logins),
+   matches the manifest's row counts and every foreign key resolves; an unreviewed column on a kept table is
+   refused; and a planted address stops the run before the file is built or
+   delivered. It then runs `staging-refresh --snapshot-only`
    itself, with `STAGING_DATABASE_URL` pointing at a listener that counts
    connections: preflight completes, and staging gets no connection.
 6. Tears the container down and restores `packages/env/.env`.

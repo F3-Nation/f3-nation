@@ -77,6 +77,12 @@ safeguards in the `lint` job (`lint:ws`, coverage-threshold validation, Python
 task validation, Turbo scope-selection validation, and `lint:unused`) remain
 repository-wide on every run.
 
+The `pnpm lint` step in [`ci.yml`](../.github/workflows/ci.yml) passes Turbo a
+`--concurrency` limit to reduce peak memory from simultaneous type-aware ESLint
+processes on cold runs. This limits scheduling, not workspace selection: all
+selected tasks still run. Local `pnpm lint` keeps Turbo's default concurrency;
+pass the same `--concurrency` value as that step to match CI.
+
 The Turbo cache adapter runs on localhost within each job and stores task
 artifacts in GitHub Actions cache. Relative cache paths make cache versions
 portable across runners whose temporary checkout paths differ. Docker layers
