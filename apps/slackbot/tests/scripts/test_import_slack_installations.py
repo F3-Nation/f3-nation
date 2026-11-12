@@ -150,3 +150,43 @@ def test_never_prints_tokens(isolated_postgres, tmp_path, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "xox" not in captured.out + captured.err
+    assert "secret-bearing" not in captured.out + captured.err
+
+
+def test_rotating_row_without_file_never_calls_auth_test(isolated_postgres, tmp_path, monkeypatch, capsys):
+    _seed(isolated_postgres, "T11", expires_in=timedelta(hours=5))
+    before = _row(isolated_postgres, "T11")
+    calls = []
+    monkeypatch.setattr(WebClient, "auth_test", lambda self: calls.append(1))
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T11 skipped_rotating"]
+    assert calls == []
+    assert _row(isolated_postgres, "T11") == before
+
+
+def test_rotating_row_dry_run(isolated_postgres, tmp_path, monkeypatch, capsys):
+    _seed(isolated_postgres, "T12", expires_in=timedelta(hours=5))
+    calls = []
+    monkeypatch.setattr(WebClient, "auth_test", lambda self: calls.append(1))
+
+    assert importer.main(["--installations-dir", str(tmp_path), "--dry-run"]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T12 skipped_rotating"]
+    assert calls == []
+
+
+def test_one_bad_team_does_not_stop_the_run(isolated_postgres, tmp_path, capsys):
+    _seed(isolated_postgres, "T13")
+    _seed(isolated_postgres, "T14")
+    _write_file(tmp_path, "T14")
+    _write_file(tmp_path, "T13")
+    corrupt = next(p for p in tmp_path.rglob("bot-latest") if "T13" in str(p))
+    corrupt.write_text("{not json")
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 1
+
+    assert capsys.readouterr().out.splitlines() == ["T13 error:JSONDecodeError", "T14 imported"]
+    assert _row(isolated_postgres, "T14")[0] == FILE_TOKEN
+    assert _row(isolated_postgres, "T13")[0] == ROW_TOKEN

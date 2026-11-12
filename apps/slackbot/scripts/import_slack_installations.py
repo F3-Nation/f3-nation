@@ -16,8 +16,11 @@ Each workspace prints one line, `<team_id> <status>`:
   nor sent to Slack.
 - `no_token`: no file and no stored token.
 - `auth_failed:<slack error code>`: `auth.test` rejected the stored token.
+- `error:<exception class>`: reading the file, calling Slack or saving failed;
+  the run continues with the next workspace.
 
-Exits 1 if any workspace is `auth_failed`. Tokens are never printed.
+`--dry-run` writes nothing but still calls `auth.test` for backfill rows.
+Exits 1 if any workspace is `auth_failed` or `error`. Tokens are never printed.
 """
 
 import argparse
@@ -83,15 +86,21 @@ def _import_team(team_id: str, token: Optional[str], store: FileInstallationStor
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--installations-dir", required=True)
-    parser.add_argument("--dry-run", action="store_true", help="report statuses without writing")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="report statuses without writing (backfill rows still call auth.test)"
+    )
     args = parser.parse_args(argv)
 
     # The previous release wrote the files without a client_id; adding one changes the directory layout.
     store = FileInstallationStore(base_dir=args.installations_dir)
     failed = False
     for team_id, token in _stored_tokens():
-        status = _import_team(team_id, token, store, args.dry_run)
-        failed = failed or status.startswith("auth_failed")
+        try:
+            status = _import_team(team_id, token, store, args.dry_run)
+        except Exception as e:
+            # The class name only: exception text can embed request or token data.
+            status = f"error:{type(e).__name__}"
+        failed = failed or status.startswith(("auth_failed", "error"))
         print(f"{team_id} {status}")
     return 1 if failed else 0
 
