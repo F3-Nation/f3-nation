@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -16 840 528" width="840" height="528" role="img" aria-labelledby="t d" data-diagram-type="architecture">
-  <title id="t">Region pages: current and proposed data path</title>
-  <desc id="d">Today visitors to regions.f3nation.com hit the legacy Cloud Run app in GCP project region-pages, which reads a Neon copy that an ingest job fills from Cloud SQL f3data. After cutover the domain maps to the monorepo app in project f3-region-pages-app, which reads f3data through the F3 API; regions2 redirects to regions with a 307 during the soak and a 301 after signoff, and Neon sits idle for a 14-day soak before any signoff-gated teardown.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -28 856 484" width="856" height="484" role="img" aria-labelledby="t d" data-diagram-type="flow">
+  <title id="t">Region pages cutover in three stages</title>
+  <desc id="d">Today regions.f3nation.com runs on the legacy app, which pays Neon about 26 USD a month to hold a copy of f3data, while the monorepo app already reads f3data through the F3 API at regions2. Cutover maps the domain to the monorepo app, redirects regions2 with a no-store 307, and keeps the legacy app on standby for rollback. During the 14 day soak regions2 stays a 307 and rollback stays ready; only after release signoff does the redirect become a 301 and Neon retire.</desc>
   <style>
     svg { --bg: #F5F5F5; --surface: #FFFFFF; --ink: #2D3142; --muted: #4F5D75; --soft: #5A6580; --line: #4F5D75; --rule: #D9DADD; --accent: #B5401C; --accent-tint: #F2E9E6; --link: #2E5AA8; }
     @media (prefers-color-scheme: dark) {
@@ -24,67 +24,31 @@
     <marker id="arrow-accent" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#B5401C"/></marker>
     <marker id="arrow-link" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#2E5AA8"/></marker>
   </defs>
-  <rect class="bg" x="0" y="-16" width="840" height="528" fill="#F5F5F5"/>
-  <g class="group">
-    <rect x="24" y="24" width="792" height="216" rx="8"/>
-    <rect class="mask" x="36" y="16" width="72" height="16" rx="2"/>
-    <text class="edge-label" x="72" y="28" font-size="11" text-anchor="middle" letter-spacing="0.06em">CURRENT</text>
-  </g>
-  <g class="group">
-    <rect x="24" y="272" width="792" height="216" rx="8"/>
-    <rect class="mask" x="36" y="264" width="80" height="16" rx="2"/>
-    <text class="edge-label" x="76" y="276" font-size="11" text-anchor="middle" letter-spacing="0.06em">PROPOSED</text>
-  </g>
-  <path class="edge" data-from="v1" data-to="legacy" d="M216 88 H240" marker-end="url(#arrow)"/>
-  <path class="edge" data-from="legacy" data-to="neon" d="M408 88 H432" marker-end="url(#arrow)"/>
-  <path class="edge" data-from="ingest" data-to="neon" d="M516 152 V120" marker-end="url(#arrow)"/>
-  <path class="edge" data-from="ingest" data-to="f3a" d="M600 184 H624" marker-end="url(#arrow)"/>
-  <path class="edge" data-from="v2" data-to="app" d="M216 336 H240" marker-end="url(#arrow)"/>
-  <path class="edge" data-from="app" data-to="api" d="M408 336 H432" marker-end="url(#arrow)"/>
-  <path class="edge" data-from="api" data-to="f3b" d="M600 336 H624" marker-end="url(#arrow)"/>
-  <path class="edge" data-from="r2" data-to="v2" d="M132 400 V368" marker-end="url(#arrow)"/>
-  <g class="node" data-id="v1">
-    <rect x="48" y="56" width="168" height="64" rx="6"/>
-    <text class="label" x="132" y="84.5" font-size="14" text-anchor="middle"><tspan x="132">Visitors</tspan><tspan x="132" dy="16.8">regions domain</tspan></text>
-  </g>
-  <g class="node" data-id="legacy">
-    <rect x="240" y="56" width="168" height="64" rx="6"/>
-    <text class="label" x="324" y="84.5" font-size="14" text-anchor="middle"><tspan x="324">Legacy app</tspan><tspan x="324" dy="16.8">region-pages GCP</tspan></text>
-  </g>
-  <g class="node store" data-id="neon">
-    <rect x="432" y="56" width="168" height="64" rx="6"/>
-    <text class="label" x="516" y="84.5" font-size="14" text-anchor="middle"><tspan x="516">Neon copy</tspan><tspan x="516" dy="16.8">about $26/mo</tspan></text>
-  </g>
-  <g class="node" data-id="ingest">
-    <rect x="432" y="152" width="168" height="64" rx="6"/>
-    <text class="label" x="516" y="180.5" font-size="14" text-anchor="middle"><tspan x="516">Ingest job</tspan><tspan x="516" dy="16.8">daily copy</tspan></text>
-  </g>
-  <g class="node store" data-id="f3a">
-    <rect x="624" y="152" width="168" height="64" rx="6"/>
-    <text class="label" x="708" y="180.5" font-size="14" text-anchor="middle"><tspan x="708">Cloud SQL</tspan><tspan x="708" dy="16.8">f3data</tspan></text>
-  </g>
-  <g class="node" data-id="v2">
-    <rect x="48" y="304" width="168" height="64" rx="6"/>
-    <text class="label" x="132" y="332.5" font-size="14" text-anchor="middle"><tspan x="132">Visitors</tspan><tspan x="132" dy="16.8">regions domain</tspan></text>
-  </g>
-  <g class="node focal" data-id="app">
-    <rect x="240" y="304" width="168" height="64" rx="6"/>
-    <text class="label" x="324" y="332.5" font-size="14" text-anchor="middle"><tspan x="324">Monorepo app</tspan><tspan x="324" dy="16.8">new GCP project</tspan></text>
-  </g>
-  <g class="node" data-id="api">
-    <rect x="432" y="304" width="168" height="64" rx="6"/>
-    <text class="label" x="516" y="332.5" font-size="14" text-anchor="middle"><tspan x="516">F3 API</tspan><tspan x="516" dy="16.8">apps/api</tspan></text>
-  </g>
-  <g class="node store" data-id="f3b">
-    <rect x="624" y="304" width="168" height="64" rx="6"/>
-    <text class="label" x="708" y="332.5" font-size="14" text-anchor="middle"><tspan x="708">Cloud SQL</tspan><tspan x="708" dy="16.8">f3data</tspan></text>
-  </g>
-  <g class="node" data-id="r2">
-    <rect x="48" y="400" width="168" height="64" rx="6"/>
-    <text class="label" x="132" y="428.5" font-size="14" text-anchor="middle"><tspan x="132">regions2 alias</tspan><tspan x="132" dy="16.8">307, 301 later</tspan></text>
-  </g>
-  <g class="node optional" data-id="idle">
-    <rect x="432" y="400" width="168" height="64" rx="6"/>
-    <text class="label" x="516" y="428.5" font-size="14" text-anchor="middle"><tspan x="516">Neon, idle</tspan><tspan x="516" dy="16.8">14-day soak</tspan></text>
-  </g>
+  <rect class="bg" x="-8" y="-28" width="856" height="484"/>
+    <g class="group"><rect x="8" y="32" width="256" height="400" rx="8"/></g>
+  <text class="label" x="136.0" y="16" font-size="16" text-anchor="middle">1. Today: two apps, one bill</text>
+  <g class="node focal" data-id="t-dom"><rect x="24" y="64" width="224" height="64" rx="6"/><text class="label" x="136.0" y="101" font-size="14" text-anchor="middle">regions.f3nation.com</text></g>
+  <g class="node" data-id="t-leg"><rect x="24" y="160" width="224" height="64" rx="6"/><text class="label" x="136.0" y="197" font-size="14" text-anchor="middle">Legacy app</text></g>
+  <g class="node store" data-id="t-neon"><rect x="24" y="256" width="224" height="64" rx="6"/><text class="label" x="136.0" y="284" font-size="14" text-anchor="middle"><tspan x="136.0">Neon</tspan><tspan x="136.0" dy="16.8">26 USD a month</tspan></text></g>
+  <g class="node optional" data-id="t-new"><rect x="24" y="352" width="224" height="64" rx="6"/><text class="label" x="136.0" y="380" font-size="14" text-anchor="middle"><tspan x="136.0">Monorepo app, regions2</tspan><tspan x="136.0" dy="16.8">reads f3data via API</tspan></text></g>
+  <path class="edge" data-from="t-dom" data-to="t-leg" d="M136.0 128 V160" marker-end="url(#arrow)"/>
+  <path class="edge" data-from="t-leg" data-to="t-neon" d="M136.0 224 V256" marker-end="url(#arrow)"/><text class="edge-label" x="146.0" y="244" font-size="12">copies f3data</text>
+  <g class="group"><rect x="296" y="32" width="256" height="400" rx="8"/></g>
+  <text class="label" x="424.0" y="16" font-size="16" text-anchor="middle">2. Cutover (this runbook)</text>
+  <g class="node" data-id="c-r2"><rect x="312" y="64" width="224" height="64" rx="6"/><text class="label" x="424.0" y="101" font-size="14" text-anchor="middle">regions2.f3nation.com</text></g>
+  <g class="node focal" data-id="c-dom"><rect x="312" y="160" width="224" height="64" rx="6"/><text class="label" x="424.0" y="197" font-size="14" text-anchor="middle">regions.f3nation.com</text></g>
+  <g class="node" data-id="c-new"><rect x="312" y="256" width="224" height="64" rx="6"/><text class="label" x="424.0" y="293" font-size="14" text-anchor="middle">Monorepo app</text></g>
+  <g class="node optional" data-id="c-leg"><rect x="312" y="352" width="224" height="64" rx="6"/><text class="label" x="424.0" y="380" font-size="14" text-anchor="middle"><tspan x="424.0">Legacy app</tspan><tspan x="424.0" dy="16.8">on standby</tspan></text></g>
+  <path class="edge" data-from="c-r2" data-to="c-dom" d="M424.0 128 V160" marker-end="url(#arrow)"/><text class="edge-label" x="434.0" y="148" font-size="12">307, no-store</text>
+  <path class="edge" data-from="c-dom" data-to="c-new" d="M424.0 224 V256" marker-end="url(#arrow)"/><text class="edge-label" x="434.0" y="244" font-size="12">domain mapping</text>
+  <path class="edge" data-from="c-new" data-to="c-leg" d="M424.0 320 V352" marker-end="url(#arrow)" stroke-dasharray="5 4"/><text class="edge-label" x="434.0" y="340" font-size="12">rollback</text>
+  <g class="group"><rect x="584" y="32" width="256" height="400" rx="8"/></g>
+  <text class="label" x="712.0" y="16" font-size="16" text-anchor="middle">3. Soak, then savings</text>
+  <g class="node" data-id="s-soak"><rect x="600" y="64" width="224" height="64" rx="6"/><text class="label" x="712.0" y="92" font-size="14" text-anchor="middle"><tspan x="712.0">14 day soak</tspan><tspan x="712.0" dy="16.8">regions2 stays 307</tspan></text></g>
+  <g class="node optional" data-id="s-roll"><rect x="600" y="160" width="224" height="64" rx="6"/><text class="label" x="712.0" y="188" font-size="14" text-anchor="middle"><tspan x="712.0">Rollback ready</tspan><tspan x="712.0" dy="16.8">at every step</tspan></text></g>
+  <g class="node" data-id="s-sign"><rect x="600" y="256" width="224" height="64" rx="6"/><text class="label" x="712.0" y="293" font-size="14" text-anchor="middle">Release signoff</text></g>
+  <g class="node focal" data-id="s-neon"><rect x="600" y="352" width="224" height="64" rx="6"/><text class="label" x="712.0" y="380" font-size="14" text-anchor="middle"><tspan x="712.0">301 redirect</tspan><tspan x="712.0" dy="16.8">Neon retired</tspan></text></g>
+  <path class="edge" data-from="s-soak" data-to="s-roll" d="M712.0 128 V160" marker-end="url(#arrow)"/>
+  <path class="edge" data-from="s-roll" data-to="s-sign" d="M712.0 224 V256" marker-end="url(#arrow)"/>
+  <path class="edge" data-from="s-sign" data-to="s-neon" d="M712.0 320 V352" marker-end="url(#arrow)"/><text class="edge-label" x="722.0" y="340" font-size="12">one way</text>
 </svg>
