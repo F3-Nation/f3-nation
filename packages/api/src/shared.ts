@@ -362,7 +362,6 @@ const getSession = async ({ context }: { context: BaseContext }) => {
     .select({
       apiKeyId: schema.apiKeys.id,
       ownerId: schema.apiKeys.ownerId,
-      apiKey: schema.apiKeys.key,
       userId: schema.users.id,
       email: schema.users.email,
       f3Name: schema.users.f3Name,
@@ -426,7 +425,7 @@ const getSession = async ({ context }: { context: BaseContext }) => {
     },
     apiKey: {
       id: apiKeyRecord.apiKeyId,
-      key: `${apiKeyRecord.apiKey.slice(0, 4)}...${apiKeyRecord.apiKey.slice(-4)}`,
+      key: `${bearerToken.slice(0, 4)}...${bearerToken.slice(-4)}`,
       ownerId: apiKeyRecord.ownerId,
       revokedAt: apiKeyRecord.revokedAt,
       expiresAt: apiKeyRecord.expiresAt,

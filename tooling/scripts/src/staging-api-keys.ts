@@ -172,8 +172,27 @@ async function main(): Promise<void> {
           `${orphans.length} stashed key(s) have an owner id the loaded copy doesn't have; re-run with --owner-email <user email>.`,
         );
       }
+      // Name the columns both tables share instead of relying on column
+      // order: a stash taken before a schema change to api_keys can then be
+      // restored after it. Any hash columns the stash lacks are refilled
+      // from key by the api_keys_fill_hash trigger.
+      const shared = await tx<{ column_name: string }[]>`
+        SELECT p.column_name FROM information_schema.columns p
+        WHERE p.table_schema = 'public' AND p.table_name = 'api_keys'
+          AND EXISTS (
+            SELECT 1 FROM information_schema.columns k
+            WHERE k.table_schema = 'refresh_keep' AND k.table_name = 'api_keys'
+              AND k.column_name = p.column_name)
+        ORDER BY p.ordinal_position`;
+      const columns = shared.map((c) => c.column_name);
+      if (!columns.includes("id")) {
+        throw new Error(
+          "refresh_keep.api_keys has no id column to restore by.",
+        );
+      }
       const keys = await tx`
-        INSERT INTO public.api_keys SELECT * FROM refresh_keep.api_keys
+        INSERT INTO public.api_keys (${tx(columns)})
+        SELECT ${tx(columns)} FROM refresh_keep.api_keys
         ON CONFLICT (id) DO NOTHING
         RETURNING id`;
       // The grant table has no unique key, so guard re-runs explicitly; skip

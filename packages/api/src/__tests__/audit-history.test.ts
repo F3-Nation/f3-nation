@@ -22,7 +22,7 @@ const approvedTracking = {
     [],
     [],
   ],
-  api_keys: [["id"], ["updated"], ["key"]],
+  api_keys: [["id"], ["updated"], ["key", "key_hash"]],
   attendance: [["id"], ["updated"], []],
   attendance_types: [["id"], ["updated"], []],
   attendance_x_attendance_types: [
@@ -939,17 +939,21 @@ describe("audit history migration (#664)", () => {
       expect(rows.map((r) => r.op)).toEqual(["I", "U", "D"]);
       expect(rows[0]).toMatchObject({
         old_row: null,
-        new_row: { key: "[redacted]" },
+        new_row: { key: "[redacted]", key_hash: "[redacted]" },
       });
       expect(rows[1]).toMatchObject({
-        old_row: { key: "[redacted]" },
-        new_row: { key: "[redacted: changed]" },
+        old_row: { key: "[redacted]", key_hash: "[redacted]" },
+        new_row: {
+          key: "[redacted: changed]",
+          key_hash: "[redacted: changed]",
+        },
       });
       expect(rows[2]).toMatchObject({
-        old_row: { key: "[redacted]" },
+        old_row: { key: "[redacted]", key_hash: "[redacted]" },
         new_row: null,
       });
       expect(JSON.stringify(rows)).not.toContain("synthetic-matrix");
+      expect(JSON.stringify(rows)).not.toMatch(/[0-9a-f]{64}/);
     }));
 
   it("removes inherited default table/sequence grants and history schema CREATE", async () =>
@@ -1100,7 +1104,7 @@ describe("audit history migration (#664)", () => {
           : [];
         const masked =
           table === "api_keys"
-            ? ["key"]
+            ? ["key", "key_hash"]
             : table === "update_requests"
               ? ["token"]
               : [];

@@ -286,6 +286,8 @@ public.api_keys.description:character varying
 public.api_keys.expires_at:timestamp without time zone
 public.api_keys.id:integer
 public.api_keys.key:character varying
+public.api_keys.key_hash:character varying
+public.api_keys.key_hint:character varying
 public.api_keys.last_used_at:timestamp without time zone
 public.api_keys.name:character varying
 public.api_keys.owner_id:integer
