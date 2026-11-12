@@ -123,12 +123,35 @@ describe("GoogleMapsAuthFailureBoundary", () => {
     expectOuterCaught("FeatureMarker: missing location");
   });
 
+  it("re-throws a non-TypeError from Google's script after the key was rejected", () => {
+    authFailed.current = true;
+    const error = new Error("InvalidValueError: setPosition: not a LatLng");
+    error.stack = CHROME_GOOGLE_STACK;
+
+    renderBoundaryThrowing(error);
+
+    expectOuterCaught("InvalidValueError: setPosition: not a LatLng");
+  });
+
   it("re-throws a TypeError whose top frame is our code after the key was rejected", () => {
     authFailed.current = true;
 
     renderBoundaryThrowing(typeErrorWithStack(APP_STACK));
 
     expectOuterCaught(GOOGLE_MESSAGE);
+  });
+
+  it("re-throws a TypeError with a Google Maps URL in its message and our code on top", () => {
+    authFailed.current = true;
+    const message =
+      "Failed to load https://maps.googleapis.com/maps/api/js?key=test";
+    const error = new TypeError(message);
+    error.stack = `TypeError: ${message}
+    at FeatureMarker (http://localhost:3000/_next/static/chunks/map.js:42:7)`;
+
+    renderBoundaryThrowing(error);
+
+    expectOuterCaught(message);
   });
 
   it("re-throws a TypeError without a stack after the key was rejected", () => {

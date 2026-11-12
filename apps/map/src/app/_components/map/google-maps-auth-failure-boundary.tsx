@@ -20,16 +20,21 @@ const GOOGLE_MAPS_SCRIPT_ORIGIN = "https://maps.googleapis.com/";
 /**
  * True for the `TypeError`s Google's disabled marker class throws: their top
  * stack frame is in a script served from Google Maps. Chrome, Firefox and
- * Safari all print a frame's script URL, and the message line before the
- * frames holds none, so the first URL in the stack is the top frame's.
- * An error without a stack doesn't match, so it reaches the app's error
- * boundary rather than being hidden.
+ * Safari all print a frame's script URL. Chrome starts the stack with the
+ * `TypeError: <message>` line, which is removed first so a URL inside the
+ * message is never taken for a frame; after that, the first URL in the stack
+ * is the top frame's. An error without a stack doesn't match, so it reaches
+ * the app's error boundary rather than being hidden.
  */
 function isGoogleMapsScriptError(error: unknown): boolean {
   if (!(error instanceof TypeError) || typeof error.stack !== "string") {
     return false;
   }
-  const topFrameUrl = /https?:\/\/[^\s)]+/.exec(error.stack)?.[0];
+  const header = String(error);
+  const frames = error.stack.startsWith(header)
+    ? error.stack.slice(header.length)
+    : error.stack;
+  const topFrameUrl = /https?:\/\/[^\s)]+/.exec(frames)?.[0];
   return topFrameUrl?.startsWith(GOOGLE_MAPS_SCRIPT_ORIGIN) ?? false;
 }
 

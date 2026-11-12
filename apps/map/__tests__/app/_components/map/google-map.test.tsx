@@ -15,7 +15,10 @@ interface LatLng {
   lng: number;
 }
 
-const { fakeGoogle } = vi.hoisted(() => ({
+const { fakeGoogle, runtimeConfig } = vi.hoisted(() => ({
+  runtimeConfig: {
+    current: { googleApiKey: "test-key", status: "ready" },
+  },
   fakeGoogle: {
     markerClassDisabled: false,
     // Positions the fake marker accepted, in order.
@@ -124,7 +127,7 @@ vi.mock("@vis.gl/react-google-maps", () => ({
   ),
 }));
 vi.mock("~/utils/runtime-config", () => ({
-  useRuntimeConfig: () => ({ googleApiKey: "test-key", status: "ready" }),
+  useRuntimeConfig: () => runtimeConfig.current,
 }));
 vi.mock("~/app/_components/map/initial-location-provider", () => ({
   useInitialLocation: () => ({
@@ -198,6 +201,7 @@ function expectAlertInsteadOfMap() {
 
 beforeEach(() => {
   delete window.gm_authFailure;
+  runtimeConfig.current = { googleApiKey: "test-key", status: "ready" };
   fakeGoogle.markerClassDisabled = false;
   fakeGoogle.acceptedPositions = [];
   fakeGoogle.rejectedPositionSets = 0;
@@ -245,5 +249,25 @@ describe("GoogleMapComponent", () => {
     expect(fakeGoogle.rejectedPositionSets).toBe(1);
     expect(fakeGoogle.acceptedPositions).toEqual([FIRST_POSITION]);
     expectAlertInsteadOfMap();
+  });
+
+  it("shows the config-error alert when runtime config fails to load", async () => {
+    runtimeConfig.current = { googleApiKey: "", status: "error" };
+
+    await renderMap();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "We couldn't load the map right now",
+    );
+    expect(screen.queryByTestId("api-provider")).not.toBeInTheDocument();
+  });
+
+  it("shows a spinner and no alert while runtime config is loading", async () => {
+    runtimeConfig.current = { googleApiKey: "", status: "loading" };
+
+    await renderMap();
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("api-provider")).not.toBeInTheDocument();
   });
 });

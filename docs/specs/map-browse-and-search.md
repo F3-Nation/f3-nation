@@ -193,4 +193,6 @@ shared "anonymous" bucket) — a per-instance limit, not a global cap.
     shared auth middleware).
 - Browser exceptions captured in PostHog:
   - `map.google_maps.auth_failure` — Google Maps rejected the API key on a
-    visitor's page (AC-19); reported once per page load.
+    visitor's page (AC-19); captured once per page load. Google's own scripts
+    keep throwing after the map is removed, and PostHog's exception autocapture
+    records those as separate, untagged `$exception` events.
