@@ -63,13 +63,17 @@ in that JSON are preserved.
   `PASSWORD_ENCRYPT_KEY`. The variable accepts a comma-separated list of keys,
   newest first, so a key can be replaced without downtime.
 - The key is given to the Slackbot service and job only, never to the API.
-- The refresh token is decrypted only inside the refresh procedure. No other
-  function returns it, and no `Bot` handed to Bolt or to callers carries it.
+- The refresh token is decrypted only inside the refresh procedure and the
+  re-key CLI, which decrypts each row to re-encrypt it. No other function
+  returns it, and no `Bot` handed to Bolt or to callers carries it.
 - Changing the key: put the new key first in the list, keeping the old one
   second, and run the re-key CLI. It re-encrypts every row's refresh token with
   the newest key under the workspace lock, without calling Slack. Its check
   mode lists rows the newest key alone can't decrypt. The old key is removed
   only after the check finds none.
+- `scripts/cloud-run-env.sh` refuses a value whose entries aren't Fernet keys
+  before any cloud call, and never destroys earlier versions of the key's
+  secret, so a key that rows were encrypted with stays recoverable.
 - Adding the variable follows the env-var checklist in the root
   [`AGENTS.md`](../../AGENTS.md#dependencies-and-environment-variables).
 
@@ -169,7 +173,11 @@ refreshes earlier than its window.
   row is unchanged and the failure is printed by team ID. GIVEN Slack answers
   `token_already_exchanged`, or the exchange succeeds but the save still fails
   after retries, THEN the CLI prints that team as needing a reinstall, never
-  calls the exchange again for it, and exits non-zero.
+  calls the exchange again for it, and exits non-zero. GIVEN the exchange call
+  fails with an error that isn't a Slack API error (such as a dropped
+  connection) THEN the CLI prints that team as `error:<exception class>` and
+  exits non-zero; Slack may or may not have exchanged the token, so a re-run
+  for that team either converts it or reports it as needing a reinstall.
 - **AC-14** — GIVEN any Slackbot code path WHEN it builds a Slack client for a
   workspace other than the one in Bolt's request context THEN the client comes
   from the token module, and the calling code never holds the token string. No token is read from the settings JSON, stored in a
@@ -260,7 +268,9 @@ Rotation can't be disabled on a Slack app, so the order is binding:
 - AC-14: the static boundary test over Slackbot source.
 - AC-18: Bolt's own authorizer, run against the store, never refreshes.
 - AC-13: a lost exchange response is reported as needing a reinstall and is
-  never retried.
+  never retried. An exchange call that fails with a non-Slack error is
+  reported as `error:<exception class>`, and a re-run reports the team as
+  needing a reinstall or converts it.
 
 ## 8. Observability
 
@@ -275,3 +285,8 @@ values, refresh tokens or key material, only the team ID.
 - `slack.token.decrypt_failed`: team ID.
 - `slack.token.admin_team_missing`: whether `ADMIN_TEAM_ID` is unset or has
   no row.
+- `slack.token.encryption_key_invalid`: logged at ERROR when the app or the
+  hourly job starts outside local development and `SLACK_TOKEN_ENCRYPTION_KEY`
+  is unset or doesn't parse. No key material.
+- `slack.token.install_refused`: team ID. An OAuth install's token was not
+  saved because the stored rotating token expires later.
