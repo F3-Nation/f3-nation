@@ -22,6 +22,7 @@ from typing import Iterator, Optional, Tuple
 
 from f3_data_models.models import SlackSpace
 from f3_data_models.utils import session_scope
+from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError, SlackTokenRotationError
 from slack_sdk.oauth.installation_store import Bot
 from slack_sdk.oauth.token_rotation import TokenRotator
@@ -48,10 +49,22 @@ class TokenSaveError(Exception):
     """The database rejected a token write; the transaction rolled back."""
 
 
+class TokenChanged(Exception):
+    """The row's token no longer matches the one the caller read; nothing was written."""
+
+
+# slack_sdk logs every request and response body at DEBUG; for `oauth.v2.access`
+# those hold the refresh token and the new tokens. The SDK checks its logger's
+# own level, so this logger is pinned above DEBUG whatever `LOG_LEVEL` sets.
+_rotation_http_logger = logging.getLogger(__name__ + ".rotation_http")
+_rotation_http_logger.setLevel(logging.INFO)
+
+
 def _rotator() -> TokenRotator:
     return TokenRotator(
         client_id=os.environ[constants.SLACK_CLIENT_ID],
         client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
+        client=WebClient(logger=_rotation_http_logger),
     )
 
 
@@ -175,14 +188,27 @@ def _flush(session: Session, team_id: str, path: str) -> None:
         raise TokenSaveError(f"saving the bot token failed with {failure['error_type']}")
 
 
-def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = None) -> bool:
+_ANY_TOKEN = object()
+
+
+def save_bot_locked(
+    bot: Bot,
+    *,
+    team_id: str,
+    workspace_name: Optional[str] = None,
+    expected_token: object = _ANY_TOKEN,
+) -> bool:
     """Write the bot's token fields under the workspace lock, creating the row if needed.
 
     Returns False without writing when the save guard rejects the token.
+    With `expected_token` (a token string, or None for "no row or no token"),
+    raises `TokenChanged` without writing if the row no longer holds it.
     Raises `TokenSaveError` if the database rejects the write.
     `workspace_name` is written only when the row is created.
     """
     with _locked(team_id) as (session, row):
+        if expected_token is not _ANY_TOKEN and (row.bot_token if row is not None else None) != expected_token:
+            raise TokenChanged(team_id)
         if row is None:
             row = SlackSpace(team_id=team_id, workspace_name=workspace_name)
             session.add(row)
@@ -191,30 +217,6 @@ def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = N
         _write(row, bot)
         _flush(session, team_id, "save_bot_locked")
         return True
-
-
-def has_context_token(context: dict) -> bool:
-    """Whether Bolt's request context carries a bot token."""
-    return bool(context.get("bot_token"))
-
-
-def save_context_token(team_id: str, context: dict) -> bool:
-    """Save the non-rotating bot token from Bolt's request context.
-
-    Returns False without writing if the context has no token or the save
-    guard refuses it (the stored token is rotating).
-    """
-    if not has_context_token(context):
-        return False
-    bot_token = context["bot_token"]
-    bot = Bot(
-        team_id=team_id,
-        bot_token=bot_token,
-        bot_id=context.get("bot_id"),
-        bot_user_id=context.get("bot_user_id"),
-        installed_at=time.time(),
-    )
-    return save_bot_locked(bot, team_id=team_id)
 
 
 def load_bot(team_id: str) -> Optional[Bot]:
@@ -277,6 +279,7 @@ def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str
             if rotated.bot_refresh_token is None:
                 rotated.bot_refresh_token = refresh_token
             if not _guard_allows(row, rotated):
+                _log(logging.WARNING, "slack.token.save_refused", team_id, path=path)
                 return stored
             _write(row, rotated)
             _flush(session, team_id, path)

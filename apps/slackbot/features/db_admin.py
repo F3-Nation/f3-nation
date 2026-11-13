@@ -23,7 +23,6 @@ from utilities.helper_functions import (
 )
 from utilities.slack import actions, orm
 from utilities.slack_tokens.client import slack_client_for_team
-from utilities.slack_tokens.refresh import has_context_token, load_bot, save_context_token
 
 
 def build_db_admin_form(
@@ -219,24 +218,6 @@ def handle_make_org(
     )
 
 
-def handle_update_bot_token(
-    body: dict,
-    client: WebClient,
-    logger: Logger,
-    context: dict,
-    region_record: SlackSettings,
-):
-    if not has_context_token(context) or save_context_token(region_record.team_id, context):
-        return
-    stored = load_bot(region_record.team_id)
-    user_id = safe_get(body, "user", "id")
-    if stored and stored.bot_token_expires_at and user_id:
-        client.chat_postMessage(
-            channel=user_id,
-            text="This workspace uses rotating tokens; reinstall the app instead.",
-        )
-
-
 def handle_send_admin_announcement(
     body: dict,
     client: WebClient,
@@ -262,6 +243,9 @@ def handle_send_admin_announcement(
                 try:
                     slack_client = slack_client_for_team(slack_space.team_id)
                     if slack_client is None:
+                        logger.error(
+                            f"No Slack installation for {slack_space.workspace_name}; admin announcement not sent there"
+                        )
                         break
                     slack_client.chat_postMessage(
                         channel=slack_user_id,
@@ -361,10 +345,6 @@ DB_ADMIN_FORM = orm.BlockView(
                 orm.ButtonElement(
                     label="Trigger Map Revalidation",
                     action=actions.SECRET_MENU_TRIGGER_MAP_REVALIDATION,
-                ),
-                orm.ButtonElement(
-                    label="Update Bot Token",
-                    action=actions.SECRET_MENU_UPDATE_BOT_TOKEN,
                 ),
                 orm.ButtonElement(
                     label="Refresh Cache",

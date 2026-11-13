@@ -20,7 +20,8 @@ def _slack_space(team_id: str):
     )
 
 
-def test_award_achievements_skips_uninstalled_workspace(monkeypatch):
+def _post_for_two_workspaces(monkeypatch, client_for_team):
+    """Run `post_achievements` for one award in each of workspaces T1 and T2."""
     candidates = [
         award_achievements.CandidateAward(achievement_id=7, user_id=1, award_year=2026, award_period=1, metric=5),
         award_achievements.CandidateAward(achievement_id=7, user_id=2, award_year=2026, award_period=1, metric=5),
@@ -38,11 +39,31 @@ def test_award_achievements_skips_uninstalled_workspace(monkeypatch):
         MagicMock(all=lambda: slack_users),
     ]
     session.execute.return_value.all.return_value = [(10, _slack_space("T1")), (20, _slack_space("T2"))]
+    monkeypatch.setattr(award_achievements, "slack_client_for_team", lambda team_id, **kwargs: client_for_team(team_id))
+    return award_achievements.post_achievements(session, candidates, dry_run=False)
+
+
+def test_award_achievements_skips_uninstalled_workspace(monkeypatch):
     installed_client = MagicMock()
     clients = {"T1": None, "T2": installed_client}
-    monkeypatch.setattr(award_achievements, "slack_client_for_team", lambda team_id, **kwargs: clients[team_id])
 
-    award_achievements.post_achievements(session, candidates, dry_run=False)
+    failed = _post_for_two_workspaces(monkeypatch, clients.__getitem__)
 
+    assert failed == []
+    installed_client.chat_postMessage.assert_called_once()
+    assert installed_client.chat_postMessage.call_args.kwargs["channel"] == "C-T2"
+
+
+def test_award_achievements_reports_failed_client_lookup_and_continues(monkeypatch):
+    installed_client = MagicMock()
+
+    def client_for_team(team_id):
+        if team_id == "T1":
+            raise RuntimeError("database unavailable")
+        return installed_client
+
+    failed = _post_for_two_workspaces(monkeypatch, client_for_team)
+
+    assert failed == ["T1"]
     installed_client.chat_postMessage.assert_called_once()
     assert installed_client.chat_postMessage.call_args.kwargs["channel"] == "C-T2"

@@ -23,10 +23,10 @@ only reads. The architecture and its tradeoffs are in
   `context["bot_token"]` into `slack_spaces`. That copy goes away.
 - Token readers to migrate: every Python read of `bot_token` (from
   `SlackSettings`, `SlackSpace` or the settings JSON) in
-  `apps/slackbot/features/` and `apps/slackbot/scripts/`, plus the DB Admin
-  "Update Bot Token" action in
-  [`db_admin.py`](../../apps/slackbot/features/db_admin.py). Find them with
-  `grep -rn bot_token apps/slackbot --include=*.py`.
+  `apps/slackbot/features/` and `apps/slackbot/scripts/`. Find them with
+  `grep -rn bot_token apps/slackbot --include=*.py`. DB Admin has no action
+  that writes a token: Bolt's request token is read from the same row, so
+  copying it back would change nothing.
 - API reader: `getSlackBotTokenForOrg` in
   [`slack.ts`](../../packages/api/src/router/slack.ts).
 - Hourly job: [`hourly_runner.py`](../../apps/slackbot/scripts/hourly_runner.py),
@@ -163,9 +163,9 @@ refreshes earlier than its window.
 - **AC-11** — GIVEN the API's Slack call fails with `token_revoked` WHEN it
   used `slack_spaces.bot_token` THEN the API re-reads the row and retries once
   with the stored token. A second failure is reported as today.
-- **AC-12** — GIVEN a rotating row WHEN DB Admin "Update Bot Token" is used
-  THEN the row is unchanged and the admin is told to reinstall the app. GIVEN
-  a non-rotating row THEN the action behaves as before.
+- **AC-12** — GIVEN any workspace WHEN an admin opens the DB Admin menu THEN
+  it offers no action that writes a bot token; reinstalling the app is how a
+  stale token is replaced.
 - **AC-13** — GIVEN a non-rotating row WHEN the conversion CLI runs for that
   team THEN it calls `oauth.v2.exchange` under the per-workspace lock and
   saves the access token, expiry and encrypted refresh token. GIVEN a row that
@@ -212,14 +212,14 @@ refreshes earlier than its window.
 This feature adds no user-facing procedures. Its authorization boundary is
 which runtimes hold which secrets.
 
-| Action                                   | Allowed                                                                                | Explicitly denied                                                                        |
-| ---------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Decrypt a refresh token                  | Slackbot service and Slackbot job (hold `SLACK_TOKEN_ENCRYPTION_KEY`)                  | API, Next.js apps, local dev against shared DBs                                          |
-| Refresh a token                          | Slackbot service (Bolt authorization, getter) and Slackbot job (getter, sweep)         | API                                                                                      |
-| Read the current access token            | Slackbot service, Slackbot job, API (existing `slack_spaces` read)                     | Browser clients, Slack metadata, logs                                                    |
-| Overwrite a workspace's token by hand    | DB Admin "Update Bot Token", behind `SECRET_ADMIN_PASSWORD`, on non-rotating rows only | Everyone, on a rotating row: the action refuses and tells the admin to reinstall the app |
-| Convert a workspace to rotation          | Release owner, with the conversion CLI                                                 | Everyone else; the Slackbot service and job never convert                                |
-| Re-encrypt refresh tokens with a new key | Release owner, with the re-key CLI                                                     | Everyone else                                                                            |
+| Action                                   | Allowed                                                                                 | Explicitly denied                                         |
+| ---------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Decrypt a refresh token                  | Slackbot service and Slackbot job (hold `SLACK_TOKEN_ENCRYPTION_KEY`)                   | API, Next.js apps, local dev against shared DBs           |
+| Refresh a token                          | Slackbot service (Bolt authorization, getter) and Slackbot job (getter, sweep)          | API                                                       |
+| Read the current access token            | Slackbot service, Slackbot job, API (existing `slack_spaces` read)                      | Browser clients, Slack metadata, logs                     |
+| Overwrite a workspace's token by hand    | Nobody; a workspace admin reinstalls the app, which saves a new token through the store | Everyone, including DB Admin                              |
+| Convert a workspace to rotation          | Release owner, with the conversion CLI                                                  | Everyone else; the Slackbot service and job never convert |
+| Re-encrypt refresh tokens with a new key | Release owner, with the re-key CLI                                                      | Everyone else                                             |
 
 ## 6. Out of scope / non-goals
 

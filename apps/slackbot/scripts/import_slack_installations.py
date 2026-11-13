@@ -1,8 +1,10 @@
 """Copy Bolt `FileInstallationStore` installations into `slack_spaces`.
 
-Run once per environment, before deploying the release that reads bot
-credentials from `slack_spaces`. The installations directory is a local copy of
-the bucket the previous release stored them in.
+Run once per environment, after the migration and before deploying the release
+that reads bot credentials from `slack_spaces`. The installations directory is
+a local copy of the bucket the previous release stored them in. Don't re-run it
+after that deploy: the release saves new installations only to `slack_spaces`,
+so from then on the files are older than the rows and would overwrite them.
 
     python scripts/import_slack_installations.py --installations-dir <dir> [--dry-run]
 
@@ -17,13 +19,18 @@ Each workspace prints one line, `<team_id> <status>`:
 - `skipped_rotating`: the row already holds a rotating token. Its file holds an
   earlier, already-exchanged token, so the row is neither read from the file
   nor sent to Slack.
+- `skipped_changed`: the row's token changed while the run was in progress
+  (a reinstall, or another process saving it), so the newer token is kept.
 - `no_token`: no file and no stored token.
+- `team_mismatch`: the file, or `auth.test` for the stored token, names a
+  different workspace, so nothing was saved.
 - `auth_failed:<slack error code>`: `auth.test` rejected the stored token.
 - `error:<exception class>`: reading the file, calling Slack or saving failed;
   the run continues with the next workspace.
 
 `--dry-run` writes nothing but still calls `auth.test` for backfill rows.
-Exits 1 if any workspace is `auth_failed` or `error`. Tokens are never printed.
+Exits 1 if any workspace is `team_mismatch`, `auth_failed` or `error`, and 2 if
+`--installations-dir` is not a directory. Tokens are never printed.
 """
 
 import argparse
@@ -42,7 +49,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth.installation_store import Bot, FileInstallationStore
 from sqlalchemy import select
 
-from utilities.slack_tokens.refresh import load_bot, save_bot_locked
+from utilities.slack_tokens.refresh import TokenChanged, load_bot, save_bot_locked
 
 
 def _stored_tokens() -> list[tuple[str, Optional[str]]]:
@@ -58,22 +65,34 @@ def _file_team_ids(installations_dir: str) -> list[str]:
     return sorted(team_id for team_id in team_ids if team_id and team_id != "none")
 
 
+def _save(
+    bot: Bot, team_id: str, snapshot_token: Optional[str], status: str, workspace_name: Optional[str] = None
+) -> str:
+    """Save `bot` only if the row still holds the token read at the start of the run."""
+    try:
+        saved = save_bot_locked(bot, team_id=team_id, workspace_name=workspace_name, expected_token=snapshot_token)
+    except TokenChanged:
+        return "skipped_changed"
+    return status if saved else "skipped_rotating"
+
+
 def _import_new_team(team_id: str, store: FileInstallationStore, dry_run: bool) -> str:
     file_bot = store.find_bot(enterprise_id=None, team_id=team_id)
     if file_bot is None:
         return "no_token"
+    if file_bot.team_id != team_id:
+        return "team_mismatch"
     if dry_run:
         return "imported_new"
-    saved = save_bot_locked(file_bot, team_id=team_id, workspace_name=file_bot.team_name)
-    return "imported_new" if saved else "skipped_rotating"
+    return _save(file_bot, team_id, None, "imported_new", workspace_name=file_bot.team_name)
 
 
-def _backfill_bot(team_id: str, token: str) -> Bot:
+def _backfill_bot(token: str) -> Bot:
     """Ask Slack who owns `token`; raises `SlackApiError` if it is rejected."""
     response = WebClient(token=token).auth_test()
     scopes = response.headers.get("x-oauth-scopes", "") if response.headers else ""
     return Bot(
-        team_id=team_id,
+        team_id=response.get("team_id"),
         bot_token=token,
         bot_id=response.get("bot_id"),
         bot_user_id=response.get("user_id"),
@@ -89,20 +108,24 @@ def _import_team(team_id: str, token: Optional[str], store: FileInstallationStor
 
     file_bot = store.find_bot(enterprise_id=None, team_id=team_id)
     if file_bot is not None:
+        if file_bot.team_id != team_id:
+            return "team_mismatch"
         if dry_run:
             return "imported"
-        return "imported" if save_bot_locked(file_bot, team_id=team_id) else "skipped_rotating"
+        return _save(file_bot, team_id, token, "imported")
 
     if not token:
         return "no_token"
     try:
-        bot = _backfill_bot(team_id, token)
+        bot = _backfill_bot(token)
     except SlackApiError as e:
         code = e.response.get("error") if e.response is not None else None
         return f"auth_failed:{code if isinstance(code, str) else 'unknown'}"
+    if bot.team_id != team_id:
+        return "team_mismatch"
     if dry_run:
         return "backfilled"
-    return "backfilled" if save_bot_locked(bot, team_id=team_id) else "skipped_rotating"
+    return _save(bot, team_id, token, "backfilled")
 
 
 def main(argv: list[str]) -> int:
@@ -112,6 +135,10 @@ def main(argv: list[str]) -> int:
         "--dry-run", action="store_true", help="report statuses without writing (backfill rows still call auth.test)"
     )
     args = parser.parse_args(argv)
+    # FileInstallationStore accepts a missing path and finds no files in it, which
+    # would report every file-only workspace as absent instead of failing.
+    if not os.path.isdir(args.installations_dir):
+        parser.error(f"--installations-dir is not a directory: {args.installations_dir}")
 
     # The previous release wrote the files without a client_id; adding one changes the directory layout.
     store = FileInstallationStore(base_dir=args.installations_dir)
@@ -130,7 +157,7 @@ def main(argv: list[str]) -> int:
         except Exception as e:
             # The class name only: exception text can embed request or token data.
             status = f"error:{type(e).__name__}"
-        failed = failed or status.startswith(("auth_failed", "error"))
+        failed = failed or status.startswith(("auth_failed", "error", "team_mismatch"))
         print(f"{team_id} {status}")
     return 1 if failed else 0
 

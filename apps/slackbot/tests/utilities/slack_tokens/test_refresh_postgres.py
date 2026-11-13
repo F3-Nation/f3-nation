@@ -1,18 +1,22 @@
+import json
 import logging
 import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from http.client import HTTPMessage
 
 import pytest
 from cryptography.fernet import Fernet
 from f3_data_models.models import Base, SlackSpace
 from slack_sdk.errors import SlackApiError, SlackTokenRotationError
 from slack_sdk.oauth.installation_store import Bot
+from slack_sdk.web import base_client as slack_base_client
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from tests import postgres_fixture
+from utilities import constants
 from utilities.slack_tokens import refresh
 from utilities.slack_tokens.crypto import TokenDecryptError, decrypt_refresh_token, encrypt_refresh_token
 
@@ -269,36 +273,6 @@ def test_save_does_not_overwrite_workspace_name_on_update(isolated_postgres):
     assert _row(isolated_postgres)["workspace_name"] == "Rotation Test"
 
 
-def test_save_context_token_refused_on_rotating_row(isolated_postgres):
-    _seed(isolated_postgres, expires_in=timedelta(hours=12))
-    before = _row(isolated_postgres)
-
-    saved = refresh.save_context_token(
-        TEAM_ID, {"bot_token": "xoxb-context", "bot_id": "B_CTX", "bot_user_id": "U_CTX"}
-    )
-
-    assert saved is False
-    assert _row(isolated_postgres) == before
-
-
-def test_save_context_token_writes_non_rotating_row(isolated_postgres):
-    _seed(isolated_postgres, expires_in=None, refresh_token=None)
-
-    saved = refresh.save_context_token(
-        TEAM_ID, {"bot_token": "xoxb-context", "bot_id": "B_CTX", "bot_user_id": "U_CTX"}
-    )
-
-    assert saved is True
-    row = _row(isolated_postgres)
-    assert row["bot_token"] == "xoxb-context"
-    assert row["bot_id"] == "B_CTX"
-    assert row["bot_user_id"] == "U_CTX"
-    assert row["bot_token_expires_at"] is None
-    assert row["bot_refresh_token_encrypted"] is None
-    # Bolt's context carries no scopes, so the stored scopes are kept.
-    assert row["bot_scopes"] == "chat:write,users:read"
-
-
 def test_refresh_result_carries_no_refresh_token(isolated_postgres, rotator):
     _seed(isolated_postgres, expires_in=timedelta(minutes=30))
 
@@ -365,6 +339,50 @@ def test_slack_error_leaves_row_and_logs_code(isolated_postgres, monkeypatch, ca
     assert failed[0].json_fields["error_code"] == "invalid_refresh_token"
     assert failed[0].json_fields["team_id"] == TEAM_ID
     assert all(STORED_REFRESH not in r.getMessage() for r in caplog.records)
+
+
+class _FakeHttpResponse:
+    """Stands in for `urlopen`'s response so the real slack_sdk HTTP path runs."""
+
+    code = 200
+
+    def __init__(self, body: dict):
+        self._body = json.dumps(body).encode()
+        self.headers = HTTPMessage()
+        self.headers["Content-Type"] = "application/json; charset=utf-8"
+
+    def read(self):
+        return self._body
+
+
+def test_refresh_at_debug_logging_never_logs_tokens(isolated_postgres, monkeypatch, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    monkeypatch.setenv(constants.SLACK_CLIENT_ID, "client-id")
+    monkeypatch.setenv(constants.SLACK_CLIENT_SECRET, "client-secret-value")
+    requests = []
+
+    def fake_urlopen(request, **kwargs):
+        requests.append(request)
+        return _FakeHttpResponse(
+            {
+                "ok": True,
+                "token_type": "bot",
+                "access_token": NEW_TOKEN,
+                "refresh_token": NEW_REFRESH,
+                "expires_in": 43200,
+            }
+        )
+
+    monkeypatch.setattr(slack_base_client, "urlopen", fake_urlopen)
+    caplog.set_level(logging.DEBUG)
+
+    bot = refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    assert bot.bot_token == NEW_TOKEN
+    assert len(requests) == 1
+    assert STORED_REFRESH in requests[0].data.decode()
+    for secret in (STORED_REFRESH, NEW_TOKEN, NEW_REFRESH, "client-secret-value"):
+        assert secret not in caplog.text
 
 
 def test_lock_timeout_returns_stored_token(isolated_postgres, rotator, caplog):

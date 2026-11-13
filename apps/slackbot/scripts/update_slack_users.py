@@ -14,6 +14,17 @@ from utilities.helper_functions import create_user, is_deactivated_slack_user, s
 from utilities.slack_tokens.client import slack_client_for_team
 
 
+def _log_sync_failure(team_id: str, error: Exception) -> None:
+    """Log the exception type only: exception text can embed request data."""
+    error_type = type(error).__name__
+    logging.getLogger(__name__).error(
+        "slack.identity.sync_failed team_id=%s error_type=%s",
+        team_id,
+        error_type,
+        extra={"json_fields": {"event": "slack.identity.sync_failed", "team_id": team_id, "error_type": error_type}},
+    )
+
+
 def update_slack_users(force=False):
     """
     Update Slack users in the database with their latest information from Slack.
@@ -36,18 +47,7 @@ def update_slack_users(force=False):
         try:
             client = slack_client_for_team(slack_space.team_id)
         except Exception as error:
-            logging.getLogger(__name__).error(
-                "slack.identity.sync_failed team_id=%s error_type=%s",
-                slack_space.team_id,
-                type(error).__name__,
-                extra={
-                    "json_fields": {
-                        "event": "slack.identity.sync_failed",
-                        "team_id": slack_space.team_id,
-                        "error_type": type(error).__name__,
-                    }
-                },
-            )
+            _log_sync_failure(slack_space.team_id, error)
             continue
         if client is None:
             continue
@@ -107,6 +107,10 @@ def update_slack_users(force=False):
                 context["slack_error"],
                 extra={"json_fields": {"event": "slack.identity.sync_failed", **context}},
             )
+            continue
+        except Exception as error:
+            # e.g. a database error while the client reloads a revoked token.
+            _log_sync_failure(slack_space.team_id, error)
             continue
 
 

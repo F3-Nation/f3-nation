@@ -172,6 +172,14 @@ def _run_cloud_run_env(
         "  fi\n"
         "  exit 0\n"
         "fi\n"
+        'if [[ "$1 $2 $3" == "secrets describe slack-token-encryption-key" ]]; then\n'
+        '  case "${GCLOUD_TOKEN_KEY_SECRET_STATE:-present}" in\n'
+        '    absent) printf "ERROR: (gcloud.secrets.describe) NOT_FOUND: '
+        'Secret [projects/synthetic/secrets/slack-token-encryption-key] not found.\\n" >&2; exit 1 ;;\n'
+        '    lookup-denied) printf "ERROR: (gcloud.secrets.describe) PERMISSION_DENIED: '
+        'synthetic-private-diagnostic.\\n" >&2; exit 1 ;;\n'
+        "  esac\n"
+        "fi\n"
         'if [[ "$1 $2 $3" == "secrets describe email-server" ]]; then\n'
         '  test -f "$GCLOUD_EMAIL_SECRET_STATE"; exit $?\n'
         "fi\n"
@@ -406,6 +414,53 @@ def test_invalid_token_encryption_key_aborts_before_any_cloud_call(tmp_path: Pat
     assert "SLACK_TOKEN_ENCRYPTION_KEY must be" in result.stdout
     assert calls == []
     assert value not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "state,message",
+    [
+        ("absent", "SLACK_TOKEN_ENCRYPTION_KEY is required"),
+        ("lookup-denied", "Failed to inspect secret slack-token-encryption-key"),
+    ],
+)
+def test_empty_token_encryption_key_without_a_readable_secret_aborts_before_any_change(
+    tmp_path: Path, state: str, message: str
+):
+    result, calls = _run_cloud_run_env(
+        tmp_path,
+        "staging",
+        "EMAIL_SERVER=smtp://changed.example.test\n",
+        secret_exists=True,
+        extra_env={"GCLOUD_TOKEN_KEY_SECRET_STATE": state},
+    )
+    assert result.returncode != 0
+    assert message in result.stdout
+    assert calls == [
+        [
+            "secrets",
+            "describe",
+            "slack-token-encryption-key",
+            "--project",
+            "f3-slackbot-staging",
+            "--format=value(name)",
+        ]
+    ]
+    assert "synthetic-private-diagnostic" not in result.stdout + result.stderr
+
+
+def test_empty_token_encryption_key_keeps_an_existing_secret(tmp_path: Path):
+    result, calls = _run_cloud_run_env(
+        tmp_path, "staging", "EMAIL_SERVER=smtp://changed.example.test\n", secret_exists=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "SKIP: SLACK_TOKEN_ENCRYPTION_KEY (empty)" in result.stdout
+    assert not any(call[:4] == ["secrets", "versions", "add", "slack-token-encryption-key"] for call in calls)
+    update_calls = [call for call in calls if call[:3] in (["run", "services", "update"], ["run", "jobs", "update"])]
+    assert len(update_calls) == 2
+    for call in update_calls:
+        assert (
+            "SLACK_TOKEN_ENCRYPTION_KEY=slack-token-encryption-key:latest" in call[call.index("--update-secrets") + 1]
+        )
 
 
 def test_token_encryption_key_list_is_pushed_without_destroying_earlier_versions(tmp_path: Path):

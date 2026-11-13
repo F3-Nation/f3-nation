@@ -189,7 +189,6 @@ ACTION_MAPPER = {
     event_tag.EVENT_TAG_EDIT_DELETE: (event_tag.handle_event_tag_edit_delete, False, False),
     event_tag.CALENDAR_MANAGE_EVENT_TAGS: (event_tag.manage_event_tags, False, False),
     actions.SECRET_MENU_REFRESH_SLACK_USERS: (db_admin.handle_slack_user_refresh, False, False),
-    actions.SECRET_MENU_UPDATE_BOT_TOKEN: (db_admin.handle_update_bot_token, False, False),
     connect.DENY_CONNECTION: (connect.handle_deny_connection, False, False),
     connect.APPROVE_CONNECTION: (connect.handle_approve_connection, False, False),
     user.IGNORE_EVENT: (builders.ignore_event, False, False),

@@ -8,6 +8,7 @@ from urllib.error import URLError
 import pytest
 from slack_bolt.authorization.authorize import InstallationStoreAuthorize
 from slack_bolt.context import BoltContext
+from slack_bolt.error import BoltError
 from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth.installation_store import Installation
 from slack_sdk.oauth.token_rotation import TokenRotator
@@ -151,11 +152,13 @@ def test_find_bot_logs_and_raises_unexpected_errors(isolated_postgres, monkeypat
     assert STORED_TOKEN not in caplog.text
 
 
-def test_save_refused_by_guard_logs_warning(isolated_postgres, caplog):
+def test_save_refused_by_guard_logs_warning_and_raises_bolt_error(isolated_postgres, caplog):
     _seed(isolated_postgres, expires_in=timedelta(hours=11))
     before = _row(isolated_postgres)
 
-    SlackSpaceInstallationStore().save(_installation(bot_token_expires_at=int(time.time()) + 3600))
+    # Bolt's OAuthFlow answers a BoltError from the store with its storage-error page, not success.
+    with pytest.raises(BoltError):
+        SlackSpaceInstallationStore().save(_installation(bot_token_expires_at=int(time.time()) + 3600))
 
     assert _row(isolated_postgres) == before
     [record] = [
@@ -183,6 +186,28 @@ def test_delete_installation_clears_credentials(isolated_postgres):
     row = _row(isolated_postgres)
     assert row["bot_token"] is None
     assert row["bot_refresh_token_encrypted"] is None
+
+
+def test_deleting_one_users_installation_keeps_the_bot(isolated_postgres):
+    # Bolt's tokens_revoked listener deletes each revoked user token this way.
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    before = _row(isolated_postgres)
+
+    SlackSpaceInstallationStore().delete_installation(enterprise_id=None, team_id=TEAM_ID, user_id="U_REVOKED")
+
+    assert _row(isolated_postgres) == before
+
+
+def test_save_bot_refused_by_guard_logs_warning(isolated_postgres, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(hours=11))
+    before = _row(isolated_postgres)
+
+    SlackSpaceInstallationStore().save_bot(_installation(bot_token_expires_at=int(time.time()) + 3600).to_bot())
+
+    assert _row(isolated_postgres) == before
+    [record] = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.save_refused"]
+    assert record.levelno == logging.WARNING
+    assert record.json_fields == {"event": "slack.token.save_refused", "team_id": TEAM_ID}
 
 
 def test_find_installation_is_not_implemented():
