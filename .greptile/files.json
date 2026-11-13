@@ -266,6 +266,17 @@
         "packages/db-python/**",
         "packages/shared/**"
       ]
+    },
+    {
+      "path": "docs/specs/strava-credential-isolation.md",
+      "description": "Feature spec: Strava credential isolation, metadata boundaries, migration precedence and sanitized database copies. Acceptance criteria and authorization for changed behavior.",
+      "scope": [
+        "packages/api/**",
+        "apps/slackbot/**",
+        "packages/db/**",
+        "packages/db-python/**",
+        "tooling/scripts/**"
+      ]
     }
   ]
 }

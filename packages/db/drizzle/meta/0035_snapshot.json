@@ -1,5 +1,5 @@
 {
-  "id": "efb62aa6-d564-407f-a95a-c20f25da37a7",
+  "id": "41afa25d-386c-4507-aee4-08ed28e986ca",
   "prevId": "5b4843d2-9a43-4d30-ab09-f97b91573399",
   "version": "7",
   "dialect": "postgresql",
@@ -4928,36 +4928,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "bot_id": {
-          "name": "bot_id",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bot_user_id": {
-          "name": "bot_user_id",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bot_scopes": {
-          "name": "bot_scopes",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bot_token_expires_at": {
-          "name": "bot_token_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bot_refresh_token_encrypted": {
-          "name": "bot_refresh_token_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "settings": {
           "name": "settings",
           "type": "jsonb",
@@ -5505,6 +5475,76 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_strava_credentials": {
+      "name": "user_strava_credentials",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "athlete_id": {
+          "name": "athlete_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "access_token": {
+          "name": "access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "refresh_token": {
+          "name": "refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_strava_credentials_user_id_users_id_fk": {
+          "name": "user_strava_credentials_user_id_users_id_fk",
+          "tableFrom": "user_strava_credentials",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_strava_credentials_athlete_id_key": {
+          "name": "user_strava_credentials_athlete_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "athlete_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "user_strava_credentials_complete": {
+          "name": "user_strava_credentials_complete",
+          "value": "\"user_strava_credentials\".\"athlete_id\" > 0 AND \"user_strava_credentials\".\"expires_at\" > 0 AND length(\"user_strava_credentials\".\"access_token\") > 0 AND length(\"user_strava_credentials\".\"refresh_token\") > 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.users": {

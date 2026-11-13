@@ -94,6 +94,7 @@ def _create_postgresql_engine(echo: bool) -> Engine:
     database = os.environ["DATABASE_SCHEMA"]
     port = os.environ.get("DATABASE_PORT", "5432")
 
+    # OAuth bundles share this engine; SQL_ECHO must never print bound secrets.
     if os.environ.get("USE_GCP_AUTH_PROXY", "false").lower() == "false":
         db_url = sqlalchemy.engine.URL.create(
             drivername=POSTGRESQL_DRIVERNAME,
@@ -103,7 +104,7 @@ def _create_postgresql_engine(echo: bool) -> Engine:
             port=port,
             database=database,
         )
-        return sqlalchemy.create_engine(db_url, echo=echo, **_pool_kwargs())
+        return sqlalchemy.create_engine(db_url, echo=echo, hide_parameters=True, **_pool_kwargs())
 
     # Connect via Cloud Run's built-in Cloud SQL Unix socket
     unix_sock_dir = f"/cloudsql/{host}"
@@ -117,6 +118,7 @@ def _create_postgresql_engine(echo: bool) -> Engine:
         db_url,
         echo=echo,
         connect_args={"host": unix_sock_dir},
+        hide_parameters=True,
         **_pool_kwargs(),
     )
 
