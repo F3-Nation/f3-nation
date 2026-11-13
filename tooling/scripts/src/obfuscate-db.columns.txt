@@ -554,6 +554,11 @@ public.update_requests.submitted_by:character varying
 public.update_requests.submitter_validated:boolean
 public.update_requests.token:uuid
 public.update_requests.updated:timestamp without time zone
+public.user_strava_credentials.access_token:text
+public.user_strava_credentials.athlete_id:bigint
+public.user_strava_credentials.expires_at:bigint
+public.user_strava_credentials.refresh_token:text
+public.user_strava_credentials.user_id:integer
 public.users.avatar_url:character varying
 public.users.created:timestamp without time zone
 public.users.email:USER-DEFINED

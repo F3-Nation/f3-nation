@@ -36,6 +36,7 @@ import {
   slackUsers,
   updateRequests,
   users,
+  userStravaCredentials,
 } from "../drizzle/schema";
 
 export const schema = {
@@ -68,6 +69,7 @@ export const schema = {
   orgsXSlackSpaces,
   updateRequests,
   users,
+  userStravaCredentials,
 };
 
 /** Auth schema tables (auth.*) — kept separate to avoid name collisions */

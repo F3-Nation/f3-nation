@@ -1,3 +1,4 @@
+import { rejectStravaMetadata } from "../lib/user-metadata";
 import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
@@ -355,10 +356,13 @@ export const userRouter = {
           .record(z.string(), z.unknown())
           .nullable()
           .optional()
-          .describe("User metadata"),
+          .describe(
+            "User metadata. Top-level strava_* keys are rejected with BAD_REQUEST.",
+          ),
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      rejectStravaMetadata(input.meta);
       // emailVerified is set by the sign-in flow, never by callers.
       const { roles: rawRoles, emailVerified: _emailVerified, ...rest } = input;
       const roles = rawRoles as RoleInput[];

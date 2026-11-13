@@ -744,6 +744,7 @@ const TOUCHED_TABLES = new Set([
   "public.event_tags",
   "public.event_types",
   "public.users",
+  "public.user_strava_credentials",
   "public.slack_users",
   "public.slack_spaces",
   "public.orgs_x_slack_spaces",
@@ -941,6 +942,9 @@ async function obfuscate(sql: Sql): Promise<void> {
     "slack_users",
   ]);
 
+  // Connections never cross environment boundaries, including local fixtures.
+  await truncateTables(sql, ["user_strava_credentials"]);
+
   // ---- auth.oauth_clients: invalidate secrets --------------------------------
   // Overwrite every secret (hash) with `revoked:` + the hash of two random
   // UUIDs that are never kept. Nothing hashes to that shape and nobody knows
@@ -1039,7 +1043,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       emergency_contact: "null out",
       emergency_phone: "null out",
       emergency_notes: "null out",
-      meta: "scrub emails (json)",
+      meta: "remove strava_* keys; scrub emails (json)",
     },
     transform: (row) => {
       const email = str(row.email);
@@ -1083,8 +1087,18 @@ async function obfuscate(sql: Sql): Promise<void> {
         if (row[col] !== null) changes[col] = null;
       }
       if (row.meta !== null) {
-        const scrubbed = scrubJson(row.meta);
-        if (scrubbed !== row.meta) changes.meta = JSON.stringify(scrubbed);
+        if (typeof row.meta !== "object" || Array.isArray(row.meta)) {
+          throw new Error(
+            `User metadata must be an object or null for sanitization (users.id=${String(row.id)})`,
+          );
+        }
+        const publicMeta = Object.fromEntries(
+          Object.entries(row.meta).filter(
+            ([key]) => !key.startsWith("strava_"),
+          ),
+        );
+        const scrubbed = scrubJson(publicMeta);
+        changes.meta = JSON.stringify(scrubbed);
       }
       return changes;
     },

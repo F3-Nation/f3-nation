@@ -80,6 +80,7 @@ const SLACK_MENTION_REGEX = /<@([UW][A-Za-z0-9]+)(?:\|[^>]*)?>/g;
 const OBFUSCATED_SLACK_ID = /^Uf3[0-9a-f]{8,}$/;
 
 const EMPTY_TABLES = [
+  "public.user_strava_credentials",
   "public.auth_sessions",
   "public.auth_verification_tokens",
   "public.auth_accounts",
@@ -388,6 +389,17 @@ async function main(): Promise<void> {
       const n = (row as unknown as { n: number }).n;
       check(`${table} empty`, n === 0, `${n} rows`);
     }
+
+    const [stravaMeta] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM public.users u
+      WHERE CASE WHEN jsonb_typeof(meta) = 'object'
+        THEN EXISTS (SELECT 1 FROM jsonb_object_keys(u.meta) k WHERE left(k, 7) = 'strava_')
+        ELSE meta IS NOT NULL AND meta <> 'null'::jsonb END`;
+    check(
+      "users.meta has no Strava credentials",
+      stravaMeta?.n === 0,
+      `${stravaMeta?.n} unsafe metadata objects`,
+    );
 
     // Every user's address is exactly sink+<their id>.
     const [usersBad] = await sql<{ n: number }[]>`
