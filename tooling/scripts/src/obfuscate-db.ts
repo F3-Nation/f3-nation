@@ -682,7 +682,8 @@ const str = (v: unknown): string | null =>
  * auth.oauth_access_token, …) — leftovers from an earlier auth setup that
  * pre-dates the repo's current NextAuth adapter (packages/auth's
  * MDPGDrizzleAdapter, which reads/writes the repo's own plural
- * users/auth_accounts/auth_sessions/auth_verification_tokens tables). Not
+ * users/auth_accounts/auth_sessions/auth_verification_tokens/
+ * auth_verification_sends tables). Not
  * written to by any active code path, but still physically present —
  * alongside the plural ones the repo schema defines — 4.9k raw emails and
  * 37k tokens would have sailed through silently. Schema drift must stop the
@@ -761,6 +762,7 @@ const TOUCHED_TABLES = new Set([
   "public.positions",
   "public.achievements",
   "public.auth_sessions",
+  "public.auth_verification_sends",
   "public.auth_verification_tokens",
   "public.auth_accounts",
   "public.api_keys",
@@ -863,6 +865,7 @@ async function obfuscate(sql: Sql): Promise<void> {
   // adapter uses, and the singular legacy ones that still exist on prod.
   for (const table of [
     "auth_sessions",
+    "auth_verification_sends",
     "auth_verification_tokens",
     "auth_accounts",
     "auth.oauth_authorization_codes",

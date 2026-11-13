@@ -323,6 +323,9 @@ public.auth_sessions.expires:timestamp without time zone
 public.auth_sessions.session_token:text
 public.auth_sessions.updated:timestamp without time zone
 public.auth_sessions.user_id:integer
+public.auth_verification_sends.created:timestamp without time zone
+public.auth_verification_sends.id:integer
+public.auth_verification_sends.identifier:character varying
 public.auth_verification_tokens.created:timestamp without time zone
 public.auth_verification_tokens.expires:timestamp without time zone
 public.auth_verification_tokens.identifier:character varying

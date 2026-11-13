@@ -1207,6 +1207,27 @@ export const authVerificationTokens = pgTable(
   ],
 );
 
+// One row per sign-in email the map's auth adapter allowed. Kept apart from
+// auth_verification_tokens, whose rows are deleted on redemption, so
+// redeeming a code can't erase its send from the per-address limit.
+export const authVerificationSends = pgTable(
+  "auth_verification_sends",
+  {
+    id: serial().primaryKey().notNull(),
+    identifier: varchar().notNull(),
+    created: timestamp({ mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+  (table) => [
+    index("idx_auth_verification_sends_identifier_created").using(
+      "btree",
+      table.identifier.asc().nullsLast().op("text_ops"),
+      table.created.asc().nullsLast().op("timestamp_ops"),
+    ),
+  ],
+);
+
 export const apiKeys = pgTable(
   "api_keys",
   {

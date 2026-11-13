@@ -12,7 +12,10 @@ import { ProviderId } from "@acme/shared/common/enums";
 
 import { isDevModeSignInAllowed } from "./lib/dev-mode";
 import { emailProvider } from "./lib/email-provider";
-import { MDPGDrizzleAdapter } from "./lib/md-pg-drizzzle-adapter";
+import {
+  limitVerificationEmails,
+  MDPGDrizzleAdapter,
+} from "./lib/md-pg-drizzzle-adapter";
 import OtpProvider from "./lib/otp-provider";
 import { logWarn } from "./logger";
 import type { UserRole } from "@acme/shared/app/enums";
@@ -216,6 +219,7 @@ export const authConfig: NextAuthConfig = {
   },
   providers,
   callbacks: {
+    signIn: limitVerificationEmails(db),
     // `session` is deliberately not destructured: on `trigger === "update"` it
     // is the body of a POST to /api/auth/session, which any signed-in user can
     // send with whatever roles they like. Nothing in it may reach the token.
