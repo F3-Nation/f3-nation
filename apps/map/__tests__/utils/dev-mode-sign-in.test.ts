@@ -12,7 +12,7 @@ describe("shouldShowDevModeSignIn", () => {
     },
   );
 
-  it.each(["prod", "", "Prod", "production", "unknown"])(
+  it.each(["prod", "staging", "", "Prod", "production", "unknown"])(
     "never shows on %j",
     (channel) => {
       expect(shouldShowDevModeSignIn({ channel, status: "ready" })).toBe(false);

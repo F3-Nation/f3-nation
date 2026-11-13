@@ -111,6 +111,7 @@ const KEPT_TABLES = [
 ];
 
 const EMPTY_TABLES = [
+  "user_strava_credentials",
   "auth_sessions",
   "auth_verification_tokens",
   "auth_accounts",
@@ -353,6 +354,9 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
       '{"notes": "reach me at jane@example.com"}')
     RETURNING id`;
   if (!user) throw new Error("Failed to insert synthetic user");
+
+  await sql`UPDATE users SET meta = meta || '{"strava_access_token":"synthetic-access","strava_refresh_token":"synthetic-refresh","strava_future":"synthetic-future"}'::jsonb WHERE id = ${user.id}`;
+  await sql`INSERT INTO user_strava_credentials (user_id, athlete_id, access_token, refresh_token, expires_at) VALUES (${user.id}, 7000001, 'synthetic-access', 'synthetic-refresh', 2000000000)`;
 
   const [expansion] = await sql<{ id: number }[]>`
     INSERT INTO expansions (area, pinned_lat, pinned_lon, user_lat, user_lon,
@@ -2069,6 +2073,15 @@ async function main(): Promise<void> {
       childEnv,
     );
 
+    const [legacyStrava] = await sql<
+      { n: number }[]
+    >`SELECT count(*)::int AS n FROM users u WHERE EXISTS (SELECT 1 FROM jsonb_object_keys(u.meta) k WHERE left(k, 7) = 'strava_')`;
+    check(
+      "legacy Strava metadata removed",
+      legacyStrava?.n === 0,
+      "credential key count only",
+    );
+
     // --- 5. Assertions --------------------------------------------------------
     console.log("\nAssertions:");
 
@@ -2909,6 +2922,46 @@ async function main(): Promise<void> {
         : `${preservedHere.length} preserved, fix-ups: ${keptPlan.fixups.map((f) => `${f.table}.${f.column}`).join(", ") || "none"}, ${intoPreserved.size} loaded table(s) into them, all empty`,
     );
 
+    // A JSON string can conceal credentials from object-key filtering.
+    const [metadataBefore] = await sql<{ meta: string | null }[]>`
+      SELECT meta::text AS meta FROM users WHERE id = ${userId}`;
+    if (!metadataBefore)
+      throw new Error("Harness bug: missing metadata fixture");
+    const encodedMetadata = JSON.stringify({
+      strava_access_token: "synthetic-malformed-metadata-token",
+    });
+    try {
+      await sql`UPDATE users SET meta = ${sql.json(encodedMetadata)} WHERE id = ${userId}`;
+      const malformedRun = spawnSync(
+        "pnpm",
+        [
+          "-F",
+          "@acme/scripts",
+          "exec",
+          "tsx",
+          "src/obfuscate-db.ts",
+          "--allow-db",
+          DB_NAME,
+          "--i-understand-this-rewrites-data",
+        ],
+        { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+      );
+      const output = `${malformedRun.stdout.toString()}${malformedRun.stderr.toString()}`;
+      check(
+        "string-encoded user metadata aborts sanitization with a safe row diagnostic",
+        malformedRun.status !== null &&
+          malformedRun.status !== 0 &&
+          output.includes(
+            `User metadata must be an object or null for sanitization (users.id=${userId})`,
+          ) &&
+          !output.includes(encodedMetadata) &&
+          !output.includes("synthetic-malformed-metadata-token"),
+        `exit ${malformedRun.status}; diagnostic ${output.includes(`users.id=${userId}`) ? "identifies row" : "MISSING"}`,
+      );
+    } finally {
+      await sql`UPDATE users SET meta = ${metadataBefore.meta}::text::jsonb WHERE id = ${userId}`;
+    }
+
     // --- 5a. Unclassified-table gate ------------------------------------------
     // The gate has fired for real (Better Auth schema drift), but only its
     // pass path ran here. Add an unclassified table, plant a real-looking
@@ -3337,9 +3390,10 @@ async function main(): Promise<void> {
         VALUES ('Preservation Fixture', 'Synthetic', 'Person', ${fixture.email},
           '704-555-1234', 'https://example.com/avatar.png', 'Synthetic Contact',
           '704-555-9999', 'Call profile-contact@example.com',
-          ${sql.json({ owner: fixture.email, contact: "profile-contact@example.com" })})
+          ${sql.json({ owner: fixture.email, contact: "profile-contact@example.com", strava_access_token: "synthetic-access", strava_refresh_token: "synthetic-refresh", strava_future: "synthetic-future" })})
         RETURNING id`;
       if (!user) throw new Error(`Failed to plant ${fixture.label} user`);
+      await sql`INSERT INTO user_strava_credentials (user_id, athlete_id, access_token, refresh_token, expires_at) VALUES (${user.id}, ${user.id}, 'synthetic-access', 'synthetic-refresh', 2000000000)`;
       await sql`
         INSERT INTO auth.better_auth_user (id, name, email, email_verified, image,
           created_at, updated_at)
@@ -3426,6 +3480,14 @@ async function main(): Promise<void> {
         "--preserve-local-seed",
       ],
       { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const [preservedStrava] = await sql<
+      { n: number }[]
+    >`SELECT (SELECT count(*) FROM user_strava_credentials)::int + (SELECT count(*) FROM users u WHERE EXISTS (SELECT 1 FROM jsonb_object_keys(u.meta) k WHERE left(k, 7) = 'strava_'))::int AS n`;
+    check(
+      "preserve-local-seed removes every Strava connection",
+      preservedStrava?.n === 0,
+      "credential row/key count only",
     );
     for (const fixture of preserveUsers) {
       const [user] = await sql<

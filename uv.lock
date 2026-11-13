@@ -675,6 +675,7 @@ charts = [
     { name = "matplotlib" },
 ]
 dev = [
+    { name = "dataframe-image" },
     { name = "debugpy" },
     { name = "mypy" },
     { name = "pandas" },
@@ -714,6 +715,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 charts = [{ name = "matplotlib", specifier = "==3.11.2" }]
 dev = [
+    { name = "dataframe-image", specifier = "==0.2.7" },
     { name = "debugpy", specifier = "==1.8.22" },
     { name = "mypy", specifier = "==2.4.0" },
     { name = "pandas", specifier = "==2.3.3" },
