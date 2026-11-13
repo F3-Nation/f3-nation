@@ -1,7 +1,7 @@
 import type { JWK } from "jose";
 import { generateKeyPair, importJWK, SignJWT } from "jose";
 
-import { FIXTURE_KID } from "../global-setup";
+import { FIXTURE_CLIENT_ID, FIXTURE_KID } from "../global-setup";
 
 let cachedKey: CryptoKey | undefined;
 
@@ -37,7 +37,7 @@ export async function signFixtureJwt(opts: {
     token_use: "access",
     email: "char-jwt@example.com",
     scope: "openid profile",
-    client_id: "characterization",
+    client_id: FIXTURE_CLIENT_ID,
   })
     .setProtectedHeader({ alg: "RS256", kid: opts.kid ?? FIXTURE_KID })
     .setSubject(opts.sub.toString())
