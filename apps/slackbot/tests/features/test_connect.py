@@ -352,6 +352,7 @@ def _patch_approval_flow(monkeypatch, requester_client):
     requester_space = SimpleNamespace(settings={"team_id": "TREQUESTER", "org_id": 1}, id=12)
     monkeypatch.setattr(connect, "_get_requester_slack_space", lambda team: requester_space)
     monkeypatch.setattr(connect.DbManager, "get", MagicMock(return_value=SimpleNamespace(id=7)))
+    monkeypatch.setattr(connect.DbManager, "find_first_record", MagicMock(return_value=SimpleNamespace(id=3)))
     monkeypatch.setattr(connect.DbManager, "create_record", MagicMock())
     monkeypatch.setattr(connect.DbManager, "update_records", MagicMock())
     monkeypatch.setattr(connect, "get_user", MagicMock(return_value=SimpleNamespace(user_id=22)))
