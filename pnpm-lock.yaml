@@ -351,7 +351,7 @@ catalogs:
       specifier: ^4.17.27
       version: 4.17.27
     '@types/node':
-      specifier: ^26.6.5
+      specifier: ^26.6.6
       version: 26.6.6
     '@types/nodemailer':
       specifier: ^8.0.2
