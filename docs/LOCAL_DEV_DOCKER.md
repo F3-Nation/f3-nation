@@ -655,6 +655,40 @@ sudo systemctl restart docker
 pnpm local:setup
 ```
 
+### `pnpm ci:local` freezes the machine or runs out of JavaScript heap
+
+`pnpm ci:local` runs the same checks as CI, and Turbo runs each check's tasks across the workspaces in parallel. Several of them (`tsc`, `next build`, type-aware ESLint) each take gigabytes of memory, and Node sizes its default heap limit from the memory it can see. A laptop, or a WSL 2 VM that only gets part of the Windows host's memory, can run out under Turbo's default concurrency. The symptoms are the whole machine locking up, or a task dying with `JavaScript heap out of memory`.
+
+These are per-machine settings, so keep them out of the repo:
+
+1. **Run fewer tasks at once.** Turbo reads `TURBO_CONCURRENCY`. Set it on the command rather than in your shell profile, then start low and raise it until the machine stays responsive:
+
+   ```bash
+   TURBO_CONCURRENCY=4 pnpm ci:local
+   ```
+
+   `pnpm dev` starts the apps as long-running Turbo tasks, and Turbo refuses to start when its concurrency is lower than that number of tasks plus one. If you export `TURBO_CONCURRENCY` from your profile anyway, override it with `pnpm dev --concurrency=<n>`.
+
+2. **Raise Node's heap limit** if a task still runs out of heap. First check the current limit in MB, then set a value above it:
+
+   ```bash
+   node -p 'require("v8").getHeapStatistics().heap_size_limit / 1048576'
+   export NODE_OPTIONS="--max-old-space-size=6144"
+   ```
+
+   The limit caps the JavaScript heap of each Node process, not total memory. One task can start several Node processes (Vitest runs its test files in worker processes, for example), and each process also uses memory outside its heap, so the limit times `TURBO_CONCURRENCY` underestimates the real peak. Leave plenty of headroom below the memory you actually have, or the system swaps or kills processes instead. `NODE_OPTIONS` also applies to every other Node program you run from that shell.
+
+3. **On WSL 2, give the VM more memory.** WSL 2 caps its VM at part of the Windows host's memory. First check the current cap: the `total` column of `free -h` inside your distro. Pick a value above it that still leaves a few GB for Windows itself; a fixed number can lower the cap on a host with more memory. Then create or edit `%UserProfile%\.wslconfig` on Windows. For example, on a 16 GB host:
+
+   ```ini
+   [wsl2]
+   memory=12GB
+   ```
+
+   Then run `wsl --shutdown` from PowerShell and reopen your distro. Check the new total with `free -h`. With more memory you may not need the other two settings.
+
+If one task runs out of heap even on its own, that task's memory use has grown, so open an issue that names it rather than only raising the limit. Run it alone with `pnpm --filter <package> <task>` (for example `pnpm --filter f3-map typecheck`); the root scripts such as `pnpm typecheck` run that task in every workspace through Turbo.
+
 ### Postgres won't start
 
 Check the container logs:
