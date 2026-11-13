@@ -64,6 +64,7 @@ dev = [
     "ruff==0.17.3",
     "mypy==2.4.0",
     "pytest-cov==7.1.0",
+    "dataframe-image==0.2.7",
 ]
 charts = [
     "matplotlib==3.11.2",
