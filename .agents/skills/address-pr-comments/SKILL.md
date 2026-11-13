@@ -229,15 +229,19 @@ the concern still applies before planning a fix.
 
 Review bodies and conversation comments (#2, #3) cannot be resolved. Treat one as already
 addressed when a later conversation comment, thread reply or COMMENT review body carries a
-`_written by …_` signature (see Step 5c), was posted by the PR author's account, and responds to it. Teammates use different
-agents, so match the signature, not a particular model name.
+`_written by …_` signature (see Step 5c), was posted by the PR author's account or the signed-in
+`gh` account (a maintainer addressing someone else's PR), and responds to it. Teammates use
+different agents, so match the signature, not a particular model name.
 
 Keep feedback from bot **reviewers** — AI code-review bots (CodeRabbit, Copilot, Codex, adversarial
 review workflows) raise real findings. Drop only noise: CI/status/coverage summaries,
-dependency-bot and release-bot chatter, empty review bodies, and standalone APPROVED reviews with
-no comment. A review with a non-empty body is feedback whatever its state — an APPROVED review
-that says "my only comment is…" is a question to answer, and a human COMMENTED review often holds
-numbered requests. Never drop a human review without reading its full body.
+dependency-bot and release-bot chatter, empty review bodies, standalone APPROVED reviews with no
+comment, and this skill's own signed replies — a review body or conversation comment that ends
+with a `_written by …_` signature and was posted by the PR author's or the signed-in `gh` account.
+The rule above still counts those replies as evidence that a comment is addressed. A review with
+a non-empty body is feedback whatever its state — an APPROVED review that says "my only comment
+is…" is a question to answer, and a human COMMENTED review often holds numbered requests. Never
+drop a human review without reading its full body.
 
 Before planning, account for every review: end Step 4's plan with a line like "Reviews seen: N —
 planned: X; skipped as noise: Y (author — reason)". A review that appears in neither count means
