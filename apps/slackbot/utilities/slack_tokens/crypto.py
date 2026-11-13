@@ -24,16 +24,20 @@ class TokenDecryptError(Exception):
     """The refresh token could not be encrypted or decrypted."""
 
 
-def _cipher() -> MultiFernet:
+def _fernets() -> list[Fernet]:
     keys = [k.strip() for k in os.environ.get(_ENV_VAR, "").split(",") if k.strip()]
     if not keys:
         raise TokenDecryptError(f"{_ENV_VAR} is not set")
     try:
-        return MultiFernet([Fernet(k) for k in keys])
+        return [Fernet(k) for k in keys]
     except (ValueError, TypeError):
         pass
     # Raised outside the except block so the key error is not chained.
     raise TokenDecryptError(f"{_ENV_VAR} contains an invalid Fernet key")
+
+
+def _cipher() -> MultiFernet:
+    return MultiFernet(_fernets())
 
 
 def encrypt_refresh_token(plaintext: str) -> str:
@@ -65,5 +69,27 @@ def check_encryption_key() -> bool:
     except TokenDecryptError:
         event = "slack.token.encryption_key_invalid"
         logger.error(event, extra={"json_fields": {"event": event}})
+        return False
+    return True
+
+
+def reencrypt_refresh_token(ciphertext: str) -> str:
+    """Re-encrypt with the newest key, decrypting with whichever listed key matches.
+
+    The plaintext is never returned.
+    """
+    cipher = _cipher()
+    try:
+        return cipher.rotate(ciphertext.encode()).decode()
+    except (InvalidToken, ValueError, TypeError):
+        pass
+    raise TokenDecryptError("refresh token could not be decrypted")
+
+
+def decrypts_with_primary_key(ciphertext: str) -> bool:
+    """True when the newest key alone decrypts the ciphertext."""
+    try:
+        _fernets()[0].decrypt(ciphertext.encode())
+    except (InvalidToken, ValueError, TypeError):
         return False
     return True

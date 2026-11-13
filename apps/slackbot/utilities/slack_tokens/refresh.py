@@ -8,8 +8,9 @@ refreshes, so two unserialized refreshes can each save a token the other just
 revoked. The transaction-scoped lock is released by commit or rollback, so a
 pooled connection never keeps it after an exception.
 
-`refresh_if_needed` is the only caller of `decrypt_refresh_token`. Every `Bot`
-this module returns has `bot_refresh_token=None`.
+The refresh token is decrypted only by `refresh_if_needed`, to call Slack, and
+by `crypto.reencrypt_refresh_token` for the re-key CLI, which never sees the
+plaintext. Every `Bot` this module returns has `bot_refresh_token=None`.
 """
 
 import logging
@@ -27,7 +28,7 @@ from slack_sdk.oauth.installation_store import Bot
 from slack_sdk.oauth.token_rotation import TokenRotator
 from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from utilities import constants
 from utilities.slack_tokens.crypto import TokenDecryptError, decrypt_refresh_token, encrypt_refresh_token
@@ -173,6 +174,25 @@ def _flush(session: Session, team_id: str, path: str) -> None:
     if failure is not None:
         _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **failure)
         raise TokenSaveError(f"saving the bot token failed with {failure['error_type']}")
+
+
+def write_locked_row(row: SlackSpace, bot: Bot, *, path: str) -> bool:
+    """Write the bot's token fields to a row yielded by `locked_row` and flush them.
+
+    For callers that must call Slack while holding the lock, so they can't use
+    `save_bot_locked`, which takes the lock itself. Returns False without
+    writing when the save guard rejects the token. Raises `TokenSaveError` if
+    the database rejects the write; the change commits only when the
+    `locked_row` block exits.
+    """
+    session = object_session(row)
+    if session is None:
+        raise ValueError("write_locked_row needs a row yielded by locked_row")
+    if not _guard_allows(row, bot):
+        return False
+    _write(row, bot)
+    _flush(session, row.team_id, path)
+    return True
 
 
 def save_bot_locked(bot: Bot, *, team_id: str, workspace_name: Optional[str] = None) -> bool:

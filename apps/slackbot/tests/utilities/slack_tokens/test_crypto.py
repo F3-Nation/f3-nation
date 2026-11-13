@@ -8,7 +8,9 @@ from utilities.slack_tokens.crypto import (
     TokenDecryptError,
     check_encryption_key,
     decrypt_refresh_token,
+    decrypts_with_primary_key,
     encrypt_refresh_token,
+    reencrypt_refresh_token,
 )
 
 ENV = "SLACK_TOKEN_ENCRYPTION_KEY"
@@ -118,3 +120,36 @@ def test_check_encryption_key_is_skipped_in_local_development(monkeypatch, caplo
 
     assert check_encryption_key() is True
     assert _key_invalid_records(caplog) == []
+
+
+def test_reencrypt_moves_to_primary_key(monkeypatch):
+    key_a, key_b = _key(), _key()
+    monkeypatch.setenv(ENV, key_a)
+    old = encrypt_refresh_token("xoxe-1-abc")
+
+    monkeypatch.setenv(ENV, f"{key_b},{key_a}")
+    new = reencrypt_refresh_token(old)
+
+    monkeypatch.setenv(ENV, key_b)
+    assert decrypt_refresh_token(new) == "xoxe-1-abc"
+
+
+def test_reencrypt_fails_when_no_key_decrypts(monkeypatch):
+    monkeypatch.setenv(ENV, _key())
+    old = encrypt_refresh_token("xoxe-1-abc")
+
+    monkeypatch.setenv(ENV, f"{_key()},{_key()}")
+    with pytest.raises(TokenDecryptError) as raised:
+        reencrypt_refresh_token(old)
+    assert old not in str(raised.value)
+
+
+def test_decrypts_with_primary_key(monkeypatch):
+    key_a, key_b = _key(), _key()
+    monkeypatch.setenv(ENV, key_a)
+    old = encrypt_refresh_token("xoxe-1-abc")
+
+    monkeypatch.setenv(ENV, f"{key_b},{key_a}")
+    assert decrypts_with_primary_key(old) is False
+    assert decrypts_with_primary_key(reencrypt_refresh_token(old)) is True
+    assert decrypts_with_primary_key("not-a-token") is False

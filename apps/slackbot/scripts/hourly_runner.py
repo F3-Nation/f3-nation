@@ -23,6 +23,7 @@ from scripts import (
     monthly_reporting,
     preblast_reminders,
     q_lineups,
+    refresh_slack_tokens,
     update_slack_users,
 )
 from utilities.constants import LOCAL_DEVELOPMENT
@@ -71,6 +72,12 @@ def log_job_failure(job: str, error: Exception) -> None:
 
 def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, reporting_org_id: int | None = None):
     print("Running hourly scripts")
+
+    print("Refreshing expiring Slack tokens")
+    try:
+        refresh_slack_tokens.refresh_expiring_tokens()
+    except Exception as e:
+        log_job_failure("refresh_slack_tokens.refresh_expiring_tokens", e)
 
     print("Running calendar images")
     try:
