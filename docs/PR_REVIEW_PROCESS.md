@@ -117,7 +117,7 @@ When the PR's author is a codeowner, their own skill runs are a self-check and d
 
 ## After the local test
 
-When `pr-local-test` recommends approval, the PR goes to a codeowner's final review. When a codeowner decides a PR doesn't need a local test, they add the **`local test: not needed`** label, which moves it to final review the same way.
+When `pr-local-test` recommends approval, the PR goes to a codeowner's final review. When a codeowner decides a PR doesn't need a local test, they add the **`local test: not needed`** label, which moves it to final review the same way. The label only counts when a codeowner other than the PR's author adds it.
 
 ⏸️ **Can't recommend yet** means something kept the test from finishing — a review thread still open, a check it couldn't run, a merge status it couldn't confirm — not a problem in the code. Clear what it names. Whether `pr-local-test` runs again afterward is the reviewer's call: a check it couldn't run needs another run before it counts, while threads that were only open may just need resolving.
 
@@ -160,4 +160,4 @@ The label marks the end of the bot feedback, not readiness for a codeowner's fin
 
 ## Small PRs
 
-A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline` without `--deep` and no local test, and another might be approved and merged directly. To skip the local test, add the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.
+A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline` without `--deep` and no local test, and another might be approved and merged directly. To skip the local test, a codeowner other than the PR's author adds the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.

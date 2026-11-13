@@ -245,7 +245,11 @@ jq -n '
     (pr(65; "author opened threads of their own"; "pax") | .reviews.nodes = [inline_review]
       | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z"),
           (thread(false; "pax") | .lastComment.nodes[0].createdAt = "2026-10-22T08:00:00Z"),
-          (thread(true; "pax") | .lastComment.nodes[0].createdAt = "2026-10-22T09:00:00Z")])
+          (thread(true; "pax") | .lastComment.nodes[0].createdAt = "2026-10-22T09:00:00Z")]),
+    (pr(66; "codeowner author labels their own PR not needed"; "Luis") | .reviews.nodes = [inline_review]
+      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "luis")),
+    (pr(67; "another codeowner labels a codeowner'"'"'s PR not needed"; "Luis") | .reviews.nodes = [inline_review]
+      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "andy"))
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -347,6 +351,8 @@ assert_eq "the author's own pr-review-inline doesn't count" "INLINE" "$(bucket_o
 assert_eq "the author's own clean-review comment doesn't count" "INLINE" "$(bucket_of 61)"
 assert_eq "the author's own pr-local-test doesn't count" "LOCAL" "$(bucket_of 62)"
 assert_eq "the author's own pre-marker review doesn't count" "INLINE" "$(bucket_of 63)"
+assert_eq "the author's own not-needed label doesn't skip the local test" "LOCAL" "$(bucket_of 66)"
+assert_eq "another codeowner's not-needed label skips the local test" "MANUAL" "$(bucket_of 67)"
 
 hostile_count=$(grep -c '</script><img' "$tmp_dir/board.html")
 assert_eq "the board records Unassigned for a PR with no assignee" "Unassigned" \

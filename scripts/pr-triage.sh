@@ -214,6 +214,7 @@ classify='
   # The PR author'"'"'s own run is a self-check, not a review: the PR still needs another
   # codeowner, so it stays where it was.
   def not_by($author): (.author.login | lower_login) != ($author | lower_login);
+  def actor_not($author): (.actor.login | lower_login) != ($author | lower_login);
   def reviewer_marker($m; $author): owner_marker($m) and not_by($author);
 
   ($now // now) as $now
@@ -286,11 +287,12 @@ classify='
       | ([$ledgerRows[] | select(.manual and .skill == "pr-local-test") | .at | try ts catch 0]
           | max // 0) as $markedLocalAt
       # The label counts while it is on the PR, from its newest add, and only when a codeowner
-      # made that add. An add older than the events fetched does not count.
+      # other than the PR'"'"'s author made that add. An add older than the events fetched does
+      # not count.
       | (any($pr.labels.nodes[]?; .name == $notNeededLabel)) as $hasNotNeeded
       | ([$pr.labelEvents.nodes[]? | select(.label.name == $notNeededLabel)]
           | max_by(.createdAt | ts)
-          | if . != null and (.actor.login | codeowner) then .createdAt | ts else 0 end)
+          | if . != null and (.actor.login | codeowner) and actor_not($author) then .createdAt | ts else 0 end)
         as $notNeededAt
       | ($hasNotNeeded and $notNeededAt > 0 and ($lastLocal == null or $notNeededAt > $lastLocalAt))
         as $notNeededClears
@@ -354,9 +356,10 @@ classify='
       # When the PR last became the codeowners'"'"' turn: the newest of the PR opening, being
       # reopened or marked ready, a bot finishing, a codeowner'"'"'s skill report, a thread
       # closing, and the author'"'"'s last push or thread reply. A thread the author opened is their
-      # own note, often a self-check finding, so it counts for neither. Approximate: the push is the head commit'"'"'s own date
-      # (when it was made, not pushed), and GitHub keeps no time for resolving a thread, so a
-      # resolved thread counts from its last comment. Both can make turnSince early, never late.
+      # own note, often a self-check finding, so it counts for neither. Approximate: the push is
+      # the head commit'"'"'s own date (when it was made, not pushed), and GitHub keeps no time for
+      # resolving a thread, so a resolved thread counts from its last comment. Both can make
+      # turnSince early, never late.
       | ([$pr.createdAt, $readyAt, $pr.reopened.nodes[0].createdAt, $head.committedDate,
           (if $crState == "done" then $cr.createdAt else null end),
           (if $grState == "done" then $gr.completedAt else null end),
