@@ -7,11 +7,11 @@ from sqlalchemy import case, select, update
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from f3_data_models.models import Attendance, EventInstance, Org, Org_x_SlackSpace, SlackSpace, SlackUser, User
 from f3_data_models.utils import DbManager, get_session
-from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from utilities.constants import is_production_deployment
 from utilities.helper_functions import create_user, is_deactivated_slack_user, safe_get, slack_identity_error_context
+from utilities.slack_tokens.client import slack_client_for_team
 
 
 def update_slack_users(force=False):
@@ -33,7 +33,24 @@ def update_slack_users(force=False):
     for slack_space_record in all_slack_spaces:
         slack_space = slack_space_record[0]
         region_org_record = slack_space_record[1]
-        client = WebClient(token=slack_space.settings.get("bot_token"))
+        try:
+            client = slack_client_for_team(slack_space.team_id)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                "slack.identity.sync_failed team_id=%s error_type=%s",
+                slack_space.team_id,
+                type(error).__name__,
+                extra={
+                    "json_fields": {
+                        "event": "slack.identity.sync_failed",
+                        "team_id": slack_space.team_id,
+                        "error_type": type(error).__name__,
+                    }
+                },
+            )
+            continue
+        if client is None:
+            continue
         try:
             users: list[dict] = []
 

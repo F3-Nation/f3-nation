@@ -58,6 +58,7 @@ from utilities.helper_functions import (
 )
 from utilities.slack import actions, forms
 from utilities.slack import orm as slack_orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 META_EXCLUDE_FROM_PAX_VAULT = "exclude_from_pax_vault"
 
@@ -1268,7 +1269,10 @@ COUNT: {count}
             if not ox:
                 continue
             dr_slack_space = DbManager.get(SlackSpace, ox.slack_space_id)
-            if not dr_slack_space or not dr_slack_space.bot_token:
+            if not dr_slack_space:
+                continue
+            dr_client = slack_client_for_team(dr_slack_space.team_id)
+            if dr_client is None:
                 continue
 
             dr_settings = REGION_RECORDS.get(dr_slack_space.team_id)
@@ -1317,7 +1321,6 @@ COUNT: {count}
             )
 
             try:
-                dr_client = WebClient(token=dr_slack_space.bot_token)
                 existing_post = existing_by_team.get(dr_slack_space.team_id)
 
                 if create_or_edit == "edit" and existing_post:

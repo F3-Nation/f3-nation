@@ -38,6 +38,7 @@ from utilities.slack.orm import (
     URLInputElement,
     as_selector_options,
 )
+from utilities.slack_tokens.client import slack_client_for_team
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Private helpers
@@ -58,30 +59,28 @@ def _is_admin(body: dict, region_record: SlackSettings, client: WebClient, logge
 
 
 def _get_target_region_info(org_id: int, logger: Logger) -> tuple:
-    """Return (team_id, bot_token, SlackSettings) for a region org, or (None, None, None) if not on Slack."""
+    """Return (team_id, SlackSettings) for a region org, or (None, None) if not on Slack."""
     ox = DbManager.find_first_record(Org_x_SlackSpace, [Org_x_SlackSpace.org_id == org_id])
     if not ox:
-        return None, None, None
+        return None, None
     slack_space = DbManager.get(SlackSpace, ox.slack_space_id)
     if not slack_space:
-        return None, None, None
+        return None, None
     team_id = slack_space.team_id
-    bot_token = slack_space.bot_token
     settings = REGION_RECORDS.get(team_id)
     if not settings and slack_space.settings:
         try:
             settings = SlackSettings(**slack_space.settings)
         except Exception as e:
             logger.warning(f"Could not load SlackSettings for team {team_id}: {e}")
-    return team_id, bot_token, settings
+    return team_id, settings
 
 
-def _get_space_for_team(team_id: str):
-    """Resolve a workspace credential from trusted server-side storage."""
+def _client_for_team(team_id: str):
+    """A Slack client for an installed workspace, resolved from server-side storage; None if not installed."""
     if not team_id:
         return None
-    slack_space = DbManager.find_first_record(SlackSpace, [SlackSpace.team_id == team_id])
-    return slack_space if slack_space and slack_space.bot_token else None
+    return slack_client_for_team(team_id)
 
 
 def _log_slack_call_error(logger: Logger, event: str, error: Exception) -> None:
@@ -498,7 +497,7 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
         requester_region_name = region_org.name if region_org else None
 
     # Look up target region
-    target_team_id, target_bot_token, target_settings = _get_target_region_info(selected_org_id, logger)
+    target_team_id, target_settings = _get_target_region_info(selected_org_id, logger)
     org = DbManager.get(Org, selected_org_id)
 
     # Rebuild the form with the selection preserved
@@ -585,8 +584,9 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
         _update_request_modal_for_resubmit(body, client, logger)
         return
 
-    resolved_team_id, target_bot_token, _ = _get_target_region_info(target_org_id, logger)
-    if resolved_team_id != target_team_id or not target_bot_token:
+    resolved_team_id, _ = _get_target_region_info(target_org_id, logger)
+    target_client = _client_for_team(resolved_team_id) if resolved_team_id == target_team_id else None
+    if target_client is None:
         logger.info("handle_invite_request: workspace changed; resubmit from Downrange")
         _update_request_modal_for_resubmit(body, client, logger)
         return
@@ -617,7 +617,7 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
         return
 
     # Get the target region's current invite-sharing setting to determine DM format
-    _, _, target_settings = _get_target_region_info(target_org_id, logger)
+    _, target_settings = _get_target_region_info(target_org_id, logger)
     is_direct_email = target_settings and target_settings.downrange_invite_sharing == "direct_email"
     if is_direct_email and not requester_email:
         BlockView(
@@ -717,7 +717,6 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
         ]
 
     try:
-        target_client = WebClient(token=target_bot_token)
         dm = target_client.conversations_open(users=",".join(admin_slack_ids))
         dm_channel = safe_get(dm, "channel", "id")
         target_client.chat_postMessage(
@@ -800,14 +799,13 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
         ).as_form_field(),
     ]
 
-    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
-    if not requester_space or not requester_user_id:
+    send_client = _client_for_team(requester_team_id) if requester_team_id else None
+    if send_client is None or not requester_user_id:
         logger.info("handle_invite_approve: legacy or unresolved request; requester must resubmit")
         _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} has been approved!",
@@ -845,14 +843,13 @@ def handle_invite_deny(body: dict, client: WebClient, logger: Logger, context: d
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
-    if not requester_space or not requester_user_id:
+    send_client = _client_for_team(requester_team_id) if requester_team_id else None
+    if send_client is None or not requester_user_id:
         logger.info("handle_invite_deny: legacy or unresolved request; requester must resubmit")
         _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} was not approved at this time.",
@@ -898,18 +895,19 @@ def handle_invite_link_broken(
     requester_user_id = safe_get(body, "user", "id")
 
     # Notify the target region admins that the link didn't work
+    target_client = None
     if target_org_id:
-        resolved_team_id, target_bot_token, _ = _get_target_region_info(target_org_id, logger)
-    else:
-        resolved_team_id, target_bot_token = None, None
-    if resolved_team_id == target_team_id and target_bot_token:
+        resolved_team_id, _ = _get_target_region_info(target_org_id, logger)
+        if resolved_team_id == target_team_id:
+            target_client = _client_for_team(resolved_team_id)
+    verified = target_client is not None
+    if verified:
         admin_users = get_admin_users(target_org_id, target_team_id)
         admin_slack_ids = [
             au[1].slack_id for au in admin_users if au[1] and au[1].slack_id and au[1].slack_id != "USLACKBOT"
         ]
         if admin_slack_ids:
             try:
-                target_client = WebClient(token=target_bot_token)
                 dm = target_client.conversations_open(users=",".join(admin_slack_ids))
                 dm_channel = safe_get(dm, "channel", "id")
                 target_client.chat_postMessage(
@@ -934,7 +932,7 @@ def handle_invite_link_broken(
             text=(
                 f"We've notified the admins of *{target_org_name}* that the link didn't work. "
                 "They'll send you an updated link shortly."
-                if resolved_team_id == target_team_id and target_bot_token
+                if verified
                 else "This request could not be verified. Please resubmit it from the Downrange menu."
             ),
         )
@@ -953,14 +951,13 @@ def handle_invite_mark_done(body: dict, client: WebClient, logger: Logger, conte
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
-    if not requester_space or not requester_user_id:
+    send_client = _client_for_team(requester_team_id) if requester_team_id else None
+    if send_client is None or not requester_user_id:
         logger.info("handle_invite_mark_done: legacy or unresolved request; requester must resubmit")
         _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite to {target_org_name} has been sent — check your email!",

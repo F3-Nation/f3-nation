@@ -24,6 +24,7 @@ from features.fng import (
 )
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import safe_get, usable_invite_link
+from utilities.slack_tokens.client import slack_client_for_team
 
 REMINDER_HOUR = 17  # US/Central, same as the home region nudge
 MAX_REMINDERS = 3
@@ -65,7 +66,7 @@ def send_fng_reminders(force: bool = False):
 def _remind_space(space: SlackSpace, org_x_space: Org_x_SlackSpace, now: datetime) -> int:
     settings = SlackSettings(**space.settings)
     interval = fng_reminder_days(settings)
-    if not interval or not settings.bot_token:
+    if not interval:
         return 0
     # Reminders are due on day N, 2N and 3N after /fng created him, plus the catch-up window for a failed one.
     # Counted in Central calendar days, like `days` below, so the last catch-up day is whole whatever time he was
@@ -74,7 +75,9 @@ def _remind_space(space: SlackSpace, org_x_space: Org_x_SlackSpace, now: datetim
     central = pytz.timezone("US/Central")
     cutoff = central.localize(datetime.combine(cutoff_day, time.min)).astimezone(pytz.utc).replace(tzinfo=None)
     fngs = DbManager.find_records(User, filters=[User.home_region_id == org_x_space.org_id, User.created >= cutoff])
-    client = WebClient(token=settings.bot_token)
+    client = slack_client_for_team(space.team_id)
+    if client is None:
+        return 0
     sent = 0
     for fng in fngs:
         try:

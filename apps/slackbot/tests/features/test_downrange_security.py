@@ -46,7 +46,7 @@ def test_request_uses_server_resolved_target_token_and_never_emits_token_metadat
     monkeypatch.setattr(
         downrange,
         "_get_target_region_info",
-        MagicMock(return_value=("T_TARGET", "xoxb-target-secret", target_settings)),
+        MagicMock(return_value=("T_TARGET", target_settings)),
     )
     monkeypatch.setattr(
         downrange, "get_admin_users", MagicMock(return_value=[(None, SimpleNamespace(slack_id="U_ADMIN"))])
@@ -54,7 +54,7 @@ def test_request_uses_server_resolved_target_token_and_never_emits_token_metadat
     target_client = MagicMock()
     target_client.conversations_open.return_value = {"channel": {"id": "D1"}}
     web_client_factory = MagicMock(return_value=target_client)
-    monkeypatch.setattr(downrange, "WebClient", web_client_factory)
+    monkeypatch.setattr(downrange, "slack_client_for_team", web_client_factory)
     client = MagicMock()
     body = {
         "actions": [
@@ -68,11 +68,9 @@ def test_request_uses_server_resolved_target_token_and_never_emits_token_metadat
         "view": {"id": "V1", "state": {"values": {}}},
     }
 
-    downrange.handle_invite_request(
-        body, client, MagicMock(), {}, SlackSettings(team_id="T_REQUESTER", org_id=9, bot_token="xoxb-requester-secret")
-    )
+    downrange.handle_invite_request(body, client, MagicMock(), {}, SlackSettings(team_id="T_REQUESTER", org_id=9))
 
-    assert web_client_factory.call_args.kwargs["token"] == "xoxb-target-secret"
+    web_client_factory.assert_called_once_with("T_TARGET")
     payload = target_client.chat_postMessage.call_args.kwargs["metadata"]["event_payload"]
     assert payload["requester_team_id"] == "T_REQUESTER"
     assert not any("token" in key.lower() for key in payload)
@@ -80,10 +78,9 @@ def test_request_uses_server_resolved_target_token_and_never_emits_token_metadat
 
 def test_approval_uses_server_side_requester_space_and_legacy_token_metadata_is_rejected(monkeypatch):
     send = MagicMock()
-    space_lookup = MagicMock(return_value=SimpleNamespace(bot_token="xoxb-server-secret"))
-    monkeypatch.setattr(downrange, "_get_space_for_team", space_lookup)
+    space_lookup = MagicMock(return_value=send)
+    monkeypatch.setattr(downrange, "slack_client_for_team", space_lookup)
     web_client = MagicMock()
-    monkeypatch.setattr(downrange, "WebClient", MagicMock(return_value=send))
     record = SlackSettings(team_id="T_TARGET", org_id=42, downrange_invite_link="https://invite.test")
     body = {
         "message": {
@@ -96,7 +93,7 @@ def test_approval_uses_server_side_requester_space_and_legacy_token_metadata_is_
 
     downrange.handle_invite_approve(body, web_client, MagicMock(), {}, record)
 
-    assert downrange.WebClient.call_args.kwargs["token"] == "xoxb-server-secret"
+    space_lookup.assert_called_once_with("T_REQUESTER")
     broken_payload = json.loads(send.chat_postMessage.call_args.kwargs["blocks"][2]["elements"][0]["value"])
     assert not any("token" in key.lower() for key in broken_payload)
 
@@ -113,7 +110,7 @@ def test_approval_uses_server_side_requester_space_and_legacy_token_metadata_is_
 @pytest.mark.parametrize("handler_name", ["handle_invite_deny", "handle_invite_mark_done"])
 def test_legacy_denial_and_mark_done_metadata_never_lookup_or_send(monkeypatch, handler_name):
     lookup = MagicMock()
-    monkeypatch.setattr(downrange, "_get_space_for_team", lookup)
+    monkeypatch.setattr(downrange, "slack_client_for_team", lookup)
     client = MagicMock()
     legacy_body = {
         "message": {
@@ -135,25 +132,28 @@ def test_legacy_denial_and_mark_done_metadata_never_lookup_or_send(monkeypatch, 
     )
 
 
-def test_missing_server_side_bot_token_fails_closed(monkeypatch):
-    lookup = MagicMock(return_value=SimpleNamespace(bot_token=None))
-    monkeypatch.setattr(downrange.DbManager, "find_first_record", lookup)
-    assert downrange._get_space_for_team("T_REQUESTER") is None
+def test_uninstalled_requester_workspace_fails_closed(monkeypatch):
+    lookup = MagicMock(return_value=None)
+    monkeypatch.setattr(downrange, "slack_client_for_team", lookup)
+    assert downrange._client_for_team("T_REQUESTER") is None
+    assert downrange._client_for_team("") is None
+    lookup.assert_called_once_with("T_REQUESTER")
 
-    factory = MagicMock()
-    monkeypatch.setattr(downrange, "WebClient", factory)
+    client = MagicMock()
     body = {
         "message": {"metadata": {"event_payload": {"requester_team_id": "T_REQUESTER", "requester_user_id": "U1"}}},
         "channel": {"id": "C1"},
+        "user": {"id": "U_ADMIN"},
     }
-    downrange.handle_invite_deny(body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="T_TARGET", org_id=42))
-    factory.assert_not_called()
+    downrange.handle_invite_deny(body, client, MagicMock(), {}, SlackSettings(team_id="T_TARGET", org_id=42))
+    client.chat_postMessage.assert_not_called()
+    client.chat_postEphemeral.assert_called_once()
 
 
 @pytest.mark.parametrize("value", [{}, {"target_team_id": "T_TARGET", "target_org_id": 42}])
 def test_unresolved_request_updates_modal_with_fixed_resubmit_guidance(monkeypatch, value):
     client = MagicMock()
-    monkeypatch.setattr(downrange, "_get_target_region_info", MagicMock(return_value=("OTHER", None, None)))
+    monkeypatch.setattr(downrange, "_get_target_region_info", MagicMock(return_value=("OTHER", None)))
     body = {"actions": [{"value": json.dumps(value)}], "view": {"id": "V1", "state": {"values": {}}}}
 
     downrange.handle_invite_request(body, client, MagicMock(), {}, SlackSettings(team_id="T_REQUESTER"))
@@ -176,10 +176,8 @@ def test_broken_link_uses_org_team_lookup_and_ignores_legacy_embedded_token(monk
     target_client = MagicMock()
     target_client.conversations_open.return_value = {"channel": {"id": "D1"}}
     factory = MagicMock(return_value=target_client)
-    monkeypatch.setattr(downrange, "WebClient", factory)
-    monkeypatch.setattr(
-        downrange, "_get_target_region_info", MagicMock(return_value=("T_TARGET", "xoxb-server-target", None))
-    )
+    monkeypatch.setattr(downrange, "slack_client_for_team", factory)
+    monkeypatch.setattr(downrange, "_get_target_region_info", MagicMock(return_value=("T_TARGET", None)))
     monkeypatch.setattr(
         downrange, "get_admin_users", MagicMock(return_value=[(None, SimpleNamespace(slack_id="U_ADMIN"))])
     )
@@ -199,7 +197,7 @@ def test_broken_link_uses_org_team_lookup_and_ignores_legacy_embedded_token(monk
         body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="T_REQUESTER", org_id=9)
     )
 
-    assert factory.call_args.kwargs["token"] == "xoxb-server-target"
+    factory.assert_called_once_with("T_TARGET")
     sent_blocks = target_client.chat_postMessage.call_args.kwargs["blocks"]
     assert all("xoxb" not in str(block).lower() for block in sent_blocks)
 
@@ -283,10 +281,10 @@ def test_direct_email_invite_is_not_offered_for_placeholder():
 
 def test_direct_email_request_rejects_placeholder_before_contacting_admins(monkeypatch):
     settings = SimpleNamespace(downrange_invite_sharing="direct_email")
-    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: ("T_TARGET", "test-token", settings))
+    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: ("T_TARGET", settings))
     monkeypatch.setattr(downrange, "get_admin_users", lambda *_a: [(None, SimpleNamespace(slack_id="U_ADMIN"))])
     target = MagicMock()
-    monkeypatch.setattr(downrange, "WebClient", MagicMock(return_value=target))
+    monkeypatch.setattr(downrange, "slack_client_for_team", MagicMock(return_value=target))
     client = MagicMock()
     body = {
         "user": {"id": "U_HIDDEN"},

@@ -69,7 +69,7 @@ def test_unlinked_downrange_member_has_no_admin_rights(monkeypatch, unlinked_ide
 
 
 def test_unlinked_member_can_select_downrange_region(monkeypatch, unlinked_identity):
-    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: (None, None, None))
+    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: (None, None))
     monkeypatch.setattr(
         downrange.DbManager,
         "get",
