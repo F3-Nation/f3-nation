@@ -9,7 +9,8 @@
       "./src/app/*.ts",
       "./src/app/*.tsx"
     ],
-    "./common/*": "./src/common/*.ts"
+    "./common/*": "./src/common/*.ts",
+    "./server/*": "./src/server/*.ts"
   },
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
