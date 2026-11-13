@@ -11,6 +11,7 @@ from sqlalchemy import (
     TIME,
     UUID,
     VARCHAR,
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -1082,6 +1083,29 @@ class User(Base):
     updated: Mapped[dt_update]
 
     home_region_org: Mapped[Optional[Org]] = relationship(cascade="expunge", viewonly=True)
+
+
+class UserStravaCredential(Base):
+    """Server-only Strava connection owned by an F3 user, across Slack workspaces."""
+
+    __tablename__ = "user_strava_credentials"
+    __table_args__ = (
+        UniqueConstraint("athlete_id", name="user_strava_credentials_athlete_id_key"),
+        CheckConstraint(
+            "athlete_id > 0 AND expires_at > 0 AND length(access_token) > 0 AND length(refresh_token) > 0",
+            name="user_strava_credentials_complete",
+        ),
+    )
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(BigInteger)
+    access_token: Mapped[str] = mapped_column(TEXT)
+    refresh_token: Mapped[str] = mapped_column(TEXT)
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+
+    def to_json(self):
+        """Exclude credentials from inherited string and JSON representations."""
+        return {"user_id": self.user_id, "athlete_id": self.athlete_id}
 
 
 class SlackUser(Base):
