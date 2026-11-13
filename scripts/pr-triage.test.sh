@@ -241,7 +241,11 @@ jq -n '
           review("luis"; "2026-10-22T03:00:00Z"; "| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; [])]),
     (pr(63; "codeowner author'"'"'s own pre-marker review"; "Luis")
       | .reviews.nodes = [review("luis"; "2026-10-15T00:00:00Z"; ""; ["Old finding.\n_written by Model_"])]),
-    pr(64; "viewer'"'"'s own PR in their ledger"; "viewer")
+    pr(64; "viewer'"'"'s own PR in their ledger"; "viewer"),
+    (pr(65; "author opened threads of their own"; "pax") | .reviews.nodes = [inline_review]
+      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z"),
+          (thread(false; "pax") | .lastComment.nodes[0].createdAt = "2026-10-22T08:00:00Z"),
+          (thread(true; "pax") | .lastComment.nodes[0].createdAt = "2026-10-22T09:00:00Z")])
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -387,6 +391,8 @@ assert_eq "turnSince counts a reopen" '"2026-10-20T00:00:00Z"' "$(json_field 53 
 assert_eq "turnSince counts Greptile finishing" '"2026-10-22T09:00:00Z"' "$(json_field 58 .turnSince)"
 assert_eq "turnSince ignores the author's own skill report" '"2026-10-22T00:00:00Z"' "$(json_field 62 .turnSince)"
 assert_eq "turnSince ignores the author's own clean-review comment" '"2026-10-01T00:00:00Z"' "$(json_field 61 .turnSince)"
+assert_eq "turnSince ignores threads the author opened, open or resolved" '"2026-10-22T05:00:00Z"' \
+  "$(json_field 65 .turnSince)"
 assert_eq "--json lists the codeowners, lowercased" '["andy","luis"]' "$(jq -c .codeowners "$tmp_dir/board.json")"
 assert_eq "--json marks approval" "true" "$(json_field 9 .approved)"
 

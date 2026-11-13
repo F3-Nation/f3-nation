@@ -259,8 +259,8 @@ classify='
       | [$unfinished[] | select(.overdue | not) | .name] as $pendingBots
       | [$unfinished[] | select(.overdue) | .name] as $gaveUpOn
 
-      # Skill runs, by codeowners other than the author or in the local ledger. The ledger is
-      # the viewer'"'"'s own, so it says nothing about a PR the viewer wrote.
+      # Skill runs, by codeowners other than the author or in the local ledger. The ledger holds
+      # the viewer'"'"'s own runs, so on a PR the viewer wrote, every row is a self-check.
       | (if ($author | lower_login) == ($me | lower_login) then []
          else $ledger | map(select(.pr == $pr.number)) end) as $ledgerRows
       | ($ledgerRows | map(.skill)) as $logged
@@ -348,10 +348,13 @@ classify='
          end) as $verdict
       | ($verdict[0] | IN("DRAFT", "SKIP") | not) as $active
       | [$pr.assignees.nodes[]?.login] as $assignees
+      | [$pr.reviewThreads.nodes[] | select((.comments.nodes[0].author.login // "") != $author)]
+        as $othersThreads
 
       # When the PR last became the codeowners'"'"' turn: the newest of the PR opening, being
       # reopened or marked ready, a bot finishing, a codeowner'"'"'s skill report, a thread
-      # closing, and the author'"'"'s last push or thread reply. Approximate: the push is the head commit'"'"'s own date
+      # closing, and the author'"'"'s last push or thread reply. A thread the author opened is their
+      # own note, often a self-check finding, so it counts for neither. Approximate: the push is the head commit'"'"'s own date
       # (when it was made, not pushed), and GitHub keeps no time for resolving a thread, so a
       # resolved thread counts from its last comment. Both can make turnSince early, never late.
       | ([$pr.createdAt, $readyAt, $pr.reopened.nodes[0].createdAt, $head.committedDate,
@@ -362,8 +365,8 @@ classify='
           ($inlineNotes[] | .createdAt),
           ($pr.reviews.nodes[] | select(any(.comments.nodes[]; reviewer_marker("pr-review-inline"; $author)))
             | .submittedAt),
-          ($pr.reviewThreads.nodes[] | select(.isResolved) | .lastComment.nodes[0].createdAt),
-          ($pr.reviewThreads.nodes[] | .lastComment.nodes[0]
+          ($othersThreads[] | select(.isResolved) | .lastComment.nodes[0].createdAt),
+          ($othersThreads[] | .lastComment.nodes[0]
             | select(.author.login == $author) | .createdAt)]
         | map(ts) | max) as $turnSince
       | {

@@ -113,7 +113,7 @@ Because every run has its own worktree, you can review or test several PRs at th
 
 ### Who runs which
 
-When the PR's author is a codeowner, have a different codeowner run at least one of the two skills when you can. An author running both with their own assistant can carry the same blind spots through both. The final codeowner review can still catch what they miss, but by then it costs another round of fixes and often a re-test; a second person's skill run catches it earlier.
+When the PR's author is a codeowner, their own skill runs are a self-check and don't move the PR. It leaves the inline-review stage when a different codeowner runs either skill, and the local-test stage when a different codeowner runs `pr-local-test` or adds the `local test: not needed` label. A different codeowner running both catches more, because an author running both with their own assistant can carry the same blind spots through both. The final codeowner review can still catch what they miss, but by then it costs another round of fixes and often a re-test.
 
 ## After the local test
 
