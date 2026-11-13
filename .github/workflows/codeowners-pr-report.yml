@@ -11,8 +11,8 @@ name: Codeowners PR report
 # Posts through the incoming webhook in the SLACK_MONOREPO_WEBHOOK_URL secret;
 # pr-author-nudge.yml's heads-ups go to the Codeowners channel through their
 # own webhook. The repository variable CODEOWNERS_SLACK_IDS (JSON of GitHub
-# login to Slack member ID) turns assignees and thread openers into Slack
-# mentions; unmapped logins show as plain text. A manual run is a dry run by default: the message goes to the
+# login to Slack member ID) turns PR authors, assignees and thread openers into
+# Slack mentions; unmapped logins show as plain text. A manual run is a dry run by default: the message goes to the
 # job summary only. Every run writes it there.
 
 on:

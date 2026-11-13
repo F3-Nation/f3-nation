@@ -114,8 +114,9 @@ Don't post without a clear yes in the user's own words.
 Send each message, unchanged and in order, to channel `C0CBH5D4ULU` as its own
 post (Slack's MCP server: `slack_send_message` with `channel_id:
 "C0CBH5D4ULU"` and the message text; no `thread_ts`). Never send the
-`<<< next Slack message >>>` line itself. The report includes Slack mentions (`<@U…>`) for assigned
-codeowners and reviewers, the same people the daily report pings.
+`<<< next Slack message >>>` line itself. The report mentions mapped PR authors,
+assigned codeowners and reviewers, and the person running this skill. Unmapped
+logins appear as plain text.
 
 Give the user the link to the first posted message. If Slack refuses a post (for
 example `not_in_channel` or `channel_not_found`), relay the error and stop;
