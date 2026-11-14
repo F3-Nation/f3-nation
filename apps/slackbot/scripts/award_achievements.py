@@ -55,6 +55,7 @@ from sqlalchemy.orm import Session
 from utilities import constants
 from utilities.database.orm import SlackSettings
 from utilities.database.orm.views import EventAttendance, EventInstanceExpanded
+from utilities.slack_tokens.client import slack_client_for_team
 
 # ---------------------------------------------------------------------------
 # Period calculations
@@ -430,7 +431,6 @@ class RegionAchievementGroup:
 
     team_id: str
     slack_settings: SlackSettings
-    bot_token: str
     # Map of achievement_id -> list of (AwardedUserInfo, CandidateAward)
     achievements: Dict[int, List[Tuple[AwardedUserInfo, CandidateAward]]]
 
@@ -508,8 +508,11 @@ def _build_dm_blocks(achievement: Achievement) -> List[Dict]:
     return blocks
 
 
-def post_achievements(session: Session, candidates: Sequence[CandidateAward], dry_run: bool) -> None:
+def post_achievements(session: Session, candidates: Sequence[CandidateAward], dry_run: bool) -> List[str]:
     """Post achievement notifications based on each region's settings.
+
+    Returns the team ids whose Slack client lookup failed; their posts were
+    skipped. A workspace with no installation is skipped without counting.
 
     Groups candidates by their home region's Slack space and posts according
     to the region's achievement_send_option setting:
@@ -518,7 +521,7 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
     - send_in_dms_only: Send DM to each user for their achievements
     """
     if not candidates:
-        return
+        return []
 
     # Gather all unique user_ids and achievement_ids
     user_ids = list({c.user_id for c in candidates})
@@ -536,7 +539,7 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
     home_region_ids = list({u.home_region_id for u in users_by_id.values() if u.home_region_id})
     if not home_region_ids:
         print("No users with home regions found. Skipping achievement posting.")
-        return
+        return []
 
     # Load SlackSpaces for home regions via Org_x_SlackSpace
     slack_space_query = (
@@ -550,7 +553,7 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
 
     if not region_slack_spaces:
         print("No Slack spaces found for user home regions. Skipping achievement posting.")
-        return
+        return []
 
     # Get all team_ids we need slack users for
     team_ids = list({ss.team_id for ss in region_slack_spaces.values()})
@@ -585,7 +588,6 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
             region_groups[team_id] = RegionAchievementGroup(
                 team_id=team_id,
                 slack_settings=settings,
-                bot_token=slack_space.bot_token,
                 achievements={},
             )
 
@@ -600,6 +602,7 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
             group.achievements[candidate.achievement_id] = []
         group.achievements[candidate.achievement_id].append((user_info, candidate))
 
+    failed_team_ids: List[str] = []
     # Post for each region based on settings
     for team_id, group in region_groups.items():
         settings = group.slack_settings
@@ -612,10 +615,6 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
         send_option = settings.achievement_send_option or "post_summary"
         achievement_channel = settings.achievement_channel
 
-        if not group.bot_token:
-            print(f"[{team_id}] No bot token available. Skipping.")
-            continue
-
         if dry_run:
             print(f"[DRY-RUN] [{team_id}] Would post achievements with option: {send_option}")
             for ach_id, user_awards in group.achievements.items():
@@ -625,7 +624,15 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
                 print(f"  - {ach_name}: {', '.join(users)}")
             continue
 
-        client = WebClient(group.bot_token)
+        try:
+            client = slack_client_for_team(team_id)
+        except Exception as e:
+            print(f"[{team_id}] Error getting Slack client: {type(e).__name__}. Skipping.")
+            failed_team_ids.append(team_id)
+            continue
+        if client is None:
+            print(f"[{team_id}] No Slack installation available. Skipping.")
+            continue
 
         if send_option == "post_individually":
             _post_individually(client, achievement_channel, group, achievements_by_id, team_id)
@@ -636,6 +643,8 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
         else:
             print(f"[{team_id}] Unknown send_option: {send_option}. Defaulting to summary.")
             _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
+
+    return failed_team_ids
 
 
 def _post_individually(
@@ -775,9 +784,10 @@ def main():  # pragma: no cover - CLI
             all_candidates.extend(cands)
 
         # Post achievement notifications
+        failed_team_ids: List[str] = []
         if all_candidates and not args.skip_post:
             print(f"\nPosting {len(all_candidates)} achievement notifications...")
-            post_achievements(session, all_candidates, args.dry_run)
+            failed_team_ids = post_achievements(session, all_candidates, args.dry_run)
 
         # save a csv of candidates for record-keeping
         if all_candidates and args.dry_run:
@@ -786,6 +796,11 @@ def main():  # pragma: no cover - CLI
                 for c in all_candidates:
                     f.write(f"{c.achievement_id},{c.user_id},{c.award_year},{c.award_period},{c.metric}\n")
         print(f"Done. Candidates processed: {total_candidates}")
+
+    # After the session block, so the awards commit before the job reports failure.
+    if failed_team_ids:
+        print(f"Notifications skipped for {len(failed_team_ids)} workspace(s): {', '.join(failed_team_ids)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":  # pragma: no cover

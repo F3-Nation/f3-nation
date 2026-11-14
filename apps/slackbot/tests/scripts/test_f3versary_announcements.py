@@ -18,7 +18,6 @@ def config(**overrides):
         "enabled": True,
         "org_id": 1,
         "team_id": "T1",
-        "bot_token": "xoxb-test",
         "channel": "C1",
         "lead_days": 14,
         "last_processed_date": None,
@@ -44,7 +43,6 @@ def slack_record(**setting_overrides):
     settings = {
         "team_id": "T1",
         "org_id": 1,
-        "bot_token": "xoxb-test",
         "f3versary_announcements_enabled": True,
         "f3versary_announcements_channel": "C1",
         "f3versary_announcements_lead_days": 14,
@@ -56,7 +54,6 @@ def slack_record(**setting_overrides):
         id=10,
         team_id="T1",
         workspace_name="Test Workspace",
-        bot_token="xoxb-test",
         settings=settings,
     )
     return (None, org, slack_space)
@@ -196,11 +193,10 @@ def test_load_settings_uses_workspace_json_and_ignores_legacy_unknown_keys():
         f3versary_announcements_lead_days=30,
         f3versary_announcements_delivery_plan={"next_page": 1},
     )
-    slack_space.bot_token = "xoxb-current"
 
     loaded = f3versary_announcements._load_settings(org, slack_space)
 
-    assert loaded == config(bot_token="xoxb-current", channel="C-settings", lead_days=30)
+    assert loaded == config(channel="C-settings", lead_days=30)
 
 
 def test_load_settings_uses_authoritative_workspace_team_id():
@@ -439,7 +435,7 @@ def test_dry_run_prints_without_slack_or_outbox_writes(monkeypatch, capsys):
     def reject_client(*args, **kwargs):
         raise AssertionError("dry run must not contact Slack")
 
-    monkeypatch.setattr(f3versary_announcements, "WebClient", reject_client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", reject_client)
 
     f3versary_announcements.send_f3versary_announcements(force=True, dry_run=True, now_cst=datetime(2026, 9, 1, 12))
 
@@ -479,7 +475,7 @@ def test_no_candidates_creates_complete_zero_page_run_without_posting(monkeypatc
     def reject_client(*args, **kwargs):
         raise AssertionError("empty delivery must not contact Slack")
 
-    monkeypatch.setattr(f3versary_announcements, "WebClient", reject_client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", reject_client)
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 12))
 
@@ -497,7 +493,7 @@ def test_successful_post_completes_run_and_uses_scoped_message_id(monkeypatch):
 
     class Client:
         def __init__(self, **kwargs):
-            assert kwargs == {"token": "xoxb-test", "timeout": 20, "retry_handlers": []}
+            assert kwargs == {"timeout": 20, "retry_handlers": []}
 
         def chat_postMessage(self, **kwargs):
             posts.append(kwargs)
@@ -505,7 +501,7 @@ def test_successful_post_completes_run_and_uses_scoped_message_id(monkeypatch):
 
     monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
     monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", lambda *args, **kwargs: [candidate()])
-    monkeypatch.setattr(f3versary_announcements, "WebClient", Client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", lambda team_id, **kwargs: Client(**kwargs))
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 17))
 
@@ -548,7 +544,7 @@ def test_second_page_failure_retries_saved_unsent_page_without_requery(monkeypat
 
     monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
     monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", load_candidates)
-    monkeypatch.setattr(f3versary_announcements, "WebClient", Client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", lambda team_id, **kwargs: Client(**kwargs))
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 17))
 
@@ -593,7 +589,7 @@ def test_admin_settings_change_pauses_saved_same_day_run(monkeypatch, changed_se
         raise AssertionError("old channel/lead-time plan must not post")
 
     monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", reject_candidates)
-    monkeypatch.setattr(f3versary_announcements, "WebClient", reject_client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", reject_client)
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 18))
 
@@ -624,7 +620,7 @@ def test_workspace_settings_apply_only_to_the_configured_region(monkeypatch):
 
     monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
     monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", lambda *args, **kwargs: [candidate()])
-    monkeypatch.setattr(f3versary_announcements, "WebClient", Client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", lambda team_id, **kwargs: Client(**kwargs))
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 17))
 
@@ -664,7 +660,7 @@ def test_unfinished_prior_day_run_is_abandoned_and_new_day_proceeds(monkeypatch)
 
     monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
     monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", load_candidates)
-    monkeypatch.setattr(f3versary_announcements, "WebClient", reject_client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", reject_client)
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 2, 18))
 
@@ -833,11 +829,12 @@ def test_plan_save_failure_never_calls_slack(monkeypatch, caplog):
     def fail_create_run(*args, **kwargs):
         raise RuntimeError("database unavailable, member name and token")
 
-    def reject_client(*args, **kwargs):
-        raise AssertionError("Slack must not post before the plan commits")
+    class RejectingClient:
+        def chat_postMessage(self, **kwargs):
+            raise AssertionError("Slack must not post before the plan commits")
 
     monkeypatch.setattr(f3versary_announcements, "_create_run", fail_create_run)
-    monkeypatch.setattr(f3versary_announcements, "WebClient", reject_client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", lambda *args, **kwargs: RejectingClient())
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 17))
 
@@ -868,7 +865,7 @@ def test_slack_success_and_failed_db_finalize_reuses_same_message_id_on_retry(mo
     monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
     monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", lambda *args, **kwargs: [candidate()])
     monkeypatch.setattr(f3versary_announcements, "_record_sent_page", record_sent)
-    monkeypatch.setattr(f3versary_announcements, "WebClient", Client)
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", lambda team_id, **kwargs: Client(**kwargs))
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 17))
     assert len(posts) == 1
@@ -926,3 +923,32 @@ def test_unexpected_error_logs_safe_stack_without_exception_message(monkeypatch,
     assert "error_type=RuntimeError" in caplog.text
     assert "fail_run_read" in caplog.text
     assert "private member name" not in caplog.text
+
+
+def test_f3versary_skips_uninstalled_workspace(monkeypatch, caplog):
+    uninstalled = slack_record(team_id="T0")
+    uninstalled[2].id = 11
+    uninstalled[2].team_id = "T0"
+    installed = slack_record()
+    records = [uninstalled, installed]
+    outbox = FakeOutbox(monkeypatch, installed[2])
+    spaces = {record[2].id: record[2] for record in records}
+    monkeypatch.setattr(f3versary_announcements, "_read_slack_space", lambda space_id: spaces[space_id])
+    posts = []
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            posts.append(kwargs)
+            return {"ts": "123.456"}
+
+    clients = {"T0": None, "T1": Client()}
+    monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
+    monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", lambda *args, **kwargs: [candidate()])
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", lambda team_id, **kwargs: clients[team_id])
+
+    f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 17))
+
+    assert outbox.run_for_date(11, 1, date(2026, 9, 1)) is None
+    assert outbox.run_for_date(10, 1, date(2026, 9, 1)).status == "complete"
+    assert len(posts) == 1
+    assert "Error processing" not in caplog.text

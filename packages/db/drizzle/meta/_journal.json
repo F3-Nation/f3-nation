@@ -267,6 +267,13 @@
       "when": 1794538891362,
       "tag": "0037_auth_verification_sends",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794571598817,
+      "tag": "0038_slack_token_rotation",
+      "breakpoints": true
     }
   ]
 }

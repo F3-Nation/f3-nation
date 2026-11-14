@@ -461,9 +461,9 @@ jobs:
       - run: pnpm test ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
       # The authenticated service pull above already supplies this image to
       # Docker; the disposable fixture uses the same digest and its own database.
-      - name: Verify Slack identity migration and concurrency
+      - name: Verify Slack identity and token refresh against Postgres
         working-directory: apps/slackbot
-        run: uv run pytest tests/utilities/test_create_user_postgres.py
+        run: uv run pytest tests/utilities/test_create_user_postgres.py tests/utilities/slack_tokens/test_refresh_postgres.py tests/utilities/slack_tokens/test_store_postgres.py tests/scripts/test_import_slack_installations.py tests/utilities/test_get_region_record_postgres.py
         env:
           SLACKBOT_POSTGRES_TESTS: "1"
           SLACKBOT_POSTGRES_IMAGE: ghcr.io/f3-nation/f3-nation-ci-postgres@sha256:55d810d8c285ca9aa56d4b8594f31e2b09b300ed64c9b072980216d33fb6f449

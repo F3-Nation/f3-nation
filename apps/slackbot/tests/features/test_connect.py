@@ -15,11 +15,9 @@ def test_connection_request_metadata_does_not_include_bot_token(monkeypatch):
     sent = {}
     monkeypatch.setattr(connect, "LOCAL_DEVELOPMENT", False)
 
-    def fake_web_client(**kwargs):
-        return MagicMock(chat_postMessage=lambda **args: sent.update(args))
-
-    monkeypatch.setattr(connect, "WebClient", fake_web_client)
-    monkeypatch.setenv("ADMIN_BOT_TOKEN", "admin-token")
+    admin_client = MagicMock(chat_postMessage=lambda **args: sent.update(args))
+    monkeypatch.setattr(connect, "slack_client_for_team", lambda team_id: admin_client)
+    monkeypatch.setenv("ADMIN_TEAM_ID", "T_ADMIN")
     monkeypatch.setenv("ADMIN_CHANNEL_ID", "C_ADMIN")
     client = MagicMock()
     client.users_info.return_value = {"user": {"profile": {"display_name": "Pax"}}}
@@ -74,7 +72,7 @@ def test_deny_uses_current_db_token_and_ignores_legacy_metadata_token(monkeypatc
     lookup = MagicMock(return_value=requester_space)
     client_factory = MagicMock()
     monkeypatch.setattr(connect, "_get_requester_slack_space", lookup)
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     body = {
         "message": {
             "metadata": {
@@ -90,8 +88,7 @@ def test_deny_uses_current_db_token_and_ignores_legacy_metadata_token(monkeypatc
     connect.handle_deny_connection(body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="TREQUESTER"))
 
     lookup.assert_called_once_with("TREQUESTER")
-    client_factory.assert_called_once()
-    assert client_factory.call_args.kwargs["token"] == "current-db-token"
+    client_factory.assert_called_once_with("TREQUESTER")
     client_factory.return_value.chat_postMessage.assert_called_once()
 
 
@@ -99,7 +96,7 @@ def test_deny_rejects_missing_or_invalid_workspace_without_using_legacy_token(mo
     lookup = MagicMock(return_value=None)
     client_factory = MagicMock()
     monkeypatch.setattr(connect, "_get_requester_slack_space", lookup)
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     body = {
         "message": {
             "metadata": {
@@ -161,8 +158,8 @@ def test_approve_uses_requester_workspace_client_without_admin_context(monkeypat
     monkeypatch.setattr(connect, "get_user", get_user)
     monkeypatch.setattr(connect, "update_local_region_records", MagicMock())
     client_factory = MagicMock()
-    monkeypatch.setattr(connect, "WebClient", client_factory)
-    monkeypatch.delenv("ADMIN_BOT_TOKEN", raising=False)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
+    monkeypatch.delenv("ADMIN_TEAM_ID", raising=False)
     body = {
         "user": {"id": "U_ADMIN"},
         "message": {
@@ -187,7 +184,7 @@ def test_approve_uses_requester_workspace_client_without_admin_context(monkeypat
         SlackSettings(team_id="TADMIN"),
     )
 
-    assert client_factory.call_args.kwargs["token"] == "current-db-token"
+    client_factory.assert_called_once_with("TREQUESTER")
     assert get_user.call_args.args[2] is client_factory.return_value
     assert client_factory.return_value.chat_postMessage.call_args.kwargs["channel"] == "U_REQUESTER"
 
@@ -205,7 +202,7 @@ def test_approve_rejects_unexpected_workspace_settings_before_database_writes(mo
     monkeypatch.setattr(connect.DbManager, "create_record", create_record)
     monkeypatch.setattr(connect.DbManager, "update_records", update_records)
     client_factory = MagicMock()
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     body = {
         "message": {
             "metadata": {
@@ -253,8 +250,8 @@ def test_approve_failure_feedback_uses_admin_client_and_does_not_write(monkeypat
     monkeypatch.setattr(connect.DbManager, "create_record", writes[0])
     monkeypatch.setattr(connect.DbManager, "update_records", writes[1])
     factory = MagicMock()
-    monkeypatch.setattr(connect, "WebClient", factory)
-    monkeypatch.setenv("ADMIN_BOT_TOKEN", "admin-workspace-token")
+    monkeypatch.setattr(connect, "slack_client_for_team", factory)
+    monkeypatch.setenv("ADMIN_TEAM_ID", "T_ADMIN")
     logger = MagicMock()
     body = {
         "user": {"id": "U_ADMIN"},
@@ -265,7 +262,7 @@ def test_approve_failure_feedback_uses_admin_client_and_does_not_write(monkeypat
     connect.handle_approve_connection(body, MagicMock(), logger, {}, SlackSettings(team_id="TADMIN"))
 
     logger.warning.assert_called_once_with(warning)
-    factory.assert_called_once_with(token="admin-workspace-token")
+    factory.assert_called_once_with("T_ADMIN")
     factory.return_value.chat_postEphemeral.assert_called_once()
     assert factory.return_value.chat_postEphemeral.call_args.kwargs["channel"] == "C_ADMIN"
     assert factory.return_value.chat_postEphemeral.call_args.kwargs["user"] == "U_ADMIN"
@@ -277,8 +274,8 @@ def test_approve_failure_feedback_uses_admin_client_and_does_not_write(monkeypat
 def test_approve_failure_feedback_skips_missing_channel_or_user(monkeypatch):
     monkeypatch.setattr(connect, "_get_requester_slack_space", MagicMock(return_value=None))
     factory = MagicMock()
-    monkeypatch.setattr(connect, "WebClient", factory)
-    monkeypatch.setenv("ADMIN_BOT_TOKEN", "admin-workspace-token")
+    monkeypatch.setattr(connect, "slack_client_for_team", factory)
+    monkeypatch.setenv("ADMIN_TEAM_ID", "T_ADMIN")
     body = {"message": {"metadata": {"event_payload": {"team_id": "TREQUESTER"}}}}
 
     connect.handle_approve_connection(body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="TADMIN"))
@@ -297,7 +294,7 @@ def test_approve_unlinked_requester_does_not_connect_workspace(monkeypatch):
     get_user = MagicMock(side_effect=UnlinkedSlackIdentityError())
     monkeypatch.setattr(connect, "get_user", get_user)
     client_factory = MagicMock()
-    monkeypatch.setattr(connect, "WebClient", client_factory)
+    monkeypatch.setattr(connect, "slack_client_for_team", client_factory)
     body = {
         "message": {"metadata": {"event_payload": {"team_id": "TREQUESTER", "user_id": "U_REQUESTER", "region_id": 7}}}
     }
@@ -312,3 +309,181 @@ def test_approve_unlinked_requester_does_not_connect_workspace(monkeypatch):
     db_manager.create_record.assert_not_called()
     db_manager.update_records.assert_not_called()
     client_factory.return_value.chat_postMessage.assert_not_called()
+
+
+def test_approve_without_installed_requester_client_notifies_admin_and_does_not_write(monkeypatch):
+    requester_space = SimpleNamespace(settings={"team_id": "TREQUESTER", "org_id": 1}, id=12)
+    monkeypatch.setattr(connect, "_get_requester_slack_space", MagicMock(return_value=requester_space))
+    monkeypatch.setattr(connect, "slack_client_for_team", MagicMock(return_value=None))
+    notify = MagicMock()
+    monkeypatch.setattr(connect, "_notify_admin_request_unverified", notify)
+    db_manager = MagicMock()
+    monkeypatch.setattr(connect, "DbManager", db_manager)
+    logger = MagicMock()
+    body = {"message": {"metadata": {"event_payload": {"team_id": "TREQUESTER", "region_id": 7}}}}
+
+    connect.handle_approve_connection(body, MagicMock(), logger, {}, SlackSettings(team_id="TADMIN"))
+
+    notify.assert_called_once()
+    logger.warning.assert_called_once_with("Unable to resolve requester workspace credentials for connection approval.")
+    db_manager.create_record.assert_not_called()
+    db_manager.update_records.assert_not_called()
+
+
+def _approval_body():
+    return {
+        "user": {"id": "U_ADMIN"},
+        "container": {"channel_id": "C_ADMIN", "message_ts": "123.456"},
+        "message": {
+            "metadata": {
+                "event_payload": {
+                    "team_id": "TREQUESTER",
+                    "user_id": "U_REQUESTER",
+                    "region_id": 7,
+                    "region_name": "Region 7",
+                    "migration_date": "2026-10-23",
+                }
+            }
+        },
+    }
+
+
+def _patch_approval_flow(monkeypatch, requester_client):
+    requester_space = SimpleNamespace(settings={"team_id": "TREQUESTER", "org_id": 1}, id=12)
+    monkeypatch.setattr(connect, "_get_requester_slack_space", lambda team: requester_space)
+    monkeypatch.setattr(connect.DbManager, "get", MagicMock(return_value=SimpleNamespace(id=7)))
+    monkeypatch.setattr(connect.DbManager, "find_first_record", MagicMock(return_value=SimpleNamespace(id=3)))
+    monkeypatch.setattr(connect.DbManager, "create_record", MagicMock())
+    monkeypatch.setattr(connect.DbManager, "update_records", MagicMock())
+    monkeypatch.setattr(connect, "get_user", MagicMock(return_value=SimpleNamespace(user_id=22)))
+    monkeypatch.setattr(connect, "update_local_region_records", MagicMock())
+    clients = {"TREQUESTER": requester_client}
+    return clients
+
+
+def test_admin_notification_uses_admin_team_client(monkeypatch):
+    monkeypatch.setattr(connect, "LOCAL_DEVELOPMENT", False)
+    monkeypatch.setenv("ADMIN_TEAM_ID", "T_ADMIN")
+    monkeypatch.setenv("ADMIN_CHANNEL_ID", "C_ADMIN_POSTS")
+    admin_client = MagicMock()
+    requester_client = MagicMock()
+    clients = {"T_ADMIN": admin_client, "TREQUESTER": requester_client}
+    monkeypatch.setattr(connect, "slack_client_for_team", lambda team_id, **kw: clients.get(team_id))
+    client = MagicMock()
+    client.users_info.return_value = {"user": {"profile": {"display_name": "Pax"}}}
+    body = {
+        "team": {"id": "TREQUESTER", "domain": "requester"},
+        "user": {"id": "U_REQUESTER"},
+        "view": {
+            "id": "V_CURRENT",
+            "previous_view_id": "V_PREVIOUS",
+            "state": {
+                "values": {
+                    connect.SELECT_REGION: {
+                        connect.SELECT_REGION: {
+                            "type": "external_select",
+                            "selected_option": {"value": "42", "text": {"type": "plain_text", "text": "Region 42"}},
+                        }
+                    },
+                    connect.MIGRATION_DATE: {
+                        connect.MIGRATION_DATE: {"type": "datepicker", "selected_date": "2026-10-23"}
+                    },
+                }
+            },
+        },
+    }
+
+    connect.handle_existing_region_selection(
+        body, client, MagicMock(), {}, SlackSettings(team_id="TREQUESTER", bot_token="x")
+    )
+
+    admin_client.chat_postMessage.assert_called_once()
+    assert admin_client.chat_postMessage.call_args.kwargs["channel"] == "C_ADMIN_POSTS"
+    requester_client.chat_postMessage.assert_not_called()
+
+
+def test_admin_team_unset_skips_and_logs(monkeypatch):
+    monkeypatch.setattr(connect, "LOCAL_DEVELOPMENT", False)
+    monkeypatch.delenv("ADMIN_TEAM_ID", raising=False)
+    monkeypatch.setenv("ADMIN_CHANNEL_ID", "C_ADMIN_POSTS")
+    factory = MagicMock()
+    monkeypatch.setattr(connect, "slack_client_for_team", factory)
+    logger = MagicMock()
+    client = MagicMock()
+    client.users_info.return_value = {"user": {"profile": {"display_name": "Pax"}}}
+    body = {
+        "team": {"id": "TREQUESTER", "domain": "requester"},
+        "user": {"id": "U_REQUESTER"},
+        "view": {
+            "id": "V_CURRENT",
+            "previous_view_id": "V_PREVIOUS",
+            "state": {
+                "values": {
+                    connect.SELECT_REGION: {
+                        connect.SELECT_REGION: {
+                            "type": "external_select",
+                            "selected_option": {"value": "42", "text": {"type": "plain_text", "text": "Region 42"}},
+                        }
+                    },
+                    connect.MIGRATION_DATE: {
+                        connect.MIGRATION_DATE: {"type": "datepicker", "selected_date": "2026-10-23"}
+                    },
+                }
+            },
+        },
+    }
+
+    connect.handle_existing_region_selection(
+        body, client, logger, {}, SlackSettings(team_id="TREQUESTER", bot_token="x")
+    )
+
+    factory.assert_not_called()
+    logger.warning.assert_called_once_with(
+        "slack.token.admin_team_missing",
+        extra={"json_fields": {"event": "slack.token.admin_team_missing", "reason": "unset"}},
+    )
+    client.views_update.assert_called_once()
+
+
+def test_admin_team_without_row_logs_no_row(monkeypatch):
+    monkeypatch.setenv("ADMIN_TEAM_ID", "T_ADMIN")
+    monkeypatch.setattr(connect, "slack_client_for_team", lambda team_id, **kw: None)
+    logger = MagicMock()
+
+    assert connect._admin_client(logger) is None
+
+    logger.warning.assert_called_once_with(
+        "slack.token.admin_team_missing",
+        extra={"json_fields": {"event": "slack.token.admin_team_missing", "reason": "no_row", "team_id": "T_ADMIN"}},
+    )
+
+
+def test_approved_admin_message_update_uses_admin_team_client(monkeypatch):
+    requester_client = MagicMock()
+    _patch_approval_flow(monkeypatch, requester_client)
+    admin_client = MagicMock()
+    clients = {"T_ADMIN": admin_client, "TREQUESTER": requester_client}
+    monkeypatch.setattr(connect, "slack_client_for_team", lambda team_id, **kw: clients.get(team_id))
+    monkeypatch.setenv("ADMIN_TEAM_ID", "T_ADMIN")
+
+    connect.handle_approve_connection(_approval_body(), MagicMock(), MagicMock(), {}, SlackSettings(team_id="TADMIN"))
+
+    admin_client.chat_update.assert_called_once()
+    assert admin_client.chat_update.call_args.kwargs["channel"] == "C_ADMIN"
+    assert admin_client.chat_update.call_args.kwargs["ts"] == "123.456"
+    requester_client.chat_update.assert_not_called()
+
+
+def test_approved_admin_team_unset_skips_message_update(monkeypatch):
+    requester_client = MagicMock()
+    _patch_approval_flow(monkeypatch, requester_client)
+    monkeypatch.setattr(
+        connect, "slack_client_for_team", lambda team_id, **kw: requester_client if team_id == "TREQUESTER" else None
+    )
+    monkeypatch.delenv("ADMIN_TEAM_ID", raising=False)
+    update_local = connect.update_local_region_records
+
+    connect.handle_approve_connection(_approval_body(), MagicMock(), MagicMock(), {}, SlackSettings(team_id="TADMIN"))
+
+    requester_client.chat_update.assert_not_called()
+    update_local.assert_called_once()

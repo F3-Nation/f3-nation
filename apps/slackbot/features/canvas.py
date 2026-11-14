@@ -11,6 +11,7 @@ from utilities import storage
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_position_users
 from utilities.helper_functions import current_date_cst, safe_get
+from utilities.slack_tokens.client import slack_client_for_team
 
 
 def create_special_events_blocks(events: List[EventInstance], slack_settings: SlackSettings) -> str:
@@ -109,11 +110,14 @@ def update_all_canvases():
     for region in regions:
         slack_settings = SlackSettings(**region.slack_space.settings)
         if slack_settings.canvas_channel and slack_settings.special_events_enabled:
-            client = WebClient(token=slack_settings.bot_token)
             try:
+                client = slack_client_for_team(slack_settings.team_id)
+                if client is None:
+                    Logger("logger").error(f"No Slack installation for region {region.name}; skipping canvas update")
+                    continue
                 update_canvas({}, client, Logger("logger"), {}, slack_settings)
             except Exception as e:
-                Logger("logger").error(f"Error updating canvas for region {region.name}: {e}")
+                Logger("logger").error(f"Error updating canvas for region {region.id}: {type(e).__name__}")
 
 
 if __name__ == "__main__":

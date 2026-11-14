@@ -39,6 +39,7 @@ from utilities.helper_functions import (
 )
 from utilities.routing import MAIN_MAPPER
 from utilities.slack.actions import LOADING_ID
+from utilities.slack_tokens.crypto import check_encryption_key
 
 
 def setup_debugger():
@@ -83,6 +84,7 @@ if LOCAL_DEVELOPMENT:
 else:
     handler = StructuredLogHandler()
     setup_logging(handler, log_level=logging_level)
+check_encryption_key()
 
 _app = None
 _app_lock = threading.Lock()

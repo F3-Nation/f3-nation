@@ -1,7 +1,5 @@
 import hashlib
 import json
-import os
-import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
@@ -12,71 +10,22 @@ from types import SimpleNamespace
 import pytest
 from f3_data_models import utils as data_model_utils
 from f3_data_models.models import Base, SlackUser, User
-from sqlalchemy import create_engine, event, inspect, select, text
-from sqlalchemy.engine import URL
+from sqlalchemy import event, inspect, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
+from tests import postgres_fixture
 from utilities import helper_functions
 
-POSTGRES_IMAGE = os.environ.get(
-    "SLACKBOT_POSTGRES_IMAGE",
-    "postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280",
-)
-pytestmark = pytest.mark.skipif(
-    os.environ.get("SLACKBOT_POSTGRES_TESTS") != "1",
-    reason="set SLACKBOT_POSTGRES_TESTS=1 to run disposable-Postgres integration tests",
-)
+pytestmark = postgres_fixture.requires_postgres
+isolated_postgres = postgres_fixture.isolated_postgres
 
 
 @pytest.fixture
-def isolated_postgres(monkeypatch):
+def postgres_schema():
     assert helper_functions.session_scope is data_model_utils.session_scope
-    container_id = None
-    engine = None
-    try:
-        container_id = subprocess.check_output(
-            [
-                "docker",
-                "create",
-                "--tmpfs",
-                "/var/lib/postgresql:rw",
-                "--publish",
-                "127.0.0.1::5432",
-                "--env",
-                "POSTGRES_USER=slackbot_test",
-                "--env",
-                "POSTGRES_PASSWORD=slackbot_test",
-                "--env",
-                "POSTGRES_DB=slackbot_test",
-                POSTGRES_IMAGE,
-            ],
-            text=True,
-        ).strip()
-        subprocess.run(["docker", "start", container_id], check=True, capture_output=True, text=True)
-        published_port = subprocess.check_output(["docker", "port", container_id, "5432/tcp"], text=True).strip()
-        port = int(published_port.rsplit(":", maxsplit=1)[1])
-        url = URL.create(
-            "postgresql+psycopg2",
-            username="slackbot_test",
-            password="slackbot_test",
-            host="127.0.0.1",
-            port=port,
-            database="slackbot_test",
-        )
-        engine = create_engine(url, pool_pre_ping=True)
 
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                with engine.connect() as connection:
-                    connection.execute(text("SELECT 1"))
-                break
-            except Exception:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.2)
-
+    def create(engine):
         with engine.begin() as connection:
             connection.execute(text("CREATE EXTENSION citext"))
             # The helper only needs the referenced key; avoid creating the full application schema.
@@ -86,16 +35,9 @@ def isolated_postgres(monkeypatch):
             connection.exec_driver_sql("CREATE TABLE orgs_x_slack_spaces (org_id integer, slack_space_id integer)")
         Base.metadata.tables["users"].create(engine)
         Base.metadata.tables["slack_users"].create(engine)
-
-        session_factory = sessionmaker(bind=engine)
-        monkeypatch.setattr(data_model_utils, "get_session", lambda backend=None: session_factory())
         helper_functions.SLACK_USERS.clear()
-        yield engine
-    finally:
-        if engine is not None:
-            engine.dispose()
-        if container_id:
-            subprocess.run(["docker", "rm", "--force", container_id], check=True, capture_output=True, text=True)
+
+    return create
 
 
 def _assert_single_synthetic_link(engine, slack_id, slack_user_id, expected_user_id=None, expected_flags=False):

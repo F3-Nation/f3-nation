@@ -38,10 +38,10 @@ declare -A SECRET_MAP=(
   [DATABASE_PASSWORD]="database-password"
   [SECRET_ADMIN_PASSWORD]="secret-admin-password"
   [PASSWORD_ENCRYPT_KEY]="password-encrypt-key"
+  [SLACK_TOKEN_ENCRYPTION_KEY]="slack-token-encryption-key"
   [F3_API_KEY]="f3-api-key"
   [MAP_REVALIDATION_KEY]="map-revalidation-key"
   [STRAVA_CLIENT_SECRET]="strava-client-secret"
-  [ADMIN_BOT_TOKEN]="admin-bot-token"
   [EMAIL_SERVER]="email-server"
 )
 
@@ -61,6 +61,7 @@ ENV_FILE_VARS=(
   DATABASE_SCHEMA
   ACHIEVEMENTS_ALPHA_TESTING_ORG_IDS
   ADMIN_CHANNEL_ID
+  ADMIN_TEAM_ID
   STRAVA_CLIENT_ID
   HOME_REGION_NUDGE_DAY
   HOME_REGION_NUDGE_HOUR
@@ -125,6 +126,12 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+# The env file is the only source for these values: a var it omits stays unset
+# rather than keeping a value inherited from the caller's shell.
+for var in "${ENV_FILE_VARS[@]}" "${!SECRET_MAP[@]}"; do
+  unset "$var"
+done
+
 # Safely parse the env file without sourcing to prevent execution of arbitrary shell code
 while IFS= read -r line || [[ -n "$line" ]]; do
   # Skip blank lines and comments
@@ -141,6 +148,48 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   fi
 done < "$ENV_FILE"
 unset _env_key _env_val
+
+# Validate SLACK_TOKEN_ENCRYPTION_KEY before any cloud call. A pushed bad value
+# makes every stored refresh token unreadable. Each comma-separated entry must
+# have a Fernet key's shape (32 bytes, url-safe base64); a placeholder fails.
+# Empty leaves the existing secret unchanged.
+print_token_key_hint() {
+  echo "Generate one with:"
+  echo "  python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+}
+validate_token_encryption_key() {
+  local value="${SLACK_TOKEN_ENCRYPTION_KEY:-}" entry
+  local -a entries
+  [[ -z "$value" ]] && return 0
+  IFS=',' read -ra entries <<<"$value"
+  [[ "$value" == *, ]] && entries+=("")
+  for entry in "${entries[@]}"; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"
+    entry="${entry%"${entry##*[![:space:]]}"}"
+    if [[ ! "$entry" =~ ^[A-Za-z0-9_-]{43}=$ ]]; then
+      echo "Error: SLACK_TOKEN_ENCRYPTION_KEY must be comma-separated Fernet keys (44-char url-safe base64)."
+      print_token_key_hint
+      return 1
+    fi
+  done
+}
+validate_token_encryption_key || exit 1
+
+# An empty key keeps the existing secret, so one must already exist: without it
+# the IAM grant and the Cloud Run secret reference below would both fail.
+if [[ -z "${SLACK_TOKEN_ENCRYPTION_KEY:-}" ]]; then
+  if ! token_key_metadata="$(gcloud secrets describe slack-token-encryption-key \
+    --project "$PROJECT" --format='value(name)' 2>&1)"; then
+    if grep -qE '^ERROR: \(gcloud\.secrets\.describe\) NOT_FOUND: ' <<<"$token_key_metadata"; then
+      echo "Error: SLACK_TOKEN_ENCRYPTION_KEY is required: $PROJECT has no slack-token-encryption-key secret yet."
+      print_token_key_hint
+    else
+      echo "Error: Failed to inspect secret slack-token-encryption-key — aborting."
+    fi
+    exit 1
+  fi
+  unset token_key_metadata
+fi
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
@@ -187,6 +236,11 @@ push_secret() {
 
   echo "  UPDATE: $secret_id"
   printf '%s' "$value" | gcloud secrets versions add "$secret_id" --project "$project" --data-file=-
+
+  # Earlier versions of the token encryption key are kept: a version holding a
+  # key that rows are still encrypted with is the only way to read them, and
+  # losing it forces every rotating workspace to reinstall.
+  [[ "$secret_id" == "slack-token-encryption-key" ]] && return 0
 
   # Delete all previous versions (keep only the one we just created)
   latest="$(gcloud secrets versions list "$secret_id" --project "$project" \
@@ -301,10 +355,16 @@ for var in "${!PLAIN_VARS[@]}"; do
 done
 
 # Per-environment env vars (from env file, not secrets)
+# --update-env-vars never removes a key, so an unset ADMIN_TEAM_ID goes to
+# --remove-env-vars, and ADMIN_BOT_TOKEN (replaced by ADMIN_TEAM_ID) leaves the
+# running service and job through --remove-secrets.
+REMOVE_ENV_VARS=()
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
   [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
+  [[ -z "$value" && "$var" == "ADMIN_TEAM_ID" ]] && REMOVE_ENV_VARS+=("$var")
 done
+REMOVE_SECRETS_ARG="ADMIN_BOT_TOKEN"
 
 # Deployment classification is derived from the selected target, never from
 # arbitrary values in the env file or the caller's shell.
@@ -340,11 +400,18 @@ join_dict_args() {
 UPDATE_ENV_VARS_ARG="$(join_dict_args "${UPDATE_ARGS[@]}")"
 UPDATE_SECRETS_ARG="$(join_dict_args "${SECRET_ARGS[@]}")"
 
+REMOVE_ENV_FLAGS=()
+if [[ ${#REMOVE_ENV_VARS[@]} -gt 0 ]]; then
+  REMOVE_ENV_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ENV_VARS[*]}")")
+fi
+
 gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
   --update-env-vars "$UPDATE_ENV_VARS_ARG" \
   --update-secrets "$UPDATE_SECRETS_ARG" \
+  --remove-secrets "$REMOVE_SECRETS_ARG" \
+  ${REMOVE_ENV_FLAGS[@]+"${REMOVE_ENV_FLAGS[@]}"} \
   --quiet
 
 if gcloud run jobs describe "$SCRIPTS_JOB_NAME" \
@@ -356,6 +423,8 @@ if gcloud run jobs describe "$SCRIPTS_JOB_NAME" \
     --region "$REGION" \
     --update-env-vars "$UPDATE_ENV_VARS_ARG" \
     --update-secrets "$UPDATE_SECRETS_ARG" \
+    --remove-secrets "$REMOVE_SECRETS_ARG" \
+    ${REMOVE_ENV_FLAGS[@]+"${REMOVE_ENV_FLAGS[@]}"} \
     --quiet
 else
   echo "WARNING: Cloud Run Job $SCRIPTS_JOB_NAME does not exist in $PROJECT; skipping job env update."

@@ -77,8 +77,7 @@ def test_saving_settings_stores_only_the_url(monkeypatch, saved, submitted, stor
 
 def test_approval_dm_sends_only_the_url_from_a_saved_share_message(monkeypatch):
     send = MagicMock()
-    monkeypatch.setattr(downrange, "_get_space_for_team", MagicMock(return_value=MagicMock(bot_token="xoxb")))
-    monkeypatch.setattr(downrange, "WebClient", MagicMock(return_value=send))
+    monkeypatch.setattr(downrange, "slack_client_for_team", MagicMock(return_value=send))
     body = {
         "message": {
             "metadata": {"event_payload": {"requester_team_id": "T_REQUESTER", "requester_user_id": "U1"}},
@@ -97,8 +96,7 @@ def test_approval_dm_sends_only_the_url_from_a_saved_share_message(monkeypatch):
 
 def test_approval_with_no_url_in_the_saved_link_warns_the_admin_and_sends_nothing(monkeypatch):
     requester_client = MagicMock()
-    monkeypatch.setattr(downrange, "_get_space_for_team", MagicMock(return_value=MagicMock(bot_token="xoxb")))
-    monkeypatch.setattr(downrange, "WebClient", MagicMock(return_value=requester_client))
+    monkeypatch.setattr(downrange, "slack_client_for_team", MagicMock(return_value=requester_client))
     admin_client = MagicMock()
     body = {
         "message": {
@@ -159,7 +157,7 @@ def test_region_select_restores_admin_form_with_only_a_valid_url(monkeypatch, sa
         "get_user",
         MagicMock(return_value=SimpleNamespace(user_id=None, user_name="Admin", email=None)),
     )
-    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: (None, None, None))
+    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: (None, None))
     monkeypatch.setattr(
         downrange.DbManager,
         "get",
@@ -200,7 +198,7 @@ def test_region_select_keeps_only_the_url_from_a_typed_link(monkeypatch, typed, 
         "get_user",
         MagicMock(return_value=SimpleNamespace(user_id=None, user_name="Admin", email=None)),
     )
-    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: (None, None, None))
+    monkeypatch.setattr(downrange, "_get_target_region_info", lambda *_a: (None, None))
     monkeypatch.setattr(
         downrange.DbManager,
         "get",

@@ -22,7 +22,6 @@ from f3_data_models.models import (
     User,
 )
 from f3_data_models.utils import get_session
-from slack_sdk.web import WebClient
 from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy.orm import aliased
 
@@ -30,6 +29,7 @@ from features.calendar.event_instance import META_DO_NOT_SEND_AUTO_PREBLASTS
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import current_date_cst, safe_get
 from utilities.slack import actions, orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 MSG_TEMPLATE = "Hey there, {q_name}! I see you have an upcoming {event_name} Q on {event_date} at {event_ao}. Please click the button below to fill out the preblast form below to let everyone know what to expect. Thanks for leading!"  # noqa
 MSG_TEMPLATE_NOT_ABLE = " If you're not able to complete the form, I'll still send one out on your behalf."  # noqa
@@ -173,9 +173,14 @@ def send_preblast_reminders(force: bool = False):
         ):
             msg += MSG_TEMPLATE_NOT_ABLE
 
-        slack_bot_token = preblast.slack_settings.bot_token
-        if slack_bot_token and preblast.slack_user_id:
-            slack_client = WebClient(slack_bot_token)
+        slack_client = None
+        if preblast.slack_user_id:
+            try:
+                slack_client = slack_client_for_team(preblast.slack_settings.team_id)
+            except Exception as e:
+                print(f"Error getting Slack client for team {preblast.slack_settings.team_id}: {type(e).__name__}")
+                continue
+        if slack_client:
             blocks: List[orm.BaseBlock] = [
                 orm.SectionBlock(label=msg),
                 orm.ActionsBlock(
