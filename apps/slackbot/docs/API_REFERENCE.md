@@ -220,6 +220,10 @@ Individual occurrences of events (can be standalone or part of a series).
 
 ### user
 
+User responses omit every top-level `strava_*` metadata key, even with PII
+access. Profile writes supplying those keys fail with `BAD_REQUEST`. The
+Strava integration uses its server-only credential store, not these endpoints.
+
 | Method   | Path                     | Purpose                                              |
 | -------- | ------------------------ | ---------------------------------------------------- |
 | `GET`    | `/v1/user`               | List users (filter by `orgIds`, `roles`, `statuses`) |
@@ -238,8 +242,10 @@ For `POST /v1/user`, a key with its own administrator access to an existing
 member's current home region can correct that region without editing rights
 in the destination. The destination must be an active region with active
 ancestors. Role assignments and private fields keep their existing permission
-checks; a correction does not transfer roles or notify the member. A stale
-correction returns `409 CONFLICT`; reload the member before retrying. See the
+checks; a correction does not transfer roles or notify the member. If the
+member's record changes or is deleted while the correction is being processed,
+it returns `409 CONFLICT`; reload the member and retry. The API does not compare
+against a version the client read earlier. See the
 [home-region correction spec](../../../docs/specs/admin-user-home-region.md).
 
 ---

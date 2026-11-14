@@ -109,6 +109,8 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     useState<PhoneCountry>("US");
   const [emergencyNotes, setEmergencyNotes] = useState("");
 
+  const [regionsLoaded, setRegionsLoaded] = useState(false);
+  const [regionError, setRegionError] = useState("");
   const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(false);
   const [registrationComplete, setRegistrationComplete] = useState(false);
@@ -141,10 +143,25 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     }
   }
 
+  if (
+    regionsLoaded &&
+    homeRegionId !== "" &&
+    !regions.some((region) => region.id === homeRegionId)
+  ) {
+    setHomeRegionId("");
+    setRegionSearch("");
+    setRegionError(
+      "That region is no longer available. Please choose another.",
+    );
+  }
+
   useEffect(() => {
     fetch("/api/regions")
       .then((res) => res.json())
-      .then((data: Region[]) => setRegions(data))
+      .then((data: Region[]) => {
+        setRegions(data);
+        setRegionsLoaded(true);
+      })
       .catch(() => {
         /* regions are optional */
       });
@@ -163,6 +180,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
 
     setLoading(true);
     setError("");
+    setRegionError("");
 
     if (!firstName.trim() || !lastName.trim()) {
       setError("First name and last name are required.");
@@ -213,6 +231,19 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
         };
+        if (
+          res.status === 400 &&
+          data.error ===
+            "That region is no longer available. Please choose another."
+        ) {
+          setRegions((choices) =>
+            choices.filter((region) => region.id !== homeRegionId),
+          );
+          setHomeRegionId("");
+          setRegionSearch("");
+          setRegionError(data.error);
+          return;
+        }
         setError(data.error ?? "Registration failed. Please try again.");
         // A rejected code can't be fixed from this form: keep the answers
         // for this tab and offer a fresh code.
@@ -373,12 +404,21 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
             <RegionPicker
               regions={regions}
               value={homeRegionId}
-              onChange={setHomeRegionId}
+              onChange={(value) => {
+                setHomeRegionId(value);
+                setRegionError("");
+              }}
               search={regionSearch}
               onSearchChange={setRegionSearch}
               inputClass={inputClass}
               placeholder="Search for a region (optional)"
             />
+
+            {regionError && (
+              <p role="alert" className="text-base text-destructive">
+                {regionError}
+              </p>
+            )}
 
             <div>
               <PhoneField

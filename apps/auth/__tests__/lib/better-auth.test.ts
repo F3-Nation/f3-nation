@@ -262,7 +262,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     // auth URL, and the resource indicator sets aud.
     expect(payload.iss).toBe(ISSUER);
     expect([payload.aud].flat()).toContain(ISSUER);
-    expect(typeof payload.client_id).toBe("string");
+    expect(payload.client_id).toBe(client.client_id);
     expect(header.alg).toBe("RS256");
 
     // id_token issuance, matching apps/auth/src/lib/oauth.ts's

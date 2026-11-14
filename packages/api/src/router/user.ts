@@ -1,4 +1,5 @@
 import { getTableColumns } from "drizzle-orm";
+import { rejectStravaMetadata } from "../lib/user-metadata";
 import { and, eq, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
@@ -334,7 +335,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Create or update user",
       description:
-        "Create a new user or update an existing one, including role assignments for organizations. Administrators of an existing member's current home region may correct it to another active region without destination editing rights; API keys use only their own roles. Changed non-null home regions must be active regions with active ancestors. Administrator corrections send no member notifications. Stale source-administrator corrections return CONFLICT. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "Create a new user or update an existing one, including role assignments for organizations. Administrators of an existing member's current home region may correct it to another active region without destination editing rights; API keys use only their own roles. Changed non-null home regions must be active regions with active ancestors. Administrator corrections send no member notifications. A source-administrator correction returns CONFLICT if the member row changes or is deleted during the request. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
     })
     .output(
       UserSelectSchema.partial({
@@ -358,11 +359,14 @@ export const userRouter = {
           .record(z.string(), z.unknown())
           .nullable()
           .optional()
-          .describe("User metadata"),
+          .describe(
+            "User metadata. Top-level strava_* keys are rejected with BAD_REQUEST.",
+          ),
       }),
     )
     .handler(async ({ context: ctx, input }) => {
       if (!ctx.session) throw new ORPCError("UNAUTHORIZED");
+      rejectStravaMetadata(input.meta);
       // emailVerified is set by the sign-in flow, never by callers.
       const { roles: rawRoles, emailVerified: _emailVerified, ...rest } = input;
       const roles = rawRoles as RoleInput[];

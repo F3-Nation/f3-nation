@@ -666,10 +666,16 @@ describe("AdminUsersModal", () => {
       await screen.findByRole("button", { name: "Confirm change" }),
     );
     await waitFor(() => expect(mocks.byId).toHaveBeenCalledTimes(2));
+    expect(toast.error).toHaveBeenCalledWith(
+      "This profile changed. Reloading the latest values replaces your unsaved edits.",
+    );
     await waitFor(() =>
       expect(
         screen.getByLabelText<HTMLSelectElement>("Home region picker").value,
       ).toBe("30"),
+    );
+    expect(toast.error).not.toHaveBeenCalledWith(
+      "Unable to reload this member. Close and reopen the form before trying again.",
     );
     expect(mocks.crupdate).toHaveBeenCalledTimes(1);
   });
@@ -686,6 +692,11 @@ describe("AdminUsersModal", () => {
       await screen.findByRole("button", { name: "Confirm change" }),
     );
     await waitFor(() => expect(mocks.byId).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Unable to reload this member. Close and reopen the form before trying again.",
+      ),
+    );
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Unable to load this member",
     );

@@ -32,8 +32,8 @@ the correction event records who made the change.
 - **AC-1** — GIVEN an existing member homed in region A and either a signed-in
   person or an API key with its own administrator access to A, WHEN that caller
   saves active region B as the member's home region, THEN the persisted home region is B even without
-  editing rights in B. Administrators of an ancestor organization
-  (area, sector or nation) also qualify through existing role inheritance.
+  editing rights in B. Administrators of any ancestor organization also
+  qualify through existing role inheritance.
 - **AC-2** — GIVEN an administrator with no administrator access to the member's
   current home region, WHEN they attempt to use this exception, THEN the request
   is rejected and the member's record is unchanged.

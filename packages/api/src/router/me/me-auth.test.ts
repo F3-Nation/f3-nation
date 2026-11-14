@@ -15,6 +15,7 @@ import {
 
 const mocks = vi.hoisted(() => {
   vi.stubEnv("AUTH_TRUSTED_ISSUERS", "https://auth.example.test");
+  vi.stubEnv("AUTH_TRUSTED_CLIENT_IDS", "f3-me-test");
   return { key: vi.fn(), limit: vi.fn(), warn: vi.fn(), error: vi.fn() };
 });
 
@@ -140,7 +141,7 @@ describe("Personal operations authentication", () => {
       expires: string,
       privateKey = pair.privateKey,
     ) =>
-      new SignJWT({ token_use: tokenUse })
+      new SignJWT({ token_use: tokenUse, client_id: "f3-me-test" })
         .setProtectedHeader({ alg: "RS256" })
         .setIssuer("https://auth.example.test")
         .setSubject(String(userId))

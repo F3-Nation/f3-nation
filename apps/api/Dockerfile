@@ -3,7 +3,7 @@ ARG TURBO_VERSION=2
 # Node 25+ images no longer bundle Corepack; install it so pnpm comes from
 # the root packageManager pin (version and hash).
 ARG COREPACK_VERSION=0.36.0
-FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS builder
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -21,7 +21,7 @@ COPY . .
 RUN turbo prune f3-api --docker
 
 # ---------- Stage 2: Install + bundle ----------
-FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS installer
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS installer
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -65,7 +65,7 @@ RUN cp -r apps/api/dist /bundle && \
 # Boots the bundle in the runner's layout and checks /health,
 # /docs/openapi.json, /favicon.ico and SIGTERM shutdown. BuildKit only builds
 # stages the target depends on, so the runner copies this stage's marker file.
-FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS smoke
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS smoke
 WORKDIR /app
 COPY --from=installer /bundle ./dist
 COPY --from=installer /app/apps/api/public ./public
@@ -73,7 +73,7 @@ COPY --from=installer /app/apps/api/scripts/smoke.mjs ./smoke.mjs
 RUN SKIP_ENV_VALIDATION=1 NODE_ENV=production node smoke.mjs && touch /tmp/smoke-ok
 
 # ---------- Stage 4: Production runner ----------
-FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS runner
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app

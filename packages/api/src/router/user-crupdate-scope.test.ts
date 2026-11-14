@@ -391,11 +391,17 @@ describe("user.crupdate org scoping", () => {
       await mockAuthWithSession(session);
       await createTestClient().user.crupdate({
         id: target.id,
+        f3Name: "Corrected",
+        email: `Corrected.Member.${target.id}@Example.com`,
         homeRegionId: regionB.id,
         roles: [{ orgId: regionB.id, roleName: "editor" }],
       });
       expect(mockDepthScan).toHaveBeenCalledWith(db);
-      expect((await readUser(target.id))?.homeRegionId).toBe(regionB.id);
+      expect(await readUser(target.id)).toMatchObject({
+        homeRegionId: regionB.id,
+        f3Name: "Corrected",
+        email: `corrected.member.${target.id}@example.com`,
+      });
       expect((await readUser(target.id))?.meta).toEqual(
         optOut ? { home_region_nudge_opt_out: true } : null,
       );
