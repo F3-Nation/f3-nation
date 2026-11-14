@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import {
   afterEach,
   assert,
@@ -18,6 +19,7 @@ import {
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
+import * as cascadeService from "../lib/cascade-service";
 import { cachedMapData, clearMapDataCache } from "../lib/map-data-cache";
 import { notifyWebhooks } from "../lib/notify-webhooks";
 import { waitForEventRegionNotificationTasks } from "./event";
@@ -147,6 +149,27 @@ const seedEvent = async (
   return event!;
 };
 
+const seedInstance = async (
+  event: Awaited<ReturnType<typeof seedEvent>>,
+  startDate = event.startDate,
+) => {
+  const [instance] = await db
+    .insert(schema.eventInstances)
+    .values({
+      name: event.name,
+      orgId: event.orgId,
+      locationId: event.locationId,
+      seriesId: event.id,
+      startDate,
+      isActive: true,
+      isPrivate: false,
+      highlight: false,
+    })
+    .returning();
+  assert(instance);
+  return instance;
+};
+
 const publicEvent = async (id: number) => {
   const rows = await readMap();
   return rows.flatMap((row) => row[6]).find((event) => event[0] === id);
@@ -268,6 +291,116 @@ describe("event mutation map cache", () => {
       isActive: false,
     });
     expect(await publicEvent(event.id)).toBeUndefined();
+  });
+
+  it.each(["cascade", "commit"] as const)(
+    "rolls back a series deletion and preserves cached data on %s failure",
+    async (failure) => {
+      const input = await fixture();
+      const event = await seedEvent(input, "monday");
+      const instance = await seedInstance(event);
+      const before = await readMap();
+      await cachedMapData("delete-rollback-probe", () =>
+        Promise.resolve("retained"),
+      );
+      const injectedError = new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "Synthetic deletion failure",
+      });
+      if (failure === "cascade") {
+        const cascade = cascadeService.softDeleteFutureInstancesForSeries;
+        vi.spyOn(
+          cascadeService,
+          "softDeleteFutureInstancesForSeries",
+        ).mockImplementationOnce(async (...args) => {
+          await cascade(...args);
+          throw injectedError;
+        });
+      } else {
+        assert(global.db);
+        const database = global.db;
+        const transaction = database.transaction.bind(database);
+        vi.spyOn(database, "transaction").mockImplementationOnce(
+          (callback, config) =>
+            transaction(async (tx) => {
+              await callback(tx);
+              throw injectedError;
+            }, config),
+        );
+      }
+
+      await expect(client.event.delete({ id: event.id })).rejects.toMatchObject(
+        {
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Synthetic deletion failure",
+        },
+      );
+      const [savedEvent] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      const [savedInstance] = await db
+        .select()
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, instance.id));
+      expect(savedEvent).toEqual(event);
+      expect(savedInstance).toEqual(instance);
+      expect(
+        await cachedMapData("delete-rollback-probe", () =>
+          Promise.resolve("cleared"),
+        ),
+      ).toBe("retained");
+      expect(notifyWebhooks).not.toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      clearMapDataCache();
+      expect(await readMap()).toEqual(before);
+    },
+  );
+
+  it("commits series deletion with current instances and then refreshes map data", async () => {
+    const input = await fixture();
+    const event = await seedEvent(input, "monday");
+    const current = await seedInstance(event);
+    const future = await seedInstance(event, "2099-01-01");
+    const past = await seedInstance(event, "2000-01-01");
+    const otherEvent = await seedEvent(input, "monday");
+    const otherInstance = await seedInstance(otherEvent);
+    expect((await publicEvent(event.id))?.[1]).toBe(input.name);
+
+    expect(await client.event.delete({ id: event.id })).toEqual({
+      eventId: event.id,
+    });
+    const [savedEvent] = await db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, event.id));
+    expect(savedEvent?.isActive).toBe(false);
+    for (const instance of [current, future]) {
+      const [saved] = await db
+        .select()
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, instance.id));
+      expect({ ...saved, updated: instance.updated }).toEqual({
+        ...instance,
+        isActive: false,
+      });
+    }
+    for (const instance of [past, otherInstance]) {
+      const [saved] = await db
+        .select()
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, instance.id));
+      expect(saved).toEqual(instance);
+    }
+    expect(await publicEvent(event.id)).toBeUndefined();
+    expect((await publicEvent(otherEvent.id))?.[1]).toBe(input.name);
+    expect(notifyWebhooks).toHaveBeenCalledExactlyOnceWith({
+      action: "map.deleted",
+      eventId: event.id,
+    });
+    expect(globalThis.fetch).toHaveBeenCalledExactlyOnceWith(
+      "https://map.example.test/api/revalidate",
+      { method: "POST", headers: { "x-api-key": "synthetic-map-key" } },
+    );
   });
 
   it("still removes a deleted one-off event from the cached dataset", async () => {
