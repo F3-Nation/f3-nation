@@ -236,10 +236,10 @@ different agents, so match the signature, not a particular model name.
 Keep feedback from bot **reviewers** — AI code-review bots (CodeRabbit, Copilot, Codex, adversarial
 review workflows) raise real findings. Drop only noise: CI/status/coverage summaries,
 dependency-bot and release-bot chatter, empty review bodies, standalone APPROVED reviews with no
-comment, and this skill's own signed replies — a review body or conversation comment that ends
-with a `_written by …_` signature, was posted by the PR author's or the signed-in `gh` account,
-and responds to an earlier comment or thread. A signed comment that raises something new is
-feedback. The rule above still counts those replies as evidence that a comment is addressed. A
+comment, and this skill's own replies: a review body or conversation comment that would mark an
+earlier comment as already addressed under the rule for unresolvable feedback. A signed comment
+that raises something new is feedback. A dropped reply still counts as evidence that the comment
+it answers is addressed. A
 review with a non-empty body is feedback whatever its state — an APPROVED review that says "my
 only comment is…" is a question to answer, and a human COMMENTED review often holds numbered
 requests. Never drop a human review without reading its full body.
