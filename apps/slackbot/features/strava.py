@@ -1,5 +1,6 @@
 import copy
 import json
+import logging
 import os
 from datetime import datetime
 from logging import Logger
@@ -12,6 +13,12 @@ from flask import Request, Response
 from requests_oauthlib import OAuth2Session
 from slack_sdk import WebClient
 
+from infrastructure.strava_credentials import (
+    StravaNotConnectedError,
+    StravaOwnershipConflict,
+    get_access_token,
+    save_connection,
+)
 from utilities import constants
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import parse_rich_block, replace_user_channel_ids, safe_get
@@ -132,11 +139,11 @@ def build_strava_form(body: dict, client: WebClient, logger: Logger, context: di
             user: User = DbManager.get(User, slack_user_record.user_id)
             strava_recent_activities = get_strava_activities(user) if user else []
 
-            logger.info(f"recent activities found: {strava_recent_activities}")
+            logger.info("Strava activity lookup completed")
             if len(strava_recent_activities) == 0:
                 strava_blocks = [
                     slack_orm.SectionBlock(
-                        label="No recent activities found. Please log an activity on Strava first. If you have logged activities, it's possible that your access token may be expired. Please use the button below to reconnect to Strava.",  # noqa
+                        label="Strava is not connected or no recent activities were found. Log an activity in Strava, or use the button below to connect.",  # noqa
                     ),
                     *auth_blocks,
                 ]
@@ -239,6 +246,7 @@ def strava_exchange_token(request: Request) -> dict:
                 "code": code,
                 "grant_type": "authorization_code",
             },
+            timeout=10,
         )
         response.raise_for_status()
 
@@ -253,13 +261,34 @@ def strava_exchange_token(request: Request) -> dict:
             if user_id:
                 user: User = DbManager.get(User, user_id)
                 if user:
-                    user_meta = user.meta or {}
-                    user_meta["strava_athlete_id"] = response_json["athlete"]["id"]
-                    user_meta["strava_access_token"] = response_json["access_token"]
-                    user_meta["strava_refresh_token"] = response_json["refresh_token"]
-                    user_meta["strava_expires_at"] = response_json["expires_at"]
-                    DbManager.update_record(User, user_id, {User.meta: user_meta})
-                    msg = "Authorization successful! You can return to Slack."
+                    try:
+                        saved = save_connection(user.id, response_json)
+                    except StravaOwnershipConflict:
+                        return Response(
+                            json.dumps(
+                                {
+                                    "message": (
+                                        "This Strava account is already connected to another F3 profile. "
+                                        "The existing connection has not changed. Please contact support for help."
+                                    )
+                                }
+                            ),
+                            status=409,
+                            content_type="application/json",
+                        )
+                    except ValueError:
+                        logging.error("strava.exchange.invalid_provider_response")
+                        saved = False
+                    except RuntimeError:
+                        saved = False
+                    if saved:
+                        msg = "Authorization successful! You can return to Slack."
+                    else:
+                        return Response(
+                            json.dumps({"message": "Strava could not be connected right now. Please try again later."}),
+                            status=503,
+                            content_type="application/json",
+                        )
 
         r = {
             "statusCode": 200,
@@ -275,47 +304,33 @@ def strava_exchange_token(request: Request) -> dict:
         )
 
 
-def check_and_refresh_strava_token(user: User) -> str:
-    """Check if a Strava token is expired and refresh it if necessary."""
-    user_meta = user.meta or {}
-    access_token = user_meta.get("strava_access_token")
-    if not access_token:
-        return None
+def check_and_refresh_strava_token(user: User) -> str | None:
+    """Use the isolated connection, refreshing its complete bundle when expired."""
 
-    expires_at = user_meta.get("strava_expires_at", 0)
-    if (
-        expires_at < datetime.now().timestamp()
-        and os.environ.get(constants.STRAVA_CLIENT_ID)
-        and os.environ.get(constants.STRAVA_CLIENT_SECRET)
-    ):
-        request_url = "https://www.strava.com/api/v3/oauth/token"
+    def refresh(refresh_token: str) -> dict:
+        if not os.environ.get(constants.STRAVA_CLIENT_ID) or not os.environ.get(constants.STRAVA_CLIENT_SECRET):
+            raise ValueError("Strava application credentials are not configured")
         res = requests.post(
-            request_url,
+            "https://www.strava.com/api/v3/oauth/token",
             data={
-                "client_id": os.environ["STRAVA_CLIENT_ID"],
-                "client_secret": os.environ["STRAVA_CLIENT_SECRET"],
-                "refresh_token": user_meta.get("strava_refresh_token"),
+                "client_id": os.environ[constants.STRAVA_CLIENT_ID],
+                "client_secret": os.environ[constants.STRAVA_CLIENT_SECRET],
+                "refresh_token": refresh_token,
                 "grant_type": "refresh_token",
             },
+            timeout=10,
         )
         res.raise_for_status()
-        data = res.json()
-        access_token = data["access_token"]
-        user_meta["strava_access_token"] = data["access_token"]
-        user_meta["strava_refresh_token"] = data["refresh_token"]
-        user_meta["strava_expires_at"] = data["expires_at"]
-        DbManager.update_record(User, user.id, {User.meta: user_meta})
+        return res.json()
 
-    return access_token
+    return get_access_token(user.id, refresh)
 
 
 def get_strava_activities(user: User) -> List[Dict]:
     """Get a list of Strava activities for a user."""
-    user_meta = user.meta or {}
-    if not user_meta.get("strava_access_token"):
-        return []
-
     access_token = check_and_refresh_strava_token(user)
+    if access_token is None:
+        return []
     request_url = "https://www.strava.com/api/v3/athlete/activities"
     res = requests.get(request_url, headers={"Authorization": f"Bearer {access_token}"}, params={"per_page": 10})
     res.raise_for_status()
@@ -349,6 +364,10 @@ def update_strava_activity(
     user: User = DbManager.get(User, slack_user_record.user_id)
 
     access_token = check_and_refresh_strava_token(user)
+    if access_token is None:
+        raise StravaNotConnectedError(
+            "Your Strava connection was not found. Use the Strava button on the backblast to reconnect."
+        )
     request_url = f"https://www.strava.com/api/v3/activities/{strava_activity_id}"
     res = requests.put(
         request_url,
@@ -387,6 +406,10 @@ def get_strava_activity(
     user: User = DbManager.get(User, slack_user_record.user_id)
 
     access_token = check_and_refresh_strava_token(user)
+    if access_token is None:
+        raise StravaNotConnectedError(
+            "Your Strava connection was not found. Use the Strava button on the backblast to reconnect."
+        )
 
     request_url = f"https://www.strava.com/api/v3/activities/{strava_activity_id}"
     res = requests.get(

@@ -28,6 +28,7 @@ import { Client, Header } from "@acme/shared/common/enums";
 import { jwksFetchFailure } from "./jwks-failure";
 import { logError, logWarn } from "./logger";
 import { getProxiedClientIp } from "./proxied-client-ip";
+import { trustedClientIds } from "./trusted-client-ids";
 import { trustedIssuers } from "./trusted-issuers";
 
 type BaseContext = RequestHeadersPluginContext;
@@ -107,6 +108,16 @@ if (authIssuers.length === 0) {
   logWarn("api.auth.no_trusted_issuers", {
     message:
       "AUTH_TRUSTED_ISSUERS is empty, so no bearer JWT will be accepted. Set it to the auth server origin(s), e.g. http://localhost:3004 locally.",
+  });
+}
+
+// The first-party OAuth clients whose access tokens are accepted:
+// AUTH_TRUSTED_CLIENT_IDS. See ./trusted-client-ids.
+const authClientIds = trustedClientIds(process.env.AUTH_TRUSTED_CLIENT_IDS);
+if (authIssuers.length > 0 && authClientIds.size === 0) {
+  logWarn("api.auth.no_trusted_client_ids", {
+    message:
+      "AUTH_TRUSTED_CLIENT_IDS is empty, so no bearer JWT will be accepted. Set it to the OAuth client ids of the apps that call the API with user tokens, e.g. f3-me-local,f3-admin-local locally.",
   });
 }
 
@@ -442,7 +453,8 @@ const getSession = async ({ context }: { context: BaseContext }) => {
  * Verifies the token signature via the remote JWKS of the trusted issuer it
  * names, then fetches the user's roles from roles_x_users_x_org.
  * Returns null if no issuer is configured, the token names an issuer that
- * isn't trusted, or the token is invalid/expired.
+ * isn't trusted, the token is invalid/expired, or it was issued to an OAuth
+ * client that isn't in AUTH_TRUSTED_CLIENT_IDS.
  */
 async function getSessionFromJWT(token: string): Promise<Session | null> {
   if (authJwksByIssuer.size === 0) return null;
@@ -499,6 +511,17 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
   // client-side code, id_token_hint query strings, and logs) would work
   // as a fully privileged API credential here.
   if (payload.token_use !== "access") return null;
+
+  // A trusted issuer signs access tokens for every registered OAuth client,
+  // third-party apps included. Without this check, any app a user signs in
+  // to could call the API as that user, with their roles.
+  const clientId = payload.client_id;
+  if (typeof clientId !== "string" || !authClientIds.has(clientId)) {
+    logWarn("api.auth.client_not_trusted", {
+      clientId: typeof clientId === "string" ? clientId.slice(0, 200) : null,
+    });
+    return null;
+  }
 
   const userId = Number(payload.sub);
   if (!userId) return null;

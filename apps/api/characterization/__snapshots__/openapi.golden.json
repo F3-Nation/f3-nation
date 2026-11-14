@@ -11156,23 +11156,17 @@
                         "meta": {
                           "anyOf": [
                             {
-                              "anyOf": [
-                                {
-                                  "additionalProperties": {},
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "type": "object"
-                                },
-                                {
-                                  "type": "string"
-                                }
-                              ]
+                              "additionalProperties": {},
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "type": "object"
                             },
                             {
                               "type": "null"
                             }
-                          ]
+                          ],
+                          "description": "Profile metadata excluding top-level strava_* keys."
                         },
                         "phone": {
                           "anyOf": [
@@ -11401,7 +11395,7 @@
                   },
                   "meta": {
                     "additionalProperties": {},
-                    "description": "JSON meta fields to merge with existing meta (e.g. f3_name_origin, my_f3_why).",
+                    "description": "JSON meta fields to merge with existing meta (e.g. f3_name_origin, my_f3_why). Top-level strava_* keys are rejected with BAD_REQUEST.",
                     "propertyNames": {
                       "type": "string"
                     },
@@ -11540,23 +11534,17 @@
                         "meta": {
                           "anyOf": [
                             {
-                              "anyOf": [
-                                {
-                                  "additionalProperties": {},
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "type": "object"
-                                },
-                                {
-                                  "type": "string"
-                                }
-                              ]
+                              "additionalProperties": {},
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "type": "object"
                             },
                             {
                               "type": "null"
                             }
-                          ]
+                          ],
+                          "description": "Profile metadata excluding top-level strava_* keys."
                         },
                         "phone": {
                           "anyOf": [
@@ -21710,7 +21698,7 @@
                                 "type": "null"
                               }
                             ],
-                            "description": "User metadata"
+                            "description": "User metadata excluding top-level strava_* keys"
                           },
                           "name": {
                             "description": "Full name (firstName + lastName)",
@@ -22125,7 +22113,7 @@
                           "type": "null"
                         }
                       ],
-                      "description": "User metadata"
+                      "description": "User metadata. Top-level strava_* keys are rejected with BAD_REQUEST."
                     },
                     "phone": {
                       "anyOf": [
@@ -22444,7 +22432,7 @@
                                   "type": "null"
                                 }
                               ],
-                              "description": "User metadata"
+                              "description": "User metadata excluding top-level strava_* keys"
                             },
                             "phone": {
                               "anyOf": [
@@ -22775,7 +22763,7 @@
                                 "type": "null"
                               }
                             ],
-                            "description": "User metadata"
+                            "description": "User metadata excluding top-level strava_* keys"
                           },
                           "name": {
                             "description": "Full name (firstName + lastName)",
@@ -23054,7 +23042,7 @@
                                   "type": "null"
                                 }
                               ],
-                              "description": "User metadata"
+                              "description": "User metadata excluding top-level strava_* keys"
                             },
                             "phone": {
                               "anyOf": [
@@ -23506,7 +23494,7 @@
                                 "type": "null"
                               }
                             ],
-                            "description": "User metadata"
+                            "description": "User metadata excluding top-level strava_* keys"
                           },
                           "name": {
                             "description": "Full name (firstName + lastName)",

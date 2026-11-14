@@ -247,7 +247,7 @@ You should see output ending with:
 
 ### 3. (Optional) Add a Google Maps API key
 
-You don't need a real key to build, run the tests, or pass `pnpm ci:local` — only to see the map itself. `pnpm local:setup` copies `.env.example`, whose placeholder value (`F3_GOOGLE_API_KEY=your-google-maps-api-key-here`) is enough to satisfy env validation; the apps start, but the map tiles won't render. Don't blank the variable out — the map and admin env schemas require it to be non-empty, so an empty value fails `pnpm dev` and `pnpm build`. To get a real key:
+You don't need a real key to build, run the tests, or pass `pnpm ci:local` — only to see the map itself. `pnpm local:setup` copies `.env.example`, whose placeholder value (`F3_GOOGLE_API_KEY=your-google-maps-api-key-here`) is enough to satisfy env validation; the apps start, but Google rejects the key, so the map app shows a "Google Maps isn't available" message instead of the map. Don't blank the variable out — the map and admin env schemas require it to be non-empty, so an empty value fails `pnpm dev` and `pnpm build`. To get a real key:
 
 1. Go to [console.cloud.google.com/google/maps-apis](https://console.cloud.google.com/google/maps-apis/)
 2. Create a project and enable **Maps JavaScript API** and **Places API (New)**
@@ -421,9 +421,9 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 
 ### Google Maps
 
-| Variable            | Value      | Meaning                                                                                                                                                                                                |
-| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `F3_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key, read by the map and admin apps. They start with the `.env.example` placeholder instead of a real key (the map is just blank), but an empty value fails env validation. |
+| Variable            | Value      | Meaning                                                                                                                                                                                                                                    |
+| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `F3_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key, read by the map and admin apps. They start with the `.env.example` placeholder instead of a real key (the map app shows a "Google Maps isn't available" message), but an empty value fails env validation. |
 
 ---
 
@@ -654,6 +654,40 @@ docker compose -f docker-compose.yml down --remove-orphans
 sudo systemctl restart docker
 pnpm local:setup
 ```
+
+### `pnpm ci:local` freezes the machine or runs out of JavaScript heap
+
+`pnpm ci:local` runs the same checks as CI, and Turbo runs each check's tasks across the workspaces in parallel. Several of them (`tsc`, `next build`, type-aware ESLint) each take gigabytes of memory, and Node sizes its default heap limit from the memory it can see. A laptop, or a WSL 2 VM that only gets part of the Windows host's memory, can run out under Turbo's default concurrency. The symptoms are the whole machine locking up, or a task dying with `JavaScript heap out of memory`.
+
+These are per-machine settings, so keep them out of the repo:
+
+1. **Run fewer tasks at once.** Turbo reads `TURBO_CONCURRENCY`. Set it on the command rather than in your shell profile, then start low and raise it until the machine stays responsive:
+
+   ```bash
+   TURBO_CONCURRENCY=4 pnpm ci:local
+   ```
+
+   `pnpm dev` starts the apps as long-running Turbo tasks, and Turbo refuses to start when its concurrency is lower than that number of tasks plus one. If you export `TURBO_CONCURRENCY` from your profile anyway, override it with `pnpm dev --concurrency=<n>`.
+
+2. **Raise Node's heap limit** if a task still runs out of heap. First check the current limit in MB, then set a value above it:
+
+   ```bash
+   node -p 'require("v8").getHeapStatistics().heap_size_limit / 1048576'
+   export NODE_OPTIONS="--max-old-space-size=6144"
+   ```
+
+   The limit caps the JavaScript heap of each Node process, not total memory. One task can start several Node processes (Vitest runs its test files in worker processes, for example), and each process also uses memory outside its heap, so the limit times `TURBO_CONCURRENCY` underestimates the real peak. Leave plenty of headroom below the memory you actually have, or the system swaps or kills processes instead. `NODE_OPTIONS` also applies to every other Node program you run from that shell.
+
+3. **On WSL 2, give the VM more memory.** WSL 2 caps its VM at part of the Windows host's memory. First check the current cap: the `total` column of `free -h` inside your distro. Pick a value above it that still leaves a few GB for Windows itself; a fixed number can lower the cap on a host with more memory. Then create or edit `%UserProfile%\.wslconfig` on Windows. For example, on a 16 GB host:
+
+   ```ini
+   [wsl2]
+   memory=12GB
+   ```
+
+   Then run `wsl --shutdown` from PowerShell and reopen your distro. Check the new total with `free -h`. With more memory you may not need the other two settings.
+
+If one task runs out of heap even on its own, that task's memory use has grown, so open an issue that names it rather than only raising the limit. Run it alone with `pnpm --filter <package> <task>` (for example `pnpm --filter f3-map typecheck`); the root scripts such as `pnpm typecheck` run that task in every workspace through Turbo.
 
 ### Postgres won't start
 
