@@ -215,6 +215,10 @@ Individual occurrences of events (can be standalone or part of a series).
 
 ### user
 
+User responses omit every top-level `strava_*` metadata key, even with PII
+access. Profile writes supplying those keys fail with `BAD_REQUEST`. The
+Strava integration uses its server-only credential store, not these endpoints.
+
 | Method   | Path                     | Purpose                                              |
 | -------- | ------------------------ | ---------------------------------------------------- |
 | `GET`    | `/v1/user`               | List users (filter by `orgIds`, `roles`, `statuses`) |

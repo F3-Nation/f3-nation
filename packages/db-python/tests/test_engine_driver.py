@@ -21,3 +21,20 @@ def test_postgresql_engine_uses_psycopg2(monkeypatch, use_proxy):
     engine = utils._create_postgresql_engine(echo=False)
     assert engine.dialect.driver == "psycopg2"
     assert engine.dialect.dbapi.__name__ == "psycopg2"
+
+
+@pytest.mark.parametrize("use_proxy", ["false", "true"])
+def test_postgresql_engine_hides_sensitive_bind_parameters(monkeypatch, use_proxy):
+    for name, value in {
+        "DATABASE_HOST": "localhost",
+        "DATABASE_USER": "synthetic",
+        "DATABASE_PASSWORD": "synthetic",
+        "DATABASE_SCHEMA": "f3_test",
+        "USE_GCP_AUTH_PROXY": use_proxy,
+    }.items():
+        monkeypatch.setenv(name, value)
+    engine = utils._create_postgresql_engine(echo=True)
+    try:
+        assert engine.hide_parameters is True
+    finally:
+        engine.dispose()
