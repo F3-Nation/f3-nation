@@ -1,0 +1,138 @@
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
+
+import { cleanup, createMixedOrgTree, db, uniqueId } from "@acme/api/testing";
+import { eq, schema } from "@acme/db";
+
+import { target } from "../transport";
+
+// Run the Auth handler against the characterization database, never its app DB.
+vi.mock("../../../auth/src/lib/db", () => ({ db }));
+
+const session = vi.hoisted(() => ({ userId: "" }));
+vi.mock("../../../auth/src/lib/current-session", () => ({
+  getCurrentSession: () => Promise.resolve({ user: { id: session.userId } }),
+}));
+// Resolve handlers through Vitest with Auth's aliases; each app typechecks its
+// own source. These tests exercise the HTTP request/response boundary.
+const { POST } = await vi.importActual<{
+  POST: (request: Request) => Promise<Response>;
+}>("../../../auth/src/app/api/onboarding/route");
+const { GET } = await vi.importActual<{
+  GET: () => Promise<Response>;
+}>("../../../auth/src/app/api/regions/route");
+
+describe.runIf(target.inProcess)("registration region choices", () => {
+  const orgIds: number[] = [];
+  let tree: Awaited<ReturnType<typeof createMixedOrgTree>>;
+
+  beforeAll(async () => {
+    tree = await createMixedOrgTree(orgIds);
+    await db
+      .update(schema.orgs)
+      .set({ isActive: false })
+      .where(eq(schema.orgs.id, tree.directBranch.area.id));
+    await db
+      .update(schema.orgs)
+      .set({ isActive: false })
+      .where(eq(schema.orgs.id, tree.territoryBranch.region.id));
+  });
+
+  afterAll(async () => {
+    for (const id of [...orgIds].reverse()) await cleanup.org(id);
+  });
+
+  const createOnboardingUser = async () => {
+    const [user] = await db
+      .insert(schema.users)
+      .values({ email: `${uniqueId()}@example.invalid` })
+      .returning({ id: schema.users.id });
+    if (!user) throw new Error("Missing fixture user");
+    onTestFinished(async () => {
+      session.userId = "";
+      await cleanup.user(user.id);
+    });
+    session.userId = String(user.id);
+    return user.id;
+  };
+
+  it("offers active regions only when their ancestors are active", async () => {
+    const response = await GET();
+    const rows = (await response.json()) as { id: number; name: string }[];
+    expect(response.status).toBe(200);
+    const ids = rows.map((row) => row.id);
+    expect(ids).toContain(tree.unrelatedBranch.region.id);
+    expect(ids).not.toContain(tree.directBranch.region.id);
+    expect(ids).not.toContain(tree.territoryBranch.region.id);
+    expect(ids).not.toContain(tree.unrelatedBranch.ao.id);
+    expect(
+      rows.every((row) => Object.keys(row).sort().join(",") === "id,name"),
+    ).toBe(true);
+  });
+  it.each(["inactive ancestor", "inactive region"] as const)(
+    "rejects onboarding with an %s without changing the profile",
+    async (reason) => {
+      const userId = await createOnboardingUser();
+      const request = new Request("https://auth.test.invalid/api/onboarding", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          f3Name: "Fixture",
+          firstName: "Synthetic",
+          lastName: "Member",
+          homeRegionId:
+            reason === "inactive ancestor"
+              ? tree.directBranch.region.id
+              : tree.territoryBranch.region.id,
+        }),
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: "homeRegionId must be an active region",
+      });
+      const [stored] = await db
+        .select({
+          homeRegionId: schema.users.homeRegionId,
+          f3Name: schema.users.f3Name,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId));
+      expect(stored).toEqual({ homeRegionId: null, f3Name: null });
+    },
+  );
+  it("accepts onboarding into a region with active ancestors", async () => {
+    const userId = await createOnboardingUser();
+    const request = new Request("https://auth.test.invalid/api/onboarding", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        f3Name: "Fixture",
+        firstName: "Synthetic",
+        lastName: "Member",
+        homeRegionId: tree.unrelatedBranch.region.id,
+      }),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    const [stored] = await db
+      .select({
+        homeRegionId: schema.users.homeRegionId,
+        f3Name: schema.users.f3Name,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId));
+    expect(stored).toEqual({
+      homeRegionId: tree.unrelatedBranch.region.id,
+      f3Name: "Fixture",
+    });
+  });
+});

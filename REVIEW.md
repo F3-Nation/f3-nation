@@ -35,7 +35,9 @@ says it's covered. Each links to the rule it checks.
 
 - **CC-AUTHZ:** Does every read or write of a specific resource check the
   caller against the fetched row's org, and does every move check both source
-  and destination? ([rule](packages/api/AGENTS.md#authorization))
+  and destination, except for the explicitly scoped
+  [source-admin home-region correction](docs/specs/admin-user-home-region.md)?
+  ([rule](packages/api/AGENTS.md#authorization))
 - **CC-PUBLIC:** Can an anonymous caller reach private, inactive or personal
   data, or an unbounded page? ([rule](packages/api/AGENTS.md#authorization))
 - **CC-TOKENS:** Could a client-supplied claim, an unverified token, a

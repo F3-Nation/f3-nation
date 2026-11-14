@@ -12254,6 +12254,29 @@
           {
             "allowEmptyValue": true,
             "allowReserved": true,
+            "in": "query",
+            "name": "activeAncestorsOnly",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ],
+              "description": "If true, also require the organization and every ancestor to be active. This narrows the status filter rather than replacing it. Omitted or false preserves signed-in status filtering; anonymous reads always apply this check."
+            }
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
             "explode": true,
             "in": "query",
             "name": "parentOrgIds",
@@ -14047,6 +14070,29 @@
               "type": "array"
             },
             "style": "deepObject"
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
+            "name": "activeAncestorsOnly",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ],
+              "description": "If true, also require the organization and every ancestor to be active. This narrows the status filter rather than replacing it. Omitted or false preserves signed-in status filtering; anonymous reads always apply this check."
+            }
           },
           {
             "allowEmptyValue": true,
@@ -21788,7 +21834,7 @@
         ]
       },
       "post": {
-        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "description": "Create a new user or update an existing one, including role assignments for organizations. Administrators of an existing member's current home region may correct it to another active region without destination editing rights; API keys use only their own roles. Changed non-null home regions must be active regions with active ancestors. Administrator corrections send no member notifications. A source-administrator correction returns CONFLICT if the member row changes or is deleted during the request. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.crupdate",
         "parameters": [
           {

@@ -23,8 +23,12 @@ const dbMock = {
 };
 
 vi.mock("~/lib/db", () => ({ db: dbMock }));
+vi.mock("@acme/api/org-tree", () => ({
+  logIfOrgTreeExceedsMaxDepth: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("~/lib/current-session", () => ({ getCurrentSession: vi.fn() }));
 
+const { logIfOrgTreeExceedsMaxDepth } = await import("@acme/api/org-tree");
 const { getCurrentSession } = await import("~/lib/current-session");
 const { GET, POST } = await import("../../../../src/app/api/onboarding/route");
 
@@ -111,6 +115,7 @@ describe("POST /api/onboarding", () => {
 
     const res = await POST(post({ ...profile, homeRegionId: 7 }));
 
+    expect(logIfOrgTreeExceedsMaxDepth).toHaveBeenCalledWith(dbMock);
     expect(res.status).toBe(200);
     const update = set.mock.calls[0]?.[0] as {
       meta: Record<string, unknown>;
@@ -164,7 +169,8 @@ describe("POST /api/onboarding", () => {
     const { sql, params } = new PgDialect().sqlToQuery(where);
     expect(sql).toContain('"org_type"');
     expect(sql).toContain('"is_active"');
-    expect(params).toEqual(expect.arrayContaining([7, "region", true]));
+    expect(params).toEqual(expect.arrayContaining([7, "region"]));
+    expect(sql).toContain('"is_active" = false');
   });
 
   it("lets a page loaded before the region field existed finish", async () => {
