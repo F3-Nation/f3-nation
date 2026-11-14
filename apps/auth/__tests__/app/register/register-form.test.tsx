@@ -173,6 +173,73 @@ describe("registration", { timeout: 20_000 }, () => {
     },
   );
 
+  it("clears an unavailable draft region after loading selectable regions", async () => {
+    sessionStorage.setItem(
+      "f3-register-draft",
+      JSON.stringify({
+        email,
+        f3Name: "Runner",
+        firstName: "Test",
+        lastName: "PAX",
+        homeRegionId: 99,
+        regionSearch: "Retired region",
+      }),
+    );
+    await fillForm();
+    expect(screen.getByLabelText("Home Region")).toHaveProperty("value", "");
+    expect(screen.getByRole("alert").textContent).toBe(
+      "That region is no longer available. Please choose another.",
+    );
+    await act(async () => submit());
+    const request = fetchMock.mock.calls.find(
+      ([url]) => url === "/api/register",
+    );
+    expect(JSON.parse(request?.[1]?.body as string)).not.toHaveProperty(
+      "homeRegionId",
+    );
+  });
+
+  it("clears a rejected region and permits registration with another choice", async () => {
+    await fillForm();
+    change("Home Region", "Test South");
+    const region = screen.getByRole("option", { name: "Test South" });
+    fireEvent.mouseDown(region);
+    fireEvent.click(region);
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { error: "That region is no longer available. Please choose another." },
+        { status: 400 },
+      ),
+    );
+    await act(async () => submit());
+    expect(screen.getByLabelText("Home Region")).toHaveProperty("value", "");
+    expect(screen.getByRole("alert").textContent).toBe(
+      "That region is no longer available. Please choose another.",
+    );
+    expect(signIn).not.toHaveBeenCalled();
+    const first = fetchMock.mock.calls.find(([url]) => url === "/api/register");
+    expect(JSON.parse(first?.[1]?.body as string)).toMatchObject({
+      homeRegionId: 2,
+    });
+    fireEvent.focus(screen.getByLabelText("Home Region"));
+    expect(screen.getByRole("option", { name: "Test North" })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "Test South" })).toBeNull();
+
+    change("Home Region", "Test North");
+    const replacement = screen.getByRole("option", { name: "Test North" });
+    fireEvent.mouseDown(replacement);
+    fireEvent.click(replacement);
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => submit());
+    const requests = fetchMock.mock.calls.filter(
+      ([url]) => url === "/api/register",
+    );
+    expect(JSON.parse(requests[1]?.[1]?.body as string)).toMatchObject({
+      homeRegionId: 1,
+    });
+    expect(signIn).toHaveBeenCalledTimes(1);
+  });
+
   it("restores only the matching draft and resets phone defaults for a new email", async () => {
     vi.spyOn(navigator, "language", "get").mockReturnValue("en-GB");
     const nextEmail = "returning-pax@example.test";

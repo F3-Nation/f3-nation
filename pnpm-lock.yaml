@@ -935,6 +935,9 @@ importers:
 
   apps/auth:
     dependencies:
+      '@acme/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@acme/db':
         specifier: workspace:*
         version: link:../../packages/db
