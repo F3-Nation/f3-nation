@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.11.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.10.2...pkg-db@0.11.0) (2026-11-14)
+
+
+### Features
+
+* **db:** attribute API writes to request actors ([#1493](https://github.com/F3-Nation/f3-nation/issues/1493)) ([a5aeed3](https://github.com/F3-Nation/f3-nation/commit/a5aeed3525167666f01b51d7c3cbb54b99dd9f95))
+* **scripts:** add attendance to the public dev snapshot ([#1586](https://github.com/F3-Nation/f3-nation/issues/1586)) ([a57fe93](https://github.com/F3-Nation/f3-nation/commit/a57fe9378766c1874970933e2b1881fe58cbd099))
+
+
+### Bug Fixes
+
+* **slackbot:** prevent duplicate Q messages with workspace identities ([#1505](https://github.com/F3-Nation/f3-nation/issues/1505)) ([2b0ceff](https://github.com/F3-Nation/f3-nation/commit/2b0ceff18aa832a34a77903a7dc173bff03d2168))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.7.0
+
 ## [0.10.2](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.10.1...pkg-db@0.10.2) (2026-10-29)
 
 

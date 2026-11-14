@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.17.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.16.0...pkg-api@0.17.0) (2026-11-14)
+
+
+### Features
+
+* **db:** attribute API writes to request actors ([#1493](https://github.com/F3-Nation/f3-nation/issues/1493)) ([a5aeed3](https://github.com/F3-Nation/f3-nation/commit/a5aeed3525167666f01b51d7c3cbb54b99dd9f95))
+
+
+### Bug Fixes
+
+* **api:** invalidate map data for one-off event updates ([#1457](https://github.com/F3-Nation/f3-nation/issues/1457)) ([15c41c9](https://github.com/F3-Nation/f3-nation/commit/15c41c9e14507c5cbd016d72cec8434f94cf090f))
+* **api:** limit OAuth client scopes to the ones auth3 serves ([#1475](https://github.com/F3-Nation/f3-nation/issues/1475)) ([580fd27](https://github.com/F3-Nation/f3-nation/commit/580fd276880e859ce1092eae41dc0d8f494eb862))
+* **api:** stop returning region emails from the public region list ([#1508](https://github.com/F3-Nation/f3-nation/issues/1508)) ([9184cdf](https://github.com/F3-Nation/f3-nation/commit/9184cdf5430d26fb7c804d23775207752e78c473))
+* **auth:** consume email sign-in tokens atomically ([#1463](https://github.com/F3-Nation/f3-nation/issues/1463)) ([2d9695d](https://github.com/F3-Nation/f3-nation/commit/2d9695da355f8613045dae49cf72b73273af3b67))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.3.0
+    * @acme/db bumped to 0.11.0
+    * @acme/shared bumped to 0.7.0
+    * @acme/validators bumped to 0.5.3
+
 ## [0.16.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.15.0...pkg-api@0.16.0) (2026-10-29)
 
 
