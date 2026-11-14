@@ -143,7 +143,7 @@ function place(pr, facts, codeowners, slackIds) {
   const mentions = (logins) =>
     logins.map((l) => mention(l, slackIds)).join(" ");
   const author = mention(pr.author, slackIds);
-  // The held local-test result, without the triage note's bot details.
+  // Only the held local-test result from the triage note.
   const held = (pr.note ?? "")
     .split("; ")
     .filter((part) => part.startsWith("last local test"));

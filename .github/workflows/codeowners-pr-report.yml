@@ -41,8 +41,8 @@ jobs:
     permissions:
       contents: read # check out the scripts and read branch rules
       pull-requests: read # read PRs, reviews, threads and assignees
-      checks: read # read check runs (bot status, required checks)
-      statuses: read # read legacy commit statuses (CodeRabbit)
+      checks: read # read check runs (failing checks, required checks)
+      statuses: read # read legacy commit statuses (failing checks)
     steps:
       - name: Check out the scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
