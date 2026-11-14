@@ -185,6 +185,24 @@ describe("SearchBox", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
+  it("closes the list on a click outside the search box", () => {
+    render(
+      <SearchBox
+        presentLayers={["region", "area", "sector"]}
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "Char" },
+    });
+    expect(screen.getByRole("listbox")).toBeTruthy();
+
+    fireEvent.click(document.body);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
   it("clears results and closes when the query is emptied", () => {
     render(
       <SearchBox
@@ -280,6 +298,24 @@ describe("SearchBox", () => {
     });
     fireEvent.click(screen.getByText("Bootcamp"));
     expect(screen.getByText("Couldn't locate that AO on the map")).toBeTruthy();
+  });
+
+  it("drops the AO fallback message once the user types again", () => {
+    render(
+      <SearchBox
+        presentLayers={["region", "area", "sector"]}
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn(() => false)}
+      />,
+    );
+    const input = screen.getByRole("searchbox");
+    fireEvent.change(input, { target: { value: "boot" } });
+    fireEvent.click(screen.getByText("Bootcamp"));
+    expect(screen.getByText("Couldn't locate that AO on the map")).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: "Char" } });
+    expect(screen.queryByText("Couldn't locate that AO on the map")).toBeNull();
   });
 
   it("shows a search-unavailable message when the AO search fails", () => {

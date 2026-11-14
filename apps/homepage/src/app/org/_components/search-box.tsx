@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import type { AoSearchResult, Org, OrgType } from "../_lib/types";
 import { useAoSearch } from "../_lib/use-ao-search";
@@ -21,13 +21,17 @@ export function SearchBox({
   disabled,
 }: SearchBoxProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Org[]>([]);
   const [open, setOpen] = useState(false);
   const [aoNavigateFailed, setAoNavigateFailed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Set when a result is chosen: the resulting setQuery(name) must not reopen
-  // the list on the next effect run.
-  const justSelectedRef = useRef(false);
+
+  // Org matches always follow the query. A selection sets the query to the
+  // chosen name, so refocusing afterwards lists that name rather than the
+  // partial query it was picked from.
+  const results = useMemo(
+    () => (query.trim() ? getResults(query) : []),
+    [query, getResults],
+  );
 
   // AOs aren't in the client dataset (the chart loads regions), so they're
   // searched server-side (debounced). Only query while the list is open so a
@@ -39,29 +43,6 @@ export function SearchBox({
   } = useAoSearch(open ? query : "");
 
   useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      setOpen(false);
-      setAoNavigateFailed(false);
-      return;
-    }
-    if (justSelectedRef.current) {
-      justSelectedRef.current = false;
-      // Refresh results to the full-name query so a later focus doesn't reopen
-      // a stale partial-query list, but keep the list closed for now. Leave
-      // aoNavigateFailed as-is: this same query change is what handleSelectAo
-      // just used to report its outcome, and resetting here would erase it.
-      setResults(getResults(query));
-      setOpen(false);
-      return;
-    }
-    setAoNavigateFailed(false);
-    const hits = getResults(query);
-    setResults(hits);
-    setOpen(true);
-  }, [query, getResults]);
-
-  useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (!containerRef.current?.contains(e.target as Node)) {
         setOpen(false);
@@ -70,6 +51,14 @@ export function SearchBox({
     document.addEventListener("click", onClickOutside);
     return () => document.removeEventListener("click", onClickOutside);
   }, []);
+
+  // Only typing opens the list. Selecting a result also sets the query, but
+  // goes through handleSelect/handleSelectAo, which keep it closed.
+  function handleChange(value: string) {
+    setQuery(value);
+    setOpen(value.trim() !== "");
+    setAoNavigateFailed(false);
+  }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
@@ -87,7 +76,6 @@ export function SearchBox({
   }
 
   function handleSelect(org: Org) {
-    justSelectedRef.current = true;
     setAoNavigateFailed(false);
     setQuery(org.name);
     setOpen(false);
@@ -95,7 +83,6 @@ export function SearchBox({
   }
 
   function handleSelectAo(ao: AoSearchResult) {
-    justSelectedRef.current = true;
     setQuery(ao.name ?? "");
     setOpen(false);
     setAoNavigateFailed(!onSelectAo(ao));
@@ -133,7 +120,7 @@ export function SearchBox({
         id="org-search"
         type="search"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}
         onFocus={() => query.trim() && setOpen(true)}
         placeholder={placeholder}
