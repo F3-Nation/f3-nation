@@ -405,6 +405,27 @@ function buildReport(
 }
 
 /**
+ * Throws when a board holds a PR from a repository other than its source's,
+ * such as a security advisory fix PR from `pr-triage.sh --with-advisories`:
+ * a report posted where that fork's readers can't see must not list it. The
+ * message names only the source, never the PR, since a workflow's log can be
+ * public.
+ */
+function assertOwnPrs(owner, repo, board) {
+  const prefix = `https://github.com/${owner}/${repo}/pull/`.toLowerCase();
+  for (const pr of board.prs ?? []) {
+    if (
+      !String(pr.url ?? "")
+        .toLowerCase()
+        .startsWith(prefix)
+    )
+      throw new Error(
+        `pr-triage's board for ${owner}/${repo} holds a PR from another repository.`,
+      );
+  }
+}
+
+/**
  * Reads whose turn each PR is for every board, then builds the report.
  * `sources` is `[{ owner, repo, board, base? }]`: pr-triage's JSON for each
  * repo, and where its branch rules and team live (see `collectFacts()`).
@@ -430,6 +451,8 @@ async function assembleReport({
   const prs = [];
   let truncated = false;
   let fetched = 0;
+  for (const { owner, repo, board } of sources)
+    assertOwnPrs(owner, repo, board);
   for (const { owner, repo, board, base } of sources) {
     const collected = await collectFacts({ github, owner, repo, base });
     notes.push(...collected.notes);

@@ -630,6 +630,45 @@ test("assembleReport reads facts per repo and merges the boards", async () => {
   assert.ok(calls.every((c) => c.startsWith("f3-nation ")));
 });
 
+test("assembleReport refuses a board PR from another repo without naming it", async () => {
+  const forkUrl =
+    "https://github.com/F3-Nation/f3-nation-ghsa-aaaa-bbbb-cccc/pull/1";
+  const calls = [];
+  const github = {
+    paginate: async (route) => {
+      calls.push(route);
+      return [];
+    },
+    graphql: async () => {
+      calls.push("graphql");
+      return {};
+    },
+  };
+  await assert.rejects(
+    assembleReport({
+      github,
+      sources: [
+        {
+          owner: "F3-Nation",
+          repo: "f3-nation",
+          board: { codeowners: [], prs: [pr(1), pr(2, { url: forkUrl })] },
+        },
+      ],
+      now: NOW,
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        "pr-triage's board for F3-Nation/f3-nation holds a PR from another repository.",
+      );
+      assert.doesNotMatch(error.message, /ghsa/i);
+      return true;
+    },
+  );
+  // It stops before reading anything from GitHub.
+  assert.deepEqual(calls, []);
+});
+
 test("extra lists follow the PR lists, and their header notes end the header", () => {
   const result = buildReport(
     { codeowners: [], prs: [pr(1)] },
