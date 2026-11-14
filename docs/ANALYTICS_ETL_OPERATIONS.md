@@ -114,12 +114,56 @@ and buckets separate.
 - Never delete the current release or a rollback-eligible release.
 
 Do **not** configure a naive bucket lifecycle age rule that can delete
-`current.json`, a selected release, or a retained previous release. No automated
-garbage collector is implemented. Any future GC is a separately privileged,
-generation-aware operation requiring explicit human approval and preservation
-of the live and rollback-eligible pointer chains. Publisher and rollback code
-do not delete objects. Failed runs may leave unreachable immutable prefixes;
-record them for later reviewed cleanup.
+`current.json`, a selected release, or a retained previous release. Age alone
+cannot tell which release the pointer uses: if publishing stops for longer than
+the rule's age, the live release is deleted and consumers follow the pointer to
+missing objects. Publisher and rollback code do not delete objects; failed runs
+leave unreachable immutable prefixes.
+
+### Generation-aware release cleanup
+
+`analytics-etl gc-releases` deletes old release prefixes that the product
+pointer no longer references. It is a dry run unless `--apply` is passed, and
+it logs the plan as `analytics.etl.release_gc_planned` either way. A prefix is
+deleted only when all of these hold:
+
+- `current.json` exists and passes the publisher's pointer validation, and the
+  release manifests it references (current and `retainedPrevious`) still
+  exist. Otherwise the command refuses, because the bucket needs a human.
+- The release is neither the pointer's current release nor its
+  `retainedPrevious` rollback target.
+- The release is not among the `--keep-latest` newest prefixes.
+- Every object in the prefix is older than `--min-age-days`, so a publication
+  still writing objects is never touched. The command rejects values below one
+  day.
+
+Before each release is deleted the command re-reads the pointer generation and
+stops if it moved; re-run it to plan against the new pointer. Each delete is
+pinned to the planned object generation, and `release.json` goes first, so a
+partially deleted prefix can never validate as a release. `--max-releases`
+caps one run, oldest first. The defaults for `--min-age-days`,
+`--keep-latest`, and `--max-releases` live in
+[`release_gc.py`](../apps/analytics/analytics/release_gc.py); the age default
+matches the 14-day minimum above, and shortening it is a retention-policy
+decision for the release owners.
+
+Run it as an operator identity, never the product runtime, which must not hold
+release delete. That identity needs `storage.objects.list` on the bucket,
+`storage.objects.get` on the product's `current.json` and release prefix, and
+`storage.objects.delete` on only that release prefix. It reads the same
+environment as `rollback-pointer` (`ANALYTICS_ENVIRONMENT`,
+`ANALYTICS_CATALOG_BUCKET`):
+
+```bash
+uv run analytics-etl gc-releases --product analytics
+uv run analytics-etl gc-releases --product analytics --apply
+```
+
+Review the dry-run plan's `protected_release_ids` and `candidate_release_ids`
+before applying. With bucket Object Versioning on, deleted objects become
+noncurrent versions that still cost storage until a noncurrent-version
+lifecycle rule removes them; soft delete likewise keeps them recoverable, and
+billed, for the bucket's soft-delete window.
 
 ## Publication, CAS, and rollback
 
