@@ -211,9 +211,9 @@ there is nothing to set in GitHub after that.
 The job refuses to run while prod has a migration its image doesn't know
 (`… migration(s) this build's … _journal.json doesn't know`), so rebuild it
 after every prod migration. `pnpm db:migrate:prod` starts it for you when it
-applies one, with your own `gh` login, and prints the link to the run. If it
-can't start it, it prints why and the command instead. Anyone with write
-access to the repo can run it, with no Google Cloud access:
+applies one, with your own `gh` login, and prints the link to the workflow's
+runs. If it can't start it, it prints why and the command instead. Anyone
+with write access to the repo can run it, with no Google Cloud access:
 
 ```bash
 gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
