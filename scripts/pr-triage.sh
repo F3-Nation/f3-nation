@@ -27,17 +27,17 @@
 #
 # Only a codeowner's skill run moves a PR: the union of @user handles in .github/CODEOWNERS
 # ($PR_TRIAGE_CODEOWNERS overrides the file), compared case-insensitively. An @org/team entry
-# is an error. A run is detected by its hidden marker, or by your local ledger
+# is an error. The PR author's own runs never count, so a codeowner can check their own PR
+# without it looking reviewed. A run is detected by its hidden marker, or by your local ledger
 # ($PR_TRIAGE_LEDGER, default ${XDG_STATE_HOME:-~/.local/state}/pr-triage/ledger.tsv), which
-# always counts. The <!-- pr-review-inline --> marker is read in PR comments and inline review
+# counts on every PR but your own. The <!-- pr-review-inline --> marker is read in PR comments and inline review
 # comments; the <!-- pr-local-test --> marker in review bodies and inline review comments. Runs
 # from before the markers existed are recognized by the shape of their comments.
 #
 # A local-test report that is ⏸️ (can't recommend yet) or ❌ (don't approve yet) keeps the PR
 # waiting on /pr-local-test until a later run passes, a codeowner adds the `local test: not
 # needed` label after it, or you `mark` a run after it. A ❌ first waits on the author's push.
-# The PR author's own run neither holds nor releases the PR. That label also stands in for a
-# local test that never ran.
+# That label also stands in for a local test that never ran.
 set -euo pipefail
 
 LEDGER="${PR_TRIAGE_LEDGER:-${XDG_STATE_HOME:-$HOME/.local/state}/pr-triage/ledger.tsv}"
@@ -205,6 +205,11 @@ classify='
   # Only a codeowner'"'"'s run moves a PR; anyone else'"'"'s is extra input. That also leaves out
   # review bots, which quote the markers back in their own comments.
   def owner_marker($m): (.author.login | codeowner) and (.body | has_marker($m));
+  # The PR author'"'"'s own run is a self-check, not a review: the PR still needs another
+  # codeowner, so it stays where it was.
+  def not_by($author): (.author.login | lower_login) != ($author | lower_login);
+  def actor_not($author): (.actor.login | lower_login) != ($author | lower_login);
+  def reviewer_marker($m; $author): owner_marker($m) and not_by($author);
 
   ($now // now) as $now
   | .data.viewer.login as $me
@@ -225,24 +230,23 @@ classify='
       | ($pr.commits.nodes[0].commit) as $head
       | ($pr.timelineItems.nodes[0].createdAt) as $readyAt
 
-      # Skill runs, by codeowners or in the local ledger
-      | ($ledger | map(select(.pr == $pr.number))) as $ledgerRows
+      # Skill runs, by codeowners other than the author or in the local ledger. The ledger holds
+      # the viewer'"'"'s own runs, so on a PR the viewer wrote, every row is a self-check.
+      | (if ($author | lower_login) == ($me | lower_login) then []
+         else $ledger | map(select(.pr == $pr.number)) end) as $ledgerRows
       | ($ledgerRows | map(.skill)) as $logged
       | [$pr.reviews.nodes[] | select((.submittedAt | ts) < ($cutoff | ts))
-          | select(.author.login | codeowner)] as $legacy
-      | [$pr.reviews.nodes[] | select(owner_marker("pr-local-test")
-          or any(.comments.nodes[]; owner_marker("pr-local-test")))] as $localReports
+          | select((.author.login | codeowner) and not_by($author))] as $legacy
+      | [$pr.reviews.nodes[] | select(reviewer_marker("pr-local-test"; $author)
+          or any(.comments.nodes[]; reviewer_marker("pr-local-test"; $author)))] as $localReports
       | (($logged | index("pr-local-test") != null)
           or ($localReports | length) > 0
           or any($legacy[]; (.body // "") as $b | ($b | footer) and ($b | contains("|"))))
         as $localRan
       # A report that could not recommend yet (⏸️, its main check was blocked) or found a
-      # problem (❌) holds the PR until something after it clears it. The skill omits that line
-      # on a PR its runner authored, so the author'"'"'s own report neither holds nor releases
-      # the PR; it still counts toward $localRan above.
+      # problem (❌) holds the PR until something after it clears it.
       # "." stands for the apostrophe, straight or curly.
-      | ([$pr.reviews.nodes[] | select(owner_marker("pr-local-test")
-          and ((.author.login | lower_login) != ($author | lower_login)))]
+      | ([$pr.reviews.nodes[] | select(reviewer_marker("pr-local-test"; $author))]
           | sort_by(.submittedAt // "") | last) as $lastLocal
       | ($lastLocal.body // "") as $lastLocalBody
       | ($lastLocalBody | test("Can.t recommend yet")) as $localBlocked
@@ -253,11 +257,12 @@ classify='
       | ([$ledgerRows[] | select(.manual and .skill == "pr-local-test") | .at | try ts catch 0]
           | max // 0) as $markedLocalAt
       # The label counts while it is on the PR, from its newest add, and only when a codeowner
-      # made that add. An add older than the events fetched does not count.
+      # other than the PR'"'"'s author made that add. An add older than the events fetched does
+      # not count.
       | (any($pr.labels.nodes[]?; .name == $notNeededLabel)) as $hasNotNeeded
       | ([$pr.labelEvents.nodes[]? | select(.label.name == $notNeededLabel)]
           | max_by(.createdAt | ts)
-          | if . != null and (.actor.login | codeowner) then .createdAt | ts else 0 end)
+          | if . != null and (.actor.login | codeowner) and actor_not($author) then .createdAt | ts else 0 end)
         as $notNeededAt
       | ($hasNotNeeded and $notNeededAt > 0 and ($lastLocal == null or $notNeededAt > $lastLocalAt))
         as $notNeededClears
@@ -268,11 +273,11 @@ classify='
           and $lastLocal.commit.oid != null and $lastLocal.commit.oid == $head.oid) as $awaitingFixes
       | (($localRan and ($localHeld | not)) or $notNeededClears) as $localTested
       # A clean inline review leaves only a "no issues" comment, and a local test always follows one.
-      | [$pr.comments.nodes[] | select(owner_marker("pr-review-inline"))] as $inlineNotes
+      | [$pr.comments.nodes[] | select(reviewer_marker("pr-review-inline"; $author))] as $inlineNotes
       | ($localRan
           or ($logged | index("pr-review-inline") != null)
           or ($inlineNotes | length) > 0
-          or any($pr.reviews.nodes[]; any(.comments.nodes[]; owner_marker("pr-review-inline")))
+          or any($pr.reviews.nodes[]; any(.comments.nodes[]; reviewer_marker("pr-review-inline"; $author)))
           or any($legacy[]; (.body // "") == "" and any(.comments.nodes[];
                .replyTo == null and (.body | footer) and (.body | has_marker("pr-local-test") | not))))
         as $inlineReviewed
@@ -314,19 +319,23 @@ classify='
          end) as $verdict
       | ($verdict[0] | IN("DRAFT", "SKIP") | not) as $active
       | [$pr.assignees.nodes[]?.login] as $assignees
+      | [$pr.reviewThreads.nodes[] | select((.comments.nodes[0].author.login // "") != $author)]
+        as $othersThreads
 
       # When the PR last became the codeowners'"'"' turn: the newest of the PR opening, being
       # reopened or marked ready, a codeowner'"'"'s skill report, a thread closing, and the
-      # author'"'"'s last push or thread reply. Approximate: the push is the head commit'"'"'s own
-      # date (when it was made, not pushed), and GitHub keeps no time for resolving a thread, so
-      # a resolved thread counts from its last comment. Both can make turnSince early, never late.
+      # author'"'"'s last push or thread reply. A thread the author opened is their own note,
+      # often a self-check finding, so it counts for neither. Approximate: the push is the head
+      # commit'"'"'s own date (when it was made, not pushed), and GitHub keeps no time for
+      # resolving a thread, so a resolved thread counts from its last comment. Both can make
+      # turnSince early, never late.
       | ([$pr.createdAt, $readyAt, $pr.reopened.nodes[0].createdAt, $head.committedDate,
           ($localReports[] | .submittedAt),
           ($inlineNotes[] | .createdAt),
-          ($pr.reviews.nodes[] | select(any(.comments.nodes[]; owner_marker("pr-review-inline")))
+          ($pr.reviews.nodes[] | select(any(.comments.nodes[]; reviewer_marker("pr-review-inline"; $author)))
             | .submittedAt),
-          ($pr.reviewThreads.nodes[] | select(.isResolved) | .lastComment.nodes[0].createdAt),
-          ($pr.reviewThreads.nodes[] | .lastComment.nodes[0]
+          ($othersThreads[] | select(.isResolved) | .lastComment.nodes[0].createdAt),
+          ($othersThreads[] | .lastComment.nodes[0]
             | select(.author.login == $author) | .createdAt)]
         | map(ts) | max) as $turnSince
       | {

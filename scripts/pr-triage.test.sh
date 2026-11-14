@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Regression tests for scripts/pr-triage.sh: one synthetic PR per stage, skill runs detected
-# from codeowners' markers only (including a clean review's "no issues" comment), the cutoff
+# from codeowners' markers only (including a clean review's "no issues" comment) and never from
+# the PR author's own runs, the cutoff
 # for shape-based detection of runs from before the markers, held local tests and the
 # `local test: not needed` label, the viewer's own PRs, the --json fields,
 # and that a hostile PR title can't break out of the HTML board's data block.
@@ -203,7 +204,26 @@ jq -n '
     (pr(59; "local test said do not approve yet"; "someone")
       | .reviews.nodes = [inline_review, review("andy"; "2026-10-22T02:00:00Z";
           "❌ Recommendation: Don'"'"'t approve yet\n| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; [])]
-      | pushed("2026-10-22T02:30:00Z"))
+      | pushed("2026-10-22T02:30:00Z")),
+    (pr(60; "codeowner author ran pr-review-inline on their own PR"; "Luis")
+      | .reviews.nodes = [inline_review | .author.login = "luis" | .comments.nodes[].author.login = "luis"]),
+    (pr(61; "codeowner author'"'"'s own clean-review comment"; "Luis")
+      | .comments.nodes += [{author: {login: "luis"}, body: "No issues found.\n<!-- pr-review-inline -->",
+          createdAt: "2026-10-22T03:00:00Z"}]),
+    (pr(62; "codeowner author ran pr-local-test on their own PR"; "Luis")
+      | .reviews.nodes = [inline_review,
+          review("luis"; "2026-10-22T03:00:00Z"; "| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; [])]),
+    (pr(63; "codeowner author'"'"'s own pre-marker review"; "Luis")
+      | .reviews.nodes = [review("luis"; "2026-10-15T00:00:00Z"; ""; ["Old finding.\n_written by Model_"])]),
+    pr(64; "viewer'"'"'s own PR in their ledger"; "viewer"),
+    (pr(65; "author opened threads of their own"; "pax") | .reviews.nodes = [inline_review]
+      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z"),
+          (thread(false; "pax") | .lastComment.nodes[0].createdAt = "2026-10-22T08:00:00Z"),
+          (thread(true; "pax") | .lastComment.nodes[0].createdAt = "2026-10-22T09:00:00Z")]),
+    (pr(66; "codeowner author labels their own PR not needed"; "Luis") | .reviews.nodes = [inline_review]
+      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "luis")),
+    (pr(67; "another codeowner labels a codeowner'"'"'s PR not needed"; "Luis") | .reviews.nodes = [inline_review]
+      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "andy"))
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -290,6 +310,13 @@ assert_eq "every thread ending with the author's reply waits on a reviewer" "REP
 assert_eq "a reviewer-reply note names who opened the threads" \
   "2 unresolved, author replied (andy 1, coderabbitai 1)" "$(note_of 44)"
 assert_eq "a thread still waiting on the author keeps the PR in THREADS" "THREADS" "$(bucket_of 45)"
+assert_eq "another codeowner's run counts on a codeowner's own PR" "LOCAL" "$(bucket_of 46)"
+assert_eq "the author's own pr-review-inline doesn't count" "INLINE" "$(bucket_of 60)"
+assert_eq "the author's own clean-review comment doesn't count" "INLINE" "$(bucket_of 61)"
+assert_eq "the author's own pr-local-test doesn't count" "LOCAL" "$(bucket_of 62)"
+assert_eq "the author's own pre-marker review doesn't count" "INLINE" "$(bucket_of 63)"
+assert_eq "the author's own not-needed label doesn't skip the local test" "LOCAL" "$(bucket_of 66)"
+assert_eq "another codeowner's not-needed label skips the local test" "MANUAL" "$(bucket_of 67)"
 
 hostile_count=$(grep -c '</script><img' "$tmp_dir/board.html")
 assert_eq "the board records Unassigned for a PR with no assignee" "Unassigned" \
@@ -332,6 +359,10 @@ assert_eq "turnSince counts a resolved thread from its last comment" '"2026-10-2
 assert_eq "turnSince counts the author's push" '"2026-10-22T11:30:00Z"' "$(json_field 3 .turnSince)"
 assert_eq "turnSince counts being marked ready" '"2026-10-22T11:45:00Z"' "$(json_field 26 .turnSince)"
 assert_eq "turnSince counts a reopen" '"2026-10-20T00:00:00Z"' "$(json_field 53 .turnSince)"
+assert_eq "turnSince ignores the author's own skill report" '"2026-10-22T00:00:00Z"' "$(json_field 62 .turnSince)"
+assert_eq "turnSince ignores the author's own clean-review comment" '"2026-10-01T00:00:00Z"' "$(json_field 61 .turnSince)"
+assert_eq "turnSince ignores threads the author opened, open or resolved" '"2026-10-22T05:00:00Z"' \
+  "$(json_field 65 .turnSince)"
 assert_eq "--json lists the codeowners, lowercased" '["andy","luis"]' "$(jq -c .codeowners "$tmp_dir/board.json")"
 assert_eq "--json marks approval" "true" "$(json_field 9 .approved)"
 
@@ -366,12 +397,15 @@ assert_eq "text mode counts drafts" "3 drafts ignored; skipped (Renovate/release
   "$(tail -1 "$tmp_dir/text.out")"
 
 ledger="$tmp_dir/ledger.tsv"
-printf 'acme/repo\t5\tpr-review-inline\tsha\t2026-10-22T00:00:00Z\n' >"$ledger"
+printf 'acme/repo\t5\tpr-review-inline\tsha\t2026-10-22T00:00:00Z\nacme/repo\t64\tpr-review-inline\tsha\t2026-10-22T00:00:00Z\tmark\n' >"$ledger"
 PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$ledger" \
   bash "$triage" -R acme/repo --out "$tmp_dir/ledger.html" --no-open >/dev/null 2>&1
-assert_eq "a local ledger entry counts as a run" "LOCAL" \
-  "$(sed -n '/id="data">/,/<\/script>/p' "$tmp_dir/ledger.html" | sed '1d;$d' \
-    | jq -r '.prs[] | select(.number == 5) | .bucket')"
+ledger_bucket() {
+  sed -n '/id="data">/,/<\/script>/p' "$tmp_dir/ledger.html" | sed '1d;$d' \
+    | jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .bucket'
+}
+assert_eq "a local ledger entry counts as a run" "LOCAL" "$(ledger_bucket 5)"
+assert_eq "the ledger doesn't count runs on the viewer's own PR" "INLINE" "$(ledger_bucket 64)"
 
 # Paging: a fake gh serves page 2 when asked for the cursor page 1 returned.
 stub_dir="$tmp_dir/stub"

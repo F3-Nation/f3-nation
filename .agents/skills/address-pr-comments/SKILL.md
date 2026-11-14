@@ -173,7 +173,7 @@ Run all three. Never truncate comment bodies — replies must respond to the rev
 # 1. Unresolved inline review threads, with every comment in each thread. GraphQL, not REST:
 #    thread resolution exists only on PullRequestReviewThread, and a reviewer's follow-up reply
 #    inside an open thread ("still broken") is new feedback that a first-comment-only view misses.
-#    `id` is the thread's first comment — the target for the reply endpoint in Step 5c.
+#    `nodeId` is the thread's GraphQL node id (`PRRT_…`) — the reply target in Step 5c.
 gh api graphql -f query='
 query($owner: String!, $name: String!, $pr: Int!) {
   repository(owner: $owner, name: $name) {
@@ -185,7 +185,7 @@ query($owner: String!, $name: String!, $pr: Int!) {
           id
           comments(first: 100) {
             pageInfo { hasNextPage endCursor }
-            nodes { databaseId author { login } createdAt body }
+            nodes { author { login } createdAt body }
           }
         }
       }
@@ -195,7 +195,7 @@ query($owner: String!, $name: String!, $pr: Int!) {
   --jq '.data.repository.pullRequest.reviewThreads
         | {hasNextPage: .pageInfo.hasNextPage, endCursor: .pageInfo.endCursor,
            threads: [.nodes[] | select(.isResolved | not)
-             | {id: .comments.nodes[0].databaseId, nodeId: .id, path, line: (.line // .originalLine), isOutdated,
+             | {nodeId: .id, path, line: (.line // .originalLine), isOutdated,
                 moreComments: .comments.pageInfo.hasNextPage, commentsCursor: .comments.pageInfo.endCursor,
                 comments: [.comments.nodes[] | {author: .author.login, createdAt, body}]}]}'
 # If hasNextPage is true, re-run with `reviewThreads(first: 100, after: "<endCursor>")` using the
@@ -228,16 +228,21 @@ needs no new action. `isOutdated: true` means the commented line has since chang
 the concern still applies before planning a fix.
 
 Review bodies and conversation comments (#2, #3) cannot be resolved. Treat one as already
-addressed when a later conversation comment or thread reply carries a `_written by …_` signature
-(see Step 5c), was posted by the PR author's account, and responds to it. Teammates use different
-agents, so match the signature, not a particular model name.
+addressed when a later conversation comment, thread reply or COMMENT review body carries a
+`_written by …_` signature (see Step 5c), was posted by the PR author's account or the signed-in
+`gh` account (a maintainer addressing someone else's PR), and responds to it. Teammates use
+different agents, so match the signature, not a particular model name.
 
 Keep feedback from bot **reviewers** — AI code-review bots (CodeRabbit, Copilot, Codex, adversarial
 review workflows) raise real findings. Drop only noise: CI/status/coverage summaries,
-dependency-bot and release-bot chatter, empty review bodies, and standalone APPROVED reviews with
-no comment. A review with a non-empty body is feedback whatever its state — an APPROVED review
-that says "my only comment is…" is a question to answer, and a human COMMENTED review often holds
-numbered requests. Never drop a human review without reading its full body.
+dependency-bot and release-bot chatter, empty review bodies, standalone APPROVED reviews with no
+comment, and this skill's own replies: a review body or conversation comment that would mark an
+earlier comment as already addressed under the rule for unresolvable feedback. A signed comment
+that raises something new is feedback. A dropped reply still counts as evidence that the comment
+it answers is addressed. A
+review with a non-empty body is feedback whatever its state — an APPROVED review that says "my
+only comment is…" is a question to answer, and a human COMMENTED review often holds numbered
+requests. Never drop a human review without reading its full body.
 
 Before planning, account for every review: end Step 4's plan with a line like "Reviews seen: N —
 planned: X; skipped as noise: Y (author — reason)". A review that appears in neither count means
@@ -358,16 +363,44 @@ the files outside the worktree, which must stay clean for Step 6:
 `REPLY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pr-<number>-replies.XXXXXX")"` (this form works with both
 the macOS and GNU `mktemp`).
 
-```bash
-# Inline review thread — {comment_id} is the thread's `id` from Step 3 #1:
-gh api repos/<BASE_REPO>/pulls/<number>/comments/<comment_id>/replies \
-  -F body=@"$REPLY_DIR/<n>.md"
+Reply to an inline review thread through GraphQL, using the thread's `nodeId` (`PRRT_…`) from
+Step 3 #1. The REST replies endpoint
+(`repos/<BASE_REPO>/pulls/<number>/comments/<comment_id>/replies`) returns 404 in a GitHub
+security-advisory temporary private fork, even though REST reads of the same comments succeed;
+the GraphQL mutation works there and in ordinary repositories alike. `-F b=@<file>` reads the
+reply body from the file:
 
-# Top-level PR conversation comment:
+```bash
+gh api graphql -f query='
+mutation($thread: ID!, $b: String!) {
+  addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $thread, body: $b}) {
+    comment { url }
+  }
+}' -F thread=<nodeId> -F b=@"$REPLY_DIR/<n>.md" --jq '.data.addPullRequestReviewThreadReply.comment.url'
+```
+
+Reply to a review body or conversation comment with a top-level PR comment:
+
+```bash
 gh pr comment <number> --repo <BASE_REPO> --body-file "$REPLY_DIR/<n>.md"
 ```
 
-Issue these as plain sequential commands, not inside a shell function.
+A security-advisory temporary private fork (a repository named
+`<owner>/<repo>-ghsa-xxxx-xxxx-xxxx`) forbids top-level PR comments. There, post the reply as a
+COMMENT review instead, using the PR's node id (`PR_…`):
+
+```bash
+gh pr view <number> --repo <BASE_REPO> --json id --jq .id
+gh api graphql -f query='
+mutation($pr: ID!, $b: String!) {
+  addPullRequestReview(input: {pullRequestId: $pr, event: COMMENT, body: $b}) {
+    pullRequestReview { url }
+  }
+}' -F pr=<PR node id> -F b=@"$REPLY_DIR/<n>.md" --jq '.data.addPullRequestReview.pullRequestReview.url'
+```
+
+Issue these as plain sequential commands, not inside a shell function. Each prints the posted
+reply's URL; if one prints nothing or an error, stop and tell the user which replies did not post.
 
 ## Step 6 — Clean Up and Report
 

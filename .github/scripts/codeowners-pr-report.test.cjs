@@ -8,7 +8,10 @@ const {
   parseSlackIds,
   lightFor,
   buildReport,
+  isListed,
+  assembleReport,
   toMarkdown,
+  toSlackMarkdown,
 } = require("./codeowners-pr-report.cjs");
 const { DAYS } = require("./pr-author-nudge.cjs");
 
@@ -40,8 +43,8 @@ function report(
   prs,
   { facts = {}, slackIds, truncated = false, warnings } = {},
 ) {
-  const factsByNumber = new Map(
-    prs.map((p) => [p.number, facts[p.number] ?? teamFacts]),
+  const factsByUrl = new Map(
+    prs.map((p) => [p.url, facts[p.number] ?? teamFacts]),
   );
   return buildReport(
     {
@@ -50,7 +53,7 @@ function report(
       fetched: prs.length,
       prs,
     },
-    factsByNumber,
+    factsByUrl,
     {
       now: NOW,
       slackIds:
@@ -87,14 +90,13 @@ test("unclaimed PRs go to 🙋, however they are assigned", () => {
   assert.equal(list(result, "✅"), undefined);
 });
 
-test("🙋 names the next step past pr-review-inline and pings nobody", () => {
+test("🙋 names the next step past pr-review-inline", () => {
   const owner = list(
     report([pr(1, { bucket: "LOCAL" }), pr(2, { bucket: "MERGE" })]),
     "🙋",
   );
-  assert.match(lineFor(owner, 1), /by amy · next: `\/pr-local-test`/);
+  assert.match(lineFor(owner, 1), /by @amy · next: `\/pr-local-test`/);
   assert.match(lineFor(owner, 2), /approved, needs merge/);
-  assert.doesNotMatch(owner, /<@/);
 });
 
 test("an unclaimed PR held after a local test shows the held result", () => {
@@ -128,13 +130,21 @@ test("🙋 marks outside contributors", () => {
     report([pr(1)], { facts: { 1: { tier: "outside", reasons: [] } } }),
     "🙋",
   );
-  assert.match(lineFor(owner, 1), /by amy \(outside contributor\)/);
+  assert.match(lineFor(owner, 1), /by @amy \(outside contributor\)/);
 });
 
 test("claimed but not reviewed stays in 🙋 as review not run yet", () => {
   const owner = list(report([pr(1, { codeownerAssignees: ["dan"] })]), "🙋");
-  assert.match(lineFor(owner, 1), /claimed by @dan, review not run yet/);
-  assert.doesNotMatch(owner, /<@U0DAN>/);
+  assert.match(lineFor(owner, 1), /claimed by <@U0DAN>, review not run yet/);
+});
+
+test("🙋 mentions a mapped author and leaves an unmapped one as text", () => {
+  const owner = list(
+    report([pr(1, { author: "Andy" }), pr(2, { author: "amy" })]),
+    "🙋",
+  );
+  assert.match(lineFor(owner, 1), /by <@U0ANDY> · /);
+  assert.match(lineFor(owner, 2), /by @amy · /);
 });
 
 test("claimed and LOCAL goes to 🧪, mentioning the claimer and the held result", () => {
@@ -183,7 +193,7 @@ test("a codeowner's own PR needs a different codeowner to approve", () => {
   );
   assert.match(
     lineFor(final, 1),
-    /by luis · <@U0DAN> · needs a different codeowner to approve/,
+    /by @luis · <@U0DAN> · needs a different codeowner to approve/,
   );
 });
 
@@ -392,7 +402,7 @@ test("a hostile title or login is escaped, including inside the link", () => {
   const line = lineFor(list(result, "🙋"), 1);
   assert.match(
     line,
-    /\|#1 &lt;!channel&gt; &amp; &lt;https:\/\/evil\.example\|click&gt;> · by &lt;!here&gt; ·/,
+    /\|#1 &lt;!channel&gt; &amp; &lt;https:\/\/evil\.example\|click&gt;> · by @&lt;!here&gt; ·/,
   );
   assert.equal((line.match(/</g) ?? []).length, 1);
 });
@@ -510,4 +520,156 @@ test("a title can't start a link of its own in the job summary", () => {
     markdown,
     /\[#1 \\\]\(https:\/\/phish\.example\) \\\[x\]\(https:\/\/github\.com\/F3-Nation\/f3-nation\/pull\/1\)/,
   );
+});
+
+test("PRs from different repos with the same number are kept apart", () => {
+  const forkPr = pr(1, {
+    url: "https://github.com/F3-Nation/f3-nation-ghsa-aaaa-bbbb-cccc/pull/1",
+    ref: "GHSA-aaaa-bbbb-cccc #1",
+  });
+  const result = buildReport(
+    { codeowners: [], prs: [pr(1), forkPr] },
+    new Map([
+      [pr(1).url, teamFacts],
+      [forkPr.url, { tier: "team", reasons: [{ kind: "threads" }] }],
+    ]),
+    { now: NOW },
+  );
+  // Only the fork PR is its author's turn; each PR got its own facts.
+  assert.equal(result.counts.listed, 1);
+  assert.match(list(result, "🙋"), /\|#1 feat/);
+});
+
+test("a PR's ref replaces its number in the link", () => {
+  const owner = list(report([pr(1, { ref: "GHSA-aaaa-bbbb-cccc #1" })]), "🙋");
+  assert.match(owner, /\|GHSA-aaaa-bbbb-cccc #1 feat\(api\): change 1>/);
+});
+
+test("the report's name, empty text and board hint can be changed", () => {
+  const named = buildReport(
+    { codeowners: [], prs: [pr(1)] },
+    new Map([[pr(1).url, teamFacts]]),
+    {
+      now: NOW,
+      title: "Security Advisory Report",
+      boardHint: "Run by @andy",
+    },
+  );
+  assert.match(named.blocks[0].text.text, /^Security Advisory Report · /);
+  assert.match(named.text, /^Security Advisory Report: 1 PR needs/);
+  assert.match(named.blocks.at(-1).elements[0].text, /^Run by @andy · /);
+  const empty = buildReport({ codeowners: [], prs: [] }, new Map(), {
+    now: NOW,
+    emptyText: "No security advisory PRs are waiting.",
+  });
+  assert.equal(empty.text, "No security advisory PRs are waiting.");
+});
+
+test("the Slack Markdown uses plain newlines and defuses broadcasts", () => {
+  const markdown = toSlackMarkdown(
+    report([pr(1, { title: "@channel [fix](https://x.example)" }), pr(2)]),
+  );
+  assert.doesNotMatch(markdown, / {2}\n/);
+  assert.match(
+    markdown,
+    /\n• 🟢 \[#1 @\u200bchannel \(fix\)\(https:\/\/x\.example\)\]\(/,
+  );
+});
+
+test("assembleReport reads facts per repo and merges the boards", async () => {
+  const fork = "f3-nation-ghsa-aaaa-bbbb-cccc";
+  const calls = [];
+  const node = (repo, number, login) => ({
+    number,
+    url: `https://github.com/F3-Nation/${repo}/pull/${number}`,
+    title: "t",
+    isDraft: false,
+    createdAt: ago(2),
+    authorAssociation: "MEMBER",
+    author: { login, __typename: "User" },
+    timelineItems: { nodes: [] },
+    reviewThreads: { nodes: [] },
+    commits: { nodes: [] },
+  });
+  const github = {
+    paginate: async (route, params) => {
+      calls.push(`${params.repo} ${route}`);
+      return [];
+    },
+    graphql: async (_q, { repo }) => ({
+      repository: {
+        pullRequests: {
+          pageInfo: { hasNextPage: false },
+          nodes: [node(repo, 1, "amy")],
+        },
+      },
+    }),
+  };
+  const boardOf = (repo) => ({
+    codeowners: ["andy"],
+    fetched: 1,
+    prs: [pr(1, { url: `https://github.com/F3-Nation/${repo}/pull/1` })],
+  });
+  const { report: built, notes } = await assembleReport({
+    github,
+    sources: [
+      { owner: "F3-Nation", repo: "f3-nation", board: boardOf("f3-nation") },
+      {
+        owner: "F3-Nation",
+        repo: fork,
+        board: boardOf(fork),
+        base: { owner: "F3-Nation", repo: "f3-nation" },
+      },
+    ],
+    slackIdsRaw: "not json",
+    now: NOW,
+  });
+  assert.equal(built.counts.listed, 2);
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /CODEOWNERS_SLACK_IDS isn't valid JSON/);
+  assert.ok(calls.every((c) => c.startsWith("f3-nation ")));
+});
+
+test("extra lists follow the PR lists, and their header notes end the header", () => {
+  const result = buildReport(
+    { codeowners: [], prs: [pr(1)] },
+    new Map([[pr(1).url, teamFacts]]),
+    {
+      now: NOW,
+      extraLists: [
+        { heading: "🚧 No open fix PR", lines: ["one", "two"] },
+        { heading: "✍️ Empty", lines: [] },
+      ],
+      headerExtras: ["2 advisories have no open fix PR"],
+    },
+  );
+  assert.match(
+    result.blocks[0].text.text,
+    / · 1 PR needs a codeowner · 🔴 0 🟡 0 · 2 advisories have no open fix PR$/,
+  );
+  const texts = result.blocks
+    .filter((b) => b.type === "section")
+    .map((b) => b.text.text);
+  assert.equal(texts.length, 2);
+  assert.match(texts[0], /^\*🙋/);
+  assert.equal(texts[1], "*🚧 No open fix PR* · 2\n• one\n• two");
+});
+
+test("extra lists alone still make a report, not the empty text", () => {
+  const result = buildReport({ codeowners: [], prs: [] }, new Map(), {
+    now: NOW,
+    extraLists: [{ heading: "🚧 No open fix PR", lines: ["one"] }],
+  });
+  assert.equal(result.blocks[0].type, "header");
+  assert.match(result.blocks[0].text.text, / · 0 PRs need a codeowner · /);
+});
+
+test("isListed matches what the report lists", () => {
+  assert.equal(isListed(pr(1), teamFacts), true);
+  assert.equal(
+    isListed(pr(1), { tier: "team", reasons: [{ kind: "threads" }] }),
+    false,
+  );
+  assert.equal(isListed(pr(1, { bucket: "THREADS" }), teamFacts), false);
+  assert.equal(isListed(pr(1), undefined), false);
 });
