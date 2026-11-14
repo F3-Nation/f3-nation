@@ -10,8 +10,8 @@ vi.mock("nodemailer", () => ({ createTransport }));
 import {
   renderOtpEmailHtml,
   renderOtpEmailText,
-} from "~/app/api/otp/otp-email-template";
-import { sendVerificationRequest } from "~/app/api/otp/send-verification-request";
+} from "@acme/auth/lib/otp-email-template";
+import { sendOtpEmail } from "@acme/auth/lib/send-otp-email";
 
 const baseParams = {
   identifier: "user@example.com",
@@ -21,20 +21,29 @@ const baseParams = {
   token: "AB12CD",
 };
 
-describe("sendVerificationRequest", () => {
+const sendWithServer = ({ server, from, ...rest }: typeof baseParams) =>
+  sendOtpEmail({
+    ...rest,
+    provider: { server, from },
+    expires: new Date(),
+    theme: {},
+    request: new Request(rest.url),
+  } as unknown as Parameters<typeof sendOtpEmail>[0]);
+
+describe("sendOtpEmail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sendMail.mockResolvedValue({ rejected: [], pending: [] });
   });
 
   it("connects with the given server string", async () => {
-    await sendVerificationRequest(baseParams);
+    await sendWithServer(baseParams);
 
     expect(createTransport).toHaveBeenCalledWith(baseParams.server);
   });
 
   it("sends the text body as text and the HTML body as html", async () => {
-    await sendVerificationRequest(baseParams);
+    await sendWithServer(baseParams);
 
     expect(sendMail).toHaveBeenCalledWith({
       to: baseParams.identifier,
@@ -47,7 +56,7 @@ describe("sendVerificationRequest", () => {
   });
 
   it("disables SendGrid click and open tracking", async () => {
-    await sendVerificationRequest(baseParams);
+    await sendWithServer(baseParams);
 
     const { headers } = sendMail.mock.calls[0]?.[0] as {
       headers: Record<string, string>;
@@ -61,7 +70,7 @@ describe("sendVerificationRequest", () => {
   });
 
   it("escapes the token and host in the HTML body but not the text body", async () => {
-    await sendVerificationRequest({ ...baseParams, token: "<b>&" });
+    await sendWithServer({ ...baseParams, token: "<b>&" });
 
     const { html, text } = sendMail.mock.calls[0]?.[0] as {
       html: string;
@@ -74,19 +83,48 @@ describe("sendVerificationRequest", () => {
     expect(text).not.toContain("<html");
   });
 
-  it("throws when the recipient is rejected", async () => {
+  it("throws without the address when the recipient is rejected", async () => {
     sendMail.mockResolvedValue({ rejected: ["user@example.com"] });
 
-    await expect(sendVerificationRequest(baseParams)).rejects.toThrow(
-      "Email (user@example.com) could not be sent",
+    const err = await Promise.resolve(sendWithServer(baseParams)).catch(
+      (e: unknown) => e,
     );
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe(
+      "OTP email was rejected or left pending by the SMTP server",
+    );
+    expect((err as Error).message).not.toContain("user@example.com");
   });
 
-  it("throws when the recipient is left pending", async () => {
+  it("throws without the address when the recipient is left pending", async () => {
     sendMail.mockResolvedValue({ rejected: [], pending: ["user@example.com"] });
 
-    await expect(sendVerificationRequest(baseParams)).rejects.toThrow(
-      "could not be sent",
+    const err = await Promise.resolve(sendWithServer(baseParams)).catch(
+      (e: unknown) => e,
     );
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe(
+      "OTP email was rejected or left pending by the SMTP server",
+    );
+    expect((err as Error).message).not.toContain("user@example.com");
+  });
+
+  it("rejects a non-string server before connecting", async () => {
+    await expect(
+      sendOtpEmail({
+        identifier: baseParams.identifier,
+        url: baseParams.url,
+        token: baseParams.token,
+        provider: {
+          server: { host: "smtp.example.test" },
+          from: baseParams.from,
+        },
+        expires: new Date(),
+        theme: {},
+        request: new Request(baseParams.url),
+      } as unknown as Parameters<typeof sendOtpEmail>[0]),
+    ).rejects.toThrow("OTP provider server must be an SMTP connection string");
+    expect(createTransport).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
   });
 });

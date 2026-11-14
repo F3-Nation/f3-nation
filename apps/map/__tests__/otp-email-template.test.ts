@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   renderOtpEmailHtml,
   renderOtpEmailText,
-} from "~/app/api/otp/otp-email-template";
+} from "@acme/auth/lib/otp-email-template";
 
 describe("renderOtpEmailHtml", () => {
   it("renders the token and host", () => {
