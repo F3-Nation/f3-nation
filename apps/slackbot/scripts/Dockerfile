@@ -6,9 +6,14 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PATH="/app/.venv/bin:$PATH" \
-    APP_HOME=/app/apps/slackbot
+    APP_HOME=/app/apps/slackbot \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
+
+# Chromium renders user-supplied text, so the job runs without root.
+RUN groupadd --gid 1000 slackbot && \
+    useradd --uid 1000 --gid slackbot --shell /bin/bash --create-home slackbot
 
 # Install system dependencies for Playwright/Chromium
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -54,6 +59,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --package f3-nation-slack-bot --group scripts --no-dev --no-editable
 
 WORKDIR $APP_HOME
-RUN python -m playwright install chromium
+RUN python -m playwright install chromium && \
+    chown slackbot:slackbot "$APP_HOME"
 
+# Jobs write debug CSVs and report images to the working directory, so the non-root user owns it; the rest of /app stays root-owned.
+USER slackbot
 CMD ["python", "-m", "scripts.hourly_runner"]

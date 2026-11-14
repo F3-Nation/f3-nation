@@ -1,3 +1,7 @@
+import {
+  rejectStravaMetadata,
+  stripStravaMetadata,
+} from "../../lib/user-metadata";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
@@ -75,7 +79,7 @@ const profileUpdateSchema = z
       .record(z.string(), z.unknown())
       .optional()
       .describe(
-        "JSON meta fields to merge with existing meta (e.g. f3_name_origin, my_f3_why).",
+        "JSON meta fields to merge with existing meta (e.g. f3_name_origin, my_f3_why). Top-level strava_* keys are rejected with BAD_REQUEST.",
       ),
   })
   .describe("Whitelisted profile fields the user can update.");
@@ -104,7 +108,10 @@ const meProfileSchema = z.object({
   phone: z.string().nullable(),
   homeRegionId: z.number().int().min(1).nullable(),
   avatarUrl: z.string().nullable(),
-  meta: z.union([z.record(z.string(), z.unknown()), z.string()]).nullable(),
+  meta: z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .describe("Profile metadata excluding top-level strava_* keys."),
   emergencyContact: z.string().nullable(),
   emergencyPhone: z.string().nullable(),
   emergencyNotes: z.string().nullable(),
@@ -193,7 +200,12 @@ async function fetchFullProfile(db: AppDb, userId: number) {
       .orderBy(asc(schema.orgs.name), asc(schema.positions.name)),
   ]);
 
-  return { ...user, roles, positions };
+  return {
+    ...user,
+    meta: stripStravaMetadata(user.meta) ?? null,
+    roles,
+    positions,
+  };
 }
 
 export const meRouter = {
@@ -243,6 +255,7 @@ export const meRouter = {
 
       // Build the update set from provided fields
       const { meta: metaInput, ...directFields } = input;
+      rejectStravaMetadata(metaInput);
 
       const updateSet: Record<string, unknown> = { ...directFields };
 

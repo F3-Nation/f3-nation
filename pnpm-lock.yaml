@@ -351,7 +351,7 @@ catalogs:
       specifier: ^4.17.27
       version: 4.17.27
     '@types/node':
-      specifier: ^26.6.5
+      specifier: ^26.6.6
       version: 26.6.6
     '@types/nodemailer':
       specifier: ^8.0.2
@@ -1691,6 +1691,9 @@ importers:
       '@acme/vitest-config':
         specifier: workspace:*
         version: link:../../tooling/vitest
+      '@auth/core':
+        specifier: 0.41.3
+        version: 0.41.3(nodemailer@10.3.1)
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.27

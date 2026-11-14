@@ -25,6 +25,7 @@ from infrastructure.api_client.exceptions import (
     F3ApiError,
     F3ApiNotFoundError,
 )
+from infrastructure.strava_credentials import StravaNotConnectedError
 from utilities.builders import SUBMISSION_WAIT_VIEW, add_debug_form, add_loading_form, send_error_response
 from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE, is_production_deployment
 from utilities.database.orm import SlackSettings
@@ -61,7 +62,7 @@ setup_debugger()
 
 
 def get_user_facing_error_message(exc: Exception) -> str:
-    if isinstance(exc, UnlinkedSlackIdentityError):
+    if isinstance(exc, (UnlinkedSlackIdentityError, StravaNotConnectedError)):
         return str(exc)
     if isinstance(exc, F3ApiAuthError):
         return "The Slackbot could not authenticate with the F3 Nation API."
@@ -219,7 +220,9 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             )
             if isinstance(exc, F3ApiError):
                 logger.error(f"F3 API detail: {exc.detail}")
-            if isinstance(exc, SlackApiError):
+            if isinstance(exc, StravaNotConnectedError):
+                logger.warning("strava.connection.not_found")
+            elif isinstance(exc, SlackApiError):
                 logger.error(
                     "slack.api.handler_failed type=%s handler=%s error=%s",
                     request_type,
