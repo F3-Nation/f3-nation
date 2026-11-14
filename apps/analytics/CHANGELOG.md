@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.2](https://github.com/F3-Nation/f3-nation/compare/analytics@1.2.1...analytics@1.2.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* **deps:** update dependency duckdb to v2 ([#1470](https://github.com/F3-Nation/f3-nation/issues/1470)) ([4ef5d02](https://github.com/F3-Nation/f3-nation/commit/4ef5d0262688d35c3655b870e7f7c84c5bbda855))
+* **deps:** update python dependencies (non-major) ([#1465](https://github.com/F3-Nation/f3-nation/issues/1465)) ([a416306](https://github.com/F3-Nation/f3-nation/commit/a41630638e8eb83c27fdb50246c3ed34ebad91b8))
+* **repo:** prevent cached Python missing-tool skips ([#1459](https://github.com/F3-Nation/f3-nation/issues/1459)) ([8726631](https://github.com/F3-Nation/f3-nation/commit/872663132125e957eb28dbc3e1794a7e0f996a88))
+
 ## [1.2.1](https://github.com/F3-Nation/f3-nation/compare/analytics@1.2.0...analytics@1.2.1) (2026-10-29)
 
 
