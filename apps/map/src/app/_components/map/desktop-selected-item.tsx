@@ -25,7 +25,14 @@ const SelectedItemWrapper = () => {
     typeof selectedItem | undefined
   >(selectedItem);
 
-  // Create memoized debounced function
+  // Clear the stored item when it should no longer be displayed.
+  if (
+    (mapEvent !== "idle" || selectedItem.selectedLocation?.id == null) &&
+    debouncedSelectedItem !== undefined
+  ) {
+    setDebouncedSelectedItem(undefined);
+  }
+
   const debouncedSetSelectedItem = useMemo(
     () =>
       debounce((newPosition: typeof selectedItem) => {
@@ -34,12 +41,12 @@ const SelectedItemWrapper = () => {
     [],
   );
 
-  // // Update debounced position when pagePosition changes
   useEffect(() => {
     if (mapEvent !== "idle" || selectedItem.selectedLocation?.id == null) {
-      setDebouncedSelectedItem(undefined);
       return;
-    } else if (typeof selectedItem.selectedLocation.id === "number") {
+    }
+
+    if (typeof selectedItem.selectedLocation.id === "number") {
       void getQueryClient()
         .query(
           orpc.map.location.locationWorkout.queryOptions({
@@ -51,7 +58,6 @@ const SelectedItemWrapper = () => {
 
     debouncedSetSelectedItem(selectedItem);
 
-    // Cleanup
     return () => {
       debouncedSetSelectedItem.cancel();
     };
