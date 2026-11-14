@@ -16,8 +16,12 @@ export function DebouncedImage({
 }) {
   const [loading, setLoading] = useState(true);
   const [image, setImage] = useState<string | undefined>(undefined);
-  useEffect(() => {
+  const [prevSrc, setPrevSrc] = useState(src);
+  if (src !== prevSrc) {
+    setPrevSrc(src);
     setLoading(true);
+  }
+  useEffect(() => {
     const timeout = setTimeout(() => {
       setLoading(false);
       setImage(src);
