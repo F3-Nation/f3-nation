@@ -388,6 +388,11 @@ class GcsPublisher:
                 raise ValueError("retained pointer URI is malformed")
         return blob, pointer, generation
 
+    def read_current_pointer(self) -> tuple[dict[str, Any] | None, str | None]:
+        """Return the validated product pointer and its generation, or ``(None, None)`` if absent."""
+        _, pointer, generation = self._read_pointer()
+        return pointer, generation
+
     def _validate_release(
         self,
         run_id: str,

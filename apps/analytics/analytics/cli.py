@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Mapping, cast
 
 from google.cloud import storage  # type: ignore[import-untyped]
@@ -14,6 +14,13 @@ from .duckdb import connect
 from .logging import JsonLogger
 from .materializations import PRODUCTS, select_materializations
 from .publication import GcsPublisher
+from .release_gc import (
+    DEFAULT_KEEP_LATEST,
+    DEFAULT_MAX_RELEASES,
+    DEFAULT_MIN_AGE,
+    ReleaseGarbageCollector,
+    utc_now,
+)
 from .run_id import RunId
 from .settings import PointerSettings, Settings
 
@@ -57,6 +64,14 @@ def main() -> int:
     rollback_parser.add_argument("--product", choices=PRODUCTS, required=True)
     rollback_parser.add_argument("--expected-generation", required=True)
     rollback_parser.add_argument("--release-id", required=True)
+    gc_parser = commands.add_parser(
+        "gc-releases", help="delete old release prefixes not referenced by the product pointer (dry run by default)"
+    )
+    gc_parser.add_argument("--product", choices=PRODUCTS, required=True)
+    gc_parser.add_argument("--min-age-days", type=int, default=DEFAULT_MIN_AGE.days)
+    gc_parser.add_argument("--keep-latest", type=int, default=DEFAULT_KEEP_LATEST)
+    gc_parser.add_argument("--max-releases", type=int, default=DEFAULT_MAX_RELEASES)
+    gc_parser.add_argument("--apply", action="store_true", help="delete; without this flag only the plan is logged")
     for command_parser in (preflight, run_parser, export_parser):
         command_parser.add_argument(
             "--materialization", action="append", dest="command_materializations", metavar="NAME"
@@ -85,6 +100,7 @@ def main() -> int:
                 "diagnostics-staged-events",
                 "diagnostics-ctas-events",
                 "rollback-pointer",
+                "gc-releases",
                 "run",
             )
             else select_materializations(
@@ -110,6 +126,29 @@ def main() -> int:
                 pointer_release_sequence=pointer["releaseSequence"],
                 release_id=args.release_id,
             )
+        elif args.command == "gc-releases":
+            collector = ReleaseGarbageCollector(
+                _storage_client(), cast(Settings, PointerSettings.from_env()), product=args.product
+            )
+            plan = collector.plan(
+                now=utc_now(),
+                min_age=timedelta(days=args.min_age_days),
+                keep_latest=args.keep_latest,
+                max_releases=args.max_releases,
+            )
+            logger.info("analytics.etl.release_gc_planned", apply=args.apply, **plan.summary())
+            if args.apply:
+                result = collector.apply(plan)
+                logger.info(
+                    "analytics.etl.release_gc_applied",
+                    product=args.product,
+                    deleted_release_ids=result.deleted_release_ids,
+                    deleted_object_count=result.deleted_object_count,
+                    already_absent_count=result.already_absent_count,
+                    skipped_release_ids=result.skipped_release_ids,
+                )
+                if result.skipped_release_ids:
+                    return 1
         elif args.command == "preflight":
             settings = Settings.from_env()
             connection = connect(settings)

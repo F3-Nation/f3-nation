@@ -218,10 +218,13 @@ Provisioning requirements:
 
 Do **not** set a naive object-age lifecycle deletion rule over either product
 root or bucket: age alone cannot identify the live pointer or rollback chain.
-Automated garbage collection is not implemented. Any future cleanup must be a
-separately privileged, generation-aware process with explicit human approval,
-and must resolve/preserve both product pointers and retained previous releases.
-The publisher does not delete releases.
+Cleanup is the generation-aware `analytics-etl gc-releases` command, which
+preserves each product's current and `retainedPrevious` releases; its rules and
+operator procedure are in
+[`ANALYTICS_ETL_OPERATIONS.md`](ANALYTICS_ETL_OPERATIONS.md#generation-aware-release-cleanup).
+It runs under a separately privileged operator identity with delete on only the
+product release prefix, never the runtime producer. The publisher does not
+delete releases.
 
 ## 5. Scheduler
 
