@@ -3,7 +3,7 @@
 # from codeowners' markers only (including a clean review's "no issues" comment) and never from
 # the PR author's own runs, the cutoff
 # for shape-based detection of runs from before the markers, held local tests and the
-# `local test: not needed` label, the bot timeout, the viewer's own PRs, the --json fields,
+# `local test: not needed` label, the viewer's own PRs, the --json fields,
 # and that a hostile PR title can't break out of the HTML board's data block.
 # Run directly: bash scripts/pr-triage.test.sh
 set -uo pipefail
@@ -42,22 +42,16 @@ cat >"$tmp_dir/CODEOWNERS" <<'OWNERS'
 OWNERS
 export PR_TRIAGE_CODEOWNERS="$tmp_dir/CODEOWNERS"
 
-# Every PR defaults to: ready, opened long ago, all three bots finished, no skill runs,
-# no threads. Each case overrides only what it tests.
+# Every PR defaults to: ready, opened long ago, no skill runs, no threads. Each case
+# overrides only what it tests.
 jq -n '
-  def bots_done: [
-    {__typename: "StatusContext", context: "CodeRabbit", state: "SUCCESS", description: "Review completed"},
-    {__typename: "CheckRun", name: "Greptile Review", status: "COMPLETED"}
-  ];
-  def qodo: {author: {login: "qodo-free-for-open-source-projects"}, body: "<h3>Code Review by Qodo</h3>"};
   def pr($n; $title; $author): {
     number: $n, title: $title, url: "https://github.com/acme/repo/pull/\($n)",
     isDraft: false, createdAt: "2026-10-01T00:00:00Z", reviewDecision: null, mergeable: "MERGEABLE",
     author: {login: $author},
     timelineItems: {nodes: []},
-    commits: {nodes: [{commit: {oid: "first", committedDate: "2026-10-01T00:00:00Z",
-      statusCheckRollup: {contexts: {nodes: bots_done}}}}]},
-    comments: {nodes: [qodo]},
+    commits: {nodes: [{commit: {oid: "first", committedDate: "2026-10-01T00:00:00Z"}}]},
+    comments: {nodes: []},
     reviews: {nodes: []},
     reviewThreads: {nodes: []}
   };
@@ -88,10 +82,7 @@ jq -n '
   {data: {viewer: {login: "viewer"}, repository: {pullRequests: {pageInfo: {hasNextPage: false}, nodes: [
     (pr(1; "draft"; "someone") | .isDraft = true),
     pr(2; "deps"; "renovate"),
-    (pr(3; "bots running"; "someone")
-      | .commits.nodes[0].commit.committedDate = "2026-10-22T11:30:00Z"
-      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0].state = "PENDING"),
-    (pr(4; "bot never showed"; "someone") | .comments.nodes = []),
+    (pr(3; "pushed minutes ago"; "someone") | pushed("2026-10-22T11:30:00Z")),
     pr(5; "fresh"; "someone"),
     (pr(6; "clean inline review by someone else"; "someone")
       | .comments.nodes += [{author: {login: "luis"}, body: "No issues found.\n<!-- pr-review-inline -->"}]),
@@ -107,12 +98,6 @@ jq -n '
     (pr(12; "unmarked AI comment after cutoff"; "someone")
       | .reviews.nodes = [review("bot-user"; "2026-10-22T00:00:00Z"; ""; ["Some note.\n_written by Model_"])]),
     (pr(13; "</script><img src=x onerror=alert(1)>"; "someone") | .isDraft = true),
-    (pr(14; "bot rerun just started on an old commit"; "someone")
-      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0] +=
-          {state: "PENDING", createdAt: "2026-10-22T11:50:00Z"}),
-    (pr(15; "bot run stuck for hours"; "someone")
-      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[1] +=
-          {status: "IN_PROGRESS", startedAt: "2026-10-22T08:00:00Z"}),
     (pr(16; "first line\nsecond line"; "someone")),
     (pr(17; "over 100 threads"; "someone") | .reviews.nodes = [inline_review]
       | .reviewThreads = {pageInfo: {hasNextPage: true}, nodes: [thread(true; "andy")]}),
@@ -125,17 +110,8 @@ jq -n '
     (pr(21; "conflicts, ready for approval"; "someone") | .mergeable = "CONFLICTING"
       | .reviews.nodes = [inline_review, local_review]),
     (pr(22; "conflicting draft"; "someone") | .isDraft = true | .mergeable = "CONFLICTING"),
-    (pr(23; "Greptile running"; "someone")
-      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[1] +=
-          {status: "IN_PROGRESS", startedAt: "2026-10-22T11:50:00Z"}),
-    (pr(24; "CodeRabbit skipped a draft"; "someone")
-      | .commits.nodes[0].commit.committedDate = "2026-10-22T11:30:00Z"
-      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0] +=
-          {description: "Review skipped: draft detected"}),
-    (pr(25; "Qodo not started"; "someone")
-      | .commits.nodes[0].commit.committedDate = "2026-10-22T11:30:00Z" | .comments.nodes = []),
-    (pr(26; "recently marked ready"; "someone")
-      | .timelineItems.nodes = [{createdAt: "2026-10-22T11:45:00Z"}] | .comments.nodes = []),
+    (pr(26; "marked ready minutes ago"; "someone")
+      | .timelineItems.nodes = [{createdAt: "2026-10-22T11:45:00Z"}]),
     (pr(27; "markers only among the oldest reviews and comments"; "someone")
       | .firstReviews.nodes = [inline_review, local_review]),
     (pr(28; "clean review note only among the oldest comments"; "someone")
@@ -225,8 +201,6 @@ jq -n '
           (review("luis"; "2026-10-22T03:00:00Z"; "| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; [])
             | .commit.oid = "pushed")]
       | pushed("2026-10-22T02:30:00Z")),
-    (pr(58; "Greptile finished last"; "someone") | .reviews.nodes = [inline_review]
-      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[1].completedAt = "2026-10-22T09:00:00Z"),
     (pr(59; "local test said do not approve yet"; "someone")
       | .reviews.nodes = [inline_review, review("andy"; "2026-10-22T02:00:00Z";
           "❌ Recommendation: Don'"'"'t approve yet\n| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; [])]
@@ -274,9 +248,8 @@ note_of() { board_json | jq -r --argjson n "$1" '.prs[] | select(.number == $n) 
 assert_eq "board JSON parses" "acme/repo" "$(board_json | jq -r .repo)"
 assert_eq "draft is ignored" "DRAFT" "$(bucket_of 1)"
 assert_eq "Renovate is skipped" "SKIP" "$(bucket_of 2)"
-assert_eq "a bot still reviewing a fresh push holds the PR" "BOTS" "$(bucket_of 3)"
-assert_eq "a bot missing for over 2h stops blocking" "INLINE" "$(bucket_of 4)"
-assert_eq "a bot missing for over 2h is noted" "gave up waiting on Qodo" "$(note_of 4)"
+assert_eq "a fresh push goes straight to /pr-review-inline" "INLINE" "$(bucket_of 3)"
+assert_eq "a fresh push gets no note" "" "$(note_of 3)"
 assert_eq "no skill run needs /pr-review-inline" "INLINE" "$(bucket_of 5)"
 assert_eq "a codeowner's clean-review comment counts" "LOCAL" "$(bucket_of 6)"
 assert_eq "an unresolved thread waits on the author" "THREADS" "$(bucket_of 7)"
@@ -286,9 +259,6 @@ assert_eq "approved waits to merge" "MERGE" "$(bucket_of 9)"
 assert_eq "the viewer's own finished PR" "OWN" "$(bucket_of 10)"
 assert_eq "a review from before the markers is recognized" "LOCAL" "$(bucket_of 11)"
 assert_eq "an unmarked AI comment after the cutoff isn't a skill run" "INLINE" "$(bucket_of 12)"
-assert_eq "a bot run started minutes ago holds the PR, however old the commit" "BOTS" "$(bucket_of 14)"
-assert_eq "a bot run started over 2h ago stops blocking" "INLINE" "$(bucket_of 15)"
-assert_eq "a bot run started over 2h ago is noted" "gave up waiting on Greptile" "$(note_of 15)"
 assert_eq "a multiline title is flattened" "first line second line" \
   "$(board_json | jq -r '.prs[] | select(.number == 16) | .title')"
 assert_eq "threads past the first 100 hold the PR" "THREADS" "$(bucket_of 17)"
@@ -301,13 +271,7 @@ assert_eq "conflicts are noted beside open threads and finished skills" \
 assert_eq "a conflicting PR still awaits approval" "MANUAL" "$(bucket_of 21)"
 assert_eq "conflicts are noted on a PR awaiting approval" "merge conflicts" "$(note_of 21)"
 assert_eq "a conflicting draft gets no note" "" "$(note_of 22)"
-assert_eq "a running Greptile holds the PR" "BOTS" "$(bucket_of 23)"
-assert_eq "a running Greptile is named" "waiting on Greptile" "$(note_of 23)"
-assert_eq "a CodeRabbit draft skip holds the PR" "BOTS" "$(bucket_of 24)"
-assert_eq "a CodeRabbit draft skip is named" "waiting on CodeRabbit" "$(note_of 24)"
-assert_eq "a bot that hasn't shown up holds a fresh push" "BOTS" "$(bucket_of 25)"
-assert_eq "a bot that hasn't shown up is named" "waiting on Qodo" "$(note_of 25)"
-assert_eq "recently marking ready restarts the bot clock" "BOTS" "$(bucket_of 26)"
+assert_eq "a PR marked ready minutes ago goes straight to /pr-review-inline" "INLINE" "$(bucket_of 26)"
 assert_eq "skill markers among the oldest reviews still count" "MANUAL" "$(bucket_of 27)"
 assert_eq "a clean-review note among the oldest comments still counts" "LOCAL" "$(bucket_of 28)"
 assert_eq "a blocked local test still needs /pr-local-test" "LOCAL" "$(bucket_of 29)"
@@ -392,9 +356,9 @@ assert_eq "turnSince falls back to when the PR opened" '"2026-10-01T00:00:00Z"' 
 assert_eq "turnSince ignores conversation comments and a codeowner's thread comment" \
   '"2026-10-22T00:00:00Z"' "$(json_field 51 .turnSince)"
 assert_eq "turnSince counts a resolved thread from its last comment" '"2026-10-22T07:00:00Z"' "$(json_field 52 .turnSince)"
-assert_eq "turnSince ignores a bot that is still running" '"2026-10-01T00:00:00Z"' "$(json_field 14 .turnSince)"
+assert_eq "turnSince counts the author's push" '"2026-10-22T11:30:00Z"' "$(json_field 3 .turnSince)"
+assert_eq "turnSince counts being marked ready" '"2026-10-22T11:45:00Z"' "$(json_field 26 .turnSince)"
 assert_eq "turnSince counts a reopen" '"2026-10-20T00:00:00Z"' "$(json_field 53 .turnSince)"
-assert_eq "turnSince counts Greptile finishing" '"2026-10-22T09:00:00Z"' "$(json_field 58 .turnSince)"
 assert_eq "turnSince ignores the author's own skill report" '"2026-10-22T00:00:00Z"' "$(json_field 62 .turnSince)"
 assert_eq "turnSince ignores the author's own clean-review comment" '"2026-10-01T00:00:00Z"' "$(json_field 61 .turnSince)"
 assert_eq "turnSince ignores threads the author opened, open or resolved" '"2026-10-22T05:00:00Z"' \
