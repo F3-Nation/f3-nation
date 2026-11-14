@@ -119,8 +119,8 @@ city X" to "this workout, this address, this time" in a few interactions.
   revalidate, and it attempts a `map.created`, `map.updated` or `map.deleted`
   webhook carrying the event ID. Webhook destinations are optional; delivery
   failures are logged, with no retries or durable delivery. A rejected write
-  clears no cache and notifies no one. Event deletion and its current/future
-  instance deactivation commit together; a failed cascade or transaction leaves
+  clears no cache and notifies no one. Event deletion and deactivation of its instances dated on or after the
+  current UTC date commit together; a failed cascade or transaction leaves
   both unchanged, and notification starts only after commit.
 
 This does not synchronously refresh every API instance or open browser:

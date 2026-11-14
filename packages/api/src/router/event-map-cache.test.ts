@@ -151,7 +151,7 @@ const seedEvent = async (
 
 const seedInstance = async (
   event: Awaited<ReturnType<typeof seedEvent>>,
-  startDate = event.startDate,
+  startDate = new Date().toISOString().slice(0, 10),
 ) => {
   const [instance] = await db
     .insert(schema.eventInstances)
@@ -312,7 +312,7 @@ describe("event mutation map cache", () => {
           cascadeService,
           "softDeleteFutureInstancesForSeries",
         ).mockImplementationOnce(async (...args) => {
-          await cascade(...args);
+          expect(await cascade(...args)).toBe(1);
           throw injectedError;
         });
       } else {
