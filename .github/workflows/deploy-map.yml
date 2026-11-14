@@ -52,8 +52,8 @@ jobs:
     secrets:
       posthog_key: ${{ secrets.POSTHOG_KEY }}
 
-  # Staging allows the dev-mode sign-in (a nation-admin login); Production must
-  # never have it. The image is promoted unchanged from Staging, so assert it
+  # Production must never register the dev-mode sign-in (a nation-admin login).
+  # The image is promoted unchanged from Staging, so assert it
   # against the live Production service after every deploy, including one that
   # fails after the new revision started serving.
   verify-prod-no-dev-mode:

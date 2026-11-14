@@ -54,6 +54,10 @@ spec:
             # api across run.app hosts. See docs/PREVIEW_AUTH.md.
             - name: AUTH_TRUSTED_ISSUERS
               value: ${AUTH_URL}
+            # Only these OAuth clients' access tokens are accepted; the
+            # seeded f3-me-local client is the one E2E mints tokens with.
+            - name: AUTH_TRUSTED_CLIENT_IDS
+              value: f3-me-local,f3-admin-local
             - name: NEXT_PUBLIC_CHANNEL
               value: branch
             # PostHog error tracking (server-side capture reads this at
