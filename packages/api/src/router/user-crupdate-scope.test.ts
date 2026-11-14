@@ -32,7 +32,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import type { Session } from "@acme/auth";
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { mail } from "@acme/mail";
 import { notifyWebhooks } from "../lib/notify-webhooks";
 import { ERRORS } from "@acme/shared/app/errors";
@@ -56,6 +56,14 @@ import {
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 describe("user.crupdate org scoping", () => {
   const createdUserIds: number[] = [];
@@ -679,6 +687,272 @@ describe("user.crupdate org scoping", () => {
     ).toEqual([]);
     expect(mockLogInfo).not.toHaveBeenCalled();
   });
+
+  it.each(["40P01", "55P03"])(
+    "maps database concurrency error %s to a retryable conflict at either write stage",
+    async (code) => {
+      for (const stage of ["execute", "update"] as const) {
+        const target = await createUser({ homeRegionId: regionA.id });
+        await mockAuthWithSession(adminOf(regionA));
+        const transaction = db.transaction.bind(db);
+        if (!globalThis.db)
+          throw new Error("Database fixture was not initialized");
+        const spy = vi
+          .spyOn(globalThis.db, "transaction")
+          .mockImplementationOnce((callback, config) =>
+            transaction(async (tx) => {
+              const failing = vi.spyOn(tx, stage).mockImplementationOnce(() => {
+                throw new Error("Synthetic driver wrapper", {
+                  cause: Object.assign(
+                    new Error("Synthetic concurrency fault"),
+                    { code },
+                  ),
+                });
+              });
+              try {
+                return await callback(tx);
+              } finally {
+                failing.mockRestore();
+              }
+            }, config),
+          );
+        try {
+          await expect(
+            createTestClient().user.crupdate({
+              id: target.id,
+              f3Name: "Must not persist",
+              homeRegionId: regionB.id,
+              roles: [],
+            }),
+          ).rejects.toMatchObject({ code: "CONFLICT" });
+          expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+          expect((await readUser(target.id))?.f3Name).toBe("Original");
+          expect(mockLogInfo).not.toHaveBeenCalled();
+        } finally {
+          spy.mockRestore();
+        }
+      }
+    },
+  );
+
+  it.each(["cycle", "truncated", "boundary"])(
+    "validates the complete bounded ancestry (%s)",
+    async (kind) => {
+      const destination = await createRegion();
+      let current = destination;
+      const edges = kind === "truncated" ? 21 : kind === "boundary" ? 20 : 1;
+      for (let index = 0; index < edges; index++) {
+        const parent = await createRegion();
+        await db
+          .update(schema.orgs)
+          .set({ parentId: parent.id })
+          .where(eq(schema.orgs.id, current.id));
+        current = parent;
+      }
+      await db
+        .update(schema.orgs)
+        .set({ parentId: kind === "cycle" ? destination.id : null })
+        .where(eq(schema.orgs.id, current.id));
+      const target = await createUser({ homeRegionId: regionA.id });
+      await mockAuthWithSession(adminOf(regionA));
+      const saving = createTestClient().user.crupdate({
+        id: target.id,
+        homeRegionId: destination.id,
+        roles: [],
+      });
+      if (kind === "boundary") {
+        await saving;
+        expect((await readUser(target.id))?.homeRegionId).toBe(destination.id);
+      } else {
+        await expect(saving).rejects.toMatchObject({ code: "BAD_REQUEST" });
+        expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+      }
+      // Break synthetic cycles before ordinary fixture cleanup.
+      await db
+        .update(schema.orgs)
+        .set({ parentId: null })
+        .where(eq(schema.orgs.id, current.id));
+    },
+  );
+
+  it.each(["deactivate", "reparent"])(
+    "holds ancestor locks through profile commit against concurrent %s",
+    async (change) => {
+      const destination = await createRegion();
+      const ancestor = await createRegion();
+      const alternate = await createRegion();
+      await db
+        .update(schema.orgs)
+        .set({ parentId: ancestor.id })
+        .where(eq(schema.orgs.id, destination.id));
+      const target = await createUser({ homeRegionId: regionA.id });
+      await mockAuthWithSession(adminOf(regionA));
+      const saved = deferred<void>();
+      const release = deferred<void>();
+      const writerPid = deferred<number>();
+      const transaction = db.transaction.bind(db);
+      if (!globalThis.db)
+        throw new Error("Database fixture was not initialized");
+      const spy = vi
+        .spyOn(globalThis.db, "transaction")
+        .mockImplementationOnce((callback, config) =>
+          transaction(async (tx) => {
+            const result = await callback(tx);
+            saved.resolve();
+            await release.promise;
+            return result;
+          }, config),
+        );
+      const saving = createTestClient().user.crupdate({
+        id: target.id,
+        homeRegionId: destination.id,
+        roles: [],
+      });
+      let writer: Promise<unknown> | undefined;
+      try {
+        await saved.promise;
+        writer = transaction(async (tx) => {
+          const [row] = await tx.execute<{ pid: number }>(
+            sql`SELECT pg_backend_pid() AS pid`,
+          );
+          if (!row) throw new Error("Missing writer backend");
+          writerPid.resolve(row.pid);
+          await tx
+            .update(schema.orgs)
+            .set(
+              change === "deactivate"
+                ? { isActive: false }
+                : { parentId: alternate.id },
+            )
+            .where(eq(schema.orgs.id, ancestor.id));
+        });
+        const pid = await writerPid.promise;
+        await vi.waitFor(async () => {
+          const [row] = await db.execute<{ blocked: boolean }>(
+            sql`SELECT cardinality(pg_blocking_pids(${pid})) > 0 AS blocked`,
+          );
+          expect(row?.blocked).toBe(true);
+        });
+        release.resolve();
+        await saving;
+        await writer;
+        expect((await readUser(target.id))?.homeRegionId).toBe(destination.id);
+      } finally {
+        release.resolve();
+        await Promise.allSettled([saving, ...(writer ? [writer] : [])]);
+        spy.mockRestore();
+      }
+    },
+  );
+
+  it("rejects newly discovered ancestry after waiting for a concurrent reparent", async () => {
+    const destination = await createRegion();
+    const alternate = await createRegion();
+    const target = await createUser({ homeRegionId: regionA.id });
+    await mockAuthWithSession(adminOf(regionA));
+    const writerReady = deferred<void>();
+    const releaseWriter = deferred<void>();
+    const profilePid = deferred<number>();
+    const transaction = db.transaction.bind(db);
+    const writer = transaction(async (tx) => {
+      await tx
+        .update(schema.orgs)
+        .set({ parentId: alternate.id })
+        .where(eq(schema.orgs.id, destination.id));
+      writerReady.resolve();
+      await releaseWriter.promise;
+    });
+    await writerReady.promise;
+    if (!globalThis.db) throw new Error("Database fixture was not initialized");
+    const spy = vi
+      .spyOn(globalThis.db, "transaction")
+      .mockImplementationOnce((callback, config) =>
+        transaction(async (tx) => {
+          const [row] = await tx.execute<{ pid: number }>(
+            sql`SELECT pg_backend_pid() AS pid`,
+          );
+          if (!row) throw new Error("Missing profile backend");
+          profilePid.resolve(row.pid);
+          return callback(tx);
+        }, config),
+      );
+    const saving = createTestClient().user.crupdate({
+      id: target.id,
+      f3Name: "Must not persist",
+      homeRegionId: destination.id,
+      roles: [],
+    });
+    // Attach rejection handling before releasing the competing transaction.
+    const rejected = saving.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    try {
+      const pid = await profilePid.promise;
+      await vi.waitFor(async () => {
+        const [row] = await db.execute<{ blocked: boolean }>(
+          sql`SELECT cardinality(pg_blocking_pids(${pid})) > 0 AS blocked`,
+        );
+        expect(row?.blocked).toBe(true);
+      });
+      releaseWriter.resolve();
+      await writer;
+      expect(await rejected).toMatchObject({ code: "CONFLICT" });
+      expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+      expect((await readUser(target.id))?.f3Name).toBe("Original");
+      expect(mockLogInfo).not.toHaveBeenCalled();
+    } finally {
+      releaseWriter.resolve();
+      await Promise.allSettled([writer, saving, rejected]);
+      spy.mockRestore();
+    }
+  });
+
+  it.each(["destination", "ancestor"])(
+    "rejects a %s retired after initial validation without changing profile or roles",
+    async (kind) => {
+      const destination = await createRegion();
+      const ancestor = await createRegion();
+      await db
+        .update(schema.orgs)
+        .set({ parentId: ancestor.id })
+        .where(eq(schema.orgs.id, destination.id));
+      const target = await createUser({ homeRegionId: regionA.id });
+      await mockAuthWithSession(adminOf(regionA));
+      const transaction = db.transaction.bind(db);
+      if (!globalThis.db)
+        throw new Error("Database fixture was not initialized");
+      const spy = vi
+        .spyOn(globalThis.db, "transaction")
+        .mockImplementationOnce(async (callback, config) => {
+          await db
+            .update(schema.orgs)
+            .set({ isActive: false })
+            .where(
+              eq(
+                schema.orgs.id,
+                kind === "destination" ? destination.id : ancestor.id,
+              ),
+            );
+          return transaction(callback, config);
+        });
+      try {
+        await expect(
+          createTestClient().user.crupdate({
+            id: target.id,
+            f3Name: "Must not persist",
+            homeRegionId: destination.id,
+            roles: [],
+          }),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+        expect((await readUser(target.id))?.homeRegionId).toBe(regionA.id);
+        expect((await readUser(target.id))?.f3Name).toBe("Original");
+        expect(mockLogInfo).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
 
   it("rolls back the correction if a role insert fails and emits no success event", async () => {
     const target = await createUser({ homeRegionId: regionA.id });

@@ -51,6 +51,14 @@ the correction event records who made the change.
   and initial placement paths, WHEN the destination is missing, THEN return
   `NOT_FOUND`; WHEN it is not a region or it or an ancestor is inactive, THEN
   return `BAD_REQUEST`. Reject atomically without changing the user or roles.
+  Keep the destination and its complete ancestor chain stable through the write
+  transaction using shared row locks in organization-ID order, then re-read the
+  chain after lock acquisition. Reject a concurrently discovered, unlocked ancestor
+  with `CONFLICT`; never continue with a partial lock set. Reject cyclic or
+  truncated chains rather than accepting unverified ancestors. Concurrent activity
+  and parent changes wait until the save commits; later organization changes
+  remain permitted. Database deadlocks or lock refusals return a retryable
+  `CONFLICT` and roll back the whole save.
   Skip destination validation when the value is unchanged, so a member homed
   in a now-inactive region remains editable. Clearing to `null` is not a
   destination and keeps its existing permission rules. The registration and
@@ -71,8 +79,9 @@ the correction event records who made the change.
   destination and warns that they may lose profile-edit access after the move.
   Cancelling submits no mutation; confirming submits the chosen destination,
   which is visible on a subsequent authorized read. A `CONFLICT` refreshes the
-  member before retrying; a failed refresh blocks resubmission until the member
-  can be loaded again. A missing member is identified explicitly and cannot
+  member and destination choices before retrying, warning that reloading replaces
+  unsaved edits; a failed refresh of either blocks resubmission until it can be
+  loaded again. A missing member is identified explicitly and cannot
   become a creation form; its fields are hidden. While the region list is
   loading, refreshing or has failed, the picker closes and all saves and
   confirmations are blocked; a failure also shows an error. Confirmation

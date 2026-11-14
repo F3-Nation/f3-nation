@@ -1,4 +1,5 @@
 import { getTableColumns } from "drizzle-orm";
+import { lockHomeRegion } from "../lib/lock-home-region";
 import { rejectStravaMetadata } from "../lib/user-metadata";
 import { and, eq, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
@@ -630,6 +631,8 @@ export const userRouter = {
       try {
         user = await ctx.db.transaction(async (tx) => {
           const transactionDb = tx as unknown as AppDb;
+          if (homeRegionChanged)
+            await lockHomeRegion(transactionDb, newHomeRegionId);
           let user: typeof schema.users.$inferSelect;
 
           if (input.id && !canEditProfile) {
@@ -691,6 +694,12 @@ export const userRouter = {
                   message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
                 });
               }
+              if (["40P01", "55P03"].includes(getPgError(error)?.code ?? "")) {
+                throw new ORPCError("CONFLICT", {
+                  message:
+                    "The profile or home region changed concurrently. Reload and try again.",
+                });
+              }
               // The empty-result ORPCError thrown just above is already typed and
               // client-safe, so it passes through untouched.
               if (error instanceof ORPCError) throw error;
@@ -744,6 +753,12 @@ export const userRouter = {
         });
       } catch (error) {
         if (error instanceof ORPCError) throw error;
+        if (["40P01", "55P03"].includes(getPgError(error)?.code ?? "")) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "The profile or home region changed concurrently. Reload and try again.",
+          });
+        }
         logError("api.user.crupdate_tx_failed", { userId: input.id }, error);
         throw new ORPCError("INTERNAL_SERVER_ERROR", {
           message: "Unable to save user",

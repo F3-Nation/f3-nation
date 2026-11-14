@@ -2,7 +2,7 @@
 
 import { UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -108,6 +108,7 @@ export default function UserModal({
   const router = useRouter();
   const {
     data: regions,
+    refetch: refetchRegions,
     isError: isRegionsError,
     isFetching: isRegionsFetching,
     isPending: isRegionsPending,
@@ -212,21 +213,26 @@ export default function UserModal({
     },
   });
 
-  useEffect(() => {
-    if (!user) return;
+  const resetUserForm = useCallback(
+    (currentUser: NonNullable<typeof user>) => {
+      form.reset({
+        id: currentUser.id,
+        f3Name: currentUser.f3Name ?? "",
+        firstName: currentUser.firstName ?? "",
+        lastName: currentUser.lastName ?? "",
+        email: currentUser.email ?? "",
+        roles: toGrantableRoleEntries(currentUser.roles),
+        homeRegionId: currentUser.homeRegionId ?? null,
+        status: currentUser.status ?? "active",
+        phone: currentUser.phone ?? "",
+      });
+    },
+    [form],
+  );
 
-    form.reset({
-      id: user.id,
-      f3Name: user.f3Name ?? "",
-      firstName: user.firstName ?? "",
-      lastName: user.lastName ?? "",
-      email: user.email ?? "",
-      roles: toGrantableRoleEntries(user.roles),
-      homeRegionId: user.homeRegionId ?? null,
-      status: user.status ?? "active",
-      phone: user.phone ?? "",
-    });
-  }, [form, user]);
+  useEffect(() => {
+    if (user) resetUserForm(user);
+  }, [resetUserForm, user]);
 
   const crupdateUser = useMutation(
     orpc.user.crupdate.mutationOptions({
@@ -257,15 +263,28 @@ export default function UserModal({
         toast.error(
           err instanceof ORPCError
             ? err.code === "CONFLICT"
-              ? "This profile changed. Reloading the latest values replaces your unsaved edits."
+              ? "This profile or its home region changed. Reloading the latest values replaces your unsaved edits."
               : err.code === "UNAUTHORIZED"
                 ? "You are not authorized to update this user"
                 : err.message || "Failed to update user"
             : "Failed to update user",
         );
         if (err instanceof ORPCError && err.code === "CONFLICT") {
-          // Refresh the source region so retrying requires an informed choice.
-          const refreshed = await refetchUser();
+          // Reload both the member and destination choices before another informed save.
+          const [refreshed, refreshedRegions] = await Promise.all([
+            refetchUser(),
+            refetchRegions(),
+          ]);
+          // Structural sharing can preserve an unchanged member object on a
+          // hierarchy-only conflict, so reset explicitly after a successful read.
+          if (!refreshed.isError && refreshed.data?.user) {
+            resetUserForm(refreshed.data.user);
+          }
+          if (refreshedRegions.isError) {
+            toast.error(
+              "Unable to reload home regions. Close and reopen the form before trying again.",
+            );
+          }
           if (refreshed.isError) {
             toast.error(
               "Unable to reload this member. Close and reopen the form before trying again.",

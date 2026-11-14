@@ -667,7 +667,7 @@ describe("AdminUsersModal", () => {
     );
     await waitFor(() => expect(mocks.byId).toHaveBeenCalledTimes(2));
     expect(toast.error).toHaveBeenCalledWith(
-      "This profile changed. Reloading the latest values replaces your unsaved edits.",
+      "This profile or its home region changed. Reloading the latest values replaces your unsaved edits.",
     );
     await waitFor(() =>
       expect(
@@ -677,6 +677,78 @@ describe("AdminUsersModal", () => {
     expect(toast.error).not.toHaveBeenCalledWith(
       "Unable to reload this member. Close and reopen the form before trying again.",
     );
+    expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces unsaved edits and refreshes region choices after a hierarchy-only conflict", async () => {
+    await loadMember();
+    mocks.orgAll.mockResolvedValue({
+      orgs: [
+        { id: 10, name: "Source" },
+        { id: 40, name: "New destination" },
+      ],
+      total: 2,
+    });
+    mocks.crupdate.mockRejectedValueOnce(
+      new ORPCError("CONFLICT", {
+        message: "The home region hierarchy changed",
+      }),
+    );
+    fireEvent.change(screen.getByDisplayValue("NoRoles"), {
+      target: { value: "Unsaved name" },
+    });
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm change" }),
+    );
+    await waitFor(() => expect(mocks.byId).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("NoRoles")).toBeTruthy(),
+    );
+    expect(
+      screen.getByLabelText<HTMLSelectElement>("Home region picker").value,
+    ).toBe("10");
+    expect(
+      screen.getByRole("option", { name: "New destination" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "Destination" })).toBeNull();
+    expect(toast.error).not.toHaveBeenCalledWith(
+      "Unable to reload home regions. Close and reopen the form before trying again.",
+    );
+    expect(mocks.crupdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes destination choices and blocks resubmission when their conflict reload fails", async () => {
+    await loadMember();
+    const previousCalls = mocks.orgAll.mock.calls.length;
+    mocks.orgAll.mockRejectedValue(new Error("Unavailable"));
+    mocks.crupdate.mockRejectedValueOnce(
+      new ORPCError("CONFLICT", {
+        message: "The home region hierarchy changed",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("Home region picker"), {
+      target: { value: "20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm change" }),
+    );
+    await waitFor(() =>
+      expect(mocks.orgAll.mock.calls.length).toBeGreaterThan(previousCalls),
+    );
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Unable to reload home regions. Close and reopen the form before trying again.",
+      ),
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+        .disabled,
+    ).toBe(true);
     expect(mocks.crupdate).toHaveBeenCalledTimes(1);
   });
 
