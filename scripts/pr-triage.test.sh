@@ -224,7 +224,17 @@ jq -n '
     (pr(66; "codeowner author labels their own PR not needed"; "Luis") | .reviews.nodes = [inline_review]
       | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "luis")),
     (pr(67; "another codeowner labels a codeowner'"'"'s PR not needed"; "Luis") | .reviews.nodes = [inline_review]
-      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "andy"))
+      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "andy")),
+    (pr(68; "author replied in the viewer'"'"'s thread"; "pax") | .reviews.nodes = [inline_review]
+      | .reviewThreads.nodes = [replied("Viewer"; "pax"; "2026-10-22T05:00:00Z")]),
+    (pr(69; "author replied to a bot, viewer assigned"; "pax") | .reviews.nodes = [inline_review]
+      | .assignees = {nodes: [{login: "viewer"}]}
+      | .reviewThreads.nodes = [replied("coderabbitai"; "pax"; "2026-10-22T05:00:00Z")]),
+    (pr(70; "author replied to a codeowner, viewer assigned"; "pax") | .reviews.nodes = [inline_review]
+      | .assignees = {nodes: [{login: "viewer"}]}
+      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z")]),
+    (pr(71; "open threads, viewer assigned"; "someone") | .reviews.nodes = [inline_review]
+      | .assignees = {nodes: [{login: "viewer"}]} | .reviewThreads.nodes = [thread(false; "andy")])
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -336,9 +346,18 @@ assert_eq "...even when the viewer is assigned too" "true" "$(claimed_of 34)"
 assert_eq "an author assigned to their own PR, in any case, hasn't been claimed by someone else" "false" \
   "$(claimed_of 46)"
 assert_eq "an unassigned PR isn't claimed by someone else" "false" "$(claimed_of 5)"
-assert_eq "the board has a filter for PRs that are yours or unclaimed" "1" \
-  "$(grep -c '\["responsible", "Mine or unclaimed", (pr) => pr.mine || pr.assignedToMe || !pr.claimedByOther\]' \
-    "$tmp_dir/board.html")"
+turn_of() { board_json | jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .viewersTurn'; }
+assert_eq "the viewer's own PR is always theirs to move" "true" "$(turn_of 10)"
+assert_eq "an unassigned PR needing a skill run can be the viewer's" "true" "$(turn_of 5)"
+assert_eq "a PR someone else has taken on isn't the viewer's" "false" "$(turn_of 7)"
+assert_eq "a PR the viewer shares with someone else can be theirs" "true" "$(turn_of 34)"
+assert_eq "a PR only its author is assigned to can be the viewer's" "true" "$(turn_of 46)"
+assert_eq "open threads assigned to the viewer wait on the author, not them" "false" "$(turn_of 71)"
+assert_eq "an author's reply in the viewer's thread, in any case, is theirs to answer" "true" "$(turn_of 68)"
+assert_eq "an author's reply to a bot falls to the assigned viewer" "true" "$(turn_of 69)"
+assert_eq "an author's reply to another codeowner isn't the assigned viewer's" "false" "$(turn_of 70)"
+assert_eq "the board has a filter for PRs that are the viewer's responsibility" "1" \
+  "$(grep -c '\["responsible", "My responsibility", (pr) => pr.viewersTurn\]' "$tmp_dir/board.html")"
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
 assert_eq "the hostile title survives escaped" "</script><img src=x onerror=alert(1)>" \
   "$(board_json | jq -r '.prs[] | select(.number == 13) | .title')"

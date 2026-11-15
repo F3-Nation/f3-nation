@@ -392,6 +392,21 @@ classify='
          end) as $verdict
       | ($verdict[0] | IN("DRAFT", "SKIP") | not) as $active
       | [$pr.assignees.nodes[]?.login] as $assignees
+      | ($me | lower_login) as $viewer
+      | any($assignees[]; lower_login == $viewer) as $viewerAssigned
+      # Someone other than the viewer and the author is assigned: they have taken it on.
+      | any($assignees[]; lower_login as $a | $a != $viewer and $a != ($author | lower_login))
+        as $claimedByOther
+      # Whether the next move can be the viewer'"'"'s: always on their own PR; otherwise not when
+      # someone else has taken it on, the author owes a push or reply, or the threads awaiting a
+      # reply are other people'"'"'s. A thread a non-codeowner (a review bot) opened falls to the
+      # assigned codeowners, as in the Codeowners PR Report.
+      | (if ($author | lower_login) == $viewer then true
+         elif $claimedByOther and ($viewerAssigned | not) then false
+         elif $verdict[0] == "THREADS" then false
+         elif $verdict[0] == "REPLY" then
+           any($open[]; lower_login == $viewer) or ($viewerAssigned and any($open[]; codeowner | not))
+         else true end) as $viewersTurn
       | [$pr.reviewThreads.nodes[] | select((.comments.nodes[0].author.login // "") != $author)]
         as $othersThreads
 
@@ -429,9 +444,8 @@ classify='
           url: $pr.url,
           mine: ($author == $me),
           assignedToMe: ($assignees | index($me) != null),
-          # Someone other than the viewer and the author is assigned: they have taken it on.
-          claimedByOther: any($assignees[]; lower_login as $a
-            | $a != ($me | lower_login) and $a != ($author | lower_login)),
+          claimedByOther: $claimedByOther,
+          viewersTurn: $viewersTurn,
           note: ([
             (if $verdict[1] != "" then $verdict[1] else empty end),
             (if $conflicts and $active then "merge conflicts" else empty end)
@@ -743,9 +757,9 @@ HTML
     ["all", "All", () => true],
     ["mine", "Assigned to me", (pr) => pr.assignedToMe],
     ["unassigned", "Unassigned", (pr) => pr.assignee === "Unassigned"],
-    // Leaves out PRs someone else has taken on: not yours, not assigned to you, and assigned
-    // to someone other than their author.
-    ["responsible", "Mine or unclaimed", (pr) => pr.mine || pr.assignedToMe || !pr.claimedByOther],
+    // Leaves out PRs that aren't yours to move: taken on by someone else, waiting on their
+    // author, or waiting on replies in other people's threads.
+    ["responsible", "My responsibility", (pr) => pr.viewersTurn],
   ];
   // Drafts and skipped PRs have no column, so they'd inflate the counts on the buttons.
   const shown = data.prs.filter((pr) => columns.some(([bucket]) => bucket === pr.bucket));
