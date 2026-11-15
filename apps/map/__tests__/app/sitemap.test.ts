@@ -2,8 +2,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockEnv = vi.hoisted(() => ({
-  F3_MAP_BASE_URL: "" as string | undefined,
+const mockEnv = vi.hoisted((): { F3_MAP_BASE_URL: string | undefined } => ({
+  F3_MAP_BASE_URL: "",
 }));
 
 vi.mock("~/env", () => ({ env: mockEnv }));
