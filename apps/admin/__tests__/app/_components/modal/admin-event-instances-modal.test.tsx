@@ -21,6 +21,7 @@ import { closeModal } from "~/utils/store/modal";
 import AdminEventInstancesModal, {
   EventInstanceFormSchema,
   seriesExceptionOptions,
+  seriesOptions,
 } from "~/app/_components/modal/admin-event-instances-modal";
 
 const { toastMock, crupdateMutateAsync, instanceState, refDataState } =
@@ -33,7 +34,10 @@ const { toastMock, crupdateMutateAsync, instanceState, refDataState } =
     },
     crupdateMutateAsync: vi.fn(),
     instanceState: { current: null as Record<string, unknown> | null },
-    refDataState: { available: true },
+    refDataState: {
+      available: true,
+      series: null as Record<string, unknown>[] | null,
+    },
   }));
 
 /**
@@ -178,7 +182,9 @@ vi.mock("~/utils/hooks/use-fetch-all-pages", () => ({
     if (key === "org.all.everyAo") return { data: AOS };
     if (key === "location.all.everyActive") return { data: LOCATIONS };
     if (key === "eventType.all.everyMatching") return { data: EVENT_TYPES };
-    if (key === "event.all.everyMatching") return { data: SERIES };
+    if (key === "event.all.everyMatching") {
+      return { data: refDataState.series ?? SERIES };
+    }
     return { data: undefined };
   },
 }));
@@ -366,6 +372,7 @@ describe("AdminEventInstancesModal", () => {
     crupdateMutateAsync.mockResolvedValue({ id: 7 });
     instanceState.current = null;
     refDataState.available = true;
+    refDataState.series = null;
   });
 
   describe("reset on load", () => {
@@ -784,6 +791,182 @@ describe("AdminEventInstancesModal", () => {
           .disabled,
       ).toBe(true);
     });
+  });
+
+  describe("series options", () => {
+    const loaded = () =>
+      waitFor(() => {
+        expect(field("Start date").value).toBe("2026-09-01");
+      });
+
+    const optionLabel = (id: number) =>
+      screen.getByTestId(`option-Select a series-${id}`).textContent;
+
+    it("tells same-named series apart by weekday and start time", async () => {
+      refDataState.series = [
+        {
+          id: 300,
+          name: "Depot",
+          highlight: false,
+          dayOfWeek: "monday",
+          startTime: "0530",
+        },
+        {
+          id: 301,
+          name: "Depot",
+          highlight: true,
+          dayOfWeek: "thursday",
+          startTime: "1800",
+        },
+      ];
+      renderEditing();
+      await loaded();
+
+      expect(optionLabel(300)).toBe("Depot (Monday 05:30)");
+      expect(optionLabel(301)).toBe("Depot (Thursday 18:00)");
+    });
+
+    it("selects the series whose ID was picked, not the one with the same name", async () => {
+      refDataState.series = [
+        {
+          id: 300,
+          name: "Depot",
+          highlight: false,
+          dayOfWeek: "monday",
+          startTime: "0530",
+        },
+        {
+          id: 301,
+          name: "Depot",
+          highlight: true,
+          dayOfWeek: "thursday",
+          startTime: "1800",
+        },
+      ];
+      renderEditing({ highlight: false });
+      await loaded();
+
+      selectOption("Select a series", 301);
+      save();
+
+      expect(await saved()).toMatchObject({ seriesId: 301, highlight: true });
+    });
+
+    it("falls back to the series ID when same-named series have no schedule to tell them apart", async () => {
+      refDataState.series = [
+        { id: 300, name: "Depot", highlight: false },
+        { id: 301, name: "Depot", highlight: false },
+      ];
+      renderEditing();
+      await loaded();
+
+      expect(offeredOptions("Select a series")).toEqual(["300", "301"]);
+      expect(optionLabel(300)).toBe("Depot #300");
+      expect(optionLabel(301)).toBe("Depot #301");
+    });
+  });
+});
+
+describe("seriesOptions", () => {
+  const options = (series: Parameters<typeof seriesOptions>[0]) =>
+    seriesOptions(series).map((option) => option.label);
+
+  it("shows the weekday and start time next to the name", () => {
+    expect(
+      options([
+        { id: 1, name: "Depot", dayOfWeek: "monday", startTime: "0530" },
+      ]),
+    ).toEqual(["Depot (Monday 05:30)"]);
+  });
+
+  it("accepts a start time that already has its colon", () => {
+    expect(
+      options([
+        { id: 1, name: "Depot", dayOfWeek: "friday", startTime: "06:15" },
+      ]),
+    ).toEqual(["Depot (Friday 06:15)"]);
+  });
+
+  it("keeps the bare name when a unique series has no schedule", () => {
+    expect(options([{ id: 1, name: "Depot" }])).toEqual(["Depot"]);
+    expect(
+      options([{ id: 1, name: "Depot", dayOfWeek: null, startTime: "" }]),
+    ).toEqual(["Depot"]);
+  });
+
+  it("shows only what it has when the schedule is partial", () => {
+    expect(options([{ id: 1, name: "Depot", dayOfWeek: "monday" }])).toEqual([
+      "Depot (Monday)",
+    ]);
+    expect(options([{ id: 1, name: "Depot", startTime: "0530" }])).toEqual([
+      "Depot (05:30)",
+    ]);
+  });
+
+  it("adds the AO name when two series still read the same", () => {
+    expect(
+      options([
+        {
+          id: 1,
+          name: "Depot",
+          dayOfWeek: "monday",
+          startTime: "0530",
+          parent: "AO One",
+        },
+        {
+          id: 2,
+          name: "Depot",
+          dayOfWeek: "monday",
+          startTime: "0530",
+          parent: "AO Two",
+        },
+        {
+          id: 3,
+          name: "Depot",
+          dayOfWeek: "tuesday",
+          startTime: "0530",
+          parent: "AO One",
+        },
+      ]),
+    ).toEqual([
+      "Depot (Monday 05:30) - AO One",
+      "Depot (Monday 05:30) - AO Two",
+      "Depot (Tuesday 05:30)",
+    ]);
+  });
+
+  it("falls back to the series ID when nothing else tells two series apart", () => {
+    expect(
+      options([
+        {
+          id: 1,
+          name: "Depot",
+          dayOfWeek: "monday",
+          startTime: "0530",
+          parent: "AO One",
+        },
+        {
+          id: 2,
+          name: "Depot",
+          dayOfWeek: "monday",
+          startTime: "0530",
+          parent: "AO One",
+        },
+      ]),
+    ).toEqual([
+      "Depot (Monday 05:30) - AO One #1",
+      "Depot (Monday 05:30) - AO One #2",
+    ]);
+  });
+
+  it("never merges or drops options: one per series, valued by its ID", () => {
+    expect(
+      seriesOptions([
+        { id: 7, name: "Depot" },
+        { id: 8, name: "Depot" },
+        { id: 9, name: "Ruck" },
+      ]).map((option) => option.value),
+    ).toEqual(["7", "8", "9"]);
   });
 });
 

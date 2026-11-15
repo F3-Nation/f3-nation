@@ -5,9 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
-import type { SeriesException } from "@acme/shared/app/enums";
+import type { DayOfWeek, SeriesException } from "@acme/shared/app/enums";
 import { SelectableSeriesException } from "@acme/shared/app/enums";
-import { convertHHmmToHH_mm } from "@acme/shared/app/functions";
+import {
+  convertHHmmToHH_mm,
+  getReadableDayOfWeek,
+} from "@acme/shared/app/functions";
 import { isTruthy, safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -75,6 +78,53 @@ export function seriesExceptionOptions(
     return selectable;
   }
   return [...selectable, current];
+}
+
+interface SeriesOptionSource {
+  id: number;
+  name: string;
+  dayOfWeek?: DayOfWeek | null;
+  startTime?: string | null;
+  parent?: string | null;
+}
+
+const repeatedLabels = (labels: readonly string[]) =>
+  new Set(labels.filter((label, index) => labels.indexOf(label) !== index));
+
+/**
+ * Series names repeat across days and AOs (two "Depot" series in one region),
+ * so every option shows its weekday and start time. When two options still read
+ * the same, the AO name is added, and the series ID as a last resort, so no two
+ * options look alike. The option value stays the series ID: options are never
+ * merged because their names match.
+ */
+export function seriesOptions(
+  series: readonly SeriesOptionSource[],
+): { value: string; label: string }[] {
+  const scheduled = series.map((item) => {
+    const schedule = [
+      getReadableDayOfWeek(item.dayOfWeek ?? null),
+      convertHHmmToHH_mm((item.startTime ?? "").replace(":", "")),
+    ].filter(isTruthy);
+    return schedule.length ? `${item.name} (${schedule.join(" ")})` : item.name;
+  });
+
+  const sameAfterSchedule = repeatedLabels(scheduled);
+  const withAo = series.map((item, index) => {
+    const label = scheduled[index] ?? item.name;
+    return sameAfterSchedule.has(label) && item.parent
+      ? `${label} - ${item.parent}`
+      : label;
+  });
+
+  const sameAfterAo = repeatedLabels(withAo);
+  return series.map((item, index) => {
+    const label = withAo[index] ?? item.name;
+    return {
+      value: item.id.toString(),
+      label: sameAfterAo.has(label) ? `${label} #${item.id}` : label,
+    };
+  });
 }
 
 function seriesExceptionLabel(value: string): string {
@@ -647,10 +697,7 @@ export default function AdminEventInstancesModal({
                             ? field.value.toString()
                             : undefined
                         }
-                        options={events.map((event) => ({
-                          value: event.id.toString(),
-                          label: event.name,
-                        }))}
+                        options={seriesOptions(events)}
                         searchPlaceholder="Select a series"
                         onSelect={(value) => {
                           if (
