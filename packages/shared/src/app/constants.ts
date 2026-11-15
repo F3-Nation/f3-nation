@@ -235,11 +235,6 @@ export const routes = {
   },
 } as const satisfies Routes;
 
-export enum Permissions {
-  ADMIN = "admin",
-  EDIT = "edit",
-}
-
 export const START_END_TIME_DB_FORMAT = "HHmm";
 export const START_END_TIME_DISPLAY_FORMAT = "h:mmA";
 

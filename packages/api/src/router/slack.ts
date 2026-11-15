@@ -4,9 +4,9 @@ import { z } from "zod";
 import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { checkHasPermissionOnOrg } from "../check-has-role-on-org";
 import { logError } from "../logger";
-import { protectedProcedure } from "../shared";
+import { permissionProcedure } from "../shared";
 import type { Context } from "../shared";
 
 type JsonValue =
@@ -174,20 +174,20 @@ const slackMessageOutputSchema = z.object({
   ts: z.string(),
 });
 
-const assertOrgAdmin = async (
+const assertCanSendMessages = async (
   ctx: Pick<Context, "session" | "db">,
   regionOrgId: number,
 ) => {
-  const authResult = await checkHasRoleOnOrg({
+  const authResult = await checkHasPermissionOnOrg({
     session: ctx.session,
     db: ctx.db,
     orgId: regionOrgId,
-    roleName: "admin",
+    permission: "messages.send",
   });
 
   if (!authResult.success) {
     throw new ORPCError("UNAUTHORIZED", {
-      message: "Admin access to this org is required",
+      message: "Permission to send messages for this org is required",
     });
   }
 };
@@ -256,7 +256,7 @@ const prepareSlackMessageRequest = async (
   ctx: Pick<Context, "session" | "db">,
   regionOrgId: number,
 ): Promise<{ botToken: string }> => {
-  await assertOrgAdmin(ctx, regionOrgId);
+  await assertCanSendMessages(ctx, regionOrgId);
   const [, botToken] = await Promise.all([
     assertActiveOrgExists(ctx.db, regionOrgId),
     getSlackBotTokenForOrg(ctx.db, regionOrgId),
@@ -438,7 +438,7 @@ export const callSlackWebApi = async ({
 };
 
 export const slackRouter = {
-  postMessage: protectedProcedure
+  postMessage: permissionProcedure("messages.send")
     .input(postSlackMessageInputSchema)
     .route({
       method: "POST",
@@ -446,7 +446,7 @@ export const slackRouter = {
       tags: ["slack"],
       summary: "Post a Slack message",
       description:
-        "Post a Slack message to a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
+        "Post a Slack message to a channel, user, or group. Requires the messages.send permission (the admin or editor role) on the target org and an active F3 Nation Slack app installation.",
     })
     .output(slackMessageOutputSchema)
     .handler(async ({ context: ctx, input }) => {
@@ -477,7 +477,7 @@ export const slackRouter = {
       };
     }),
 
-  updateMessage: protectedProcedure
+  updateMessage: permissionProcedure("messages.send")
     .input(updateSlackMessageInputSchema)
     .route({
       method: "PATCH",
@@ -485,7 +485,7 @@ export const slackRouter = {
       tags: ["slack"],
       summary: "Update a Slack message",
       description:
-        "Update a Slack message in a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
+        "Update a Slack message in a channel, user, or group. Requires the messages.send permission (the admin or editor role) on the target org and an active F3 Nation Slack app installation.",
     })
     .output(slackMessageOutputSchema)
     .handler(async ({ context: ctx, input }) => {

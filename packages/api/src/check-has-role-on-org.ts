@@ -1,6 +1,8 @@
 import type { Session } from "@acme/auth";
 import type { UserRole } from "@acme/shared/app/enums";
+import type { Permission } from "@acme/shared/app/permissions";
 import { schema, sql } from "@acme/db";
+import { roleHasPermission } from "@acme/shared/app/permissions";
 import type { Context } from "./shared";
 
 import { logDebug, logError } from "./logger";
@@ -24,60 +26,54 @@ const roleGrants = (roleName: UserRole) => (r: { roleName: UserRole }) =>
 /** Max org ids per hierarchy query (each is a bind parameter; Postgres caps one statement at 65535). */
 const ROLE_CHECK_ORG_CHUNK_SIZE = 10_000;
 
+type SessionRole = NonNullable<Session["roles"]>[number];
+
+interface GrantCheck {
+  orgId: number;
+  grants: (role: SessionRole) => boolean;
+}
+
 /**
- * Resolves many role checks with one hierarchy query (one more per
- * ROLE_CHECK_ORG_CHUNK_SIZE distinct orgs beyond the first chunk, which keeps a
- * huge client-supplied list under Postgres' bind-parameter limit). The result array lines up with
- * `checks` by index, and each entry is exactly what `checkHasRoleOnOrg` returns
- * for that check on its own -- `checkHasRoleOnOrg` is implemented on top of
- * this, so the two cannot drift.
- *
- * Checks the session satisfies directly (a role on the org itself) need no
- * query at all; only the remaining orgs are resolved, together, with a single
- * recursive CTE that walks each org's ancestors.
+ * The grant that answers one check: `direct` when it is on the org itself,
+ * otherwise the first session role on an ancestor. `undefined` when nothing
+ * grants it.
  */
-export const checkHasRolesOnOrgs = async ({
+interface GrantMatch {
+  role: SessionRole;
+  direct: boolean;
+}
+
+/**
+ * The hierarchy walk shared by the role and permission checks. For each check,
+ * finds a session role on the org itself or on any ancestor within the depth
+ * guard (no is_active filter) for which `grants` is true; the result array
+ * lines up with `checks` by index.
+ *
+ * Checks the session satisfies directly need no query at all; only the
+ * remaining orgs are resolved, together, with one recursive CTE per
+ * ROLE_CHECK_ORG_CHUNK_SIZE distinct orgs, which keeps a huge client-supplied
+ * list under Postgres' bind-parameter limit.
+ */
+const findGrantsOnOrgs = async ({
   session,
   checks,
   db,
 }: {
-  session: Session | null;
-  checks: RoleCheckRequest[];
+  session: Session;
+  checks: GrantCheck[];
   db: Context["db"];
-}): Promise<RoleCheckOutcome[]> => {
-  if (!session) {
-    return checks.map(() => ({
-      success: false,
-      orgId: null,
-      roleName: null,
-      mode: "no-permission" as const,
-    }));
-  }
-
-  const outcomes: (RoleCheckOutcome | undefined)[] = checks.map(
-    ({ orgId, roleName }) => {
-      logDebug("api.role_check.checking", {
-        userId: session.id,
-        orgId,
-        roleName,
-        roles: session.roles,
-      });
-      const hasDirectAccessForThisOrg = session.roles?.some(
-        (r) => roleGrants(roleName)(r) && r.orgId === orgId,
-      );
-      return hasDirectAccessForThisOrg
-        ? {
-            success: true,
-            orgId,
-            roleName,
-            mode: "direct-permission" as const,
-          }
-        : undefined;
+}): Promise<(GrantMatch | undefined)[]> => {
+  const directMatches: (GrantMatch | undefined)[] = checks.map(
+    ({ orgId, grants }) => {
+      const role = session.roles?.find((r) => grants(r) && r.orgId === orgId);
+      return role ? { role, direct: true } : undefined;
     },
   );
 
   const unresolvedOrgIds = [
-    ...new Set(checks.flatMap(({ orgId }, i) => (outcomes[i] ? [] : [orgId]))),
+    ...new Set(
+      checks.flatMap(({ orgId }, i) => (directMatches[i] ? [] : [orgId])),
+    ),
   ];
 
   // org id -> ids of the org itself and every ancestor within the depth guard
@@ -148,27 +144,74 @@ export const checkHasRolesOnOrgs = async ({
     }
   }
 
-  return checks.map(({ orgId, roleName }, i) => {
-    const resolved = outcomes[i];
-    if (resolved) return resolved;
+  return checks.map(({ orgId, grants }, i) => {
+    const direct = directMatches[i];
+    if (direct) return direct;
 
     const allAncestorOrgIds = ancestorIdsByOrg.get(orgId);
-    const matchingPermission = allAncestorOrgIds
-      ? session.roles?.find(
-          (r) => roleGrants(roleName)(r) && allAncestorOrgIds.has(r.orgId),
-        )
+    const role = allAncestorOrgIds
+      ? session.roles?.find((r) => grants(r) && allAncestorOrgIds.has(r.orgId))
       : undefined;
+    return role ? { role, direct: false } : undefined;
+  });
+};
 
-    if (matchingPermission) {
-      return {
-        success: true,
-        orgId: matchingPermission.orgId,
-        roleName: matchingPermission.roleName,
-        mode: "org-admin" as const,
-      };
+/**
+ * Resolves many role checks with one hierarchy query (one more per
+ * ROLE_CHECK_ORG_CHUNK_SIZE distinct orgs beyond the first chunk). The result
+ * array lines up with `checks` by index, and each entry is exactly what
+ * `checkHasRoleOnOrg` returns for that check on its own -- `checkHasRoleOnOrg`
+ * is implemented on top of this, so the two cannot drift.
+ */
+export const checkHasRolesOnOrgs = async ({
+  session,
+  checks,
+  db,
+}: {
+  session: Session | null;
+  checks: RoleCheckRequest[];
+  db: Context["db"];
+}): Promise<RoleCheckOutcome[]> => {
+  if (!session) {
+    return checks.map(() => ({
+      success: false,
+      orgId: null,
+      roleName: null,
+      mode: "no-permission" as const,
+    }));
+  }
+
+  for (const { orgId, roleName } of checks) {
+    logDebug("api.role_check.checking", {
+      userId: session.id,
+      orgId,
+      roleName,
+      roles: session.roles,
+    });
+  }
+
+  const matches = await findGrantsOnOrgs({
+    session,
+    checks: checks.map(({ orgId, roleName }) => ({
+      orgId,
+      grants: roleGrants(roleName),
+    })),
+    db,
+  });
+
+  return checks.map(({ orgId, roleName }, i): RoleCheckOutcome => {
+    const match = matches[i];
+    if (!match) {
+      return { success: false, orgId, roleName, mode: "no-permission" };
     }
-
-    return { success: false, orgId, roleName, mode: "no-permission" as const };
+    return match.direct
+      ? { success: true, orgId, roleName, mode: "direct-permission" }
+      : {
+          success: true,
+          orgId: match.role.orgId,
+          roleName: match.role.roleName,
+          mode: "org-admin",
+        };
   });
 };
 
@@ -242,4 +285,64 @@ export const checkHasRoleOnAllOrgs = async ({
     db,
   });
   return outcomes.every((outcome) => outcome.success);
+};
+
+export interface PermissionCheckOutcome {
+  success: boolean;
+  /** The org the granting role is on; the requested org when nothing grants it. */
+  orgId: number | null;
+  /** The role that grants the permission; null when nothing grants it. */
+  roleName: UserRole | null;
+  mode: "direct-permission" | "org-admin" | "no-permission";
+}
+
+/**
+ * True when the caller (a person or an API key) holds a role on `orgId`, or on
+ * any of its ancestors, whose `ROLE_PERMISSIONS` entry includes `permission`.
+ * Same hierarchy walk as `checkHasRoleOnOrg`.
+ */
+export const checkHasPermissionOnOrg = async ({
+  session,
+  orgId,
+  db,
+  permission,
+}: {
+  session: Session | null;
+  permission: Permission;
+  orgId: number;
+  db: Context["db"];
+}): Promise<PermissionCheckOutcome> => {
+  if (!session) {
+    return {
+      success: false,
+      orgId: null,
+      roleName: null,
+      mode: "no-permission",
+    };
+  }
+
+  logDebug("api.permission_check.checking", {
+    userId: session.id,
+    orgId,
+    permission,
+    roles: session.roles,
+  });
+
+  const [match] = await findGrantsOnOrgs({
+    session,
+    checks: [
+      { orgId, grants: (r) => roleHasPermission(r.roleName, permission) },
+    ],
+    db,
+  });
+
+  if (!match) {
+    return { success: false, orgId, roleName: null, mode: "no-permission" };
+  }
+  return {
+    success: true,
+    orgId: match.role.orgId,
+    roleName: match.role.roleName,
+    mode: match.direct ? "direct-permission" : "org-admin",
+  };
 };

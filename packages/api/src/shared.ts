@@ -20,6 +20,8 @@ import {
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
+import type { Permission } from "@acme/shared/app/permissions";
+import { roleHasPermission } from "@acme/shared/app/permissions";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { getTrustedClientIp } from "@acme/shared/common/client-ip";
 import { isDevelopment } from "@acme/shared/common/constants";
@@ -267,6 +269,22 @@ export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
   }
   return next({ context });
 });
+
+/**
+ * Caller holds `permission` through a role on at least one org. A door check
+ * only: the handler must still call `checkHasPermissionOnOrg` for the org it
+ * acts on.
+ */
+export const permissionProcedure = (permission: Permission) =>
+  withSessionAndDb.use(({ context, next }) => {
+    const holdsPermission = context.session?.roles?.some((r) =>
+      roleHasPermission(r.roleName, permission),
+    );
+    if (!holdsPermission) {
+      throw new ORPCError("UNAUTHORIZED");
+    }
+    return next({ context });
+  });
 
 /**
  * Admin endpoints that must not be driven by an API key, e.g. minting or

@@ -20430,7 +20430,7 @@
     },
     "/v1/slack/message": {
       "post": {
-        "description": "Post a Slack message to a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
+        "description": "Post a Slack message to a channel, user, or group. Requires the messages.send permission (the admin or editor role) on the target org and an active F3 Nation Slack app installation.",
         "operationId": "slack.postMessage",
         "parameters": [
           {
@@ -20727,7 +20727,7 @@
     },
     "/v1/slack/message/{ts}": {
       "patch": {
-        "description": "Update a Slack message in a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
+        "description": "Update a Slack message in a channel, user, or group. Requires the messages.send permission (the admin or editor role) on the target org and an active F3 Nation Slack app installation.",
         "operationId": "slack.updateMessage",
         "parameters": [
           {

@@ -86,6 +86,7 @@ guarantees:
 | `personalUserProcedure`   | A user session or Auth access token exists; rejects API-key sessions. Personal handlers must still scope resources to that user.                                                                                                                                                                                                                                                        |
 | `editorProcedure`         | Caller has editor or admin role on **any** org. Resource-scoped auth (`checkHasRoleOnOrg`) is still required for specific resources.                                                                                                                                                                                                                                                    |
 | `adminProcedure`          | Caller has admin role on **any** org. Resource-scoped auth still required.                                                                                                                                                                                                                                                                                                              |
+| `permissionProcedure(p)`  | Caller holds permission `p` (a role whose `ROLE_PERMISSIONS` entry in `@acme/shared/app/permissions` includes it) on **any** org. Resource-scoped auth (`checkHasPermissionOnOrg`) is still required for specific resources.                                                                                                                                                            |
 | `nationAdminProcedure`    | Caller has the nation-level admin role specifically.                                                                                                                                                                                                                                                                                                                                    |
 | `revalidateAuthProcedure` | Accepts either a valid `SUPER_ADMIN_API_KEY` header or a nation admin session. Used for cache revalidation.                                                                                                                                                                                                                                                                             |
 | `apiKeyProcedure`         | Accepts a valid API key (`x-api-key` header), either the super-admin key or a DB-registered key.                                                                                                                                                                                                                                                                                        |
@@ -129,7 +130,9 @@ if (!success) throw new ORPCError("UNAUTHORIZED");
 
 Use [`checkHasRoleOnOrg`](../packages/api/src/check-has-role-on-org.ts) — it
 walks the org hierarchy (AO → region → … → nation) so a region admin is
-authorized for its AOs. Never call it in a loop over many orgs (an N+1 on the
+authorized for its AOs. Endpoints that check a permission instead of a role
+(ADR 0002) use `checkHasPermissionOnOrg` from the same file, which walks the
+same hierarchy. Never call it in a loop over many orgs (an N+1 on the
 auth path): use `checkHasRolesOnOrgs` (per-check results),
 `checkHasRoleOnAnyOrg` or `checkHasRoleOnAllOrgs` from the same file, which
 return the same decisions with one hierarchy query per chunk of up to 10,000

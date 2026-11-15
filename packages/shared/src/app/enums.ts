@@ -24,9 +24,6 @@ export type IsActiveStatus = (typeof IsActiveStatus)[number];
 export const UpdateRequestStatus = ["pending", "approved", "rejected"] as const;
 export type UpdateRequestStatus = (typeof UpdateRequestStatus)[number];
 
-export const Permissions = ["admin", "edit"] as const;
-export type Permissions = (typeof Permissions)[number];
-
 // Ordered leaf (ao) -> root (nation). Array order is load-bearing: rank
 // (see org-hierarchy.ts) derives from index, and the index order must match
 // the Postgres "org_type" enum's declared sort order (packages/db/drizzle
