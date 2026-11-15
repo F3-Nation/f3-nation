@@ -4,13 +4,15 @@ Age alone cannot tell which release the live pointer or its rollback target
 uses, so this module never deletes by age alone. A release prefix is deleted
 only when all of the following hold:
 
-- the product pointer exists and passes the publisher's validation;
+- the product pointer exists and passes the publisher's validation, and the
+  ``release.json`` of its current and ``retainedPrevious`` releases still exist;
 - the release is neither the pointer's current release nor its
   ``retainedPrevious`` rollback target;
-- the release is not among the ``keep_latest`` newest prefixes;
-- every object in the prefix is older than ``min_age``, so an in-flight
-  publication (objects still being written, pointer not yet swapped) is never
-  touched.
+- the release is not among the ``keep_latest`` newest complete releases older
+  than ``min_age``, not counting the current and ``retainedPrevious`` releases;
+- every object in the prefix is older than ``min_age``. This assumes a
+  publication finishes (objects written and pointer swapped) within
+  ``min_age``; a publication stalled for longer can lose its objects.
 
 Before each release is deleted the pointer generation is re-read; if it moved,
 the run stops so the next run plans against the new pointer. Every delete is
@@ -27,7 +29,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from google.api_core.exceptions import NotFound, PreconditionFailed
+from google.api_core.exceptions import GoogleAPICallError, NotFound, PreconditionFailed
 from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
 
 from .publication import _SAFE_COMPONENT, GcsPublisher
@@ -40,12 +42,43 @@ DEFAULT_KEEP_LATEST = 3
 DEFAULT_MAX_RELEASES = 50
 
 
+@dataclass(slots=True)
+class GcResult:
+    deleted_release_ids: list[str] = field(default_factory=list)
+    deleted_object_count: int = 0
+    already_absent_count: int = 0
+    skipped_release_ids: list[str] = field(default_factory=list)
+    # Set only on a stopped run: the prefix whose deletion had started, which may be partial.
+    in_progress_release_id: str | None = None
+
+
 class ReleaseGcError(RuntimeError):
-    """Cleanup refused to plan or stopped before finishing."""
+    """Cleanup refused to plan or stopped before finishing.
+
+    ``reason`` is a fixed, log-safe token. ``release_id`` names the affected
+    release when one applies; it is a validated safe component. ``partial`` is
+    set when ``apply`` stops after it may have deleted objects.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        release_id: str | None = None,
+        partial: GcResult | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.release_id = release_id
+        self.partial = partial
 
 
 class PointerMovedError(ReleaseGcError):
     """The product pointer changed between planning and deletion."""
+
+    def __init__(self) -> None:
+        super().__init__("product pointer changed after planning; re-run to re-plan", reason="pointer_moved")
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +99,7 @@ class ReleasePrefix:
         return sum(item.size for item in self.objects)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class GcPlan:
     product: str
     pointer_generation: str
@@ -92,14 +125,6 @@ class GcPlan:
         }
 
 
-@dataclass(slots=True)
-class GcResult:
-    deleted_release_ids: list[str] = field(default_factory=list)
-    deleted_object_count: int = 0
-    already_absent_count: int = 0
-    skipped_release_ids: list[str] = field(default_factory=list)
-
-
 class ReleaseGarbageCollector:
     def __init__(self, client: StorageClient, settings: Settings, *, product: str) -> None:
         self.publisher = GcsPublisher(client, settings, product=product)
@@ -109,17 +134,19 @@ class ReleaseGarbageCollector:
         self.releases_prefix = f"{self.publisher.prefix}/releases/"
 
     def _pointer(self) -> tuple[dict[str, Any], str]:
-        pointer, generation = self.publisher.read_current_pointer()
-        if pointer is None or generation is None:
-            raise ReleaseGcError("product pointer is absent; refusing to plan cleanup")
-        return pointer, generation
+        current = self.publisher.read_current_pointer()
+        if current is None:
+            raise ReleaseGcError("product pointer is absent; refusing to plan cleanup", reason="pointer_absent")
+        return current
 
-    def _pointer_generation(self) -> str | None:
+    def _pointer_generation(self) -> str:
         blob = self.bucket.blob(f"{self.publisher.prefix}/current.json")
         try:
             blob.reload()
         except NotFound:
-            return None
+            raise ReleaseGcError(
+                "product pointer disappeared during cleanup; the bucket needs a human", reason="pointer_disappeared"
+            ) from None
         return str(blob.generation)
 
     def _require_release_manifest(self, release_id: str) -> None:
@@ -127,7 +154,11 @@ class ReleaseGarbageCollector:
         try:
             blob.reload()
         except NotFound:
-            raise ReleaseGcError("a pointer-referenced release manifest is already missing") from None
+            raise ReleaseGcError(
+                "a pointer-referenced release manifest is already missing",
+                reason="referenced_manifest_missing",
+                release_id=release_id,
+            ) from None
 
     def plan(
         self,
@@ -184,11 +215,22 @@ class ReleaseGarbageCollector:
 
         protected_set = set(protected)
         unprotected = [item for item in prefixes if item.release_id not in protected_set]
-        kept_recent = unprotected[:keep_latest]
         cutoff = now - min_age
+        # Keep-latest is a margin of valid releases the age rule would not already keep, so
+        # young prefixes and incomplete ones (no release.json, from failed runs) never use a slot.
+        # objects[0] is release.json when the prefix has one (see the sort above).
+        complete_old = [
+            item
+            for item in unprotected
+            if item.newest_created <= cutoff and item.objects[0].name.endswith(f"/{item.release_id}/release.json")
+        ]
+        kept_recent = complete_old[:keep_latest]
+        kept_recent_ids = {item.release_id for item in kept_recent}
         kept_young: list[str] = []
         eligible: list[ReleasePrefix] = []
-        for item in unprotected[keep_latest:]:
+        for item in unprotected:
+            if item.release_id in kept_recent_ids:
+                continue
             if item.newest_created > cutoff:
                 kept_young.append(item.release_id)
             else:
@@ -208,23 +250,35 @@ class ReleaseGarbageCollector:
 
     def apply(self, plan: GcPlan) -> GcResult:
         result = GcResult()
-        for release in plan.candidates:
-            if self._pointer_generation() != plan.pointer_generation:
-                raise PointerMovedError("product pointer changed after planning; re-run to re-plan")
-            for item in release.objects:
-                try:
-                    self.bucket.blob(item.name).delete(if_generation_match=item.generation)
-                except NotFound:
-                    result.already_absent_count += 1
-                    continue
-                except PreconditionFailed:
-                    # Release objects are create-only; a new generation means something
-                    # unexpected wrote here, so leave the rest of this prefix for a human.
-                    result.skipped_release_ids.append(release.release_id)
-                    break
-                result.deleted_object_count += 1
-            else:
-                result.deleted_release_ids.append(release.release_id)
+        current: str | None = None
+        try:
+            for release in plan.candidates:
+                current = None
+                if self._pointer_generation() != plan.pointer_generation:
+                    raise PointerMovedError()
+                current = release.release_id
+                for item in release.objects:
+                    try:
+                        self.bucket.blob(item.name).delete(if_generation_match=item.generation)
+                    except NotFound:
+                        result.already_absent_count += 1
+                        continue
+                    except PreconditionFailed:
+                        # Release objects are create-only; a new generation means something
+                        # unexpected wrote here. Stop on this prefix and report it; a later run
+                        # re-plans it once it is older than min_age again.
+                        result.skipped_release_ids.append(release.release_id)
+                        break
+                    result.deleted_object_count += 1
+                else:
+                    result.deleted_release_ids.append(release.release_id)
+        except ReleaseGcError as error:
+            result.in_progress_release_id = current
+            error.partial = result
+            raise
+        except GoogleAPICallError as error:
+            result.in_progress_release_id = current
+            raise ReleaseGcError("cleanup stopped mid-run", reason="storage_error", partial=result) from error
         return result
 
 

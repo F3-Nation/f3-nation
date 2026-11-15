@@ -18,7 +18,9 @@ from .release_gc import (
     DEFAULT_KEEP_LATEST,
     DEFAULT_MAX_RELEASES,
     DEFAULT_MIN_AGE,
+    MIN_AGE_FLOOR,
     ReleaseGarbageCollector,
+    ReleaseGcError,
     utc_now,
 )
 from .run_id import RunId
@@ -86,6 +88,13 @@ def main() -> int:
         and materialization_names
     ):
         parser.error(f"{args.command} does not accept materialization selectors")
+    if args.command == "gc-releases":
+        if args.min_age_days < MIN_AGE_FLOOR.days:
+            parser.error(f"--min-age-days must be at least {MIN_AGE_FLOOR.days}")
+        if args.keep_latest < 0:
+            parser.error("--keep-latest must be >= 0")
+        if args.max_releases < 1:
+            parser.error("--max-releases must be >= 1")
     logger = JsonLogger()
     run_id = RunId.create()
     try:
@@ -130,15 +139,38 @@ def main() -> int:
             collector = ReleaseGarbageCollector(
                 _storage_client(), cast(Settings, PointerSettings.from_env()), product=args.product
             )
-            plan = collector.plan(
-                now=utc_now(),
-                min_age=timedelta(days=args.min_age_days),
-                keep_latest=args.keep_latest,
-                max_releases=args.max_releases,
-            )
-            logger.info("analytics.etl.release_gc_planned", apply=args.apply, **plan.summary())
-            if args.apply:
-                result = collector.apply(plan)
+            try:
+                plan = collector.plan(
+                    now=utc_now(),
+                    min_age=timedelta(days=args.min_age_days),
+                    keep_latest=args.keep_latest,
+                    max_releases=args.max_releases,
+                )
+                logger.info("analytics.etl.release_gc_planned", apply=args.apply, **plan.summary())
+                result = collector.apply(plan) if args.apply else None
+            except ReleaseGcError as error:
+                # Fixed reason tokens only: the exception text is never logged.
+                if error.partial is not None:
+                    logger.error(
+                        "analytics.etl.release_gc_stopped",
+                        product=args.product,
+                        stop_type=type(error).__name__,
+                        reason=error.reason,
+                        deleted_release_ids=error.partial.deleted_release_ids,
+                        deleted_object_count=error.partial.deleted_object_count,
+                        already_absent_count=error.partial.already_absent_count,
+                        skipped_release_ids=error.partial.skipped_release_ids,
+                        in_progress_release_id=error.partial.in_progress_release_id,
+                    )
+                else:
+                    logger.error(
+                        "analytics.etl.release_gc_refused",
+                        product=args.product,
+                        reason=error.reason,
+                        release_id=error.release_id,
+                    )
+                return 1
+            if result is not None:
                 logger.info(
                     "analytics.etl.release_gc_applied",
                     product=args.product,

@@ -132,13 +132,23 @@ deleted only when all of these hold:
   exist. Otherwise the command refuses, because the bucket needs a human.
 - The release is neither the pointer's current release nor its
   `retainedPrevious` rollback target.
-- The release is not among the `--keep-latest` newest prefixes.
-- Every object in the prefix is older than `--min-age-days`, so a publication
-  still writing objects is never touched. The command rejects values below one
-  day.
+- The release is not among the `--keep-latest` newest complete releases (those
+  with a `release.json`) older than `--min-age-days`, not counting the current
+  and `retainedPrevious` releases.
+- Every object in the prefix is older than `--min-age-days`. This assumes a
+  publication finishes, objects written and pointer swapped, within that age;
+  a publication stalled for longer can lose its objects. The command rejects
+  values below one day.
+
+A refusal logs `analytics.etl.release_gc_refused` with a fixed `reason`
+(`pointer_absent` or `referenced_manifest_missing`, with its `release_id`) and
+exits 1.
 
 Before each release is deleted the command re-reads the pointer generation and
-stops if it moved; re-run it to plan against the new pointer. Each delete is
+stops if it moved; re-run it to plan against the new pointer. A run that stops
+partway (the pointer moved or disappeared, or a storage error) logs
+`analytics.etl.release_gc_stopped` with what it already deleted and the
+`in_progress_release_id` that may be partially deleted, and exits 1. Each delete is
 pinned to the planned object generation, and `release.json` goes first, so a
 partially deleted prefix can never validate as a release. `--max-releases`
 caps one run, oldest first. The defaults for `--min-age-days`,
@@ -152,15 +162,19 @@ release delete. That identity needs `storage.objects.list` on the bucket,
 `storage.objects.get` on the product's `current.json` and release prefix, and
 `storage.objects.delete` on only that release prefix. It reads the same
 environment as `rollback-pointer` (`ANALYTICS_ENVIRONMENT`,
-`ANALYTICS_CATALOG_BUCKET`):
+`ANALYTICS_CATALOG_BUCKET`, and in production `ANALYTICS_PRODUCER_REVISION`):
 
 ```bash
-uv run analytics-etl gc-releases --product analytics
-uv run analytics-etl gc-releases --product analytics --apply
+uv --directory apps/analytics run analytics-etl gc-releases --product analytics
+uv --directory apps/analytics run analytics-etl gc-releases --product analytics --apply
 ```
 
 Review the dry-run plan's `protected_release_ids` and `candidate_release_ids`
-before applying. With bucket Object Versioning on, deleted objects become
+before applying. `--apply` plans again with the same checks rather than
+replaying the dry run, so the dry run is a preview, not a binding list. If an
+object's generation changed after planning, the command stops on that prefix,
+lists it under `skipped_release_ids` in `analytics.etl.release_gc_applied`, and
+exits 1; investigate before re-running. With bucket Object Versioning on, deleted objects become
 noncurrent versions that still cost storage until a noncurrent-version
 lifecycle rule removes them; soft delete likewise keeps them recoverable, and
 billed, for the bucket's soft-delete window.

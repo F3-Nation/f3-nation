@@ -10,7 +10,7 @@ from typing import Any
 import google.cloud.storage
 import google_crc32c
 import pytest
-from google.api_core.exceptions import NotFound, PreconditionFailed
+from google.api_core.exceptions import NotFound, PreconditionFailed, TooManyRequests
 
 import analytics.cli as cli
 from analytics.publication import canonical_json_bytes
@@ -163,8 +163,47 @@ def test_plan_keeps_latest_unprotected_and_young_releases(gcs):
 
     plan = collector(gcs).plan(now=NOW, min_age=timedelta(days=14), keep_latest=2)
 
-    assert plan.kept_recent == ("inflight", "r010")
-    assert {item.release_id for item in plan.candidates} == {f"r{day:03d}" for day in range(32, 60)}
+    # Young prefixes are kept by age and never use a keep-latest slot.
+    assert set(plan.kept_young) == {"inflight", "r010"}
+    assert plan.kept_recent == ("r032", "r033")
+    assert {item.release_id for item in plan.candidates} == {f"r{day:03d}" for day in range(34, 60)}
+
+
+def test_keep_latest_skips_young_and_incomplete_prefixes(gcs):
+    for index in range(3):
+        gcs.put(f"analytics/releases/failed{index}/event_info/manifest.json", created=NOW - timedelta(days=1 + index))
+
+    plan = collector(gcs).plan(now=NOW, min_age=timedelta(days=7), keep_latest=1)
+
+    assert plan.kept_recent == ("r032",)
+    assert "r032" not in {item.release_id for item in plan.candidates}
+    assert set(plan.kept_young) == {"failed0", "failed1", "failed2"}
+
+
+def test_keep_latest_never_spends_a_slot_on_an_old_incomplete_prefix(gcs):
+    gcs.put("analytics/releases/failed/event_info/manifest.json", created=NOW - timedelta(days=20))
+
+    plan = collector(gcs).plan(now=NOW, min_age=timedelta(days=7), keep_latest=1)
+
+    assert plan.kept_recent == ("r032",)
+    assert "failed" in {item.release_id for item in plan.candidates}
+
+
+def test_plan_handles_pointer_without_retained_previous(gcs):
+    put_pointer(gcs, current="r030", retained=None)
+
+    plan = collector(gcs).plan(now=NOW, min_age=timedelta(days=7), keep_latest=0)
+
+    assert plan.protected == ("r030",)
+    assert "r031" in {item.release_id for item in plan.candidates}
+
+
+def test_plan_treats_object_exactly_min_age_old_as_old(gcs):
+    put_release(gcs, "edge", age_days=7)
+
+    plan = collector(gcs).plan(now=NOW, min_age=timedelta(days=7), keep_latest=0)
+
+    assert "edge" in {item.release_id for item in plan.candidates}
 
 
 def test_release_is_young_if_any_object_is_young(gcs):
@@ -188,10 +227,11 @@ def test_plan_orders_release_manifest_first_and_caps_oldest_first(gcs):
 def test_plan_ignores_objects_outside_release_prefixes(gcs):
     gcs.put("analytics/releases/stray.txt", created=NOW - timedelta(days=90))
     gcs.put("analytics/releases/../escape/x", created=NOW - timedelta(days=90))
+    gcs.put("analytics/releases/r040/", created=NOW - timedelta(days=90))
 
     plan = collector(gcs).plan(now=NOW, min_age=timedelta(days=7), keep_latest=0)
 
-    assert plan.ignored_object_count == 2
+    assert plan.ignored_object_count == 3
 
 
 def test_dry_run_plan_deletes_nothing(gcs):
@@ -217,6 +257,7 @@ def test_apply_deletes_only_candidates_and_preserves_pointer_chain(gcs):
     [
         (lambda store: store.objects.pop(POINTER), "absent"),
         (lambda store: store.objects.pop("analytics/releases/r031/release.json"), "already missing"),
+        (lambda store: store.objects.pop("analytics/releases/r030/release.json"), "already missing"),
     ],
 )
 def test_plan_refuses_when_pointer_or_referenced_release_is_missing(gcs, setup, message):
@@ -224,6 +265,19 @@ def test_plan_refuses_when_pointer_or_referenced_release_is_missing(gcs, setup, 
 
     with pytest.raises(ReleaseGcError, match=message):
         collector(gcs).plan(now=NOW, min_age=timedelta(days=7))
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"now": NOW.replace(tzinfo=None)},
+        {"now": NOW, "keep_latest": -1},
+        {"now": NOW, "max_releases": 0},
+    ],
+)
+def test_plan_rejects_invalid_arguments(gcs, overrides):
+    with pytest.raises(ValueError):
+        collector(gcs).plan(min_age=timedelta(days=7), **overrides)
 
 
 def test_plan_refuses_malformed_pointer(gcs):
@@ -251,10 +305,64 @@ def test_apply_stops_when_pointer_moves(gcs):
 
     gcs.before_delete = move_pointer
 
-    with pytest.raises(PointerMovedError):
+    with pytest.raises(PointerMovedError) as raised:
         gc.apply(plan)
     # Only the first release (already past its pointer check) was touched.
     assert len(release_ids(gcs)) == 29
+    assert raised.value.reason == "pointer_moved"
+    assert raised.value.partial is not None
+    assert raised.value.partial.deleted_release_ids == ["r059"]
+    assert raised.value.partial.in_progress_release_id is None
+
+
+def test_apply_reports_pointer_disappearing_as_needing_a_human(gcs):
+    gc = collector(gcs)
+    plan = gc.plan(now=NOW, min_age=timedelta(days=7), keep_latest=0)
+
+    def drop_pointer(_name: str) -> None:
+        gcs.objects.pop(POINTER, None)
+
+    gcs.before_delete = drop_pointer
+
+    with pytest.raises(ReleaseGcError, match="disappeared") as raised:
+        gc.apply(plan)
+    assert not isinstance(raised.value, PointerMovedError)
+    assert raised.value.reason == "pointer_disappeared"
+
+
+def test_apply_attaches_partial_result_on_storage_error(gcs):
+    gc = collector(gcs)
+    plan = gc.plan(now=NOW, min_age=timedelta(days=7), keep_latest=0)
+    calls = 0
+
+    def fail_fifth_delete(_name: str) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 5:
+            raise TooManyRequests("throttled")
+
+    gcs.before_delete = fail_fifth_delete
+
+    with pytest.raises(ReleaseGcError) as raised:
+        gc.apply(plan)
+    assert raised.value.reason == "storage_error"
+    assert raised.value.partial is not None
+    assert raised.value.partial.deleted_release_ids == ["r059"]
+    assert raised.value.partial.deleted_object_count == 4
+    assert raised.value.partial.in_progress_release_id == "r058"
+
+
+def test_apply_counts_already_absent_objects_and_finishes_the_release(gcs):
+    gc = collector(gcs)
+    plan = gc.plan(now=NOW, min_age=timedelta(days=7), keep_latest=0, max_releases=1)
+    gcs.objects.pop(plan.candidates[0].objects[1].name)
+
+    result = gc.apply(plan)
+
+    assert result.already_absent_count == 1
+    assert result.deleted_object_count == 2
+    assert result.deleted_release_ids == ["r059"]
+    assert "r059" not in release_ids(gcs)
 
 
 def test_apply_leaves_prefix_when_object_generation_changed(gcs):
@@ -267,9 +375,16 @@ def test_apply_leaves_prefix_when_object_generation_changed(gcs):
 
     assert result.skipped_release_ids == ["r059"]
     assert target in gcs.objects
+    assert result.deleted_release_ids == []
+    assert "analytics/releases/r059/event_info/partitions/part-0.parquet" in gcs.objects
+    assert gcs.deleted == ["analytics/releases/r059/release.json"]
 
 
-def test_cli_gc_releases_is_dry_run_unless_apply(monkeypatch, gcs):
+GC_ARGV = ["analytics-etl", "gc-releases", "--product", "analytics", "--min-age-days", "7"]
+
+
+@pytest.fixture
+def cli_events(monkeypatch, gcs) -> list[tuple[str, dict[str, Any]]]:
     events: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setenv("ANALYTICS_ENVIRONMENT", "nonprod")
     monkeypatch.setenv("ANALYTICS_CATALOG_BUCKET", BUCKET)
@@ -283,7 +398,12 @@ def test_cli_gc_releases_is_dry_run_unless_apply(monkeypatch, gcs):
     )
     monkeypatch.setattr(cli, "utc_now", lambda: NOW)
     monkeypatch.setattr(google.cloud.storage, "Client", lambda: gcs)
-    argv = ["analytics-etl", "gc-releases", "--product", "analytics", "--min-age-days", "7"]
+    return events
+
+
+def test_cli_gc_releases_is_dry_run_unless_apply(monkeypatch, gcs, cli_events):
+    events = cli_events
+    argv = GC_ARGV
 
     monkeypatch.setattr(sys, "argv", argv)
     assert cli.main() == 0
@@ -295,3 +415,64 @@ def test_cli_gc_releases_is_dry_run_unless_apply(monkeypatch, gcs):
     assert cli.main() == 0
     assert events[-1][0] == "analytics.etl.release_gc_applied"
     assert release_ids(gcs) == {"r030", "r031", "r032", "r033", "r034"}
+
+
+def test_cli_gc_releases_exits_1_when_a_prefix_is_skipped(monkeypatch, gcs, cli_events):
+    rewritten = False
+
+    def rewrite_once(_name: str) -> None:
+        nonlocal rewritten
+        if not rewritten:
+            rewritten = True
+            gcs.put("analytics/releases/r059/event_info/manifest.json", created=NOW - timedelta(days=90))
+
+    gcs.before_delete = rewrite_once
+    monkeypatch.setattr(sys, "argv", [*GC_ARGV, "--apply"])
+
+    assert cli.main() == 1
+    event, context = cli_events[-1]
+    assert event == "analytics.etl.release_gc_applied"
+    assert context["skipped_release_ids"] == ["r059"]
+
+
+def test_cli_gc_releases_logs_what_a_stopped_run_deleted(monkeypatch, gcs, cli_events):
+    moved = False
+
+    def move_pointer(_name: str) -> None:
+        nonlocal moved
+        if not moved:
+            moved = True
+            put_pointer(gcs, current="r030", retained="r031")
+
+    gcs.before_delete = move_pointer
+    monkeypatch.setattr(sys, "argv", [*GC_ARGV, "--apply"])
+
+    assert cli.main() == 1
+    event, context = cli_events[-1]
+    assert event == "analytics.etl.release_gc_stopped"
+    assert context["reason"] == "pointer_moved"
+    assert context["stop_type"] == "PointerMovedError"
+    assert context["deleted_release_ids"] == ["r059"]
+    assert context["in_progress_release_id"] is None
+
+
+def test_cli_gc_releases_logs_refusal_reason_and_release(monkeypatch, gcs, cli_events):
+    gcs.objects.pop("analytics/releases/r031/release.json")
+    monkeypatch.setattr(sys, "argv", GC_ARGV)
+
+    assert cli.main() == 1
+    event, context = cli_events[-1]
+    assert event == "analytics.etl.release_gc_refused"
+    assert context == {"product": "analytics", "reason": "referenced_manifest_missing", "release_id": "r031"}
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [["--min-age-days", "0"], ["--keep-latest", "-1"], ["--max-releases", "0"]],
+)
+def test_cli_gc_releases_rejects_bad_arguments_as_usage_errors(monkeypatch, extra):
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "gc-releases", "--product", "analytics", *extra])
+
+    with pytest.raises(SystemExit) as raised:
+        cli.main()
+    assert raised.value.code == 2
