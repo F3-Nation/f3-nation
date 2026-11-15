@@ -436,6 +436,40 @@ paged=$(PR_TRIAGE_MAX_PAGES=1 run_paged)
 assert_eq "the page cap stops fetching" "5" "$(jq -r '[.prs[].number] | join(" ")' <<<"$paged")"
 assert_eq "a capped fetch is marked cut off" "true 1" "$(jq -r '"\(.truncated) \(.fetched)"' <<<"$paged")"
 
+# GitHub failing every read of reviewDecision: the page is fetched again without it, and an
+# approved PR falls back to needing approval. A fallback that also fails still fails the run.
+decision_stub="$tmp_dir/decision-stub"
+mkdir -p "$decision_stub"
+jq '.data.repository.pullRequests |= (.pageInfo = {hasNextPage: false, endCursor: null}
+  | .nodes = [.nodes[] | select(.number == 8 or .number == 9) | del(.reviewDecision)])' \
+  "$tmp_dir/fixture.json" >"$decision_stub/page.json"
+cat >"$decision_stub/gh" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+  "auth status") exit 0 ;;
+  *reviewDecision*) echo "gh: Something went wrong" >&2; exit 1 ;;
+  *) [[ -n "\${DECISION_STUB_FAIL_ALL:-}" ]] && exit 1; cat "$decision_stub/page.json" ;;
+esac
+STUB
+chmod +x "$decision_stub/gh"
+# sleep is stubbed so the retry doesn't slow the suite.
+printf '#!/usr/bin/env bash\nexit 0\n' >"$decision_stub/sleep"
+chmod +x "$decision_stub/sleep"
+
+run_decision() {
+  PATH="$decision_stub:$PATH" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
+    bash "$triage" -R acme/repo --json 2>"$tmp_dir/decision.err"
+}
+decision_out=$(run_decision)
+status=$?
+assert_eq "a failing reviewDecision falls back and exits 0" "0" "$status"
+assert_eq "without a review decision an approved PR needs approval" "MANUAL MANUAL" \
+  "$(jq -r '[.prs[] | select(.number == 8 or .number == 9) | .bucket] | join(" ")' <<<"$decision_out")"
+assert_eq "the fallback is reported" "1" "$(grep -c 'without review decisions' "$tmp_dir/decision.err")"
+DECISION_STUB_FAIL_ALL=1 run_decision >/dev/null
+status=$?
+assert_eq "a fallback that also fails exits non-zero" "true" "$([[ $status -ne 0 ]] && echo true || echo false)"
+
 # A response with no PR data reports GitHub's own errors.
 echo '{"data":null,"errors":[{"message":"boom"}]}' >"$tmp_dir/errors.json"
 err_out=$(PR_TRIAGE_FIXTURE="$tmp_dir/errors.json" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \

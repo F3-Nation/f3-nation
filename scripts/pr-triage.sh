@@ -157,21 +157,36 @@ fragment reviews on PullRequestReviewConnection {
   }
 }'
 
+# GitHub can fail every read of one PR's reviewDecision while the rest of the query works.
+query_no_decision="${query/ reviewDecision / }"
+[[ "$query_no_decision" != "$query" ]] || die "the query no longer asks for reviewDecision"
+
 if [[ -n "${PR_TRIAGE_FIXTURE:-}" ]]; then
   data=$(cat "$PR_TRIAGE_FIXTURE")
 else
   pages_dir=$(mktemp -d "${TMPDIR:-/tmp}/pr-triage.XXXXXX")
   trap 'rm -rf "$pages_dir"' EXIT
   cursor="" page=0
+  page_args() {
+    args=(-f query="$1" -f owner="${repo%%/*}" -f name="${repo#*/}")
+    [[ -n "$cursor" ]] && args+=(-f cursor="$cursor")
+    return 0
+  }
   while :; do
     page=$((page + 1))
-    args=(-f query="$query" -f owner="${repo%%/*}" -f name="${repo#*/}")
-    [[ -n "$cursor" ]] && args+=(-f cursor="$cursor")
+    page_args "$query"
     page_file="$pages_dir/$(printf '%03d' "$page").json"
     if ! gh api graphql "${args[@]}" >"$page_file"; then
       # A busy GitHub occasionally answers 502 or 504; one retry usually succeeds.
       sleep 2
-      gh api graphql "${args[@]}" >"$page_file"
+      if ! gh api graphql "${args[@]}" >"$page_file"; then
+        # Without a review decision no PR on this page counts as approved, so an approved
+        # PR waits for approval instead of being shown as ready to merge.
+        echo "pr-triage: GitHub failed page $page twice; retrying it without review decisions," \
+          "so its approved PRs show as needing approval" >&2
+        page_args "$query_no_decision"
+        gh api graphql "${args[@]}" >"$page_file"
+      fi
     fi
     [[ "$(jq -r '.data.repository.pullRequests.pageInfo.hasNextPage' "$page_file")" == "true" ]] || break
     (( page < MAX_PAGES )) || break
