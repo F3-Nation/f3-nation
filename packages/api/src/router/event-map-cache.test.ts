@@ -6,6 +6,7 @@ import {
   describe,
   expect,
   it,
+  onTestFinished,
   vi,
 } from "vitest";
 
@@ -293,9 +294,15 @@ describe("event mutation map cache", () => {
     expect(await publicEvent(event.id)).toBeUndefined();
   });
 
-  it.each(["cascade", "commit"] as const)(
+  it.each(["cascade", "post-write"] as const)(
     "rolls back a series deletion and preserves cached data on %s failure",
     async (failure) => {
+      const noon = new Date();
+      noon.setUTCHours(12, 0, 0, 0);
+      vi.useFakeTimers({ toFake: ["Date"], now: noon });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
       const input = await fixture();
       const event = await seedEvent(input, "monday");
       const instance = await seedInstance(event);
@@ -357,6 +364,12 @@ describe("event mutation map cache", () => {
   );
 
   it("commits series deletion with current instances and then refreshes map data", async () => {
+    const noon = new Date();
+    noon.setUTCHours(12, 0, 0, 0);
+    vi.useFakeTimers({ toFake: ["Date"], now: noon });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const input = await fixture();
     const event = await seedEvent(input, "monday");
     const current = await seedInstance(event);
