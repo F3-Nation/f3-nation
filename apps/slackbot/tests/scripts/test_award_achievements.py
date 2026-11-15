@@ -62,7 +62,9 @@ def test_cli_options_preserve_filter_date_dry_run_and_skip_post(award_run, monke
         ]
     )
 
-    assert 42 in award_run.session.scalars.call_args.args[0].compile().params.values()
+    stmt = award_run.session.scalars.call_args.args[0].compile()
+    assert "achievements.id = :id_1" in str(stmt)
+    assert stmt.params == {"id_1": 42}
     award_run.process.assert_called_once_with(award_run.session, award_run.achievement, date(2098, 12, 31))
     award_run.award.assert_called_once_with(award_run.session, [award_run.candidate], True)
     award_run.post.assert_not_called()

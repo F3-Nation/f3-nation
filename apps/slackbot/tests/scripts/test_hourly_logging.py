@@ -302,7 +302,7 @@ def test_hourly_failure_copies_module_text_without_custom_string_formatting(capl
         (["--reporting-org-id", "123"], {"reporting_org_id": 123}),
     ],
 )
-def test_hourly_arguments_do_not_abort_achievements_or_completion(monkeypatch, argv, kwargs):
+def test_hourly_arguments_do_not_abort_achievements_or_completion(monkeypatch, caplog, argv, kwargs):
     attempted = stub_jobs(monkeypatch, real_achievements=True)
     monkeypatch.setattr(sys, "argv", ["hourly_runner.py", *argv])
     achievements = hourly_runner.award_achievements
@@ -331,4 +331,11 @@ def test_hourly_arguments_do_not_abort_achievements_or_completion(monkeypatch, a
     hourly_runner.run_all_hourly_scripts(**kwargs)
 
     assert processed == [(session, achievement, "2099-01-01")]
-    assert attempted[-1] == "hourly_runner.notify_completion"
+    run_reporting = kwargs.get("run_reporting", True)
+    expected = [
+        job
+        for module, _, job in JOBS
+        if module != "award_achievements" and (run_reporting or module not in {"monthly_reporting", "kotter_reports"})
+    ]
+    assert attempted == expected
+    assert not [record for record in caplog.records if record.name == "scripts.hourly_runner"]
