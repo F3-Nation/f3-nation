@@ -887,6 +887,15 @@ describe("seriesOptions", () => {
     ).toEqual(["Depot (Friday 06:15)"]);
   });
 
+  it("reads the time from a start time stored with seconds", () => {
+    expect(
+      options([
+        { id: 1, name: "Depot", dayOfWeek: "monday", startTime: "05:30:00" },
+        { id: 2, name: "Ruck", dayOfWeek: "monday", startTime: "053000" },
+      ]),
+    ).toEqual(["Depot (Monday 05:30)", "Ruck (Monday 05:30)"]);
+  });
+
   it("keeps the bare name when a unique series has no schedule", () => {
     expect(options([{ id: 1, name: "Depot" }])).toEqual(["Depot"]);
     expect(
@@ -957,6 +966,17 @@ describe("seriesOptions", () => {
       "Depot (Monday 05:30) - AO One #1",
       "Depot (Monday 05:30) - AO One #2",
     ]);
+  });
+
+  it("keeps every label unique even when one series is named like another's ID label", () => {
+    const labels = options([
+      { id: 1, name: "Depot" },
+      { id: 2, name: "Depot" },
+      { id: 3, name: "Depot #1" },
+    ]);
+
+    expect(new Set(labels).size).toBe(3);
+    expect(labels).toEqual(["Depot #1 (ID 1)", "Depot #2", "Depot #1 (ID 3)"]);
   });
 
   it("never merges or drops options: one per series, valued by its ID", () => {

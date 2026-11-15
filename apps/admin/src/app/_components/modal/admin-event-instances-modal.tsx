@@ -88,15 +88,22 @@ interface SeriesOptionSource {
   parent?: string | null;
 }
 
-const repeatedLabels = (labels: readonly string[]) =>
-  new Set(labels.filter((label, index) => labels.indexOf(label) !== index));
+const repeatedLabels = (labels: readonly string[]) => {
+  const seen = new Set<string>();
+  const repeated = new Set<string>();
+  for (const label of labels) {
+    if (seen.has(label)) repeated.add(label);
+    seen.add(label);
+  }
+  return repeated;
+};
 
 /**
  * Series names repeat across days and AOs (two "Depot" series in one region),
  * so every option shows its weekday and start time. When two options still read
- * the same, the AO name is added, and the series ID as a last resort, so no two
- * options look alike. The option value stays the series ID: options are never
- * merged because their names match.
+ * the same, the AO name is added, then the series ID, so no two options look
+ * alike. The option value stays the series ID: options are never merged because
+ * their names match.
  */
 export function seriesOptions(
   series: readonly SeriesOptionSource[],
@@ -104,7 +111,8 @@ export function seriesOptions(
   const scheduled = series.map((item) => {
     const schedule = [
       getReadableDayOfWeek(item.dayOfWeek ?? null),
-      convertHHmmToHH_mm((item.startTime ?? "").replace(":", "")),
+      // HHmm, HH:mm and HH:mm:ss all start with the four digits that matter.
+      convertHHmmToHH_mm((item.startTime ?? "").replace(/:/g, "").slice(0, 4)),
     ].filter(isTruthy);
     return schedule.length ? `${item.name} (${schedule.join(" ")})` : item.name;
   });
@@ -118,11 +126,19 @@ export function seriesOptions(
   });
 
   const sameAfterAo = repeatedLabels(withAo);
-  return series.map((item, index) => {
+  const withId = series.map((item, index) => {
     const label = withAo[index] ?? item.name;
+    return sameAfterAo.has(label) ? `${label} #${item.id}` : label;
+  });
+
+  // A label with an ID can equal another series' own name (a series literally
+  // called "Depot #1"), so check once more and spell the ID out.
+  const sameAfterId = repeatedLabels(withId);
+  return series.map((item, index) => {
+    const label = withId[index] ?? item.name;
     return {
       value: item.id.toString(),
-      label: sameAfterAo.has(label) ? `${label} #${item.id}` : label,
+      label: sameAfterId.has(label) ? `${label} (ID ${item.id})` : label,
     };
   });
 }
