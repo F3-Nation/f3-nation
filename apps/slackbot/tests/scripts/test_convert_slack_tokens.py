@@ -48,6 +48,8 @@ class FakeExchange:
         assert (client_id, client_secret) == ("client-id", "client-secret")
         # A retried HTTP request could exchange the token twice.
         assert client.retry_handlers == []
+        # slack_sdk logs response bodies, which hold the new tokens, at DEBUG.
+        assert client.logger.level > logging.DEBUG
         self.tokens.append(token)
         if self.error:
             raise SlackApiError("secret-bearing message " + token, {"ok": False, "error": self.error})

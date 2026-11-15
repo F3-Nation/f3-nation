@@ -47,7 +47,6 @@ from typing import Optional
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from f3_data_models.models import SlackSpace
 from f3_data_models.utils import session_scope
-from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth.installation_store import Bot
 from sqlalchemy import select
@@ -56,6 +55,7 @@ from utilities import constants
 from utilities.slack_tokens.refresh import (
     locked_row,
     log_refresh_failure,
+    oauth_web_client,
     save_bot_locked,
     write_locked_row,
 )
@@ -126,7 +126,7 @@ def _convert_team(team_id: str, dry_run: bool) -> str:
             try:
                 # No retry handlers: a retried request after a dropped connection
                 # could exchange the token a second time.
-                response = WebClient(retry_handlers=[]).oauth_v2_exchange(
+                response = oauth_web_client(retry_handlers=[]).oauth_v2_exchange(
                     client_id=os.environ[constants.SLACK_CLIENT_ID],
                     client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
                     token=row.bot_token,

@@ -55,17 +55,23 @@ class TokenChanged(Exception):
 
 
 # slack_sdk logs every request and response body at DEBUG; for `oauth.v2.access`
-# those hold the refresh token and the new tokens. The SDK checks its logger's
-# own level, so this logger is pinned above DEBUG whatever `LOG_LEVEL` sets.
-_rotation_http_logger = logging.getLogger(__name__ + ".rotation_http")
-_rotation_http_logger.setLevel(logging.INFO)
+# and `oauth.v2.exchange` those hold the refresh token and the new tokens. The
+# SDK checks its logger's own level, so this logger is pinned above DEBUG
+# whatever `LOG_LEVEL` sets.
+_oauth_http_logger = logging.getLogger(__name__ + ".oauth_http")
+_oauth_http_logger.setLevel(logging.INFO)
+
+
+def oauth_web_client(**kwargs) -> WebClient:
+    """A `WebClient` for token-issuing OAuth calls, whose HTTP bodies are never logged."""
+    return WebClient(logger=_oauth_http_logger, **kwargs)
 
 
 def _rotator() -> TokenRotator:
     return TokenRotator(
         client_id=os.environ[constants.SLACK_CLIENT_ID],
         client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
-        client=WebClient(logger=_rotation_http_logger),
+        client=oauth_web_client(),
     )
 
 
