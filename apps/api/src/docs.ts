@@ -45,7 +45,7 @@ interface OpenAPISpec {
 
 /**
  * The docs' role and permission table, built from `Permission` and
- * `ROLE_PERMISSIONS` so it can't drift from what the API checks.
+ * `ROLE_PERMISSIONS`, so it always matches the role map.
  */
 const rolesAndPermissionsMarkdown = (): string => {
   const header = `| Permission | What it allows | ${UserRole.join(" | ")} |`;
@@ -57,13 +57,13 @@ const rolesAndPermissionsMarkdown = (): string => {
       ).join(" | ")} |`,
   );
   return [
-    "People and API keys are given roles on orgs. A role on an org also applies to every org below it. Each role includes these permissions:",
+    "People and API keys are given roles on orgs. A role on an org also applies to every org below it. Each role includes the permissions below. A permission is checked only by endpoints that list it; other endpoints say in their description what access they need:",
     "",
     header,
     divider,
     ...rows,
     "",
-    "An endpoint that checks permissions lists them in a **Required permission** line in its description. An endpoint without that line checks a role instead of a permission.",
+    "An endpoint that checks permissions lists them in a **Required permission(s)** line in its description. Other endpoints say in their description what access they need, if any.",
   ].join("\n");
 };
 

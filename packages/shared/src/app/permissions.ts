@@ -54,8 +54,18 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   password_reader: [],
 };
 
+/**
+ * `ROLE_PERMISSIONS` as a lookup that may miss. A session's role names come
+ * from the database, which can hold a role this build has no entry for.
+ */
+const permissionsByRole: Partial<Record<string, readonly Permission[]>> =
+  ROLE_PERMISSIONS;
+
+/** False for a role name that isn't in `ROLE_PERMISSIONS`. */
 export const roleHasPermission = (
   roleName: UserRole,
   permission: Permission,
 ): boolean =>
-  ROLE_PERMISSIONS[roleName].some(({ name }) => name === permission.name);
+  (permissionsByRole[roleName] ?? []).some(
+    ({ name }) => name === permission.name,
+  );

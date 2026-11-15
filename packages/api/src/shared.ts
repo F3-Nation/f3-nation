@@ -293,13 +293,20 @@ export const permissionProcedure = (
     oo.spec(
       os.$context<Context>().middleware(({ context, next }) => {
         const { session, db } = context;
+        const needed =
+          permissions.length > 1 ? "these permissions" : "this permission";
+        const displayNames = permissions
+          .map(({ displayName }) => displayName)
+          .join(", ");
         const hasEachSomewhere = permissions.every((permission) =>
           session?.roles?.some((r) =>
             roleHasPermission(r.roleName, permission),
           ),
         );
         if (!hasEachSomewhere) {
-          throw new ORPCError("UNAUTHORIZED");
+          throw new ORPCError("UNAUTHORIZED", {
+            message: `This action needs ${needed}: ${displayNames}`,
+          });
         }
         const assertPermissionsOnOrg = async (orgId: number) => {
           if (
@@ -311,9 +318,7 @@ export const permissionProcedure = (
             }))
           ) {
             throw new ORPCError("UNAUTHORIZED", {
-              message: `This action needs these permissions on the org: ${permissions
-                .map(({ displayName }) => displayName)
-                .join(", ")}`,
+              message: `This action needs ${needed} on the org: ${displayNames}`,
             });
           }
         };

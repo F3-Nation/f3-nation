@@ -1,7 +1,11 @@
 import type { Session } from "@acme/auth";
 import type { UserRole } from "@acme/shared/app/enums";
 import { inArray, schema } from "@acme/db";
-import { Permission, ROLE_PERMISSIONS } from "@acme/shared/app/permissions";
+import {
+  Permission,
+  ROLE_PERMISSIONS,
+  roleHasPermission,
+} from "@acme/shared/app/permissions";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -53,6 +57,12 @@ describe("ROLE_PERMISSIONS", () => {
         expect(defined.has(permission)).toBe(true);
       }
     }
+  });
+
+  it("gives a role name it has no entry for no permissions", () => {
+    expect(
+      roleHasPermission("not_a_role" as UserRole, Permission.MessagesSend),
+    ).toBe(false);
   });
 });
 
@@ -148,17 +158,41 @@ describe("checkHasPermissionsOnOrg", () => {
 
   it("takes each permission from whichever role includes it", async () => {
     const region = orgs.directBranch.region.id;
-    await expect(
-      checkHasPermissionsOnOrg({
-        session: makeSession([
-          role(region, "user"),
-          role(orgs.sector.id, "editor"),
-        ]),
-        orgId: region,
-        permissions: [Permission.EntitiesManage, Permission.PiiRead],
-        db,
-      }),
-    ).resolves.toBe(true);
+    const session = makeSession([
+      role(region, "user"),
+      role(orgs.sector.id, "editor"),
+    ]);
+    // No two real roles have separate permissions, so give two of them one
+    // each for this test.
+    const map = ROLE_PERMISSIONS;
+    const original = { user: map.user, editor: map.editor };
+    map.user = [Permission.EntitiesManage];
+    map.editor = [Permission.PiiRead];
+    try {
+      await expect(
+        checkHasPermissionsOnOrg({
+          session,
+          orgId: region,
+          permissions: [Permission.EntitiesManage, Permission.PiiRead],
+          db,
+        }),
+      ).resolves.toBe(true);
+      await expect(
+        checkHasPermissionsOnOrg({
+          session,
+          orgId: region,
+          permissions: [
+            Permission.EntitiesManage,
+            Permission.PiiRead,
+            Permission.MessagesSend,
+          ],
+          db,
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      map.user = original.user;
+      map.editor = original.editor;
+    }
   });
 
   it("rejects a role on an unrelated org", async () => {
@@ -167,6 +201,28 @@ describe("checkHasPermissionsOnOrg", () => {
         session: makeSession([role(orgs.unrelatedSector.id, "admin")]),
         orgId: orgs.directBranch.region.id,
         permissions: [Permission.MessagesSend],
+        db,
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("rejects a role on an org below the target", async () => {
+    await expect(
+      checkHasPermissionsOnOrg({
+        session: makeSession([role(orgs.directBranch.ao.id, "admin")]),
+        orgId: orgs.directBranch.region.id,
+        permissions: [Permission.MessagesSend],
+        db,
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("rejects an empty permission list", async () => {
+    await expect(
+      checkHasPermissionsOnOrg({
+        session: makeSession([role(orgs.directBranch.region.id, "admin")]),
+        orgId: orgs.directBranch.region.id,
+        permissions: [] as unknown as [Permission],
         db,
       }),
     ).resolves.toBe(false);

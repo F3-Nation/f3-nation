@@ -43,7 +43,8 @@ Full rationale, the code-selection table, and the `catch`-block pattern:
 ## Authorization
 
 A procedure tier is not authorization. `protectedProcedure` proves a session;
-`editorProcedure` and `adminProcedure` prove a role on _some_ org. More in
+`editorProcedure` and `adminProcedure` prove a role, and `permissionProcedure`
+a permission, on _some_ org. More in
 [`docs/AI_DEVELOPMENT_GUIDE.md`](../../docs/AI_DEVELOPMENT_GUIDE.md#api-authorization).
 
 - Every read or write of a specific resource calls `checkHasRoleOnOrg` (or an
@@ -52,7 +53,7 @@ A procedure tier is not authorization. `protectedProcedure` proves a session;
 - Declare a permission-checked endpoint's permissions once, in
   `permissionProcedure(...)`, and check the org with
   `ctx.assertPermissionsOnOrg`. The procedure writes them into the API docs;
-  don't name permissions or roles in a route `description`.
+  don't repeat them, or name roles, in that endpoint's route `description`.
 - A mutation that moves a record (`orgId`, `parentId`, `aoId`, `locationId`,
   `seriesId`, any foreign id) authorizes the caller on **both** source and
   destination. Use `requireEditorOnRescope`, which returns `NOT_FOUND` for a

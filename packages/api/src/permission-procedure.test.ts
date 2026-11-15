@@ -10,8 +10,9 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 
 import type { Session } from "@acme/auth";
 import type { UserRole } from "@acme/shared/app/enums";
-import { Permission } from "@acme/shared/app/permissions";
+import { Permission, ROLE_PERMISSIONS } from "@acme/shared/app/permissions";
 import { Client, Header } from "@acme/shared/common/enums";
+import { OpenAPIGenerator } from "@orpc/openapi";
 import { createRouterClient } from "@orpc/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -21,8 +22,14 @@ import {
 } from "./__tests__/test-utils";
 import { permissionProcedure } from "./shared";
 
-const sessionWithRole = (orgId: number, roleName: UserRole): Session => {
-  const roles = [{ orgId, orgName: `org ${orgId}`, roleName }];
+const sessionWithRoles = (
+  ...grants: [orgId: number, roleName: UserRole][]
+): Session => {
+  const roles = grants.map(([orgId, roleName]) => ({
+    orgId,
+    orgName: `org ${orgId}`,
+    roleName,
+  }));
   return {
     id: 6262,
     email: "procedure@example.com",
@@ -31,6 +38,9 @@ const sessionWithRole = (orgId: number, roleName: UserRole): Session => {
     expires: new Date(Date.now() + 60_000).toISOString(),
   };
 };
+
+const sessionWithRole = (orgId: number, roleName: UserRole) =>
+  sessionWithRoles([orgId, roleName]);
 
 const client = () =>
   createRouterClient(
@@ -70,7 +80,32 @@ describe("permissionProcedure", () => {
     await mockAuthWithSession(sessionWithRole(999_999, "editor"));
     await expect(client().gateOnly()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
+      message:
+        "This action needs these permissions: Manage entities, Send messages",
     });
+  });
+
+  it("takes each permission from a role on a different org", async () => {
+    // No two real roles have separate permissions, so give two of them one
+    // each for this test.
+    const map = ROLE_PERMISSIONS;
+    const original = { user: map.user, editor: map.editor };
+    map.user = [Permission.MessagesSend];
+    map.editor = [Permission.EntitiesManage];
+    try {
+      await mockAuthWithSession(
+        sessionWithRoles([999_998, "user"], [999_999, "editor"]),
+      );
+      await expect(client().gateOnly()).resolves.toBe("ran");
+
+      await mockAuthWithSession(sessionWithRole(999_998, "user"));
+      await expect(client().gateOnly()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+    } finally {
+      map.user = original.user;
+      map.editor = original.editor;
+    }
   });
 
   it("stops a caller with no session", async () => {
@@ -94,7 +129,42 @@ describe("permissionProcedure", () => {
     await mockAuthWithSession(sessionWithRole(999_999, "admin"));
     await expect(client().onOrg()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
-      message: "This action needs these permissions on the org: Send messages",
+      message: "This action needs this permission on the org: Send messages",
+    });
+  });
+
+  it("lists the permissions in the endpoint's OpenAPI entry", async () => {
+    const two = () =>
+      permissionProcedure(Permission.EntitiesManage, Permission.MessagesSend);
+    const spec = await new OpenAPIGenerator().generate(
+      {
+        described: two()
+          .route({ method: "POST", path: "/described", description: "X" })
+          .handler(() => "ran"),
+        bare: two()
+          .route({ method: "POST", path: "/bare" })
+          .handler(() => "ran"),
+        single: permissionProcedure(Permission.MessagesSend)
+          .route({ method: "POST", path: "/single" })
+          .handler(() => "ran"),
+      },
+      { info: { title: "test", version: "0" } },
+    );
+
+    const required =
+      "**Required permissions:** Manage entities (`entities.manage`), Send messages (`messages.send`) on the org the request acts on.";
+    expect(spec.paths?.["/described"]?.post).toMatchObject({
+      description: `X\n\n${required}`,
+      "x-required-permissions": ["entities.manage", "messages.send"],
+    });
+    expect(spec.paths?.["/bare"]?.post).toMatchObject({
+      description: required,
+      "x-required-permissions": ["entities.manage", "messages.send"],
+    });
+    expect(spec.paths?.["/single"]?.post).toMatchObject({
+      description:
+        "**Required permission:** Send messages (`messages.send`) on the org the request acts on.",
+      "x-required-permissions": ["messages.send"],
     });
   });
 });

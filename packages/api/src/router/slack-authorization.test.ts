@@ -36,9 +36,14 @@ import {
   uniqueId,
 } from "../__tests__/test-utils";
 
-const sessionWithRole = (orgId: number, roleName: UserRole): Session => {
+const sessionWithRole = (
+  orgId: number,
+  roleName: UserRole,
+  apiKey = false,
+): Session => {
   const roles = [{ orgId, orgName: `org ${orgId}`, roleName }];
   return {
+    ...(apiKey ? { apiKey: { id: 1 } } : {}),
     id: 5151,
     email: "slack-sender@example.com",
     user: {
@@ -49,7 +54,7 @@ const sessionWithRole = (orgId: number, roleName: UserRole): Session => {
     },
     roles,
     expires: new Date(Date.now() + 60_000).toISOString(),
-  };
+  } as Session;
 };
 
 describe("Slack message authorization", () => {
@@ -144,9 +149,35 @@ describe("Slack message authorization", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("lets an admin of an ancestor org post", async () => {
+  it("lets an admin of an ancestor org post and update messages", async () => {
     await mockAuthWithSession(sessionWithRole(orgs.sector.id, "admin"));
     await expect(post()).resolves.toMatchObject({ action: "posted" });
+    await expect(update()).resolves.toMatchObject({ action: "updated" });
+  });
+
+  it("lets an API key with admin on the region post", async () => {
+    await mockAuthWithSession(sessionWithRole(regionId, "admin", true));
+    await expect(post()).resolves.toMatchObject({ action: "posted" });
+  });
+
+  it("rejects an API key with admin on another org", async () => {
+    await mockAuthWithSession(
+      sessionWithRole(orgs.unrelatedSector.id, "admin", true),
+    );
+
+    await expect(post()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(update()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects an admin of an org below the region", async () => {
+    await mockAuthWithSession(
+      sessionWithRole(orgs.directBranch.ao.id, "admin"),
+    );
+
+    await expect(post()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(update()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it.each(["editor", "user"] as const)(
@@ -154,8 +185,14 @@ describe("Slack message authorization", () => {
     async (roleName) => {
       await mockAuthWithSession(sessionWithRole(regionId, roleName));
 
-      await expect(post()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-      await expect(update()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await expect(post()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "This action needs this permission: Send messages",
+      });
+      await expect(update()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "This action needs this permission: Send messages",
+      });
       expect(fetchSpy).not.toHaveBeenCalled();
     },
   );
@@ -167,11 +204,11 @@ describe("Slack message authorization", () => {
 
     await expect(post()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
-      message: "This action needs these permissions on the org: Send messages",
+      message: "This action needs this permission on the org: Send messages",
     });
     await expect(update()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
-      message: "This action needs these permissions on the org: Send messages",
+      message: "This action needs this permission on the org: Send messages",
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });

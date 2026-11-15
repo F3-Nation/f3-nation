@@ -304,6 +304,8 @@ export const checkHasPermissionsOnOrg = async ({
   db: Context["db"];
 }): Promise<boolean> => {
   if (!session) return false;
+  // An empty list would otherwise pass for any signed-in caller.
+  if ((permissions as readonly Permission[]).length === 0) return false;
 
   logDebug("api.permission_check.checking", {
     userId: session.id,
