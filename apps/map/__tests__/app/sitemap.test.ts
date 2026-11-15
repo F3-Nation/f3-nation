@@ -2,7 +2,9 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockEnv = vi.hoisted(() => ({ F3_MAP_BASE_URL: "" }));
+const mockEnv = vi.hoisted(() => ({
+  F3_MAP_BASE_URL: "" as string | undefined,
+}));
 
 vi.mock("~/env", () => ({ env: mockEnv }));
 
@@ -24,6 +26,12 @@ describe("sitemap.xml", () => {
     expect(sitemap()[0]?.url).toBe("https://map.f3nation.com/");
 
     mockEnv.F3_MAP_BASE_URL = "";
+    expect(sitemap()[0]?.url).toBe("http://localhost:3000/");
+  });
+
+  it("falls back to localhost when the URL is unset (validation skipped)", () => {
+    mockEnv.F3_MAP_BASE_URL = undefined;
+
     expect(sitemap()[0]?.url).toBe("http://localhost:3000/");
   });
 });
