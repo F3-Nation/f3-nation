@@ -79,3 +79,11 @@ def test_callable_keeps_award_hour_guard(award_run, monkeypatch):
     award_run.process.assert_not_called()
     award_run.award.assert_not_called()
     award_run.post.assert_not_called()
+
+
+def test_cli_keeps_dry_run_enabled_when_posting(award_run, monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    award_achievements.main(["--dry-run"])
+
+    award_run.award.assert_called_once_with(award_run.session, [award_run.candidate], True)
+    award_run.post.assert_called_once_with(award_run.session, [award_run.candidate], True)
