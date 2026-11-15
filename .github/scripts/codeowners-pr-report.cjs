@@ -406,12 +406,16 @@ function buildReport(
 
 /**
  * Throws when a board holds a PR from a repository other than its source's,
- * such as a security advisory fix PR from `pr-triage.sh --with-advisories`:
- * a report posted where that fork's readers can't see must not list it. The
- * message names only the source, never the PR, since a workflow's log can be
- * public.
+ * such as a security advisory fix PR, or the advisories without one, from
+ * `pr-triage.sh --with-advisories`: a report posted where the advisories'
+ * readers can't see must not list them. The message names only the source,
+ * never the PR or advisory, since a workflow's log can be public.
  */
 function assertOwnPrs(owner, repo, board) {
+  if (board.advisoriesWithoutPr !== undefined)
+    throw new Error(
+      `pr-triage's board for ${owner}/${repo} lists security advisories.`,
+    );
   const prefix = `https://github.com/${owner}/${repo}/pull/`.toLowerCase();
   for (const pr of board.prs ?? []) {
     if (

@@ -669,6 +669,30 @@ test("assembleReport refuses a board PR from another repo without naming it", as
   assert.deepEqual(calls, []);
 });
 
+test("assembleReport refuses a board that lists security advisories", async () => {
+  const github = {
+    paginate: async () => assert.fail("read GitHub"),
+    graphql: async () => assert.fail("read GitHub"),
+  };
+  await assert.rejects(
+    assembleReport({
+      github,
+      sources: [
+        {
+          owner: "F3-Nation",
+          repo: "f3-nation",
+          board: { codeowners: [], prs: [pr(1)], advisoriesWithoutPr: [] },
+        },
+      ],
+      now: NOW,
+    }),
+    {
+      message:
+        "pr-triage's board for F3-Nation/f3-nation lists security advisories.",
+    },
+  );
+});
+
 test("extra lists follow the PR lists, and their header notes end the header", () => {
   const result = buildReport(
     { codeowners: [], prs: [pr(1)] },

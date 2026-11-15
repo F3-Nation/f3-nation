@@ -526,9 +526,12 @@ fork_board() {
 fork_board "$fork_a" '[5, 8]' >"$adv_dir/fork-a.json"
 fork_board "$fork_b" '[5]' >"$adv_dir/fork-b.json"
 echo '{"data":null,"errors":[{"message":"Could not resolve to a Repository"}]}' >"$adv_dir/fork-c.json"
-advisory() { jq -nc --arg id "$1" --arg severity "$2" --arg fork "$3" --arg at "$4" \
+fork_board acme/repo-ghsa-vvvv-wwww-xxxx '[]' >"$adv_dir/fork-d.json"
+# A fork whose only open PR is a draft.
+fork_board acme/repo-ghsa-yyyy-zzzz-2222 '[1]' >"$adv_dir/fork-e.json"
+advisory() { jq -nc --arg id "$1" --arg severity "$2" --arg fork "$3" --arg at "$4" --arg summary "${5:-Summary of $1}" \
   '{ghsa_id: $id, severity: (if $severity == "" then null else $severity end), created_at: $at,
-    private_fork: (if $fork == "" then null else {full_name: $fork} end)}'; }
+    summary: $summary, private_fork: (if $fork == "" then null else {full_name: $fork} end)}'; }
 {
   echo "["
   advisory GHSA-dddd-eeee-ffff critical "$fork_b" 2026-10-02T00:00:00Z; echo ","
@@ -544,7 +547,10 @@ advisory() { jq -nc --arg id "$1" --arg severity "$2" --arg fork "$3" --arg at "
   advisory GHSA-kkkk-mmmm-nnnn high evil/repo-ghsa-kkkk-mmmm-nnnn 2026-10-04T00:00:00Z; echo ","
   advisory GHSA-pppp-qqqq-rrrr high acme/repo-ghsa-kkkk-mmmm-nnnn 2026-10-04T00:00:00Z; echo ","
   advisory GHSA-bad high acme/repo-ghsa-bad 2026-10-04T00:00:00Z; echo ","
-  advisory GHSA-ssss-tttt-uuuu medium "" 2026-10-05T00:00:00Z
+  advisory GHSA-ssss-tttt-uuuu medium "" 2026-10-05T00:00:00Z \
+    "$(printf '</script><b>x</b>\nsecond\037line')"; echo ","
+  advisory GHSA-vvvv-wwww-xxxx low acme/repo-ghsa-vvvv-wwww-xxxx 2026-10-06T00:00:00Z; echo ","
+  advisory GHSA-yyyy-zzzz-2222 high acme/repo-ghsa-yyyy-zzzz-2222 2026-10-07T00:00:00Z
   echo "]"
 } >"$adv_dir/draft.json"
 cat >"$adv_dir/bin/gh" <<'STUB'
@@ -568,6 +574,8 @@ case "$*" in
   *name=repo-ghsa-aaaa-bbbb-cccc*) cat "$ADV_DIR/fork-a.json" ;;
   *name=repo-ghsa-dddd-eeee-ffff*) cat "$ADV_DIR/fork-b.json" ;;
   *name=repo-ghsa-gggg-hhhh-jjjj*) cat "$ADV_DIR/fork-c.json" ;;
+  *name=repo-ghsa-vvvv-wwww-xxxx*) cat "$ADV_DIR/fork-d.json" ;;
+  *name=repo-ghsa-yyyy-zzzz-2222*) cat "$ADV_DIR/fork-e.json" ;;
   *) echo "gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 STUB
@@ -602,12 +610,22 @@ status=$?
 assert_eq "advisories: the run exits 0" "0" "$status"
 assert_eq "advisories: nothing goes to stderr" "" "$(cat "$adv_dir/list.err")"
 adv() { jq -c "$1" "$adv_dir/list.json"; }
-assert_eq "advisories: only forks read are counted" "2" "$(adv .advisoryForks)"
+assert_eq "advisories: only forks read are counted" "4" "$(adv .advisoryForks)"
 assert_eq "advisories: a fork that couldn't be read is noted" \
   '["Couldn'"'"'t read 1 security advisory fork, so its PRs aren'"'"'t shown."]' "$(adv .advisoryNotes)"
 assert_eq "advisories: fix PRs come first, most severe first, each with its ref" \
-  '["GHSA-dddd-eeee-ffff #5","GHSA-aaaa-bbbb-cccc #5","GHSA-aaaa-bbbb-cccc #8",null]' \
-  "$(adv '[.prs[0:4][] | .ref]')"
+  '["GHSA-dddd-eeee-ffff #5","GHSA-aaaa-bbbb-cccc #5","GHSA-aaaa-bbbb-cccc #8","GHSA-yyyy-zzzz-2222 #1",null]' \
+  "$(adv '[.prs[0:5][] | .ref]')"
+assert_eq "advisories: those without a fix PR are listed, most severe first" \
+  '["GHSA-yyyy-zzzz-2222","GHSA-ssss-tttt-uuuu","GHSA-vvvv-wwww-xxxx"]' \
+  "$(adv '[.advisoriesWithoutPr[].ghsa]')"
+assert_eq "advisories: only a draft-only fork is marked as having a draft" "[true,false,false]" \
+  "$(adv '[.advisoriesWithoutPr[].draftPr]')"
+assert_eq "advisories: an advisory without a fix PR carries its details" \
+  '{"ghsa":"GHSA-vvvv-wwww-xxxx","severity":"low","summary":"Summary of GHSA-vvvv-wwww-xxxx","createdAt":"2026-10-06T00:00:00Z","url":"https://github.com/acme/repo/security/advisories/GHSA-vvvv-wwww-xxxx","draftPr":false}' \
+  "$(adv '.advisoriesWithoutPr[2]')"
+assert_eq "advisories: a summary's control characters become spaces" "</script><b>x</b> second line" \
+  "$(adv '.advisoriesWithoutPr[1].summary' | jq -r .)"
 assert_eq "advisories: a fix PR carries its advisory" \
   '{"ghsa":"GHSA-aaaa-bbbb-cccc","severity":"high","url":"https://github.com/acme/repo/security/advisories/GHSA-aaaa-bbbb-cccc"}' \
   "$(adv '.prs[] | select(.ref == "GHSA-aaaa-bbbb-cccc #5") | .advisory')"
@@ -615,6 +633,19 @@ assert_eq "advisories: a fix PR is triaged like any other" "MANUAL" \
   "$(adv '.prs[] | select(.ref == "GHSA-aaaa-bbbb-cccc #8") | .bucket' | tr -d '"')"
 assert_eq "advisories: the repo's own PRs are unchanged" "$(jq -c .prs "$tmp_dir/board.json")" \
   "$(adv '[.prs[] | select(.advisory == null)]')"
+
+# A draft-only fork whose PRs were cut off may have a fix PR past the cut, so it isn't listed.
+cut_dir="$tmp_dir/adv-cut"
+cp -R "$adv_dir" "$cut_dir"
+jq '.data.repository.pullRequests.pageInfo = {hasNextPage: true, endCursor: "c1"}' \
+  "$adv_dir/fork-e.json" >"$cut_dir/fork-e.json"
+cut_board=$(ADV_MODE=list ADV_DIR="$cut_dir" PATH="$adv_dir/bin:$PATH" PR_TRIAGE_MAX_PAGES=1 \
+  PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
+  bash "$triage" -R acme/repo --with-advisories --json 2>/dev/null)
+assert_eq "advisories: a cut-off fork isn't listed as without a fix PR" \
+  '["GHSA-ssss-tttt-uuuu","GHSA-vvvv-wwww-xxxx"]' "$(jq -c '[.advisoriesWithoutPr[].ghsa]' <<<"$cut_board")"
+assert_eq "advisories: a cut-off fork is noted" "1 security advisory fork has more open PRs: only the oldest are shown." \
+  "$(jq -r '.advisoryNotes[1]' <<<"$cut_board")"
 
 printf '%s\t5\tpr-review-inline\tsha\t2026-10-22T00:00:00Z\n' "$fork_a" >"$adv_dir/ledger.tsv"
 ADV_LEDGER="$adv_dir/ledger.tsv" run_adv list --json >"$adv_dir/ledger.json" 2>/dev/null
@@ -625,7 +656,14 @@ assert_eq "advisories: a ledger row counts only on its own fork's PR" \
 
 run_adv list >"$adv_dir/list.text" 2>/dev/null
 assert_eq "advisories: the text header says how many forks are included" \
-  "PR triage for acme/repo (as @viewer; includes 2 security advisory forks)" "$(head -1 "$adv_dir/list.text")"
+  "PR triage for acme/repo (as @viewer; includes 4 security advisory forks)" "$(head -1 "$adv_dir/list.text")"
+assert_eq "advisories: the text lists advisories without a fix PR first" \
+  "Security advisories without a fix PR" "$(sed -n 4p "$adv_dir/list.text")"
+assert_eq "advisories: an advisory without a fix PR shows its severity, age and draft" \
+  "  GHSA-yyyy-zzzz-2222 [high] Summary of GHSA-yyyy-zzzz-2222|         opened 15d ago; draft fix PR open" \
+  "$(sed -n '5,6p' "$adv_dir/list.text" | paste -sd'|' -)"
+assert_eq "advisories: a hostile summary stays on one line" \
+  "  GHSA-ssss-tttt-uuuu [medium] </script><b>x</b> second line" "$(grep '^  GHSA-ssss' "$adv_dir/list.text")"
 assert_eq "advisories: the text lists the unread-fork note" \
   "  Couldn't read 1 security advisory fork, so its PRs aren't shown." "$(sed -n 2p "$adv_dir/list.text")"
 assert_eq "advisories: a fix PR's card names its advisory and severity" \
@@ -638,9 +676,11 @@ chmod 644 "$adv_dir/list.html"
 run_adv list --out "$adv_dir/list.html" --no-open >/dev/null 2>&1
 assert_eq "advisories: the HTML board is readable only by its owner" "$adv_dir/list.html" \
   "$(find "$adv_dir/list.html" -perm 0600)"
-assert_eq "advisories: the HTML board holds the fix PRs" "3" \
+assert_eq "advisories: the HTML board holds the fix PRs and the advisories without one" "4 3" \
   "$(sed -n '/id="data">/,/<\/script>/p' "$adv_dir/list.html" | sed '1d;$d' \
-    | jq '[.prs[] | select(.advisory)] | length')"
+    | jq -r '"\([.prs[] | select(.advisory)] | length) \(.advisoriesWithoutPr | length)"')"
+assert_eq "advisories: a hostile summary can't close the HTML data block" "0" \
+  "$(grep -c '</script><b>' "$adv_dir/list.html")"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} pr-triage test(s) failed"
