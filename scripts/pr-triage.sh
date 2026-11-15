@@ -19,10 +19,10 @@
 # and triages the PRs in each one's temporary private fork beside the repo's own, advisory PRs
 # first, most severe first. A first list holds the advisories with no fix PR: no fork, or a fork
 # with only drafts open; an advisory whose fork couldn't be read in full is left off it. Anyone
-# GitHub shows no advisories gets the same board as without the flag, with no message: a failed
-# or refused advisory read is treated as none. Only once an advisory is visible does the board
-# note a fork it couldn't read. The Codeowners PR Report never passes the flag, so advisories
-# and their PRs stay out of its public Slack post.
+# GitHub shows no advisories, or refuses them (403 or 404), gets the same board as without the
+# flag, with no message. Any other failed advisory read is said on stderr and on the board, and
+# so is a fork that couldn't be read. Advisory data is private to people with advisory access:
+# never pass the flag where the output is posted or logged publicly.
 #
 # Stages, in order:
 #   draft                                         -> ignored
@@ -171,8 +171,11 @@ fragment reviews on PullRequestReviewConnection {
 
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/pr-triage.XXXXXX")
 advisory_pid=""
+board_tmp=""
 cleanup() {
-  [[ -z "$advisory_pid" ]] || kill "$advisory_pid" 2>/dev/null || true
+  # Wait, not kill: killing the subshell would leave its fork fetches writing into work_dir.
+  [[ -z "$advisory_pid" ]] || wait "$advisory_pid" 2>/dev/null || true
+  [[ -z "$board_tmp" ]] || rm -f "$board_tmp"
   rm -rf "$work_dir"
 }
 trap cleanup EXIT
@@ -202,13 +205,20 @@ fetch_prs() {
 }
 
 # The open advisories the viewer can see, most severe then oldest first, as a JSON list of
-# {ghsa, severity ("" if unset), fork ("" if none), summary, createdAt}. An advisory with a fork
-# GitHub doesn't name exactly <repo>-ghsa-… is dropped. A summary's control characters become
-# spaces: reporters outside the team write them. Fails on any refused or unexpected answer.
+# {ghsa, severity ("" if unset), fork ("" if none), summary, createdAt}. An advisory whose fork
+# isn't named <repo>-<its GHSA ID>, ignoring case, is dropped, so the script never triages a
+# repository other than this repo's advisory forks. A summary's control characters (C0, DEL and
+# C1) become spaces: reporters outside the team write them. An advisory read in both states,
+# because it changed state between the reads, keeps its later record. Fails on any refused or
+# unexpected answer; any failure but a 403 or 404 (no advisory access) also leaves
+# advisories.failed.
 list_advisories() {
-  local state listed=""
+  local state listed="" err="$work_dir/advisories.err"
   for state in triage draft; do
-    listed+="$(gh api --paginate "repos/$repo/security-advisories?state=$state&per_page=100")" || return 1
+    if ! listed+="$(gh api --paginate "repos/$repo/security-advisories?state=$state&per_page=100" 2>"$err")"; then
+      grep -qE 'HTTP 40[34]' "$err" || : >"$work_dir/advisories.failed"
+      return 1
+    fi
     listed+=$'\n'
   done
   # shellcheck disable=SC2016
@@ -216,20 +226,23 @@ list_advisories() {
     def rank: . as $s | ["critical", "high", "medium", "low"] | index($s) // 4;
     if all(.[]; type == "array") then add // [] else error("not a list of advisories") end
     | map({ghsa: (.ghsa_id // ""), severity: (.severity // ""), fork: (.private_fork.full_name // ""),
-            summary: ((.summary // "") | tostring | gsub("[\u0000-\u001f\u007f]+"; " ")),
+            summary: ((.summary // "") | tostring | gsub("[\u0000-\u001f\u007f-\u009f]+"; " ")),
             createdAt: (.created_at // "")})
     | map(select((.ghsa | test("^GHSA(-[a-z0-9]{4}){3}$"))
         and (.fork == "" or (.fork | ascii_downcase) == ("\($repo)-\(.ghsa)" | ascii_downcase))))
     | map(.severity |= (if IN("critical", "high", "medium", "low") then . else "" end))
-    | unique_by(.ghsa)
-    | sort_by((.severity | rank), .createdAt)' <<<"$listed"
+    # group_by keeps input order within a group, so last is the later read.
+    | group_by(.ghsa) | map(last)
+    | sort_by((.severity | rank), .createdAt)' <<<"$listed" 2>/dev/null \
+    || { : >"$work_dir/advisories.failed"; return 1; }
 }
 
-# Run in the background beside the repo's own fetch: the advisory list into advisories.json,
-# then the n-th advisory's fork PRs into fork-<n>.json, with fork-<n>.ok once read, a few forks
-# at a time. Every failure leaves its file out and says nothing.
+# The advisory list into advisories.json, then the n-th advisory's fork PRs into fork-<n>.json,
+# a few forks at a time, with fork-<n>.ok only once that read succeeds. A failed read leaves no
+# fork-<n>.ok, and a failed list leaves no advisories.json (see list_advisories for when it
+# leaves advisories.failed).
 discover_advisories() {
-  local list n=0 fork
+  local list n=0 launched=0 fork
   list=$(list_advisories) || return 0
   [[ "$(jq 'length' <<<"$list")" -gt 0 ]] || return 0
   printf '%s\n' "$list" >"$work_dir/advisories.json"
@@ -237,7 +250,8 @@ discover_advisories() {
     n=$((n + 1))
     [[ -n "$fork" ]] || continue
     { fetch_prs "$fork" "$work_dir/fork-$n.json" && : >"$work_dir/fork-$n.ok"; } &
-    if (( n % 4 == 0 )); then wait; fi
+    launched=$((launched + 1))
+    if (( launched % 4 == 0 )); then wait; fi
   done < <(jq -r '.[].fork' <<<"$list")
   wait
 }
@@ -397,15 +411,16 @@ classify='
       # Someone other than the viewer and the author is assigned: they have taken it on.
       | any($assignees[]; lower_login as $a | $a != $viewer and $a != ($author | lower_login))
         as $claimedByOther
-      # Whether the next move can be the viewer'"'"'s: always on their own PR; otherwise not when
-      # someone else has taken it on, the author owes a push or reply, or the threads awaiting a
-      # reply are other people'"'"'s. A thread a non-codeowner (a review bot) opened falls to the
-      # assigned codeowners, as in the Codeowners PR Report.
+      # Whether the next move can be the viewer'"'"'s: always on their own PR or when the author
+      # has replied in a thread the viewer opened; otherwise not when someone else has taken it
+      # on, the author owes a push or reply, or the threads awaiting a reply are other people'"'"'s.
+      # A thread a non-codeowner (a review bot) opened falls to the assigned codeowners, since no
+      # other codeowner will answer it.
       | (if ($author | lower_login) == $viewer then true
+         elif $verdict[0] == "REPLY" and any($open[]; lower_login == $viewer) then true
          elif $claimedByOther and ($viewerAssigned | not) then false
          elif $verdict[0] == "THREADS" then false
-         elif $verdict[0] == "REPLY" then
-           any($open[]; lower_login == $viewer) or ($viewerAssigned and any($open[]; codeowner | not))
+         elif $verdict[0] == "REPLY" then $viewerAssigned and any($open[]; codeowner | not)
          else true end) as $viewersTurn
       | [$pr.reviewThreads.nodes[] | select((.comments.nodes[0].author.login // "") != $author)]
         as $othersThreads
@@ -471,6 +486,11 @@ board=$(classify_board "$data_file" "$repo" null) || die "could not classify PRs
 if [[ -n "$advisory_pid" ]]; then
   wait "$advisory_pid" || true
   advisory_pid=""
+fi
+if [[ -f "$work_dir/advisories.failed" ]]; then
+  note="Couldn't read the security advisories, so advisory PRs may be missing."
+  echo "pr-triage: $note" >&2
+  board=$(jq --arg note "$note" '.advisoryNotes = [$note]' <<<"$board")
 fi
 # Each fork read becomes a board of its own; the advisory PRs go first, in the list's order.
 # Every advisory is "none" (no fork), "read" (its fork's board is among fork_boards, in order)
@@ -558,11 +578,10 @@ if $html; then
   [[ -d "$out" ]] && out="${out%/}/pr-triage-${repo%%/*}-${repo#*/}.html"
   # "<" is escaped so no PR title can close the <script> block it is embedded in.
   json=$(jq -c '.' <<<"$board" | sed 's/</\\u003c/g')
-  # Only you can read the board: it can name unfixed security advisories. Truncating first and
-  # then narrowing the mode keeps an older board's wider mode from applying to the new content.
-  umask 077
-  : >"$out"
-  chmod 600 "$out"
+  # Only you can read the board: it can name unfixed security advisories. It is written to a new
+  # mode-0600 file and renamed over any older board, so a reader holding the older board open
+  # never sees the new content.
+  board_tmp=$(mktemp "$(dirname "$out")/.pr-triage.XXXXXX") || die "could not write $out"
   {
     cat <<'HTML'
 <!doctype html>
@@ -757,8 +776,7 @@ HTML
     ["all", "All", () => true],
     ["mine", "Assigned to me", (pr) => pr.assignedToMe],
     ["unassigned", "Unassigned", (pr) => pr.assignee === "Unassigned"],
-    // Leaves out PRs that aren't yours to move: taken on by someone else, waiting on their
-    // author, or waiting on replies in other people's threads.
+    // Only the PRs whose next move can be yours; viewersTurn holds the rule.
     ["responsible", "My responsibility", (pr) => pr.viewersTurn],
   ];
   // Drafts and skipped PRs have no column, so they'd inflate the counts on the buttons.
@@ -788,7 +806,8 @@ HTML
 </body>
 </html>
 HTML
-  } >"$out"
+  } >"$board_tmp"
+  mv -f "$board_tmp" "$out"
   echo "Wrote $out"
   if $open_board; then
     open_file "$out" || echo "Open it in your browser to view the board."

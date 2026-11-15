@@ -405,11 +405,11 @@ function buildReport(
 }
 
 /**
- * Throws when a board holds a PR from a repository other than its source's,
- * such as a security advisory fix PR, or the advisories without one, from
- * `pr-triage.sh --with-advisories`: a report posted where the advisories'
- * readers can't see must not list them. The message names only the source,
- * never the PR or advisory, since a workflow's log can be public.
+ * Throws when a board lists security advisories or holds a PR from a
+ * repository other than its source's, such as an advisory fix PR from
+ * `pr-triage.sh --with-advisories`: a report whose readers may lack advisory
+ * access must not list them. The message names only the board's source
+ * repository, never the foreign PR, since a workflow's log can be public.
  */
 function assertOwnPrs(owner, repo, board) {
   if (board.advisoriesWithoutPr !== undefined)
