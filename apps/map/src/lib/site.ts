@@ -1,0 +1,10 @@
+import { env } from "~/env";
+
+/**
+ * Canonical origin for robots.txt and the sitemap. Falls back to localhost
+ * when validation is skipped (CI and lint builds), as map-metadata.ts does.
+ */
+export const getSiteUrl = (): string => {
+  const raw = env.F3_MAP_BASE_URL.trim();
+  return (raw ? raw : "http://localhost:3000").replace(/\/+$/, "");
+};
