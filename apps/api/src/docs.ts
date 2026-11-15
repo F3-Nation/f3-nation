@@ -57,13 +57,13 @@ const rolesAndPermissionsMarkdown = (): string => {
       ).join(" | ")} |`,
   );
   return [
-    "People and API keys are given roles on orgs. A role on an org also applies to every org below it. Each role includes the permissions below. A permission is checked only by endpoints that list it; other endpoints say in their description what access they need:",
+    "People and API keys are given roles on orgs. A role on an org also applies to every org below it. Each role includes the permissions below:",
     "",
     header,
     divider,
     ...rows,
     "",
-    "An endpoint that checks permissions lists them in a **Required permission(s)** line in its description. Other endpoints say in their description what access they need, if any.",
+    "A permission is checked only by endpoints that list it in a **Required permission(s)** line in their description.",
   ].join("\n");
 };
 

@@ -86,8 +86,8 @@ describe("permissionProcedure", () => {
   });
 
   it("takes each permission from a role on a different org", async () => {
-    // No two real roles have separate permissions, so give two of them one
-    // each for this test.
+    // Give two roles one permission each, so the test doesn't depend on how
+    // the real roles' permissions overlap.
     const map = ROLE_PERMISSIONS;
     const original = { user: map.user, editor: map.editor };
     map.user = [Permission.MessagesSend];

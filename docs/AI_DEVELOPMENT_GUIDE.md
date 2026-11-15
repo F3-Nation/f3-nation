@@ -137,8 +137,7 @@ return the same decisions with one hierarchy query per chunk of up to 10,000
 orgs not already covered by a direct role (no query when direct roles cover
 every check).
 
-An endpoint that checks permissions instead of a role
-([ADR 0002](adr/0002-permission-based-authorization.md)) declares them in
+An endpoint that checks permissions instead of a role declares them in
 `permissionProcedure(...)` and calls `ctx.assertPermissionsOnOrg(orgId)` with
 the org it acts on, which walks the same hierarchy.
 
