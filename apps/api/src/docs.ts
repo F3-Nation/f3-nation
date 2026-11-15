@@ -63,7 +63,7 @@ const rolesAndPermissionsMarkdown = (): string => {
     divider,
     ...rows,
     "",
-    "An endpoint that checks a permission lists it under **Required permission** in its description. Endpoints not yet moved to permissions still check for the admin or editor role.",
+    "An endpoint that checks permissions lists them in a **Required permission** line in its description. An endpoint without that line checks a role instead of a permission.",
   ].join("\n");
 };
 

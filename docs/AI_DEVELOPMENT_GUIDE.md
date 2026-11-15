@@ -130,14 +130,17 @@ if (!success) throw new ORPCError("UNAUTHORIZED");
 
 Use [`checkHasRoleOnOrg`](../packages/api/src/check-has-role-on-org.ts) — it
 walks the org hierarchy (AO → region → … → nation) so a region admin is
-authorized for its AOs. Endpoints that check permissions instead of a role
-(ADR 0002) use `permissionProcedure` and its `ctx.assertPermissionsOnOrg`,
-which walks the same hierarchy. Never call it in a loop over many orgs (an N+1 on the
+authorized for its AOs. Never call it in a loop over many orgs (an N+1 on the
 auth path): use `checkHasRolesOnOrgs` (per-check results),
 `checkHasRoleOnAnyOrg` or `checkHasRoleOnAllOrgs` from the same file, which
 return the same decisions with one hierarchy query per chunk of up to 10,000
 orgs not already covered by a direct role (no query when direct roles cover
 every check).
+
+An endpoint that checks permissions instead of a role
+([ADR 0002](adr/0002-permission-based-authorization.md)) declares them in
+`permissionProcedure(...)` and calls `ctx.assertPermissionsOnOrg(orgId)` with
+the org it acts on, which walks the same hierarchy.
 
 ### Reads expose PII too
 

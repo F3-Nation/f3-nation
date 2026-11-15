@@ -66,7 +66,7 @@ describe("permissionProcedure", () => {
   });
 
   it("stops a caller who lacks one of the permissions on every org", async () => {
-    // editor includes entities.manage but not messages.send
+    // A role with one of the two permissions but not the other.
     await mockAuthWithSession(sessionWithRole(999_999, "editor"));
     await expect(client().gateOnly()).rejects.toMatchObject({
       code: "UNAUTHORIZED",

@@ -8,11 +8,11 @@ export interface PermissionDefinition {
 }
 
 /**
- * What the API checks before an action, and the source of truth for each
- * permission's name and wording (the API docs read them from here). Code asks
- * for a permission; people and API keys are given roles, and each role is a
- * named bundle of permissions (ADR 0002). Every entry is permanent API
- * surface: splitting one later is cheap, merging two is not.
+ * What the API checks before an action. Code asks for a permission; people and
+ * API keys are given roles, and each role is a named bundle of permissions
+ * (docs/adr/0002-permission-based-authorization.md). `displayName` and
+ * `description` are shown to API users. Every entry is permanent API surface:
+ * splitting one later is cheap, merging two is not.
  */
 export const Permission = {
   EntitiesManage: {

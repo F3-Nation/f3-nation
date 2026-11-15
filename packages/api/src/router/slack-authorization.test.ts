@@ -1,6 +1,6 @@
 /**
  * Who may send Slack messages through the API: the messages.send permission
- * on the target org (the admin role there or on an ancestor).
+ * on the target org, from a role there or on an ancestor.
  */
 
 import { vi } from "vitest";

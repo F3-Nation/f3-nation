@@ -43,10 +43,9 @@ interface RoleMatch {
 }
 
 /**
- * The hierarchy walk shared by the role and permission checks. For each check,
- * finds a session role on the org itself or on any ancestor within the depth
- * guard (no is_active filter) for which `matches` is true; the result array
- * lines up with `checks` by index.
+ * For each check, finds a session role on the org itself or on any ancestor
+ * within the depth guard (no is_active filter) for which `matches` is true;
+ * the result array lines up with `checks` by index.
  *
  * Checks the session satisfies directly need no query at all; only the
  * remaining orgs are resolved, together, with one recursive CTE per
@@ -290,7 +289,8 @@ export const checkHasRoleOnAllOrgs = async ({
  * True when the caller (a person or an API key) has every one of
  * `permissions` on `orgId`: for each permission, a role on the org or on any
  * of its ancestors that includes it. Different roles may supply different
- * permissions. Same hierarchy walk as `checkHasRoleOnOrg`, in one query.
+ * permissions. All permissions are resolved together through
+ * `findMatchingRoles`, the hierarchy walk the role checks use.
  */
 export const checkHasPermissionsOnOrg = async ({
   session,
