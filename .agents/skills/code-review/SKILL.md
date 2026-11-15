@@ -25,6 +25,11 @@ review, without a hosted pipeline or a separate API bill.
   Before dropping a finding as answered, read the full text of any
   `[TRUNCATED]` reply (`gh api repos/F3-Nation/f3-nation/pulls/comments/<id>`).
 
+Read [`REVIEW.md`](../../../REVIEW.md) and the `AGENTS.md` files above each
+changed file first: they hold the repo's critical checks, known failure
+patterns and the list of things not to flag, and they take precedence over
+the examples below.
+
 Read the surrounding code for any hunk you are unsure about. Don't report a
 finding about code you haven't opened and read: the diff alone often hides the
 guard or caller that makes it a non-issue.
