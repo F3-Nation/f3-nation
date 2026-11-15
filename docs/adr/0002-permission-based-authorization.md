@@ -45,7 +45,7 @@ Granting sector-level **admin** so someone could **send a message** is the
 canonical over-grant: the role vocabulary (admin/editor) is coarser than the
 capabilities the org actually delegates.
 
-### What exists today (verified July 2026)
+### What exists today (verified November 2026)
 
 **The planned permission model is already in the database — dormant.**
 `packages/db/drizzle/schema.ts` defines `permissions` and
@@ -61,17 +61,27 @@ vestigial `Permissions` enums (`packages/shared/src/app/constants.ts`,
    _any_ org. They are door-checks only; they scope nothing.
 2. Org-scoped checks at call sites: `checkHasRoleOnOrg`
    (`packages/api/src/check-has-role-on-org.ts`) takes a role + org and walks
-   _up_ the org hierarchy (AO → Region → Sector → Area → Nation) in SQL, so a
-   grant at Sector level covers everything beneath it. `"admin"` is
-   hard-coded as a superset of any requested role.
+   _up_ the org's ancestors in SQL, whatever the tree's depth (see
+   [ADR 0003](0003-depth-agnostic-org-hierarchy.md)), so a grant at Sector
+   level covers everything beneath it. `"admin"` is hard-coded as a superset
+   of any requested role.
+
+The endpoints behind the triggering incident still show the problem: sending
+or updating a Slack message through the API (`packages/api/src/router/slack.ts`)
+requires the `admin` role on the target org, because no narrower role exists.
 
 **Load-bearing facts that constrain any redesign:**
 
-- Role grants live in `roles_x_users_x_org` (role × user × org) and are baked
-  into the JWT session at sign-in as `{orgId, orgName, roleName}[]`
-  (`packages/auth/src/lib/md-pg-drizzzle-adapter.ts`). Grant changes do not
-  reach live sessions until re-login or session update — the ComzQ grant
-  above needed a re-login to take effect.
+- Role grants live in `roles_x_users_x_org` (role × user × org). How fresh a
+  caller's roles are depends on the credential:
+  - Cookie sessions bake them into the session JWT at sign-in as
+    `{orgId, orgName, roleName}[]` (the `jwt` callback in
+    `packages/auth/src/config.ts`). Grant changes do not reach a live cookie
+    session until re-login or session update — the ComzQ grant above needed a
+    re-login to take effect.
+  - Auth-service access tokens and API keys carry no roles; the API reads
+    their grants from the database on every request
+    (`packages/api/src/shared.ts`), so a grant change takes effect at once.
 - `roles.name` is a Postgres enum (`user_role`). Adding any new role (e.g. `comz`)
   requires an `ALTER TYPE` migration, not just an insert.
 - API keys authenticate through the same role tables
@@ -199,9 +209,10 @@ the org-hierarchy scoping stays as-is.
 - The `permissions` / `roles_x_permissions` tables remain dormant (kept as
   the escape hatch for a future data-driven mapping, at the cost of schema
   readers wondering why they are empty).
-- JWT grant staleness is unchanged (pre-existing): new grants require
-  re-login or session update. If "grant and it works immediately" becomes a
-  requirement, a session-refresh trigger after grant changes is a follow-up.
+- Grant staleness for cookie sessions is unchanged (pre-existing): new grants
+  require re-login or session update. If "grant and it works immediately"
+  becomes a requirement, a session-refresh trigger after grant changes is a
+  follow-up.
 - The incremental migration window has two authorization vocabularies in the
   codebase at once; each migrated endpoint must preserve its org-scoped
   check.
