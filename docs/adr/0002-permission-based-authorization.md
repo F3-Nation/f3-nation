@@ -97,37 +97,55 @@ Concretely:
    `roles_x_permissions` tables:
 
    ```ts
-   export const PERMISSIONS = [
-     "entities.manage",
-     "security.manage",
-     "messages.send",
-     "pii.read",
-   ] as const;
+   export const Permission = {
+     EntitiesManage: { name: "entities.manage" /* displayName, description */ },
+     SecurityManage: { name: "security.manage" /* … */ },
+     MessagesSend: { name: "messages.send" /* … */ },
+     PiiRead: { name: "pii.read" /* … */ },
+   } as const;
 
-   export type Permission = (typeof PERMISSIONS)[number];
+   export type Permission = (typeof Permission)[keyof typeof Permission];
 
    export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
-     admin: ["entities.manage", "security.manage", "messages.send", "pii.read"],
-     editor: ["entities.manage", "messages.send", "pii.read"],
+     admin: [
+       Permission.EntitiesManage,
+       Permission.SecurityManage,
+       Permission.MessagesSend,
+       Permission.PiiRead,
+     ],
+     editor: [Permission.EntitiesManage, Permission.PiiRead],
      user: [],
      // Dormant today (no permissions wired); present so the map stays
      // exhaustive over UserRole.
      password_manager: [],
      password_reader: [],
-     // comz: ["messages.send"],  // planned addition — see step 5 below
+     // comz: [Permission.MessagesSend],  // planned addition — see step 5 below
    };
    ```
+
+   Each permission carries a `displayName` and `description` alongside its
+   `name`, so the API docs and refusal messages are built from the same
+   definition the checks use.
+
+   `editor` does not include `messages.send`, unlike the proposal quoted in
+   Context ("all but security.manage"). Sending Slack messages on an org's
+   behalf stays with admins, and with roles that are given `messages.send`
+   explicitly, such as the planned `comz`.
 
    This replaces the vestigial `Permissions` enums. The hard-coded
    `roleName === "admin"` bypass in `checkHasRoleOnOrg` disappears as a
    special case — admin is simply the role mapped to all permissions.
 
-2. **Add `checkHasPermissionOnOrg`** wrapping the existing
+2. **Add `checkHasPermissionsOnOrg`** sharing the existing
    `checkHasRoleOnOrg` hierarchy logic: identical ancestor walk, but a grant
    matches when `ROLE_PERMISSIONS[r.roleName]` includes the requested
-   permission. Add a `permissionProcedure(permission)` middleware factory to
-   replace the coarse `editorProcedure` / `adminProcedure` gates. The helper
-   accepts either principal type (session or API key).
+   permission. It takes one or more permissions and requires all of them;
+   different roles may supply different permissions. Add a
+   `permissionProcedure(...permissions)` middleware factory to replace the
+   coarse `editorProcedure` / `adminProcedure` gates; it gives the handler
+   `ctx.assertPermissionsOnOrg(orgId)` for the org-scoped check and lists the
+   permissions in the endpoint's API docs. The helper accepts either principal
+   type (session or API key).
 
 3. **Migrate endpoints incrementally.** Old role checks and new permission
    checks coexist; each endpoint migration preserves the two-layer structure
@@ -161,7 +179,7 @@ the org-hierarchy scoping stays as-is.
   runtime-editable policy that nobody has asked for. Data-driven mapping
   earns its complexity only when non-developers must change policy at
   runtime; "add a Comz role" happens at developer speed anyway. Crucially,
-  the call sites this ADR introduces (`checkHasPermissionOnOrg`) are the
+  the call sites this ADR introduces (`checkHasPermissionsOnOrg`) are the
   stable seam: if the org later needs runtime role composition, only the
   lookup behind the helper changes, and the tables are already waiting.
   A code-defined map is type-safe (typos fail the build, not silently at
