@@ -17,6 +17,7 @@
     "with-env": "dotenv run -q --"
   },
   "dependencies": {
+    "@acme/api": "workspace:*",
     "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/observability": "workspace:*",
