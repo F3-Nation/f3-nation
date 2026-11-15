@@ -5,8 +5,9 @@ import { env } from "~/env";
  * when validation is skipped (CI and lint builds), as map-metadata.ts does.
  */
 export const getSiteUrl = (): string => {
-  // Widened on purpose: the value is undefined when validation is skipped.
-  const configured: string | undefined = env.F3_MAP_BASE_URL;
-  const raw = configured?.trim();
-  return (raw ? raw : "http://localhost:3000").replace(/\/+$/, "");
+  // Typed as possibly unset: the value is undefined when validation is skipped.
+  const raw = (env.F3_MAP_BASE_URL as string | undefined)?.trim();
+  const origin =
+    raw === undefined || raw === "" ? "http://localhost:3000" : raw;
+  return origin.replace(/\/+$/, "");
 };
