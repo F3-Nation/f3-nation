@@ -9,6 +9,7 @@ token, which Bolt treats as a non-rotating installation.
 import logging
 from typing import Optional
 
+from slack_bolt.error import BoltError
 from slack_sdk.errors import SlackClientError
 from slack_sdk.oauth.installation_store import Bot, Installation
 from slack_sdk.oauth.installation_store.installation_store import InstallationStore
@@ -27,6 +28,10 @@ from utilities.slack_tokens.refresh import (
 logger = logging.getLogger(__name__)
 
 
+def _log_refused(event: str, team_id: Optional[str]) -> None:
+    logger.warning(event, extra={"json_fields": {"event": event, "team_id": team_id}})
+
+
 def _non_rotating(bot: Optional[Bot]) -> Optional[Bot]:
     if bot is not None:
         bot.bot_token_expires_at = None
@@ -41,11 +46,13 @@ class SlackSpaceInstallationStore(InstallationStore):
         )
         if not saved:
             # The save guard refused a token expiring earlier than the stored rotating one.
-            event = "slack.token.install_refused"
-            logger.warning(event, extra={"json_fields": {"event": event, "team_id": installation.team_id}})
+            _log_refused("slack.token.install_refused", installation.team_id)
+            # Bolt answers a BoltError from the store with its storage-error page, not the success page.
+            raise BoltError("The installation was not saved")
 
     def save_bot(self, bot: Bot) -> None:
-        save_bot_locked(bot, team_id=bot.team_id)
+        if not save_bot_locked(bot, team_id=bot.team_id):
+            _log_refused("slack.token.save_refused", bot.team_id)
 
     def find_bot(
         self,
@@ -85,6 +92,10 @@ class SlackSpaceInstallationStore(InstallationStore):
     def delete_installation(
         self, *, enterprise_id: Optional[str], team_id: Optional[str], user_id: Optional[str] = None
     ) -> None:
+        # Only bot tokens are stored, so a user's installation has nothing here to delete;
+        # clearing the row would take the bot offline for the whole workspace.
+        if user_id is not None:
+            return
         self._clear(team_id)
 
     @staticmethod

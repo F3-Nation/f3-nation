@@ -177,6 +177,11 @@ def send_automated_preblasts(force: bool = False):
         try:
             slack_client = slack_client_for_team(preblast.slack_settings.team_id)
             if slack_client is None:
+                logger.error(
+                    "No Slack installation for team %s; preblast for event %s not sent",
+                    preblast.slack_settings.team_id,
+                    preblast.event.id,
+                )
                 continue
             event_preblast.send_preblast(
                 event_instance_id=preblast.event.id,

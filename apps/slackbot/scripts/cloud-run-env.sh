@@ -153,6 +153,10 @@ unset _env_key _env_val
 # makes every stored refresh token unreadable. Each comma-separated entry must
 # have a Fernet key's shape (32 bytes, url-safe base64); a placeholder fails.
 # Empty leaves the existing secret unchanged.
+print_token_key_hint() {
+  echo "Generate one with:"
+  echo "  python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+}
 validate_token_encryption_key() {
   local value="${SLACK_TOKEN_ENCRYPTION_KEY:-}" entry
   local -a entries
@@ -164,12 +168,28 @@ validate_token_encryption_key() {
     entry="${entry%"${entry##*[![:space:]]}"}"
     if [[ ! "$entry" =~ ^[A-Za-z0-9_-]{43}=$ ]]; then
       echo "Error: SLACK_TOKEN_ENCRYPTION_KEY must be comma-separated Fernet keys (44-char url-safe base64)."
-      echo "Generate one with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+      print_token_key_hint
       return 1
     fi
   done
 }
 validate_token_encryption_key || exit 1
+
+# An empty key keeps the existing secret, so one must already exist: without it
+# the IAM grant and the Cloud Run secret reference below would both fail.
+if [[ -z "${SLACK_TOKEN_ENCRYPTION_KEY:-}" ]]; then
+  if ! token_key_metadata="$(gcloud secrets describe slack-token-encryption-key \
+    --project "$PROJECT" --format='value(name)' 2>&1)"; then
+    if grep -qE '^ERROR: \(gcloud\.secrets\.describe\) NOT_FOUND: ' <<<"$token_key_metadata"; then
+      echo "Error: SLACK_TOKEN_ENCRYPTION_KEY is required: $PROJECT has no slack-token-encryption-key secret yet."
+      print_token_key_hint
+    else
+      echo "Error: Failed to inspect secret slack-token-encryption-key — aborting."
+    fi
+    exit 1
+  fi
+  unset token_key_metadata
+fi
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"

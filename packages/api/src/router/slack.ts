@@ -417,8 +417,9 @@ export const callSlackWebApi = async ({
       let reloaded: string | undefined;
       try {
         reloaded = await reloadBotToken();
-      } catch {
+      } catch (err) {
         // Fall through to report the original Slack error.
+        logError("api.slack.token_reload_failed", {}, err);
       }
       if (reloaded && reloaded !== botToken) {
         return callSlackWebApi({ url, botToken: reloaded, payload });

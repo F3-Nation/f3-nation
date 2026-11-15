@@ -518,19 +518,32 @@ def update_local_slack_users(slack_user: SlackUser = None) -> None:
 
 
 def _parse_stored_settings(slack_space: SlackSpace | None, team_id: str) -> SlackSettings | None:
-    """The workspace's stored settings, or None if the row has none or they are invalid."""
+    """The workspace's stored settings, or None if the row has none or they are invalid.
+
+    Invalid settings are logged at ERROR (`slack.settings.invalid`) for an
+    operator to repair; the caller runs the workspace on starter settings.
+    """
     settings = safe_get(slack_space, "settings")
+    if settings is None:
+        return None
+    error_type = None
     if isinstance(settings, str):
         try:
             settings = json.loads(settings)
-        except (TypeError, json.JSONDecodeError):
-            return None
-    if not isinstance(settings, Mapping) or settings.get("team_id") != team_id:
-        return None
-    try:
-        return SlackSettings(**settings)
-    except (TypeError, ValueError):
-        return None
+        except (TypeError, json.JSONDecodeError) as e:
+            error_type = type(e).__name__
+    if error_type is None and (not isinstance(settings, Mapping) or settings.get("team_id") != team_id):
+        error_type = "team_id_mismatch" if isinstance(settings, Mapping) else "not_an_object"
+    if error_type is None:
+        try:
+            return SlackSettings(**settings)
+        except (TypeError, ValueError) as e:
+            error_type = type(e).__name__
+    event = "slack.settings.invalid"
+    logging.getLogger(__name__).error(
+        event, extra={"json_fields": {"event": event, "team_id": team_id, "error_type": error_type}}
+    )
+    return None
 
 
 def get_region_record(team_id: str, body, context, client, logger) -> SlackSettings:

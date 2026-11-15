@@ -69,12 +69,12 @@ def _write_file(directory, team_id, *, team_name=None, enterprise_id=None):
     )
 
 
-def _fake_auth_test(monkeypatch, *, error=None):
+def _fake_auth_test(monkeypatch, *, team_id=None, error=None):
     def auth_test(self):
         if error:
             raise SlackApiError("secret-bearing message", {"ok": False, "error": error})
         return SimpleNamespace(
-            get=lambda key: {"bot_id": "B_AUTH", "user_id": "U_AUTH"}.get(key),
+            get=lambda key: {"team_id": team_id, "bot_id": "B_AUTH", "user_id": "U_AUTH"}.get(key),
             headers={"x-oauth-scopes": "chat:write,channels:read"},
         )
 
@@ -93,7 +93,7 @@ def test_imports_file_install(isolated_postgres, tmp_path, capsys):
 
 def test_backfills_from_auth_test(isolated_postgres, tmp_path, monkeypatch, capsys):
     _seed(isolated_postgres, "T2")
-    _fake_auth_test(monkeypatch)
+    _fake_auth_test(monkeypatch, team_id="T2")
 
     assert importer.main(["--installations-dir", str(tmp_path)]) == 0
 
@@ -116,7 +116,7 @@ def test_dry_run_writes_nothing(isolated_postgres, tmp_path, monkeypatch, capsys
     _seed(isolated_postgres, "T5")
     _seed(isolated_postgres, "T6")
     _write_file(tmp_path, "T5")
-    _fake_auth_test(monkeypatch)
+    _fake_auth_test(monkeypatch, team_id="T6")
 
     assert importer.main(["--installations-dir", str(tmp_path), "--dry-run"]) == 0
 
@@ -222,3 +222,82 @@ def test_dry_run_reports_file_without_a_row_and_writes_nothing(isolated_postgres
     assert capsys.readouterr().out.splitlines() == ["T23 imported_new"]
     with Session(isolated_postgres) as session:
         assert session.scalars(select(SlackSpace).where(SlackSpace.team_id == "T23")).one_or_none() is None
+
+
+def test_rejects_a_missing_installations_dir(isolated_postgres, tmp_path, capsys):
+    _seed(isolated_postgres, "T30")
+
+    with pytest.raises(SystemExit) as exit_info:
+        importer.main(["--installations-dir", str(tmp_path / "typo")])
+
+    assert exit_info.value.code == 2
+    assert "not a directory" in capsys.readouterr().err
+    assert _row(isolated_postgres, "T30") == (ROW_TOKEN, None, None, None, None)
+
+
+def test_accepts_an_empty_installations_dir(isolated_postgres, tmp_path, monkeypatch, capsys):
+    _seed(isolated_postgres, "T31")
+    _fake_auth_test(monkeypatch, team_id="T31")
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T31 backfilled"]
+
+
+def test_skips_a_row_whose_token_changed_during_the_run(isolated_postgres, tmp_path, monkeypatch, capsys):
+    _seed(isolated_postgres, "T32")
+    _write_file(tmp_path, "T32")
+    snapshot = importer._stored_tokens
+
+    def snapshot_then_reinstall():
+        tokens = snapshot()
+        with Session(isolated_postgres) as session:
+            row = session.scalars(select(SlackSpace).where(SlackSpace.team_id == "T32")).one()
+            row.bot_token = "xoxb-reinstalled"
+            session.commit()
+        return tokens
+
+    monkeypatch.setattr(importer, "_stored_tokens", snapshot_then_reinstall)
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T32 skipped_changed"]
+    assert _row(isolated_postgres, "T32")[0] == "xoxb-reinstalled"
+
+
+def test_skips_a_new_row_created_during_the_run(isolated_postgres, tmp_path, monkeypatch, capsys):
+    _write_file(tmp_path, "T33", team_name="Orphan Team")
+    snapshot = importer._stored_tokens
+
+    def snapshot_then_install():
+        tokens = snapshot()
+        _seed(isolated_postgres, "T33", token="xoxb-installed")
+        return tokens
+
+    monkeypatch.setattr(importer, "_stored_tokens", snapshot_then_install)
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T33 skipped_changed"]
+    assert _row(isolated_postgres, "T33")[0] == "xoxb-installed"
+
+
+def test_rejects_a_file_for_another_workspace(isolated_postgres, tmp_path, capsys):
+    _seed(isolated_postgres, "T34")
+    _write_file(tmp_path, "T99")
+    (tmp_path / "none-T99").rename(tmp_path / "none-T34")
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 1
+
+    assert capsys.readouterr().out.splitlines() == ["T34 team_mismatch"]
+    assert _row(isolated_postgres, "T34") == (ROW_TOKEN, None, None, None, None)
+
+
+def test_rejects_a_stored_token_for_another_workspace(isolated_postgres, tmp_path, monkeypatch, capsys):
+    _seed(isolated_postgres, "T35")
+    _fake_auth_test(monkeypatch, team_id="T99")
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 1
+
+    assert capsys.readouterr().out.splitlines() == ["T35 team_mismatch"]
+    assert _row(isolated_postgres, "T35") == (ROW_TOKEN, None, None, None, None)

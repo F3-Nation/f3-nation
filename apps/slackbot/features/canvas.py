@@ -110,14 +110,14 @@ def update_all_canvases():
     for region in regions:
         slack_settings = SlackSettings(**region.slack_space.settings)
         if slack_settings.canvas_channel and slack_settings.special_events_enabled:
-            client = slack_client_for_team(slack_settings.team_id)
-            if client is None:
-                Logger("logger").error(f"No Slack installation for region {region.name}; skipping canvas update")
-                continue
             try:
+                client = slack_client_for_team(slack_settings.team_id)
+                if client is None:
+                    Logger("logger").error(f"No Slack installation for region {region.name}; skipping canvas update")
+                    continue
                 update_canvas({}, client, Logger("logger"), {}, slack_settings)
             except Exception as e:
-                Logger("logger").error(f"Error updating canvas for region {region.name}: {e}")
+                Logger("logger").error(f"Error updating canvas for region {region.id}: {type(e).__name__}")
 
 
 if __name__ == "__main__":

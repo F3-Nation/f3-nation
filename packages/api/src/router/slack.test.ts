@@ -177,11 +177,17 @@ describe("callSlackWebApi token_revoked retry", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(revoked());
-    const reload = vi.fn().mockRejectedValue(new Error("no token"));
+    const reloadError = new Error("no token");
+    const reload = vi.fn().mockRejectedValue(reloadError);
 
     await expect(callWithReload(reload)).rejects.toMatchObject({
       status: mapSlackError("token_revoked").status,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      "api.slack.token_reload_failed",
+      {},
+      reloadError,
+    );
   });
 });

@@ -14,9 +14,25 @@ from utilities.helper_functions import create_user, is_deactivated_slack_user, s
 from utilities.slack_tokens.client import slack_client_for_team
 
 
+def _log_sync_failure(team_id: str, error: Exception) -> None:
+    """Log the exception type only: exception text can embed request data."""
+    error_type = type(error).__name__
+    logging.getLogger(__name__).error(
+        "slack.identity.sync_failed team_id=%s error_type=%s",
+        team_id,
+        error_type,
+        extra={"json_fields": {"event": "slack.identity.sync_failed", "team_id": team_id, "error_type": error_type}},
+    )
+
+
 def update_slack_users(force=False):
     """
     Update Slack users in the database with their latest information from Slack.
+
+    A workspace that fails is logged and skipped so the rest still sync. A ``SlackApiError`` is
+    only logged, so a revoked or misconfigured workspace doesn't fail every run. Any other error
+    is counted, and after the loop a ``RuntimeError`` reports how many workspaces failed, so the
+    hourly runner logs a job failure and the standalone script exits non-zero.
     """
     if not is_production_deployment():
         logging.getLogger(__name__).info("Skipping Slack user profile sync outside production.")
@@ -30,24 +46,15 @@ def update_slack_users(force=False):
         filters=[True],
     )
 
+    failed_team_ids: list[str] = []
     for slack_space_record in all_slack_spaces:
         slack_space = slack_space_record[0]
         region_org_record = slack_space_record[1]
         try:
             client = slack_client_for_team(slack_space.team_id)
         except Exception as error:
-            logging.getLogger(__name__).error(
-                "slack.identity.sync_failed team_id=%s error_type=%s",
-                slack_space.team_id,
-                type(error).__name__,
-                extra={
-                    "json_fields": {
-                        "event": "slack.identity.sync_failed",
-                        "team_id": slack_space.team_id,
-                        "error_type": type(error).__name__,
-                    }
-                },
-            )
+            _log_sync_failure(slack_space.team_id, error)
+            failed_team_ids.append(slack_space.team_id)
             continue
         if client is None:
             continue
@@ -108,6 +115,15 @@ def update_slack_users(force=False):
                 extra={"json_fields": {"event": "slack.identity.sync_failed", **context}},
             )
             continue
+        except Exception as error:
+            # e.g. a database error while the client reloads a revoked token.
+            _log_sync_failure(slack_space.team_id, error)
+            failed_team_ids.append(slack_space.team_id)
+            continue
+
+    if failed_team_ids:
+        # Only the count: each failure was already logged with its team ID.
+        raise RuntimeError(f"Slack user sync failed for {len(failed_team_ids)} workspace(s)")
 
 
 def update_home_regions():

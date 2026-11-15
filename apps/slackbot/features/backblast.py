@@ -1271,9 +1271,6 @@ COUNT: {count}
             dr_slack_space = DbManager.get(SlackSpace, ox.slack_space_id)
             if not dr_slack_space:
                 continue
-            dr_client = slack_client_for_team(dr_slack_space.team_id)
-            if dr_client is None:
-                continue
 
             dr_settings = REGION_RECORDS.get(dr_slack_space.team_id)
             if not dr_settings and dr_slack_space.settings:
@@ -1321,6 +1318,9 @@ COUNT: {count}
             )
 
             try:
+                dr_client = slack_client_for_team(dr_slack_space.team_id)
+                if dr_client is None:
+                    continue
                 existing_post = existing_by_team.get(dr_slack_space.team_id)
 
                 if create_or_edit == "edit" and existing_post:
