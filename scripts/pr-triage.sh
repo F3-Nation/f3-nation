@@ -559,6 +559,8 @@ if $html; then
     --bg: #f6f7f9; --panel: #eceef2; --card: #ffffff; --text: #1d2330; --muted: #5d6677;
     --border: #d9dde5; --link: #1f5fbf; --chip: #e7ecf6; --chip-text: #2d4a80;
     --warn: #8a5300; --warn-bg: #fff3dc; --adv: #a3202a; --adv-bg: #fde4e4;
+    --sev-high: #b42318; --sev-high-bg: #fde4e4; --sev-medium: #9a4a00; --sev-medium-bg: #ffe6cc;
+    --sev-low: #6f5600; --sev-low-bg: #fff3b8;
     --c-inline: #6f5cc4; --c-threads: #c27c1a; --c-local: #2f86b5;
     --c-reply: #b5577d; --c-manual: #2f9b62; --c-merge: #1f7a4a; --c-own: #7a8494;
   }
@@ -567,6 +569,8 @@ if $html; then
       --bg: #12151b; --panel: #1a1e26; --card: #222833; --text: #e5e8ee; --muted: #9aa3b2;
       --border: #313948; --link: #7fb0ff; --chip: #26324a; --chip-text: #b7cbf2;
       --warn: #ffc56b; --warn-bg: #3a2d14; --adv: #ffb3b3; --adv-bg: #4a1d22;
+      --sev-high: #ffb3b3; --sev-high-bg: #4f1b1f; --sev-medium: #ffc787; --sev-medium-bg: #4a2a10;
+      --sev-low: #ffe58a; --sev-low-bg: #3f3510;
     }
   }
   * { box-sizing: border-box; }
@@ -601,6 +605,9 @@ if $html; then
   .chip { background: var(--chip); color: var(--chip-text); border-radius: 10px; padding: 0 7px;
     font-size: 11px; font-weight: 600; }
   .card .advisory { background: var(--adv-bg); color: var(--adv); }
+  .card .advisory.sev-high { background: var(--sev-high-bg); color: var(--sev-high); }
+  .card .advisory.sev-medium { background: var(--sev-medium-bg); color: var(--sev-medium); }
+  .card .advisory.sev-low { background: var(--sev-low-bg); color: var(--sev-low); }
   .note { font-size: 12px; margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
   .empty { color: var(--muted); font-size: 12px; font-style: italic; }
   footer { color: var(--muted); font-size: 12px; padding: 0 16px 24px; max-width: 1800px; margin: 0 auto; }
@@ -683,7 +690,8 @@ HTML
       const head = el("div", "title");
       head.append(link(advisory.url, "num", advisory.ghsa), link(advisory.url, "", advisory.summary));
       const by = el("div", "by");
-      by.append(el("span", "chip advisory", advisory.severity ?? "no severity"));
+      const tone = { high: " sev-high", medium: " sev-medium", low: " sev-low" }[advisory.severity] ?? "";
+      by.append(el("span", `chip advisory${tone}`, advisory.severity ?? "no severity"));
       const opened = Date.parse(advisory.createdAt);
       if (!Number.isNaN(opened)) {
         const days = Math.max(0, Math.floor((Date.parse(data.generatedAt) - opened) / 86400000));
