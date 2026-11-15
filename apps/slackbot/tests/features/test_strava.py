@@ -1,14 +1,25 @@
+import hashlib
 import json
+import logging
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
+import requests
 from f3_data_models.models import SlackUser, User
 
+from features import strava
 from features.strava import (
     STRAVA_ACTIVITY_BUTTON_LABEL_MAX_LENGTH,
+    STRAVA_OAUTH_STATE_META_KEY,
+    STRAVA_OAUTH_STATE_TTL_SECONDS,
     build_strava_activity_blocks,
     build_strava_form,
+    consume_strava_oauth_state,
     format_strava_activity_button_label,
+    issue_strava_oauth_state,
+    strava_exchange_token,
 )
 from utilities.slack import actions
 from utilities.slack import orm as slack_orm
@@ -206,13 +217,14 @@ def test_build_strava_form_no_activities_shows_reconnect_button(
     mock_get_strava_activities,
     mock_db_manager,
     mock_strava_form_body,
+    slack_user_store,
     monkeypatch,
 ):
     monkeypatch.setenv("STRAVA_CLIENT_ID", "test-id")
     monkeypatch.setenv("STRAVA_CLIENT_SECRET", "test-secret")
     monkeypatch.setenv("APP_URL", "https://example.test")
 
-    mock_db_manager.find_records.return_value = [SlackUser(slack_id="U123", slack_team_id="T123", user_id=1)]
+    mock_db_manager.find_records.return_value = [slack_user_store.records[7]]
     mock_db_manager.get.return_value = User(id=1)
     mock_get_strava_activities.return_value = []
 
@@ -232,6 +244,7 @@ def test_build_strava_form_no_activities_shows_reconnect_button(
 
     connect_button = blocks[2].elements[0]
     assert isinstance(connect_button, slack_orm.ButtonElement)
+    assert "state=T123-U123" not in connect_button.url
     assert connect_button.action == actions.STRAVA_CONNECT_BUTTON
     assert connect_button.url.startswith("https://www.strava.com/oauth/authorize")
     assert "client_id=test-id" in connect_button.url
@@ -239,6 +252,382 @@ def test_build_strava_form_no_activities_shows_reconnect_button(
 
     kwargs = mock_strava_form_instance.update_modal.call_args.kwargs
     assert kwargs.get("title_text") == "Choose Activity"
+
+
+class FakeSession:
+    def __init__(self, records):
+        self.records = records
+        self.get_calls = []
+
+    def get(self, cls, pk, with_for_update=False):
+        self.get_calls.append((cls, pk, with_for_update))
+        return self.records.get(pk)
+
+
+@pytest.fixture
+def slack_user_store(monkeypatch):
+    records = {7: SlackUser(id=7, slack_id="U123", slack_team_id="T123", user_id=42, meta={"other": "kept"})}
+    session = FakeSession(records)
+
+    @contextmanager
+    def fake_session_scope(backend=None):
+        yield session
+
+    monkeypatch.setattr(strava, "session_scope", fake_session_scope)
+    return session
+
+
+def test_issue_state_stores_only_a_hash_with_expiry(slack_user_store, monkeypatch):
+    monkeypatch.setattr(strava.time, "time", lambda: 1_000_000)
+
+    state = issue_strava_oauth_state(7)
+
+    pk, token = state.split(".", 1)
+    assert pk == "7"
+    assert len(token) >= 40
+    meta = slack_user_store.records[7].meta
+    assert meta["other"] == "kept"
+    assert meta[STRAVA_OAUTH_STATE_META_KEY] == {
+        "hash": hashlib.sha256(token.encode()).hexdigest(),
+        "expires_at": 1_000_000 + STRAVA_OAUTH_STATE_TTL_SECONDS,
+    }
+    assert token not in json.dumps(meta)
+    assert slack_user_store.get_calls == [(SlackUser, 7, True)]
+
+
+def test_issue_state_is_random(slack_user_store):
+    assert issue_strava_oauth_state(7) != issue_strava_oauth_state(7)
+
+
+def test_issue_state_raises_for_unknown_slack_user(slack_user_store):
+    with pytest.raises(ValueError):
+        issue_strava_oauth_state(999)
+
+
+def test_consume_state_returns_linked_user_once(slack_user_store):
+    state = issue_strava_oauth_state(7)
+    slack_user_store.get_calls = []
+
+    assert consume_strava_oauth_state(state) == 42
+    assert slack_user_store.get_calls[0] == (SlackUser, 7, True)
+    assert slack_user_store.records[7].meta == {"other": "kept"}
+    assert consume_strava_oauth_state(state) is None
+
+
+def test_reissuing_state_invalidates_the_previous_one(slack_user_store):
+    first = issue_strava_oauth_state(7)
+    second = issue_strava_oauth_state(7)
+
+    assert consume_strava_oauth_state(first) is None
+    assert consume_strava_oauth_state(second) == 42
+
+
+def test_consume_state_with_wrong_token_keeps_pending_state(slack_user_store):
+    state = issue_strava_oauth_state(7)
+
+    assert consume_strava_oauth_state("7.not-the-token") is None
+    assert STRAVA_OAUTH_STATE_META_KEY in slack_user_store.records[7].meta
+    assert consume_strava_oauth_state(state) == 42
+
+
+def test_consume_expired_state_fails_and_clears_it(slack_user_store, monkeypatch, caplog):
+    monkeypatch.setattr(strava.time, "time", lambda: 1_000_000)
+    state = issue_strava_oauth_state(7)
+    monkeypatch.setattr(strava.time, "time", lambda: 1_000_000 + STRAVA_OAUTH_STATE_TTL_SECONDS + 1)
+
+    assert consume_strava_oauth_state(state) is None
+    assert STRAVA_OAUTH_STATE_META_KEY not in slack_user_store.records[7].meta
+    assert "slack.strava.oauth_state_rejected reason=expired slack_user_pk=7" in caplog.text
+    assert state.split(".", 1)[1] not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("state", "reason"),
+    [
+        (None, "missing"),
+        ("abc.token", "malformed"),
+        ("999.token", "unknown_slack_user"),
+        ("7.not-the-token", "token_mismatch"),
+    ],
+)
+def test_consume_rejection_logs_reason_without_the_state(slack_user_store, caplog, state, reason):
+    issue_strava_oauth_state(7)
+
+    assert consume_strava_oauth_state(state) is None
+    assert f"reason={reason}" in caplog.text
+    assert state is None or state not in caplog.text
+
+
+def test_consume_state_without_pending_state_logs_reason(slack_user_store, caplog):
+    assert consume_strava_oauth_state("7.token") is None
+    assert "reason=no_pending_state slack_user_pk=7" in caplog.text
+
+
+def test_consume_state_for_unlinked_slack_user_fails(slack_user_store, caplog):
+    state = issue_strava_oauth_state(7)
+    slack_user_store.records[7].user_id = None
+
+    assert consume_strava_oauth_state(state) is None
+    assert "reason=slack_user_unlinked slack_user_pk=7" in caplog.text
+    assert STRAVA_OAUTH_STATE_META_KEY not in slack_user_store.records[7].meta
+
+
+@pytest.mark.parametrize(
+    "state", [None, "", "T123-U123", "7", "7.", ".token", "abc.token", "-7.token", "\u00b2.x", "9999999999.x"]
+)
+def test_consume_malformed_state_does_not_touch_the_database(slack_user_store, state):
+    assert consume_strava_oauth_state(state) is None
+    assert slack_user_store.get_calls == []
+
+
+def test_consume_state_for_unknown_slack_user_fails(slack_user_store):
+    assert consume_strava_oauth_state("999.token") is None
+
+
+def _callback_request(args):
+    request = MagicMock()
+    request.args = args
+    return request
+
+
+@pytest.fixture
+def strava_env(monkeypatch):
+    monkeypatch.setenv("STRAVA_CLIENT_ID", "test-id")
+    monkeypatch.setenv("STRAVA_CLIENT_SECRET", "test-secret")
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {"code": "auth-code"},
+        {"state": "T123-U123", "code": "auth-code"},
+        {"state": "7.forged", "code": "auth-code"},
+    ],
+)
+@patch("features.strava.DbManager")
+@patch("features.strava.requests.post")
+def test_exchange_token_rejects_unissued_state(mock_post, mock_db_manager, slack_user_store, strava_env, args):
+    issue_strava_oauth_state(7)
+
+    response = strava_exchange_token(_callback_request(args))
+
+    assert response.status_code == 400
+    assert "invalid or has expired" in json.loads(response.get_data(as_text=True))["error"]
+    mock_post.assert_not_called()
+    mock_db_manager.update_record.assert_not_called()
+
+
+@patch("features.strava.save_connection", return_value=True)
+@patch("features.strava.DbManager")
+@patch("features.strava.requests.post")
+def test_exchange_token_links_tokens_to_the_user_the_state_was_issued_to(
+    mock_post, mock_db_manager, mock_save, slack_user_store, strava_env
+):
+    state = issue_strava_oauth_state(7)
+    bundle = {
+        "athlete": {"id": 555},
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "expires_at": 123,
+    }
+    mock_post.return_value.json.return_value = bundle
+
+    response = strava_exchange_token(_callback_request({"state": state, "code": "auth-code"}))
+
+    assert response.status_code == 200
+    assert json.loads(response.get_data(as_text=True)) == {
+        "message": "Authorization successful! You can return to Slack."
+    }
+    assert mock_post.call_args.kwargs["data"]["code"] == "auth-code"
+    assert mock_post.call_args.kwargs["timeout"] == 10
+    mock_save.assert_called_once_with(42, bundle)
+    mock_db_manager.update_record.assert_not_called()
+
+    replay = strava_exchange_token(_callback_request({"state": state, "code": "auth-code"}))
+    assert replay.status_code == 400
+    assert mock_post.call_count == 1
+    assert mock_save.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "http_error",
+        requests.ConnectionError("synthetic-down"),
+        requests.Timeout("synthetic-slow"),
+        "invalid_json",
+    ],
+)
+@patch("features.strava.save_connection")
+@patch("features.strava.requests.post")
+def test_exchange_token_provider_failure_returns_502_and_saves_nothing(
+    mock_post, mock_save, slack_user_store, strava_env, failure, caplog
+):
+    state = issue_strava_oauth_state(7)
+    if failure == "http_error":
+        mock_post.return_value.status_code = 400
+        mock_post.return_value.raise_for_status.side_effect = requests.HTTPError(
+            "synthetic-body", response=mock_post.return_value
+        )
+    elif failure == "invalid_json":
+        mock_post.return_value.json.side_effect = ValueError("synthetic-body")
+    else:
+        mock_post.side_effect = failure
+
+    response = strava_exchange_token(_callback_request({"state": state, "code": "synthetic-code"}))
+
+    assert response.status_code == 502
+    assert "Reopen the Strava option in Slack" in json.loads(response.get_data(as_text=True))["error"]
+    mock_save.assert_not_called()
+    assert "slack.strava.token_exchange.failed" in caplog.text
+    assert "synthetic" not in caplog.text
+    if failure == "http_error":
+        assert "status=400" in caplog.text
+
+
+@patch("features.strava.save_connection")
+@patch("features.strava.requests.post")
+def test_exchange_ownership_conflict_keeps_connection_and_shows_support_message(
+    mock_post, mock_save, slack_user_store, strava_env
+):
+    from infrastructure.strava_credentials import StravaOwnershipConflict
+
+    state = issue_strava_oauth_state(7)
+    mock_post.return_value.json.return_value = {"synthetic": "provider-payload"}
+    mock_save.side_effect = StravaOwnershipConflict
+
+    response = strava_exchange_token(_callback_request({"state": state, "code": "synthetic-code"}))
+
+    assert response.status_code == 409
+    assert json.loads(response.get_data(as_text=True)) == {
+        "message": (
+            "This Strava account is already connected to another F3 profile. "
+            "The existing connection has not changed. Please contact support for help."
+        )
+    }
+    mock_save.assert_called_once()
+    assert mock_save.call_args.args[0] == 42
+    assert "synthetic" not in response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("failure", [False, RuntimeError("synthetic-storage"), ValueError("synthetic-provider")])
+@patch("features.strava.save_connection")
+@patch("features.strava.requests.post")
+def test_exchange_save_failure_returns_service_unavailable(
+    mock_post, mock_save, slack_user_store, strava_env, failure, caplog
+):
+    state = issue_strava_oauth_state(7)
+    mock_post.return_value.json.return_value = {"synthetic": "provider-payload"}
+    if isinstance(failure, Exception):
+        mock_save.side_effect = failure
+    else:
+        mock_save.return_value = failure
+
+    response = strava_exchange_token(_callback_request({"state": state, "code": "synthetic-code"}))
+
+    assert response.status_code == 503
+    assert json.loads(response.get_data(as_text=True)) == {
+        "message": "Strava could not be connected right now. Please try again later."
+    }
+    assert mock_save.call_args.args[0] == 42
+    assert "synthetic" not in response.get_data(as_text=True)
+    assert "synthetic" not in caplog.text
+
+
+@patch("features.strava.requests.post")
+def test_exchange_token_without_code_uses_up_state(mock_post, slack_user_store, strava_env):
+    state = issue_strava_oauth_state(7)
+
+    response = strava_exchange_token(_callback_request({"state": state, "error": "access_denied"}))
+
+    assert response.status_code == 400
+    assert json.loads(response.get_data(as_text=True)) == {"error": "No code provided."}
+    assert STRAVA_OAUTH_STATE_META_KEY not in slack_user_store.records[7].meta
+    mock_post.assert_not_called()
+
+
+@patch("features.strava.requests.post")
+def test_exchange_token_unconfigured_returns_500(mock_post, slack_user_store, monkeypatch):
+    monkeypatch.delenv("STRAVA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("STRAVA_CLIENT_SECRET", raising=False)
+
+    response = strava_exchange_token(_callback_request({"state": "7.token", "code": "c"}))
+
+    assert response.status_code == 500
+    mock_post.assert_not_called()
+
+
+@patch("features.strava.DbManager")
+@patch("features.strava.get_strava_activities")
+@patch("features.strava.slack_orm.BlockView")
+def test_build_strava_form_connect_url_carries_issued_state(
+    mock_block_view,
+    mock_get_strava_activities,
+    mock_db_manager,
+    mock_strava_form_body,
+    slack_user_store,
+    strava_env,
+    caplog,
+):
+    caplog.set_level(logging.DEBUG)
+    mock_db_manager.find_records.return_value = [slack_user_store.records[7]]
+    mock_db_manager.get.return_value = User(id=42)
+    mock_get_strava_activities.return_value = []
+
+    build_strava_form(mock_strava_form_body, MagicMock(), MagicMock(), {}, MagicMock())
+
+    blocks = mock_block_view.call_args.kwargs["blocks"]
+    url = blocks[2].elements[0].url
+    (state,) = parse_qs(urlparse(url).query)["state"]
+    assert state.startswith("7.")
+    token = state.split(".", 1)[1]
+    assert token not in caplog.text
+    assert consume_strava_oauth_state(state) == 42
+
+
+@patch("features.strava.DbManager")
+@patch("features.strava.get_strava_activities")
+@patch("features.strava.slack_orm.BlockView")
+def test_build_strava_form_with_activities_issues_no_state(
+    mock_block_view,
+    mock_get_strava_activities,
+    mock_db_manager,
+    mock_strava_form_body,
+    slack_user_store,
+    strava_env,
+):
+    mock_db_manager.find_records.return_value = [slack_user_store.records[7]]
+    mock_db_manager.get.return_value = User(id=42)
+    mock_get_strava_activities.return_value = [
+        {"id": 1000, "name": "Morning Run", "start_date_local": "2026-08-01T05:30:00Z"}
+    ]
+
+    build_strava_form(mock_strava_form_body, MagicMock(), MagicMock(), {}, MagicMock())
+
+    assert slack_user_store.get_calls == []
+    assert STRAVA_OAUTH_STATE_META_KEY not in slack_user_store.records[7].meta
+
+
+@patch("features.strava.DbManager")
+@patch("features.strava.get_strava_activities")
+@patch("features.strava.slack_orm.BlockView")
+def test_build_strava_form_without_slack_user_shows_no_connect_link(
+    mock_block_view,
+    mock_get_strava_activities,
+    mock_db_manager,
+    mock_strava_form_body,
+    slack_user_store,
+    strava_env,
+):
+    mock_db_manager.find_records.return_value = []
+
+    build_strava_form(mock_strava_form_body, MagicMock(), MagicMock(), {}, MagicMock())
+
+    blocks = mock_block_view.call_args.kwargs["blocks"]
+    assert len(blocks) == 1
+    assert isinstance(blocks[0], slack_orm.SectionBlock)
+    assert "couldn't find your F3 profile" in str(blocks[0].label)
+    assert slack_user_store.get_calls == []
 
 
 def test_activity_lookup_never_falls_back_to_legacy_metadata():
@@ -253,101 +642,6 @@ def test_activity_lookup_never_falls_back_to_legacy_metadata():
     token.assert_called_once()
     assert token.call_args.args[0] == 12
     get.assert_not_called()
-
-
-def test_exchange_uses_workspace_qualified_identity_and_never_updates_profile(monkeypatch):
-    from flask import Flask, request
-
-    from features.strava import strava_exchange_token
-
-    monkeypatch.setenv("STRAVA_CLIENT_ID", "synthetic-client")
-    monkeypatch.setenv("STRAVA_CLIENT_SECRET", "synthetic-secret")
-    bundle = {
-        "athlete": {"id": 34},
-        "access_token": "synthetic-access",
-        "refresh_token": "synthetic-refresh",
-        "expires_at": 200,
-    }
-    app = Flask(__name__)
-    with (
-        app.test_request_context("/?state=Tsynthetic-Usynthetic&code=synthetic-code"),
-        patch("features.strava.requests.post") as post,
-        patch("features.strava.DbManager") as manager,
-        patch("features.strava.save_connection", return_value=True) as save,
-    ):
-        post.return_value.json.return_value = bundle
-        manager.find_records.return_value = [SlackUser(user_id=12)]
-        manager.get.return_value = User(id=12, meta={"my_f3_why": "synthetic reason"})
-        result = strava_exchange_token(request)
-        assert result.json == {"message": "Authorization successful! You can return to Slack."}
-        filters = manager.find_records.call_args.kwargs["filters"]
-        assert [_compile_filter(item) for item in filters] == [
-            "slack_users.slack_id = 'Usynthetic'",
-            "slack_users.slack_team_id = 'Tsynthetic'",
-        ]
-        save.assert_called_once_with(12, bundle)
-        manager.update_record.assert_not_called()
-
-
-def test_exchange_ownership_conflict_keeps_connection_and_shows_support_message(monkeypatch):
-    from flask import Flask, request
-
-    from features.strava import strava_exchange_token
-    from infrastructure.strava_credentials import StravaOwnershipConflict
-
-    monkeypatch.setenv("STRAVA_CLIENT_ID", "synthetic-client")
-    monkeypatch.setenv("STRAVA_CLIENT_SECRET", "synthetic-secret")
-    app = Flask(__name__)
-    with (
-        app.test_request_context("/?state=Tsynthetic-Usynthetic&code=synthetic-code"),
-        patch("features.strava.requests.post") as post,
-        patch("features.strava.DbManager") as manager,
-        patch("features.strava.save_connection", side_effect=StravaOwnershipConflict) as save,
-    ):
-        post.return_value.json.return_value = {"synthetic": "provider-payload"}
-        manager.find_records.return_value = [SlackUser(user_id=12)]
-        manager.get.return_value = User(id=12)
-        result = strava_exchange_token(request)
-        assert result.status_code == 409
-        assert result.json == {
-            "message": (
-                "This Strava account is already connected to another F3 profile. "
-                "The existing connection has not changed. Please contact support for help."
-            )
-        }
-        save.assert_called_once()
-        manager.update_record.assert_not_called()
-        assert "synthetic" not in result.get_data(as_text=True)
-
-
-@pytest.mark.parametrize("failure", [False, RuntimeError("synthetic-storage"), ValueError("synthetic-provider")])
-def test_exchange_save_failure_returns_service_unavailable(monkeypatch, failure, caplog):
-    from flask import Flask, request
-
-    from features.strava import strava_exchange_token
-
-    monkeypatch.setenv("STRAVA_CLIENT_ID", "synthetic-client")
-    monkeypatch.setenv("STRAVA_CLIENT_SECRET", "synthetic-secret")
-    app = Flask(__name__)
-    with (
-        app.test_request_context("/?state=Tsynthetic-Usynthetic&code=synthetic-code"),
-        patch("features.strava.requests.post") as post,
-        patch("features.strava.DbManager") as manager,
-        patch("features.strava.save_connection") as save,
-    ):
-        post.return_value.json.return_value = {"synthetic": "provider-payload"}
-        manager.find_records.return_value = [SlackUser(user_id=12)]
-        manager.get.return_value = User(id=12)
-        if isinstance(failure, Exception):
-            save.side_effect = failure
-        else:
-            save.return_value = failure
-        result = strava_exchange_token(request)
-        assert result.status_code == 503
-        assert result.json == {"message": "Strava could not be connected right now. Please try again later."}
-        manager.update_record.assert_not_called()
-        assert "synthetic" not in result.get_data(as_text=True)
-        assert "synthetic" not in caplog.text
 
 
 @pytest.mark.parametrize("configured", [True, False])
