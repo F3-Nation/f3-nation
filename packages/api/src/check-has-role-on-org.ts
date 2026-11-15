@@ -287,18 +287,19 @@ export const checkHasRoleOnAllOrgs = async ({
 };
 
 /**
- * True when the caller (a person or an API key) has a role on `orgId`, or on
- * any of its ancestors, that includes `permission`. Same hierarchy walk as
- * `checkHasRoleOnOrg`.
+ * True when the caller (a person or an API key) has every one of
+ * `permissions` on `orgId`: for each permission, a role on the org or on any
+ * of its ancestors that includes it. Different roles may supply different
+ * permissions. Same hierarchy walk as `checkHasRoleOnOrg`, in one query.
  */
-export const checkHasPermissionOnOrg = async ({
+export const checkHasPermissionsOnOrg = async ({
   session,
   orgId,
   db,
-  permission,
+  permissions,
 }: {
   session: Session | null;
-  permission: Permission;
+  permissions: readonly [Permission, ...Permission[]];
   orgId: number;
   db: Context["db"];
 }): Promise<boolean> => {
@@ -307,16 +308,17 @@ export const checkHasPermissionOnOrg = async ({
   logDebug("api.permission_check.checking", {
     userId: session.id,
     orgId,
-    permission: permission.name,
+    permissions: permissions.map(({ name }) => name),
     roles: session.roles,
   });
 
-  const [match] = await findMatchingRoles({
+  const matches = await findMatchingRoles({
     session,
-    checks: [
-      { orgId, matches: (r) => roleHasPermission(r.roleName, permission) },
-    ],
+    checks: permissions.map((permission) => ({
+      orgId,
+      matches: (r: SessionRole) => roleHasPermission(r.roleName, permission),
+    })),
     db,
   });
-  return match !== undefined;
+  return matches.every((match) => match !== undefined);
 };

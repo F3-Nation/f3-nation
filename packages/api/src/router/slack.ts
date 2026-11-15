@@ -5,7 +5,6 @@ import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { Permission } from "@acme/shared/app/permissions";
 
-import { checkHasPermissionOnOrg } from "../check-has-role-on-org";
 import { logError } from "../logger";
 import { permissionProcedure } from "../shared";
 import type { Context } from "../shared";
@@ -175,24 +174,6 @@ const slackMessageOutputSchema = z.object({
   ts: z.string(),
 });
 
-const assertCanSendMessages = async (
-  ctx: Pick<Context, "session" | "db">,
-  regionOrgId: number,
-) => {
-  const canSend = await checkHasPermissionOnOrg({
-    session: ctx.session,
-    db: ctx.db,
-    orgId: regionOrgId,
-    permission: Permission.MessagesSend,
-  });
-
-  if (!canSend) {
-    throw new ORPCError("UNAUTHORIZED", {
-      message: "Permission to send messages for this org is required",
-    });
-  }
-};
-
 const assertActiveOrgExists = async (db: AppDb, regionOrgId: number) => {
   const [org] = await db
     .select({ id: schema.orgs.id })
@@ -254,10 +235,12 @@ const getSlackBotTokenForOrg = async (
 };
 
 const prepareSlackMessageRequest = async (
-  ctx: Pick<Context, "session" | "db">,
+  ctx: Pick<Context, "db"> & {
+    assertPermissionsOnOrg: (orgId: number) => Promise<void>;
+  },
   regionOrgId: number,
 ): Promise<{ botToken: string }> => {
-  await assertCanSendMessages(ctx, regionOrgId);
+  await ctx.assertPermissionsOnOrg(regionOrgId);
   const [, botToken] = await Promise.all([
     assertActiveOrgExists(ctx.db, regionOrgId),
     getSlackBotTokenForOrg(ctx.db, regionOrgId),

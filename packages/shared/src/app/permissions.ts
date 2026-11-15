@@ -50,7 +50,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   ],
   editor: [Permission.EntitiesManage, Permission.PiiRead],
   user: [],
-  // Dormant roles: not assignable yet, so they include nothing.
   password_manager: [],
   password_reader: [],
 };

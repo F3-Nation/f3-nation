@@ -28,6 +28,7 @@ import { getTrustedClientIp } from "@acme/shared/common/client-ip";
 import { isDevelopment } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { checkHasPermissionsOnOrg } from "./check-has-role-on-org";
 import { jwksFetchFailure } from "./jwks-failure";
 import { logError, logWarn } from "./logger";
 import { getProxiedClientIp } from "./proxied-client-ip";
@@ -272,35 +273,63 @@ export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
 });
 
 /**
- * Caller has a role on at least one org that includes `permission`. A door
- * check only: the handler must still call `checkHasPermissionOnOrg` for the
- * org it acts on.
+ * Declares the permissions an endpoint needs, in one place:
  *
- * The permission is also written into the endpoint's OpenAPI entry, so the
- * API docs list it: a line appended to the description, and an
- * `x-required-permissions` extension holding the permission names.
+ * - The handler gets `context.assertPermissionsOnOrg(orgId)`, which throws
+ *   `UNAUTHORIZED` unless the caller has every one of them on that org (or an
+ *   ancestor). The handler must call it with the org it acts on.
+ * - Before the handler runs, the caller must have each permission on at
+ *   least one org. Without this, a handler that forgot the org check would be
+ *   open to every signed-in caller; with it, only to callers who hold the
+ *   permissions somewhere. It needs no query.
+ * - The endpoint's OpenAPI entry lists them, so the API docs do too: a line
+ *   appended to the description, and an `x-required-permissions` extension
+ *   holding the permission names.
  */
-export const permissionProcedure = (permission: Permission) =>
+export const permissionProcedure = (
+  ...permissions: [Permission, ...Permission[]]
+) =>
   withSessionAndDb.use(
     oo.spec(
       os.$context<Context>().middleware(({ context, next }) => {
-        const hasPermission = context.session?.roles?.some((r) =>
-          roleHasPermission(r.roleName, permission),
+        const { session, db } = context;
+        const hasEachSomewhere = permissions.every((permission) =>
+          session?.roles?.some((r) =>
+            roleHasPermission(r.roleName, permission),
+          ),
         );
-        if (!hasPermission) {
+        if (!hasEachSomewhere) {
           throw new ORPCError("UNAUTHORIZED");
         }
-        return next();
+        const assertPermissionsOnOrg = async (orgId: number) => {
+          if (
+            !(await checkHasPermissionsOnOrg({
+              session,
+              db,
+              orgId,
+              permissions,
+            }))
+          ) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: `This action needs these permissions on the org: ${permissions
+                .map(({ displayName }) => displayName)
+                .join(", ")}`,
+            });
+          }
+        };
+        return next({ context: { assertPermissionsOnOrg } });
       }),
       (operation) => ({
         ...operation,
         description: [
           operation.description,
-          `**Required permission:** ${permission.displayName} (\`${permission.name}\`) on the org the request acts on.`,
+          `**Required ${permissions.length > 1 ? "permissions" : "permission"}:** ${permissions
+            .map(({ displayName, name }) => `${displayName} (\`${name}\`)`)
+            .join(", ")} on the org the request acts on.`,
         ]
           .filter(Boolean)
           .join("\n\n"),
-        "x-required-permissions": [permission.name],
+        "x-required-permissions": permissions.map(({ name }) => name),
       }),
     ),
   );

@@ -2,7 +2,7 @@ import { OpenAPIGenerator } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 
 import { router } from "@acme/api";
-import { GrantableUserRole } from "@acme/shared/app/enums";
+import { UserRole } from "@acme/shared/app/enums";
 import { Permission, roleHasPermission } from "@acme/shared/app/permissions";
 import { Client, Header } from "@acme/shared/common/enums";
 
@@ -45,15 +45,14 @@ interface OpenAPISpec {
 
 /**
  * The docs' role and permission table, built from `Permission` and
- * `ROLE_PERMISSIONS` so it can't drift from what the API checks. Lists only
- * the roles that can be given today.
+ * `ROLE_PERMISSIONS` so it can't drift from what the API checks.
  */
 const rolesAndPermissionsMarkdown = (): string => {
-  const header = `| Permission | What it allows | ${GrantableUserRole.join(" | ")} |`;
-  const divider = `| --- | --- | ${GrantableUserRole.map(() => ":---:").join(" | ")} |`;
+  const header = `| Permission | What it allows | ${UserRole.join(" | ")} |`;
+  const divider = `| --- | --- | ${UserRole.map(() => ":---:").join(" | ")} |`;
   const rows = Object.values(Permission).map(
     (permission) =>
-      `| ${permission.displayName} (\`${permission.name}\`) | ${permission.description} | ${GrantableUserRole.map(
+      `| ${permission.displayName} (\`${permission.name}\`) | ${permission.description} | ${UserRole.map(
         (role) => (roleHasPermission(role, permission) ? "✅" : "—"),
       ).join(" | ")} |`,
   );

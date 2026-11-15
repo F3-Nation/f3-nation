@@ -9,7 +9,7 @@ import {
   db,
   getOrCreateRoles,
 } from "./__tests__/test-utils";
-import { checkHasPermissionOnOrg } from "./check-has-role-on-org";
+import { checkHasPermissionsOnOrg } from "./check-has-role-on-org";
 
 const makeSession = (
   roles: { orgId: number; orgName: string; roleName: UserRole }[],
@@ -56,7 +56,7 @@ describe("ROLE_PERMISSIONS", () => {
   });
 });
 
-describe("checkHasPermissionOnOrg", () => {
+describe("checkHasPermissionsOnOrg", () => {
   const createdOrgIds: number[] = [];
   let orgs: Awaited<ReturnType<typeof createMixedOrgTree>>;
 
@@ -86,10 +86,10 @@ describe("checkHasPermissionOnOrg", () => {
   it("allows a role on the org itself that includes the permission", async () => {
     const region = orgs.directBranch.region.id;
     await expect(
-      checkHasPermissionOnOrg({
+      checkHasPermissionsOnOrg({
         session: makeSession([role(region, "editor")]),
         orgId: region,
-        permission: Permission.EntitiesManage,
+        permissions: [Permission.EntitiesManage],
         db,
       }),
     ).resolves.toBe(true);
@@ -97,10 +97,10 @@ describe("checkHasPermissionOnOrg", () => {
 
   it("allows a role on an ancestor org", async () => {
     await expect(
-      checkHasPermissionOnOrg({
+      checkHasPermissionsOnOrg({
         session: makeSession([role(orgs.sector.id, "admin")]),
         orgId: orgs.territoryBranch.ao.id,
-        permission: Permission.SecurityManage,
+        permissions: [Permission.SecurityManage],
         db,
       }),
     ).resolves.toBe(true);
@@ -115,22 +115,58 @@ describe("checkHasPermissionOnOrg", () => {
     async (roleName, _name, permission) => {
       const region = orgs.directBranch.region.id;
       await expect(
-        checkHasPermissionOnOrg({
+        checkHasPermissionsOnOrg({
           session: makeSession([role(region, roleName)]),
           orgId: region,
-          permission,
+          permissions: [permission],
           db,
         }),
       ).resolves.toBe(false);
     },
   );
 
+  it("requires every listed permission", async () => {
+    const region = orgs.directBranch.region.id;
+    const both = [Permission.EntitiesManage, Permission.MessagesSend] as const;
+    await expect(
+      checkHasPermissionsOnOrg({
+        session: makeSession([role(region, "editor")]),
+        orgId: region,
+        permissions: both,
+        db,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      checkHasPermissionsOnOrg({
+        session: makeSession([role(orgs.sector.id, "admin")]),
+        orgId: region,
+        permissions: both,
+        db,
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it("takes each permission from whichever role includes it", async () => {
+    const region = orgs.directBranch.region.id;
+    await expect(
+      checkHasPermissionsOnOrg({
+        session: makeSession([
+          role(region, "user"),
+          role(orgs.sector.id, "editor"),
+        ]),
+        orgId: region,
+        permissions: [Permission.EntitiesManage, Permission.PiiRead],
+        db,
+      }),
+    ).resolves.toBe(true);
+  });
+
   it("rejects a role on an unrelated org", async () => {
     await expect(
-      checkHasPermissionOnOrg({
+      checkHasPermissionsOnOrg({
         session: makeSession([role(orgs.unrelatedSector.id, "admin")]),
         orgId: orgs.directBranch.region.id,
-        permission: Permission.MessagesSend,
+        permissions: [Permission.MessagesSend],
         db,
       }),
     ).resolves.toBe(false);
@@ -140,18 +176,18 @@ describe("checkHasPermissionOnOrg", () => {
     const region = orgs.directBranch.region.id;
     const apiKeySession = makeSession([role(orgs.sector.id, "editor")], true);
     await expect(
-      checkHasPermissionOnOrg({
+      checkHasPermissionsOnOrg({
         session: apiKeySession,
         orgId: region,
-        permission: Permission.EntitiesManage,
+        permissions: [Permission.EntitiesManage],
         db,
       }),
     ).resolves.toBe(true);
     await expect(
-      checkHasPermissionOnOrg({
+      checkHasPermissionsOnOrg({
         session: apiKeySession,
         orgId: region,
-        permission: Permission.SecurityManage,
+        permissions: [Permission.SecurityManage],
         db,
       }),
     ).resolves.toBe(false);
@@ -159,10 +195,10 @@ describe("checkHasPermissionOnOrg", () => {
 
   it("rejects when there is no session", async () => {
     await expect(
-      checkHasPermissionOnOrg({
+      checkHasPermissionsOnOrg({
         session: null,
         orgId: orgs.directBranch.region.id,
-        permission: Permission.MessagesSend,
+        permissions: [Permission.MessagesSend],
         db,
       }),
     ).resolves.toBe(false);

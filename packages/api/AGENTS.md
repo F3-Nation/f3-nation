@@ -49,9 +49,10 @@ A procedure tier is not authorization. `protectedProcedure` proves a session;
 - Every read or write of a specific resource calls `checkHasRoleOnOrg` (or an
   equivalent) against the org of the **fetched DB row**, never an org id from
   input.
-- Gate a permission-checked endpoint with `permissionProcedure`, which writes
-  the required permission into the API docs. Don't name permissions or roles
-  in a route `description`.
+- Declare a permission-checked endpoint's permissions once, in
+  `permissionProcedure(...)`, and check the org with
+  `ctx.assertPermissionsOnOrg`. The procedure writes them into the API docs;
+  don't name permissions or roles in a route `description`.
 - A mutation that moves a record (`orgId`, `parentId`, `aoId`, `locationId`,
   `seriesId`, any foreign id) authorizes the caller on **both** source and
   destination. Use `requireEditorOnRescope`, which returns `NOT_FOUND` for a

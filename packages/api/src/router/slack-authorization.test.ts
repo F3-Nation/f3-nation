@@ -167,11 +167,11 @@ describe("Slack message authorization", () => {
 
     await expect(post()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
-      message: "Permission to send messages for this org is required",
+      message: "This action needs these permissions on the org: Send messages",
     });
     await expect(update()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
-      message: "Permission to send messages for this org is required",
+      message: "This action needs these permissions on the org: Send messages",
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
