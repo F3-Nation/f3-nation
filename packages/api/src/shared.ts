@@ -1,4 +1,5 @@
 import { MemoryRatelimiter } from "@orpc/experimental-ratelimit/memory";
+import { oo } from "@orpc/openapi";
 import { ORPCError, os } from "@orpc/server";
 import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
@@ -271,20 +272,38 @@ export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
 });
 
 /**
- * Caller holds `permission` through a role on at least one org. A door check
- * only: the handler must still call `checkHasPermissionOnOrg` for the org it
- * acts on.
+ * Caller has a role on at least one org that includes `permission`. A door
+ * check only: the handler must still call `checkHasPermissionOnOrg` for the
+ * org it acts on.
+ *
+ * The permission is also written into the endpoint's OpenAPI entry, so the
+ * API docs list it: a line appended to the description, and an
+ * `x-required-permissions` extension holding the permission names.
  */
 export const permissionProcedure = (permission: Permission) =>
-  withSessionAndDb.use(({ context, next }) => {
-    const holdsPermission = context.session?.roles?.some((r) =>
-      roleHasPermission(r.roleName, permission),
-    );
-    if (!holdsPermission) {
-      throw new ORPCError("UNAUTHORIZED");
-    }
-    return next({ context });
-  });
+  withSessionAndDb.use(
+    oo.spec(
+      os.$context<Context>().middleware(({ context, next }) => {
+        const hasPermission = context.session?.roles?.some((r) =>
+          roleHasPermission(r.roleName, permission),
+        );
+        if (!hasPermission) {
+          throw new ORPCError("UNAUTHORIZED");
+        }
+        return next();
+      }),
+      (operation) => ({
+        ...operation,
+        description: [
+          operation.description,
+          `**Required permission:** ${permission.displayName} (\`${permission.name}\`) on the org the request acts on.`,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        "x-required-permissions": [permission.name],
+      }),
+    ),
+  );
 
 /**
  * Admin endpoints that must not be driven by an API key, e.g. minting or

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { Permission } from "@acme/shared/app/permissions";
 
 import { checkHasPermissionOnOrg } from "../check-has-role-on-org";
 import { logError } from "../logger";
@@ -178,14 +179,14 @@ const assertCanSendMessages = async (
   ctx: Pick<Context, "session" | "db">,
   regionOrgId: number,
 ) => {
-  const authResult = await checkHasPermissionOnOrg({
+  const canSend = await checkHasPermissionOnOrg({
     session: ctx.session,
     db: ctx.db,
     orgId: regionOrgId,
-    permission: "messages.send",
+    permission: Permission.MessagesSend,
   });
 
-  if (!authResult.success) {
+  if (!canSend) {
     throw new ORPCError("UNAUTHORIZED", {
       message: "Permission to send messages for this org is required",
     });
@@ -438,7 +439,7 @@ export const callSlackWebApi = async ({
 };
 
 export const slackRouter = {
-  postMessage: permissionProcedure("messages.send")
+  postMessage: permissionProcedure(Permission.MessagesSend)
     .input(postSlackMessageInputSchema)
     .route({
       method: "POST",
@@ -446,7 +447,7 @@ export const slackRouter = {
       tags: ["slack"],
       summary: "Post a Slack message",
       description:
-        "Post a Slack message to a channel, user, or group. Requires the messages.send permission (the admin or editor role) on the target org and an active F3 Nation Slack app installation.",
+        "Post a Slack message to a channel, user, or group. Requires an active F3 Nation Slack app installation.",
     })
     .output(slackMessageOutputSchema)
     .handler(async ({ context: ctx, input }) => {
@@ -477,7 +478,7 @@ export const slackRouter = {
       };
     }),
 
-  updateMessage: permissionProcedure("messages.send")
+  updateMessage: permissionProcedure(Permission.MessagesSend)
     .input(updateSlackMessageInputSchema)
     .route({
       method: "PATCH",
@@ -485,7 +486,7 @@ export const slackRouter = {
       tags: ["slack"],
       summary: "Update a Slack message",
       description:
-        "Update a Slack message in a channel, user, or group. Requires the messages.send permission (the admin or editor role) on the target org and an active F3 Nation Slack app installation.",
+        "Update a Slack message in a channel, user, or group. Requires an active F3 Nation Slack app installation.",
     })
     .output(slackMessageOutputSchema)
     .handler(async ({ context: ctx, input }) => {

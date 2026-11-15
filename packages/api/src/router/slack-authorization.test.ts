@@ -1,6 +1,6 @@
 /**
  * Who may send Slack messages through the API: the messages.send permission
- * on the target org (the admin or editor role there or on an ancestor).
+ * on the target org (the admin role there or on an ancestor).
  */
 
 import { vi } from "vitest";
@@ -126,39 +126,39 @@ describe("Slack message authorization", () => {
       text: "PRTEST edited",
     });
 
-  it.each(["admin", "editor"] as const)(
-    "lets an %s of the region post and update messages",
-    async (roleName) => {
-      await mockAuthWithSession(sessionWithRole(regionId, roleName));
+  it("lets an admin of the region post and update messages", async () => {
+    await mockAuthWithSession(sessionWithRole(regionId, "admin"));
 
-      await expect(post()).resolves.toEqual({
-        ok: true,
-        action: "posted",
-        channel: "C1",
-        ts: "1.2",
-      });
-      await expect(update()).resolves.toEqual({
-        ok: true,
-        action: "updated",
-        channel: "C1",
-        ts: "1.2",
-      });
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
-    },
-  );
+    await expect(post()).resolves.toEqual({
+      ok: true,
+      action: "posted",
+      channel: "C1",
+      ts: "1.2",
+    });
+    await expect(update()).resolves.toEqual({
+      ok: true,
+      action: "updated",
+      channel: "C1",
+      ts: "1.2",
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
 
-  it("lets an editor of an ancestor org post", async () => {
-    await mockAuthWithSession(sessionWithRole(orgs.sector.id, "editor"));
+  it("lets an admin of an ancestor org post", async () => {
+    await mockAuthWithSession(sessionWithRole(orgs.sector.id, "admin"));
     await expect(post()).resolves.toMatchObject({ action: "posted" });
   });
 
-  it("rejects a user of the region", async () => {
-    await mockAuthWithSession(sessionWithRole(regionId, "user"));
+  it.each(["editor", "user"] as const)(
+    "rejects an %s of the region",
+    async (roleName) => {
+      await mockAuthWithSession(sessionWithRole(regionId, roleName));
 
-    await expect(post()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    await expect(update()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
+      await expect(post()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await expect(update()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects an admin of another org", async () => {
     await mockAuthWithSession(

@@ -2,6 +2,8 @@ import { OpenAPIGenerator } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 
 import { router } from "@acme/api";
+import { GrantableUserRole } from "@acme/shared/app/enums";
+import { Permission, roleHasPermission } from "@acme/shared/app/permissions";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { getBaseUrl } from "~/lib/get-base-url";
@@ -40,6 +42,31 @@ interface OpenAPISpec {
   };
   [key: string]: unknown;
 }
+
+/**
+ * The docs' role and permission table, built from `Permission` and
+ * `ROLE_PERMISSIONS` so it can't drift from what the API checks. Lists only
+ * the roles that can be given today.
+ */
+const rolesAndPermissionsMarkdown = (): string => {
+  const header = `| Permission | What it allows | ${GrantableUserRole.join(" | ")} |`;
+  const divider = `| --- | --- | ${GrantableUserRole.map(() => ":---:").join(" | ")} |`;
+  const rows = Object.values(Permission).map(
+    (permission) =>
+      `| ${permission.displayName} (\`${permission.name}\`) | ${permission.description} | ${GrantableUserRole.map(
+        (role) => (roleHasPermission(role, permission) ? "✅" : "—"),
+      ).join(" | ")} |`,
+  );
+  return [
+    "People and API keys are given roles on orgs. A role on an org also applies to every org below it. Each role includes these permissions:",
+    "",
+    header,
+    divider,
+    ...rows,
+    "",
+    "An endpoint that checks a permission lists it under **Required permission** in its description. Endpoints not yet moved to permissions still check for the admin or editor role.",
+  ].join("\n");
+};
 
 export async function openApiJson(request: Request): Promise<Response> {
   const baseUrl = getBaseUrl(request);
@@ -97,10 +124,7 @@ Include both headers in every request to the F3 Nation API.
 
 ## Role-Based Access
 
-API keys inherit the roles and permissions of their owner. Access levels include:
-
-- **Editor**: Can view and modify data within assigned organizations
-- **Admin**: Same permissions as Editor, plus the ability to add/remove other Admins and Editors
+${rolesAndPermissionsMarkdown()}
 
 As of February 1, 2026, regional admins can only create read-only API keys. If you want an API Key edit access to your region, you will need to contact an F3 Nation admin. Right now, regional edit access is highly restrcited. This is because the API is still new and there are almost certainly gaps in security - meaning that a region has the potential to mess up data for other regions.
 

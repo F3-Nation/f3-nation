@@ -1663,6 +1663,9 @@ importers:
       '@orpc/experimental-ratelimit':
         specifier: 'catalog:'
         version: 1.16.1(@opentelemetry/api@1.10.0)
+      '@orpc/openapi':
+        specifier: 'catalog:'
+        version: 1.16.1(@opentelemetry/api@1.10.0)
       '@orpc/server':
         specifier: 'catalog:'
         version: 1.16.1(@opentelemetry/api@1.10.0)

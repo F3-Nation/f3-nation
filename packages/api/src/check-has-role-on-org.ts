@@ -20,7 +20,7 @@ export interface RoleCheckRequest {
   roleName: UserRole;
 }
 
-const roleGrants = (roleName: UserRole) => (r: { roleName: UserRole }) =>
+const satisfiesRole = (roleName: UserRole) => (r: { roleName: UserRole }) =>
   r.roleName === "admin" || r.roleName === roleName;
 
 /** Max org ids per hierarchy query (each is a bind parameter; Postgres caps one statement at 65535). */
@@ -28,17 +28,16 @@ const ROLE_CHECK_ORG_CHUNK_SIZE = 10_000;
 
 type SessionRole = NonNullable<Session["roles"]>[number];
 
-interface GrantCheck {
+interface RoleMatcher {
   orgId: number;
-  grants: (role: SessionRole) => boolean;
+  matches: (role: SessionRole) => boolean;
 }
 
 /**
- * The grant that answers one check: `direct` when it is on the org itself,
- * otherwise the first session role on an ancestor. `undefined` when nothing
- * grants it.
+ * The session role that answers one check: `direct` when it is on the org
+ * itself, otherwise the first matching role on an ancestor.
  */
-interface GrantMatch {
+interface RoleMatch {
   role: SessionRole;
   direct: boolean;
 }
@@ -46,7 +45,7 @@ interface GrantMatch {
 /**
  * The hierarchy walk shared by the role and permission checks. For each check,
  * finds a session role on the org itself or on any ancestor within the depth
- * guard (no is_active filter) for which `grants` is true; the result array
+ * guard (no is_active filter) for which `matches` is true; the result array
  * lines up with `checks` by index.
  *
  * Checks the session satisfies directly need no query at all; only the
@@ -54,18 +53,18 @@ interface GrantMatch {
  * ROLE_CHECK_ORG_CHUNK_SIZE distinct orgs, which keeps a huge client-supplied
  * list under Postgres' bind-parameter limit.
  */
-const findGrantsOnOrgs = async ({
+const findMatchingRoles = async ({
   session,
   checks,
   db,
 }: {
   session: Session;
-  checks: GrantCheck[];
+  checks: RoleMatcher[];
   db: Context["db"];
-}): Promise<(GrantMatch | undefined)[]> => {
-  const directMatches: (GrantMatch | undefined)[] = checks.map(
-    ({ orgId, grants }) => {
-      const role = session.roles?.find((r) => grants(r) && r.orgId === orgId);
+}): Promise<(RoleMatch | undefined)[]> => {
+  const directMatches: (RoleMatch | undefined)[] = checks.map(
+    ({ orgId, matches }) => {
+      const role = session.roles?.find((r) => matches(r) && r.orgId === orgId);
       return role ? { role, direct: true } : undefined;
     },
   );
@@ -144,13 +143,13 @@ const findGrantsOnOrgs = async ({
     }
   }
 
-  return checks.map(({ orgId, grants }, i) => {
+  return checks.map(({ orgId, matches }, i) => {
     const direct = directMatches[i];
     if (direct) return direct;
 
     const allAncestorOrgIds = ancestorIdsByOrg.get(orgId);
     const role = allAncestorOrgIds
-      ? session.roles?.find((r) => grants(r) && allAncestorOrgIds.has(r.orgId))
+      ? session.roles?.find((r) => matches(r) && allAncestorOrgIds.has(r.orgId))
       : undefined;
     return role ? { role, direct: false } : undefined;
   });
@@ -190,11 +189,11 @@ export const checkHasRolesOnOrgs = async ({
     });
   }
 
-  const matches = await findGrantsOnOrgs({
+  const matches = await findMatchingRoles({
     session,
     checks: checks.map(({ orgId, roleName }) => ({
       orgId,
-      grants: roleGrants(roleName),
+      matches: satisfiesRole(roleName),
     })),
     db,
   });
@@ -251,7 +250,7 @@ export const checkHasRoleOnAnyOrg = async ({
   const requested = new Set(orgIds);
   if (
     session?.roles?.some(
-      (r) => roleGrants(roleName)(r) && requested.has(r.orgId),
+      (r) => satisfiesRole(roleName)(r) && requested.has(r.orgId),
     )
   ) {
     return true;
@@ -287,19 +286,10 @@ export const checkHasRoleOnAllOrgs = async ({
   return outcomes.every((outcome) => outcome.success);
 };
 
-export interface PermissionCheckOutcome {
-  success: boolean;
-  /** The org the granting role is on; the requested org when nothing grants it. */
-  orgId: number | null;
-  /** The role that grants the permission; null when nothing grants it. */
-  roleName: UserRole | null;
-  mode: "direct-permission" | "org-admin" | "no-permission";
-}
-
 /**
- * True when the caller (a person or an API key) holds a role on `orgId`, or on
- * any of its ancestors, whose `ROLE_PERMISSIONS` entry includes `permission`.
- * Same hierarchy walk as `checkHasRoleOnOrg`.
+ * True when the caller (a person or an API key) has a role on `orgId`, or on
+ * any of its ancestors, that includes `permission`. Same hierarchy walk as
+ * `checkHasRoleOnOrg`.
  */
 export const checkHasPermissionOnOrg = async ({
   session,
@@ -311,38 +301,22 @@ export const checkHasPermissionOnOrg = async ({
   permission: Permission;
   orgId: number;
   db: Context["db"];
-}): Promise<PermissionCheckOutcome> => {
-  if (!session) {
-    return {
-      success: false,
-      orgId: null,
-      roleName: null,
-      mode: "no-permission",
-    };
-  }
+}): Promise<boolean> => {
+  if (!session) return false;
 
   logDebug("api.permission_check.checking", {
     userId: session.id,
     orgId,
-    permission,
+    permission: permission.name,
     roles: session.roles,
   });
 
-  const [match] = await findGrantsOnOrgs({
+  const [match] = await findMatchingRoles({
     session,
     checks: [
-      { orgId, grants: (r) => roleHasPermission(r.roleName, permission) },
+      { orgId, matches: (r) => roleHasPermission(r.roleName, permission) },
     ],
     db,
   });
-
-  if (!match) {
-    return { success: false, orgId, roleName: null, mode: "no-permission" };
-  }
-  return {
-    success: true,
-    orgId: match.role.orgId,
-    roleName: match.role.roleName,
-    mode: match.direct ? "direct-permission" : "org-admin",
-  };
+  return match !== undefined;
 };

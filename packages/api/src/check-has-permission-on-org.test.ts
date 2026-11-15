@@ -1,7 +1,7 @@
 import type { Session } from "@acme/auth";
 import type { UserRole } from "@acme/shared/app/enums";
 import { inArray, schema } from "@acme/db";
-import { ROLE_PERMISSIONS } from "@acme/shared/app/permissions";
+import { Permission, ROLE_PERMISSIONS } from "@acme/shared/app/permissions";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -30,21 +30,29 @@ const makeSession = (
   }) as unknown as Session;
 
 describe("ROLE_PERMISSIONS", () => {
-  it("gives admin every permission and editor all but security.manage", () => {
-    expect([...ROLE_PERMISSIONS.admin].sort()).toEqual([
+  const names = (role: UserRole) =>
+    ROLE_PERMISSIONS[role].map(({ name }) => name).sort();
+
+  it("gives admin every permission and editor no security or messages", () => {
+    expect(names("admin")).toEqual([
       "entities.manage",
       "messages.send",
       "pii.read",
       "security.manage",
     ]);
-    expect([...ROLE_PERMISSIONS.editor].sort()).toEqual([
-      "entities.manage",
-      "messages.send",
-      "pii.read",
-    ]);
-    expect(ROLE_PERMISSIONS.user).toEqual([]);
-    expect(ROLE_PERMISSIONS.password_manager).toEqual([]);
-    expect(ROLE_PERMISSIONS.password_reader).toEqual([]);
+    expect(names("editor")).toEqual(["entities.manage", "pii.read"]);
+    expect(names("user")).toEqual([]);
+    expect(names("password_manager")).toEqual([]);
+    expect(names("password_reader")).toEqual([]);
+  });
+
+  it("only uses permissions defined in Permission", () => {
+    const defined = new Set(Object.values(Permission));
+    for (const permissions of Object.values(ROLE_PERMISSIONS)) {
+      for (const permission of permissions) {
+        expect(defined.has(permission)).toBe(true);
+      }
+    }
   });
 });
 
@@ -69,105 +77,84 @@ describe("checkHasPermissionOnOrg", () => {
     }
   });
 
-  const grant = (orgId: number, roleName: UserRole) => ({
+  const role = (orgId: number, roleName: UserRole) => ({
     orgId,
     orgName: `org ${orgId}`,
     roleName,
   });
 
-  it("grants on a direct role whose map includes the permission", async () => {
+  it("allows a role on the org itself that includes the permission", async () => {
     const region = orgs.directBranch.region.id;
     await expect(
       checkHasPermissionOnOrg({
-        session: makeSession([grant(region, "editor")]),
+        session: makeSession([role(region, "editor")]),
         orgId: region,
-        permission: "messages.send",
+        permission: Permission.EntitiesManage,
         db,
       }),
-    ).resolves.toEqual({
-      success: true,
-      orgId: region,
-      roleName: "editor",
-      mode: "direct-permission",
-    });
+    ).resolves.toBe(true);
   });
 
-  it("grants through a role on an ancestor org", async () => {
-    const sector = orgs.sector.id;
+  it("allows a role on an ancestor org", async () => {
     await expect(
       checkHasPermissionOnOrg({
-        session: makeSession([grant(sector, "admin")]),
+        session: makeSession([role(orgs.sector.id, "admin")]),
         orgId: orgs.territoryBranch.ao.id,
-        permission: "security.manage",
+        permission: Permission.SecurityManage,
         db,
       }),
-    ).resolves.toEqual({
-      success: true,
-      orgId: sector,
-      roleName: "admin",
-      mode: "org-admin",
-    });
+    ).resolves.toBe(true);
   });
 
   it.each([
-    ["editor", "security.manage"],
-    ["user", "messages.send"],
+    ["editor", Permission.MessagesSend.name, Permission.MessagesSend],
+    ["editor", Permission.SecurityManage.name, Permission.SecurityManage],
+    ["user", Permission.PiiRead.name, Permission.PiiRead],
   ] as const)(
-    "rejects a %s role, whose map lacks %s",
-    async (roleName, permission) => {
+    "rejects the %s role, which doesn't include %s",
+    async (roleName, _name, permission) => {
       const region = orgs.directBranch.region.id;
       await expect(
         checkHasPermissionOnOrg({
-          session: makeSession([grant(region, roleName)]),
+          session: makeSession([role(region, roleName)]),
           orgId: region,
           permission,
           db,
         }),
-      ).resolves.toEqual({
-        success: false,
-        orgId: region,
-        roleName: null,
-        mode: "no-permission",
-      });
+      ).resolves.toBe(false);
     },
   );
 
-  it("rejects a grant on an unrelated org", async () => {
-    const target = orgs.directBranch.region.id;
+  it("rejects a role on an unrelated org", async () => {
     await expect(
       checkHasPermissionOnOrg({
-        session: makeSession([grant(orgs.unrelatedSector.id, "admin")]),
-        orgId: target,
-        permission: "messages.send",
+        session: makeSession([role(orgs.unrelatedSector.id, "admin")]),
+        orgId: orgs.directBranch.region.id,
+        permission: Permission.MessagesSend,
         db,
       }),
-    ).resolves.toEqual({
-      success: false,
-      orgId: target,
-      roleName: null,
-      mode: "no-permission",
-    });
+    ).resolves.toBe(false);
   });
 
   it("checks an API-key session's own roles", async () => {
     const region = orgs.directBranch.region.id;
-    const apiKeySession = makeSession([grant(orgs.sector.id, "editor")], true);
+    const apiKeySession = makeSession([role(orgs.sector.id, "editor")], true);
     await expect(
       checkHasPermissionOnOrg({
         session: apiKeySession,
         orgId: region,
-        permission: "messages.send",
+        permission: Permission.EntitiesManage,
         db,
       }),
-    ).resolves.toMatchObject({ success: true, mode: "org-admin" });
+    ).resolves.toBe(true);
     await expect(
       checkHasPermissionOnOrg({
         session: apiKeySession,
         orgId: region,
-        permission: "security.manage",
+        permission: Permission.SecurityManage,
         db,
       }),
-    ).resolves.toMatchObject({ success: false, mode: "no-permission" });
+    ).resolves.toBe(false);
   });
 
   it("rejects when there is no session", async () => {
@@ -175,14 +162,9 @@ describe("checkHasPermissionOnOrg", () => {
       checkHasPermissionOnOrg({
         session: null,
         orgId: orgs.directBranch.region.id,
-        permission: "messages.send",
+        permission: Permission.MessagesSend,
         db,
       }),
-    ).resolves.toEqual({
-      success: false,
-      orgId: null,
-      roleName: null,
-      mode: "no-permission",
-    });
+    ).resolves.toBe(false);
   });
 });
