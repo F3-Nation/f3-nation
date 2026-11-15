@@ -330,6 +330,15 @@ assert_eq "a PR assigned only to others isn't marked assigned to the viewer" "fa
   "$(board_json | jq -r '.prs[] | select(.number == 7) | .assignedToMe')"
 assert_eq "an unassigned PR isn't marked assigned to the viewer" "false" \
   "$(board_json | jq -r '.prs[] | select(.number == 5) | .assignedToMe')"
+claimed_of() { board_json | jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .claimedByOther'; }
+assert_eq "a PR assigned to others than the author is claimed by someone else" "true" "$(claimed_of 7)"
+assert_eq "...even when the viewer is assigned too" "true" "$(claimed_of 34)"
+assert_eq "an author assigned to their own PR, in any case, hasn't been claimed by someone else" "false" \
+  "$(claimed_of 46)"
+assert_eq "an unassigned PR isn't claimed by someone else" "false" "$(claimed_of 5)"
+assert_eq "the board has a filter for PRs that are yours or unclaimed" "1" \
+  "$(grep -c '\["responsible", "Mine or unclaimed", (pr) => pr.mine || pr.assignedToMe || !pr.claimedByOther\]' \
+    "$tmp_dir/board.html")"
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
 assert_eq "the hostile title survives escaped" "</script><img src=x onerror=alert(1)>" \
   "$(board_json | jq -r '.prs[] | select(.number == 13) | .title')"

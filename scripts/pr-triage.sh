@@ -429,6 +429,9 @@ classify='
           url: $pr.url,
           mine: ($author == $me),
           assignedToMe: ($assignees | index($me) != null),
+          # Someone other than the viewer and the author is assigned: they have taken it on.
+          claimedByOther: any($assignees[]; lower_login as $a
+            | $a != ($me | lower_login) and $a != ($author | lower_login)),
           note: ([
             (if $verdict[1] != "" then $verdict[1] else empty end),
             (if $conflicts and $active then "merge conflicts" else empty end)
@@ -740,6 +743,9 @@ HTML
     ["all", "All", () => true],
     ["mine", "Assigned to me", (pr) => pr.assignedToMe],
     ["unassigned", "Unassigned", (pr) => pr.assignee === "Unassigned"],
+    // Leaves out PRs someone else has taken on: not yours, not assigned to you, and assigned
+    // to someone other than their author.
+    ["responsible", "Mine or unclaimed", (pr) => pr.mine || pr.assignedToMe || !pr.claimedByOther],
   ];
   // Drafts and skipped PRs have no column, so they'd inflate the counts on the buttons.
   const shown = data.prs.filter((pr) => columns.some(([bucket]) => bucket === pr.bucket));
