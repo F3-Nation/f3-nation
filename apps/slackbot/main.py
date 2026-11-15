@@ -141,10 +141,8 @@ if not LOCAL_DEVELOPMENT:
         if request.path == "/":
             return Response("Service is running", status=200, headers={"Access-Control-Allow-Origin": "*"})
         elif request.path == "/exchange_token":
-            logging.info("Strava token exchange request")
-            logging.info(f"Request query parameters: {request.args}")
-            logging.info(f"Request headers: {request.headers}")
-            logging.info(f"Request body: {request.get_data(as_text=True)}")
+            # The query string carries the OAuth code and state; never log the request.
+            logging.info("slack.strava.token_exchange.received")
             return strava.strava_exchange_token(request)
         elif request.path[:6] == "/slack":
             slack_handler = SlackRequestHandler(app=get_slack_app())
