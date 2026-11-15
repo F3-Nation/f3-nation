@@ -21,7 +21,9 @@ import {
   PhaseError,
   readGitState,
   removeSnapshot,
+  runCommand,
   snapshotMigrations,
+  startRefreshRebuild,
 } from "./migrate-remote";
 
 // A throwaway "origin" plus a clone, so the git checks run against real git.
@@ -283,6 +285,81 @@ describe("afterMigrationSteps", () => {
         "prod",
       ).join("\n"),
     ).not.toContain("rebuild-staging-refresh");
+  });
+});
+
+describe("startRefreshRebuild", () => {
+  const command =
+    "gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main";
+
+  it("starts the rebuild workflow on main with gh", () => {
+    const calls: string[] = [];
+    const text = startRefreshRebuild((cmd, args) => {
+      calls.push([cmd, ...args].join(" "));
+      return { status: 0, stderr: "" };
+    }).join("\n");
+    expect(calls).toEqual([command]);
+    expect(text).toContain("Started the Staging refresh image rebuild");
+    expect(text).toContain(
+      "https://github.com/F3-Nation/f3-nation/actions/workflows/rebuild-staging-refresh.yml",
+    );
+    expect(text).toContain("tooling/scripts/staging-refresh/setup.sh");
+    expect(text).not.toContain("Couldn't");
+  });
+
+  it("without gh, says to start it by hand", () => {
+    const missing = Object.assign(new Error("spawnSync gh ENOENT"), {
+      code: "ENOENT",
+    });
+    const text = startRefreshRebuild(() => ({
+      status: null,
+      stderr: "",
+      error: missing,
+    })).join("\n");
+    expect(text).toContain(
+      "Couldn't start the Staging refresh image rebuild (gh isn't installed)",
+    );
+    expect(text).toContain(command);
+  });
+
+  it("when gh fails (not logged in), gives its first error line and the command", () => {
+    const text = startRefreshRebuild(() => ({
+      status: 4,
+      stderr:
+        "To get started with GitHub CLI, please run:  gh auth login\nmore\n",
+    })).join("\n");
+    expect(text).toContain(
+      "(To get started with GitHub CLI, please run:  gh auth login)",
+    );
+    expect(text).toContain(command);
+  });
+
+  it("runs a command and returns its status and stderr", () => {
+    const res = runCommand(process.execPath, [
+      "-e",
+      "console.error('nope'); process.exit(3)",
+    ]);
+    expect(res.status).toBe(3);
+    expect(res.stderr.trim()).toBe("nope");
+    expect(res.error).toBeUndefined();
+  });
+
+  it("reports a command that isn't installed", () => {
+    const res = runCommand("f3-no-such-command-for-this-test", []);
+    expect(res.error).toBeDefined();
+    expect(startRefreshRebuild(() => res).join("\n")).toContain(
+      "(gh isn't installed)",
+    );
+  });
+
+  it("never throws, even if running gh throws", () => {
+    const text = startRefreshRebuild(() => {
+      throw new Error("boom");
+    }).join("\n");
+    expect(text).toContain(
+      "Couldn't start the Staging refresh image rebuild (boom)",
+    );
+    expect(text).toContain(command);
   });
 });
 
