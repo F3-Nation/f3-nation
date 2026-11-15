@@ -1,16 +1,20 @@
 import copy
+import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
+import time
 from datetime import datetime
 from logging import Logger
 from typing import Any, Dict, List
+from urllib.parse import urlencode
 
 import requests
 from f3_data_models.models import SlackUser, User
-from f3_data_models.utils import DbManager
+from f3_data_models.utils import DbManager, session_scope
 from flask import Request, Response
-from requests_oauthlib import OAuth2Session
 from slack_sdk import WebClient
 
 from infrastructure.strava_credentials import (
@@ -26,6 +30,131 @@ from utilities.slack import actions, forms
 from utilities.slack import orm as slack_orm
 
 STRAVA_ACTIVITY_BUTTON_LABEL_MAX_LENGTH = 36
+STRAVA_OAUTH_STATE_META_KEY = "strava_oauth_state"
+STRAVA_OAUTH_STATE_TTL_SECONDS = 30 * 60
+STRAVA_STATE_INVALID_MESSAGE = (
+    "This Strava link is invalid or has expired. Reopen the Strava option in Slack and try again."
+)
+STRAVA_EXCHANGE_FAILED_MESSAGE = (
+    "Strava did not complete the connection. Reopen the Strava option in Slack and try again."
+)
+
+
+def _hash_state_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def issue_strava_oauth_state(slack_user_pk: int) -> str:
+    """Store a fresh single-use OAuth state on the Slack user and return the value to send to Strava.
+
+    Only a hash of the random token is stored; issuing a new state replaces any earlier one.
+    """
+    token = secrets.token_urlsafe(32)
+    with session_scope() as session:
+        record = session.get(SlackUser, slack_user_pk, with_for_update=True)
+        if record is None:
+            raise ValueError("Slack user not found")
+        meta = dict(record.meta or {})
+        meta[STRAVA_OAUTH_STATE_META_KEY] = {
+            "hash": _hash_state_token(token),
+            "expires_at": int(time.time()) + STRAVA_OAUTH_STATE_TTL_SECONDS,
+        }
+        record.meta = meta
+    return f"{slack_user_pk}.{token}"
+
+
+def _reject_state(reason: str, slack_user_pk: int | None = None) -> None:
+    # Never log the state, token or stored hash: only the reason and the numeric slack_users.id.
+    logging.warning("slack.strava.oauth_state_rejected reason=%s slack_user_pk=%s", reason, slack_user_pk)
+    return None
+
+
+def consume_strava_oauth_state(state: str | None) -> int | None:
+    """Validate and use up an OAuth state issued by `issue_strava_oauth_state`.
+
+    Returns the F3 user id linked to the Slack user the state was issued to, or None when the state is
+    missing, malformed, unknown, expired or already used. A wrong token leaves the stored state in place
+    so a guess can't cancel someone else's pending link.
+    """
+    if not state:
+        return _reject_state("missing")
+    pk_str, sep, token = state.partition(".")
+    # isdigit() alone accepts non-ASCII digits that int() rejects; 9 digits stays inside a Postgres integer.
+    if not sep or not token or not (pk_str.isascii() and pk_str.isdigit()) or len(pk_str) > 9:
+        return _reject_state("malformed")
+    pk = int(pk_str)
+
+    with session_scope() as session:
+        record = session.get(SlackUser, pk, with_for_update=True)
+        if record is None:
+            return _reject_state("unknown_slack_user", pk)
+        meta = dict(record.meta or {})
+        pending = meta.get(STRAVA_OAUTH_STATE_META_KEY)
+        if not isinstance(pending, dict) or not isinstance(pending.get("hash"), str):
+            return _reject_state("no_pending_state", pk)
+        if not hmac.compare_digest(pending["hash"], _hash_state_token(token)):
+            return _reject_state("token_mismatch", pk)
+
+        del meta[STRAVA_OAUTH_STATE_META_KEY]
+        record.meta = meta
+        expires_at = pending.get("expires_at")
+        if not isinstance(expires_at, (int, float)) or expires_at < time.time():
+            return _reject_state("expired", pk)
+        if record.user_id is None:
+            return _reject_state("slack_user_unlinked", pk)
+        return record.user_id
+
+
+def _json_response(status: int, body: dict) -> Response:
+    return Response(json.dumps(body), status=status, content_type="application/json")
+
+
+def build_strava_auth_blocks(slack_user_record: SlackUser | None) -> list:
+    if not (os.environ.get(constants.STRAVA_CLIENT_ID) and os.environ.get(constants.STRAVA_CLIENT_SECRET)):
+        return [
+            slack_orm.SectionBlock(
+                label="Strava client ID and secret are not configured.",  # noqa
+            )
+        ]
+    if slack_user_record is None:
+        return [
+            slack_orm.SectionBlock(
+                label="We couldn't find your F3 profile for this workspace yet. Please try again later.",
+            )
+        ]
+
+    APP_URL = os.environ.get("APP_URL", "")
+    # Built by hand: requests_oauthlib logs the state at DEBUG, and the state is a bearer secret.
+    authorization_url = "https://www.strava.com/oauth/authorize?" + urlencode(
+        {
+            "response_type": "code",
+            "client_id": os.environ[constants.STRAVA_CLIENT_ID],
+            "redirect_uri": f"{APP_URL}/exchange_token",
+            "scope": "read,activity:read,activity:write",
+            "state": issue_strava_oauth_state(slack_user_record.id),
+        }
+    )
+    return [
+        slack_orm.ImageBlock(
+            image_url="https://slackblast-images.s3.amazonaws.com/btn_strava_connectwith_orange.png",
+            alt_text="Connect with Strava",
+        ),
+        slack_orm.ActionsBlock(
+            elements=[
+                slack_orm.ButtonElement(
+                    label="Connect",
+                    action=actions.STRAVA_CONNECT_BUTTON,
+                    url=authorization_url,
+                )
+            ]
+        ),
+        slack_orm.ContextBlock(
+            element=slack_orm.ContextElement(
+                initial_value="Opens in a new window",
+            ),
+            action="context",
+        ),
+    ]
 
 
 def format_strava_activity_button_label(date_fmt: str, activity_name: str) -> str:
@@ -87,43 +216,6 @@ def build_strava_form(body: dict, client: WebClient, logger: Logger, context: di
     # )
     allow_strava = True
 
-    APP_URL = os.environ.get("APP_URL", "")
-    if os.environ.get(constants.STRAVA_CLIENT_ID) and os.environ.get(constants.STRAVA_CLIENT_SECRET):
-        oauth = OAuth2Session(
-            client_id=os.environ[constants.STRAVA_CLIENT_ID],
-            redirect_uri=f"{APP_URL}/exchange_token",
-            scope=["read,activity:read,activity:write"],
-            state=f"{team_id}-{user_id}",
-        )
-        authorization_url, state = oauth.authorization_url("https://www.strava.com/oauth/authorize")
-        auth_blocks = [
-            slack_orm.ImageBlock(
-                image_url="https://slackblast-images.s3.amazonaws.com/btn_strava_connectwith_orange.png",
-                alt_text="Connect with Strava",
-            ),
-            slack_orm.ActionsBlock(
-                elements=[
-                    slack_orm.ButtonElement(
-                        label="Connect",
-                        action=actions.STRAVA_CONNECT_BUTTON,
-                        url=authorization_url,
-                    )
-                ]
-            ),
-            slack_orm.ContextBlock(
-                element=slack_orm.ContextElement(
-                    initial_value="Opens in a new window",
-                ),
-                action="context",
-            ),
-        ]
-    else:
-        auth_blocks = [
-            slack_orm.SectionBlock(
-                label="Strava client ID and secret are not configured.",  # noqa
-            )
-        ]
-
     if allow_strava:
         update_view_id = safe_get(body, actions.LOADING_ID)
         user_records: List[SlackUser] = DbManager.find_records(
@@ -132,7 +224,7 @@ def build_strava_form(body: dict, client: WebClient, logger: Logger, context: di
 
         if len(user_records) == 0:
             title_text = "Connect Strava"
-            strava_blocks = auth_blocks
+            strava_blocks = build_strava_auth_blocks(None)
         else:
             title_text = "Choose Activity"
             slack_user_record = user_records[0]
@@ -145,7 +237,7 @@ def build_strava_form(body: dict, client: WebClient, logger: Logger, context: di
                     slack_orm.SectionBlock(
                         label="Strava is not connected or no recent activities were found. Log an activity in Strava, or use the button below to connect.",  # noqa
                     ),
-                    *auth_blocks,
+                    *build_strava_auth_blocks(slack_user_record),
                 ]
             else:
                 strava_blocks = build_strava_activity_blocks(
@@ -218,26 +310,20 @@ def build_strava_modify_form(
     )
 
 
-def strava_exchange_token(request: Request) -> dict:
-    """Exchanges a Strava auth code for an access token."""
-    team_id, user_id = request.args.get("state").split("-")
+def strava_exchange_token(request: Request) -> Response:
+    """Exchanges a Strava auth code for tokens and stores them on the user the OAuth state was issued to."""
+    if not os.environ.get(constants.STRAVA_CLIENT_ID) or not os.environ.get(constants.STRAVA_CLIENT_SECRET):
+        return _json_response(500, {"error": "Strava client ID or secret not configured."})
+
+    user_id = consume_strava_oauth_state(request.args.get("state"))
+    if user_id is None:
+        return _json_response(400, {"error": STRAVA_STATE_INVALID_MESSAGE})
+
     code = request.args.get("code")
     if not code:
-        r = {
-            "statusCode": 400,
-            "body": {"error": "No code provided."},
-            "headers": {},
-        }
-        return r
+        return _json_response(400, {"error": "No code provided."})
 
-    if not os.environ.get(constants.STRAVA_CLIENT_ID) or not os.environ.get(constants.STRAVA_CLIENT_SECRET):
-        r = {
-            "statusCode": 500,
-            "body": {"error": "Strava client ID or secret not configured."},
-            "headers": {},
-        }
-        return r
-    else:
+    try:
         response = requests.post(
             url="https://www.strava.com/oauth/token",
             data={
@@ -249,59 +335,34 @@ def strava_exchange_token(request: Request) -> dict:
             timeout=10,
         )
         response.raise_for_status()
-
         response_json = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        # The response body can hold tokens; log only the failure type and HTTP status.
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        logging.warning("slack.strava.token_exchange.failed error_type=%s status=%s", type(exc).__name__, status)
+        return _json_response(502, {"error": STRAVA_EXCHANGE_FAILED_MESSAGE})
 
-        slack_user_records: List[SlackUser] = DbManager.find_records(
-            SlackUser, filters=[SlackUser.slack_id == user_id, SlackUser.slack_team_id == team_id]
+    try:
+        saved = save_connection(user_id, response_json)
+    except StravaOwnershipConflict:
+        return _json_response(
+            409,
+            {
+                "message": (
+                    "This Strava account is already connected to another F3 profile. "
+                    "The existing connection has not changed. Please contact support for help."
+                )
+            },
         )
-        msg = "Authorization unsuccessful. Please try again or contact support if the issue persists."
-        if slack_user_records:
-            user_id = safe_get(slack_user_records, 0, "user_id")
-            if user_id:
-                user: User = DbManager.get(User, user_id)
-                if user:
-                    try:
-                        saved = save_connection(user.id, response_json)
-                    except StravaOwnershipConflict:
-                        return Response(
-                            json.dumps(
-                                {
-                                    "message": (
-                                        "This Strava account is already connected to another F3 profile. "
-                                        "The existing connection has not changed. Please contact support for help."
-                                    )
-                                }
-                            ),
-                            status=409,
-                            content_type="application/json",
-                        )
-                    except ValueError:
-                        logging.error("strava.exchange.invalid_provider_response")
-                        saved = False
-                    except RuntimeError:
-                        saved = False
-                    if saved:
-                        msg = "Authorization successful! You can return to Slack."
-                    else:
-                        return Response(
-                            json.dumps({"message": "Strava could not be connected right now. Please try again later."}),
-                            status=503,
-                            content_type="application/json",
-                        )
+    except ValueError:
+        logging.error("strava.exchange.invalid_provider_response")
+        saved = False
+    except RuntimeError:
+        saved = False
+    if not saved:
+        return _json_response(503, {"message": "Strava could not be connected right now. Please try again later."})
 
-        r = {
-            "statusCode": 200,
-            "body": {"message": msg},
-            "headers": {},
-        }
-
-        return Response(
-            json.dumps(r["body"]),
-            status=r["statusCode"],
-            headers=r["headers"],
-            content_type="application/json",
-        )
+    return _json_response(200, {"message": "Authorization successful! You can return to Slack."})
 
 
 def check_and_refresh_strava_token(user: User) -> str | None:
