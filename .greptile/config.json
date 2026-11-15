@@ -15,7 +15,7 @@
   "rules": [
     {
       "id": "authz",
-      "rule": "CC-AUTHZ and CC-PUBLIC: every read or write of a specific resource checks the caller against the fetched row's org (and the destination org on a move); anonymous callers never reach private, inactive or personal data or an unbounded page. Compare with sibling procedures in the same router.",
+      "rule": "CC-AUTHZ and CC-PUBLIC: every read or write of a specific resource checks the caller against the fetched row's org (and the destination org on a move, except the source-admin home-region correction specified in docs/specs/admin-user-home-region.md); anonymous callers never reach private, inactive or personal data or an unbounded page. Compare with sibling procedures in the same router.",
       "scope": ["packages/api/**", "apps/api/**"],
       "severity": "high"
     },

@@ -123,6 +123,68 @@ describe.runIf(target.sharesDatabase)("public organization activity", () => {
       await db.delete(schema.orgs).where(eq(schema.orgs.id, id));
   });
 
+  it("does not relax anonymous REST filtering with activeAncestorsOnly=false", async () => {
+    const query = new URLSearchParams({
+      searchTerm: prefix,
+      orgTypes: "ao",
+      activeAncestorsOnly: "false",
+    });
+    query.append("statuses", "active");
+    query.append("statuses", "inactive");
+    const result = await target.invoke(
+      req(`/v1/org?${query}`, {
+        headers: { ...headers(false), client: "characterization" },
+      }),
+    );
+    expect(result.status).toBe(200);
+    const listed = (await result.json()) as {
+      orgs: { id: number }[];
+      total: number;
+    };
+    expect(listed.orgs.map((org) => org.id)).toEqual(
+      branches.slice(0, 1).map((branch) => branch.aoId),
+    );
+    expect(listed.total).toBe(1);
+  });
+
+  it.each(["true", "false", "invalid"])(
+    "parses the signed-in active-ancestor filter over REST: %s",
+    async (flag) => {
+      const query = new URLSearchParams({
+        searchTerm: prefix,
+        orgTypes: "ao",
+        activeAncestorsOnly: flag,
+      });
+      const results = await Promise.all(
+        ["/v1/org", "/v1/org/count"].map((path) =>
+          target.invoke(
+            req(`${path}?${query}`, {
+              headers: { ...headers(true), client: "characterization" },
+            }),
+          ),
+        ),
+      );
+      for (const result of results)
+        expect(result.status).toBe(flag === "invalid" ? 400 : 200);
+      if (flag === "invalid") {
+        for (const result of results)
+          expect(await result.json()).toMatchObject({ code: "BAD_REQUEST" });
+        return;
+      }
+      const listed = (await results[0]!.json()) as {
+        orgs: { id: number }[];
+        total: number;
+      };
+      const counted = (await results[1]!.json()) as { count: number };
+      const expected = flag === "true" ? branches.slice(0, 1) : branches;
+      expect(listed.orgs.map((org) => org.id).sort((a, b) => a - b)).toEqual(
+        expected.map((branch) => branch.aoId).sort((a, b) => a - b),
+      );
+      expect(listed.total).toBe(expected.length);
+      expect(counted.count).toBe(expected.length);
+    },
+  );
+
   it.each([false, true])(
     "filters REST lists according to actual session presence: authenticated=%s",
     async (authenticated) => {

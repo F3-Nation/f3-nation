@@ -4,7 +4,8 @@ This directory contains the scripts and automation jobs for the F3 Nation Slack 
 
 ## Structure
 
-- `Dockerfile` — builds the scripts container image with uv and the Slackbot `scripts` dependency group (matplotlib, pandas, playwright + Chromium); dev tooling is excluded via `--no-dev`
+- `Dockerfile` — builds the scripts container image with uv and the Slackbot `scripts` dependency group (matplotlib, pandas, playwright + Chromium); dev tooling is excluded via `--no-dev`. The job runs as the non-root `slackbot` user, which owns the working directory (where jobs write debug CSVs and report images); the rest of the application tree is root-owned
+- `calendar_render.py` — renders calendar tables to PNG in a Chromium page with JavaScript off and every network request blocked; callers HTML-escape cell text first
 - `hourly_runner.py` — Entrypoint for running all hourly scripts
 - Other Python scripts for specific automation tasks
 

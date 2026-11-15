@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts",
     "./lib/admin-url": "./src/lib/admin-url.ts",
-    "./services/map-request-notification": "./src/services/map-request-notification.ts"
+    "./services/map-request-notification": "./src/services/map-request-notification.ts",
+    "./org-activity": "./src/org-activity.ts",
+    "./org-tree": "./src/org-tree.ts"
   },
   "license": "AGPL-3.0-or-later",
   "scripts": {
