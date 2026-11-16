@@ -39,6 +39,7 @@ from utilities.slack.orm import (
     ImageBlock,
     SectionBlock,
 )
+from utilities.slack_tokens.client import slack_client_for_team
 
 
 def send_lineups(force: bool = False):
@@ -220,15 +221,18 @@ def send_q_lineup_message(
     ).as_form_field()
     blocks.append(calendar_button_block)
 
-    slack_bot_token = slack_settings.bot_token
     metadata = Metadata(
         event_type="q_lineup", event_payload={"send_q_lineups_method": slack_settings.send_q_lineups_method}
     )
     if week_start and week_end:
         metadata.event_payload["week_start"] = week_start.strftime("%y-%m-%d")
         metadata.event_payload["week_end"] = week_end.strftime("%y-%m-%d")
-    if slack_bot_token:
-        slack_client = WebClient(slack_bot_token)
+    try:
+        slack_client = slack_client_for_team(slack_settings.team_id)
+    except Exception as e:
+        print(f"Error getting Slack client for team {slack_settings.team_id}: {type(e).__name__}")
+        return
+    if slack_client:
         if update_channel_id:
             channel_id = update_channel_id
         if slack_settings.send_q_lineups_method == "yes_per_ao" and safe_get(org.meta, "slack_channel_id"):

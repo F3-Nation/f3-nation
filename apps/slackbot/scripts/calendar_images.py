@@ -31,7 +31,6 @@ from f3_data_models.models import (
     User,
 )
 from f3_data_models.utils import DbManager, get_session
-from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models import blocks
 from sqlalchemy import Integer, and_, bindparam, func, or_, select
@@ -49,6 +48,7 @@ from utilities.constants import (
 from utilities.helper_functions import current_date_cst, safe_convert, update_local_region_records
 from utilities.slack import actions
 from utilities.slack.sdk_orm import image_or_link_block
+from utilities.slack_tokens.client import slack_client_for_team
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
 CALENDAR_REGION_BIND_PARAMETER = "calendar_region_id"
@@ -288,7 +288,10 @@ def _slack_attempt_was_rejected(error: Exception) -> bool:
 
 def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunday_run: bool, session=None) -> None:
     print("Posting to Slack channel")
-    client = WebClient(token=slack_app_settings["bot_token"])
+    client = slack_client_for_team(slack_app_settings["team_id"])
+    if client is None:
+        print("No Slack installation for this region; skipping Slack post")
+        return
     block_list = [blocks.HeaderBlock(text=":calendar: Q Calendar")]
     for week in WEEK_LABELS[:num_weeks]:
         image_name = slack_app_settings.get(f"calendar_image_{week}")
@@ -352,11 +355,7 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
 
 
 def slack_posting_enabled(slack_app_settings: dict) -> bool:
-    return bool(
-        slack_app_settings.get("q_image_posting_enabled")
-        and slack_app_settings.get("q_image_posting_channel")
-        and slack_app_settings.get("bot_token")
-    )
+    return bool(slack_app_settings.get("q_image_posting_enabled") and slack_app_settings.get("q_image_posting_channel"))
 
 
 def calendar_weeks_shown(slack_app_settings: dict) -> int:

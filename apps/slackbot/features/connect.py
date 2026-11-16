@@ -32,6 +32,7 @@ from utilities.helper_functions import (
     update_local_region_records,
 )
 from utilities.slack.actions import LOADING_ID
+from utilities.slack_tokens.client import slack_client_for_team
 
 CONNECT_EXISTING_REGION = "connect_existing_region"
 CREATE_NEW_REGION = "create_new_region"
@@ -48,13 +49,31 @@ SLACK_TEAM_ID_PATTERN = re.compile(r"T[A-Z0-9]+\Z")
 
 
 def _get_requester_slack_space(team_id):
-    """Resolve the install credentials from the DB, never from Slack metadata."""
+    """Resolve the installed workspace from the DB, never from Slack metadata."""
     if not isinstance(team_id, str) or not SLACK_TEAM_ID_PATTERN.fullmatch(team_id):
         return None
     slack_space = DbManager.find_first_record(SlackSpace, [SlackSpace.team_id == team_id])
-    if not slack_space or not safe_get(slack_space, "bot_token"):
+    return slack_space or None
+
+
+def _admin_client(logger: Logger):
+    """Client for the admin workspace named by ADMIN_TEAM_ID, or None when admin notifications aren't configured."""
+    admin_team_id = os.environ.get("ADMIN_TEAM_ID")
+    if not admin_team_id:
+        logger.warning(
+            "slack.token.admin_team_missing",
+            extra={"json_fields": {"event": "slack.token.admin_team_missing", "reason": "unset"}},
+        )
         return None
-    return slack_space
+    admin_client = slack_client_for_team(admin_team_id)
+    if admin_client is None:
+        logger.warning(
+            "slack.token.admin_team_missing",
+            extra={
+                "json_fields": {"event": "slack.token.admin_team_missing", "reason": "no_row", "team_id": admin_team_id}
+            },
+        )
+    return admin_client
 
 
 def _notify_admin_request_unverified(body: dict, logger: Logger):
@@ -64,11 +83,13 @@ def _notify_admin_request_unverified(body: dict, logger: Logger):
         or safe_get(body, "channel", "channel_id")
     )
     user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
-    admin_token = os.environ.get("ADMIN_BOT_TOKEN")
-    if not channel_id or not user_id or not admin_token:
+    if not channel_id or not user_id:
+        return
+    admin_client = _admin_client(logger)
+    if admin_client is None:
         return
     try:
-        WebClient(token=admin_token).chat_postEphemeral(
+        admin_client.chat_postEphemeral(
             channel=channel_id,
             user=user_id,
             text=(
@@ -296,11 +317,12 @@ def handle_existing_region_selection(
             ]
         ),
     ]
-    if os.environ.get("ADMIN_BOT_TOKEN") and os.environ.get("ADMIN_CHANNEL_ID"):
+    admin_channel_id = os.environ.get("ADMIN_CHANNEL_ID")
+    send_client = _admin_client(logger) if admin_channel_id else None
+    if send_client is not None:
         try:
-            send_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"))
             send_client.chat_postMessage(
-                channel=os.environ.get("ADMIN_CHANNEL_ID"),
+                channel=admin_channel_id,
                 text="Region Connection Request",
                 blocks=blocks,
                 metadata=metadata,
@@ -351,8 +373,11 @@ def handle_approve_connection(
         logger.warning("Unable to parse requester workspace settings for connection approval.")
         _notify_admin_request_unverified(body, logger)
         return
-    region_record.bot_token = slack_space_record.bot_token
-    requester_client = WebClient(token=slack_space_record.bot_token)
+    requester_client = slack_client_for_team(team_id)
+    if requester_client is None:
+        logger.warning("Unable to resolve requester workspace credentials for connection approval.")
+        _notify_admin_request_unverified(body, logger)
+        return
     org_record = DbManager.get(Org, metadata.get("region_id"))
     region_record.org_id = org_record.id
     slack_user_id = metadata.get("user_id")
@@ -408,8 +433,7 @@ def handle_approve_connection(
     ]
     if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=slack_space_record.bot_token)
-            send_client.chat_postMessage(
+            requester_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Approved",
                 blocks=blocks,
@@ -426,7 +450,8 @@ def handle_approve_connection(
         )
         message_ts = safe_get(body, "container", "message_ts") or safe_get(body, "message", "ts")
 
-        if channel_id and message_ts and os.environ.get("ADMIN_BOT_TOKEN"):
+        admin_client = _admin_client(logger) if channel_id and message_ts else None
+        if admin_client is not None:
             admin_blocks = [
                 HeaderBlock(text="Region Connection Request - Approved"),
                 SectionBlock(
@@ -437,7 +462,6 @@ def handle_approve_connection(
                     )
                 ),
             ]
-            admin_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"))
             admin_client.chat_update(
                 channel=channel_id,
                 ts=message_ts,
@@ -454,7 +478,8 @@ def handle_deny_connection(body: dict, client: WebClient, logger: Logger, contex
     metadata = safe_get(body, "message", "metadata") or {}
     metadata = metadata.get("event_payload") or {}
     slack_space_record = _get_requester_slack_space(metadata.get("team_id"))
-    if not slack_space_record:
+    send_client = slack_client_for_team(metadata.get("team_id")) if slack_space_record else None
+    if send_client is None:
         logger.warning("Unable to resolve requester workspace credentials for connection denial.")
         return
     blocks = [
@@ -465,7 +490,6 @@ def handle_deny_connection(body: dict, client: WebClient, logger: Logger, contex
     ]
     if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=slack_space_record.bot_token)
             send_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Denied",
