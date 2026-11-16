@@ -57,6 +57,14 @@ const client = () =>
           return "ran";
         },
       ),
+      bothOnOrg: permissionProcedure(
+        Permission.EntitiesManage,
+        Permission.MessagesSend,
+      ).handler(async ({ context }) => {
+        const nation = await getOrCreateF3NationOrg();
+        await context.assertPermissionsOnOrg(nation.id);
+        return "ran";
+      }),
     },
     {
       context: () => ({
@@ -131,6 +139,29 @@ describe("permissionProcedure", () => {
       code: "UNAUTHORIZED",
       message: "This action needs this permission on the org: Send messages",
     });
+  });
+
+  it("checks every declared permission on the org, not just somewhere", async () => {
+    const nation = await getOrCreateF3NationOrg();
+    // Passes the gate (messages.send comes from the admin role elsewhere), but
+    // on the nation the caller has only entities.manage.
+    await mockAuthWithSession(
+      sessionWithRoles([nation.id, "editor"], [999_999, "admin"]),
+    );
+    await expect(client().bothOnOrg()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      message:
+        "This action needs these permissions on the org: Manage entities, Send messages",
+    });
+
+    await mockAuthWithSession(sessionWithRole(nation.id, "admin"));
+    await expect(client().bothOnOrg()).resolves.toBe("ran");
+  });
+
+  it("refuses to be built with no permissions", () => {
+    expect(() =>
+      permissionProcedure(...([] as unknown as [Permission])),
+    ).toThrow("permissionProcedure needs at least one permission");
   });
 
   it("lists the permissions in the endpoint's OpenAPI entry", async () => {

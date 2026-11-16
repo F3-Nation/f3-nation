@@ -63,6 +63,9 @@ describe("ROLE_PERMISSIONS", () => {
     expect(
       roleHasPermission("not_a_role" as UserRole, Permission.MessagesSend),
     ).toBe(false);
+    expect(
+      roleHasPermission("constructor" as UserRole, Permission.MessagesSend),
+    ).toBe(false);
   });
 });
 
@@ -169,6 +172,25 @@ describe("checkHasPermissionsOnOrg", () => {
     map.user = [Permission.EntitiesManage];
     map.editor = [Permission.PiiRead];
     try {
+      // Neither role is enough alone. With the real role map, editor on the
+      // sector holds both, so this fails if the override stops taking effect.
+      const need = [Permission.EntitiesManage, Permission.PiiRead] as const;
+      await expect(
+        checkHasPermissionsOnOrg({
+          session: makeSession([role(region, "user")]),
+          orgId: region,
+          permissions: need,
+          db,
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        checkHasPermissionsOnOrg({
+          session: makeSession([role(orgs.sector.id, "editor")]),
+          orgId: region,
+          permissions: need,
+          db,
+        }),
+      ).resolves.toBe(false);
       await expect(
         checkHasPermissionsOnOrg({
           session,

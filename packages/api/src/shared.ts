@@ -288,8 +288,12 @@ export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
  */
 export const permissionProcedure = (
   ...permissions: [Permission, ...Permission[]]
-) =>
-  withSessionAndDb.use(
+) => {
+  // An empty list would make the gate below pass every caller.
+  if ((permissions as readonly Permission[]).length === 0) {
+    throw new Error("permissionProcedure needs at least one permission");
+  }
+  return withSessionAndDb.use(
     oo.spec(
       os.$context<Context>().middleware(({ context, next }) => {
         const { session, db } = context;
@@ -338,6 +342,7 @@ export const permissionProcedure = (
       }),
     ),
   );
+};
 
 /**
  * Admin endpoints that must not be driven by an API key, e.g. minting or
