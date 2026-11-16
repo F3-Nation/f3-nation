@@ -67,6 +67,16 @@ expect "unquoted # on a continuation line fails" 1 $'---\nname: demo\ndescriptio
 expect "unquoted colon-space on a continuation line fails" 1 $'---\nname: demo\ndescription: Use\n  when: asked.\n---' 'unquoted ": "'
 expect "comment-only description fails" 1 $'---\nname: demo\ndescription: # TODO\n---' 'description is missing'
 expect "empty block scalar description fails" 1 $'---\nname: demo\ndescription: |\n---' 'description is missing'
+expect "missing name fails" 1 $'---\ndescription: Use when asked.\n---' 'name must be "demo"'
+expect "unquoted colon-space in another field fails" 1 $'---\nname: demo\ndescription: Use when asked.\nargument-hint: issue: number\n---' 'argument-hint has an unquoted ": "'
+expect "unclosed frontmatter fails" 1 $'---\nname: demo\ndescription: Use when asked.' 'no frontmatter block'
+expect "apostrophe inside single quotes fails" 1 $'---\nname: demo\ndescription: \'Use when it\'s asked\'\n---' 'after its closing'
+expect "text after a closing double quote fails" 1 $'---\nname: demo\ndescription: "Use" # when asked to "demo"\n---' 'after its closing'
+expect "quoted value on the next line passes" 0 $'---\nname: demo\ndescription:\n  \'Use for triage #123: all fields.\'\n---'
+expect "backtick-led plain value fails" 1 $'---\nname: demo\ndescription: `pnpm lint` helper.\n---' 'YAML reads as syntax'
+expect "bracket-led plain value fails" 1 $'---\nname: demo\ndescription: [Draft] Use when asked.\n---' 'YAML reads as syntax'
+expect "leading-indicator value prints the quoting hint" 1 $'---\nname: demo\ndescription: *Use* when asked.\n---' "$hint"
+expect "key with no space after the colon fails" 1 $'---\nname: demo\ndescription:Use when asked.\n---' 'description is missing'
 
 # Runs the checker on a root that make_fixture has not filled in.
 expect_root() {
@@ -88,6 +98,10 @@ expect_root "missing skills directory fails" 'directory is missing' "$no_skills_
 empty_skills_dir="$(mktemp -d "$tmp_dir/case.XXXXXX")" || exit 1
 mkdir -p "$empty_skills_dir/.agents/skills"
 expect_root "empty skills directory fails" 'no skill directories' "$empty_skills_dir"
+no_skill_file_dir="$(mktemp -d "$tmp_dir/case.XXXXXX")" || exit 1
+mkdir -p "$no_skill_file_dir/.agents/skills/aaa" "$no_skill_file_dir/.agents/skills/zzz"
+expect_root "first skill without SKILL.md fails" 'skills/aaa/SKILL.md: file is missing' "$no_skill_file_dir"
+expect_root "last skill without SKILL.md fails" 'skills/zzz/SKILL.md: file is missing' "$no_skill_file_dir"
 
 if [[ "$failures" -ne 0 ]]; then
   echo "$failures check-skill-frontmatter test(s) failed"
