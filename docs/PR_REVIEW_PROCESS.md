@@ -116,6 +116,10 @@ Because every run has its own worktree, you can review or test several PRs at th
 
 When the PR's author is a codeowner, their own skill runs are a self-check and don't move the PR. It leaves the inline-review stage when a different codeowner runs either skill, and the local-test stage when a different codeowner runs `pr-local-test` or adds the `local test: not needed` label. A different codeowner running both catches more, because an author running both with their own assistant can carry the same blind spots through both. The final codeowner review can still catch what they miss, but by then it costs another round of fixes and often a re-test.
 
+### Keeping the skills current
+
+Skills go stale quietly when the code, the tools or the AI model change. On the first of each month a workflow ([`skill-upkeep-reminder.yml`](../.github/workflows/skill-upkeep-reminder.yml)) opens a "Monthly agent skill check" issue that lists every skill in [`.agents/skills/`](../.agents/skills/), oldest change first. A codeowner runs the [`pr-review-inline` benchmark](../.agents/skills/pr-review-inline/benchmark/README.md) on the model codeowners currently review with and pastes the results table into the issue; any other skill gets one real run and a fix for anything out of date. Close the issue when the month's checks are done. If it's still open at the next run, the workflow refreshes its list and comments instead of opening another. Run the benchmark sooner, without waiting for the issue, when codeowners switch to a new model.
+
 ## After the local test
 
 When `pr-local-test` recommends approval, the PR goes to a codeowner's final review. When a codeowner decides a PR doesn't need a local test, they add the **`local test: not needed`** label, which moves it to final review the same way. The label only counts when a codeowner other than the PR's author adds it.
