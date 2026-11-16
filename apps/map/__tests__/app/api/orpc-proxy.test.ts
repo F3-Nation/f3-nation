@@ -397,7 +397,9 @@ describe("oRPC proxy route", () => {
 
     const response = await POST(request);
 
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe(
+      "no-store, no-transform",
+    );
   });
 
   it("also sets Cache-Control: no-store on a public response", async () => {
@@ -406,6 +408,11 @@ describe("oRPC proxy route", () => {
     // `onlyMine` for a signed-in editor -- a shared cache keyed on URL alone
     // can't tell that apart from the anonymous response for the same
     // path/query, so every response is uncached, not just SIGNED_IN_ONLY_PATHS.
+    fetchSpy.mockResolvedValueOnce(
+      new Response('{"ok":true}', {
+        headers: { "content-type": "application/json" },
+      }),
+    );
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
@@ -444,111 +451,63 @@ describe("oRPC proxy route", () => {
     },
   );
 
-  it("gzips an upstream-gzipped body exactly once when the caller accepts gzip", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response('{"ok":true}', {
-        headers: {
-          "content-type": "application/json",
-          "content-encoding": "gzip",
-        },
-      }),
-    );
-    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
-
-    const response = await GET(
-      new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
-        headers: { "accept-encoding": "gzip" },
-      }),
-    );
-
-    expect(response.headers.get("content-encoding")).toBe("gzip");
-    const text = await new Response(
-      response.body!.pipeThrough(new DecompressionStream("gzip")),
-    ).text();
-    expect(JSON.parse(text)).toEqual({ ok: true });
-  });
-
+  // Since Next.js 16.4.5 a route handler's Content-Encoding is dropped on the
+  // way out, so the proxy must never encode a body itself (issue 1704).
+  // Next.js's server compresses instead, unless Cache-Control says
+  // no-transform.
   describe("compression", () => {
     const json = JSON.stringify({
       json: Array.from({ length: 500 }, (_, i) => [i, "AO name", null]),
     });
-    const upstream = (contentType = "application/json") =>
+    const upstream = (
+      contentType = "application/json",
+      extra: Record<string, string> = {},
+    ) =>
       fetchSpy.mockResolvedValueOnce(
-        new Response(json, { headers: { "content-type": contentType } }),
+        new Response(json, {
+          headers: { "content-type": contentType, ...extra },
+        }),
       );
-    const call = async (acceptEncoding?: string) => {
+    const call = async (path: string, acceptEncoding = "gzip, deflate, br") => {
       const { POST } =
         await import("../../../src/app/api/orpc/[[...rest]]/route");
       return POST(
-        new NextRequest(
-          "http://localhost:3000/api/orpc/v1/map/location/eventsAndLocations",
-          {
-            method: "POST",
-            body: "{}",
-            headers: acceptEncoding
-              ? { "accept-encoding": acceptEncoding }
-              : {},
-          },
-        ),
+        new NextRequest(`http://localhost:3000/api/orpc${path}`, {
+          method: "POST",
+          body: "{}",
+          headers: { "accept-encoding": acceptEncoding },
+        }),
       );
     };
-    const gunzip = async (res: Response) =>
-      new Response(
-        res.body!.pipeThrough(new DecompressionStream("gzip")),
-      ).text();
 
-    it("gzips a JSON response when the caller accepts gzip", async () => {
+    it("sends public JSON plain and leaves it compressible by Next.js", async () => {
       upstream();
-      const res = await call("gzip, deflate, br");
-      expect(res.headers.get("content-encoding")).toBe("gzip");
-      expect(res.headers.get("vary")).toMatch(/accept-encoding/i);
-      expect(await gunzip(res)).toBe(json);
+      const res = await call("/v1/map/location/eventsAndLocations");
+      expect(res.headers.get("content-encoding")).toBeNull();
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(await res.text()).toBe(json);
     });
 
-    it("never compresses a signed-in-only response", async () => {
-      upstream();
-      const { POST } =
-        await import("../../../src/app/api/orpc/[[...rest]]/route");
-      const res = await POST(
-        new NextRequest(
-          "http://localhost:3000/api/orpc/v1/request/canEditRegions",
-          {
-            method: "POST",
-            body: "{}",
-            headers: { "accept-encoding": "gzip" },
-          },
-        ),
-      );
+    it("sends a body fetch() already decoded plain, without its upstream encoding", async () => {
+      upstream("application/json", { "content-encoding": "gzip" });
+      const res = await call("/v1/map/location/eventsAndLocations");
       expect(res.headers.get("content-encoding")).toBeNull();
       expect(await res.text()).toBe(json);
     });
 
-    it("passes the body through when the caller doesn't accept gzip", async () => {
+    it("marks a signed-in-only response no-transform so it stays uncompressed", async () => {
       upstream();
-      const res = await call();
+      const res = await call("/v1/request/canEditRegions");
       expect(res.headers.get("content-encoding")).toBeNull();
+      expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
       expect(await res.text()).toBe(json);
     });
 
-    it("honors an explicit gzip;q=0, even with a wildcard", async () => {
-      upstream();
-      const res = await call("gzip;q=0, br");
-      expect(res.headers.get("content-encoding")).toBeNull();
-      upstream();
-      const wild = await call("gzip;q=0, *;q=1");
-      expect(wild.headers.get("content-encoding")).toBeNull();
-    });
-
-    it("accepts gzip through a wildcard when gzip isn't listed", async () => {
-      upstream();
-      const res = await call("br;q=1, *;q=0.5");
-      expect(res.headers.get("content-encoding")).toBe("gzip");
-    });
-
-    it("leaves non-JSON bodies (e.g. event streams) uncompressed", async () => {
+    it("marks non-JSON bodies (e.g. event streams) no-transform", async () => {
       upstream("text/event-stream");
-      const res = await call("gzip");
+      const res = await call("/v1/map/location/eventsAndLocations");
       expect(res.headers.get("content-encoding")).toBeNull();
+      expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     });
   });
 });
