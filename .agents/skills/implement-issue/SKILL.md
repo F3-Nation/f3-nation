@@ -1,6 +1,6 @@
 ---
 name: implement-issue
-description: Use when the user gives a GitHub issue number or URL to build ("implement issue 42", "work on #42", "pick up this issue") — takes the issue from pre-flight checks through codebase exploration, an approved approach, test-first implementation, self-review and a draft PR. Not for reviewing someone else's PR (pr-review-inline) or answering review feedback (address-pr-comments).
+description: Use when the user gives a GitHub issue number or URL to build ("implement issue 42", "work on #42", "pick up this issue") — takes the issue from pre-flight checks through codebase exploration, an approved approach, test-first implementation, a draft PR and a self-review of it. Not for reviewing someone else's PR (pr-review-inline) or answering review feedback (address-pr-comments).
 compatibility: macOS, Linux, or WSL 2 with bash, git and gh (authenticated). Works in any agent; steps that use subagents say what to do without them.
 ---
 
@@ -184,7 +184,7 @@ While building:
 - If the approved approach turns out not to work, stop and go back to Gate 2 with what you
   found. Don't redesign silently.
 
-## Step 6: Verify and review your own work
+## Step 6: Verify
 
 1. Run `pnpm ci:local` in the worktree. If it is too slow to repeat, run at least
    `pnpm lint:fix`, `pnpm format:fix`, `pnpm typecheck`, `pnpm lint:unused` and the affected
@@ -194,15 +194,10 @@ While building:
 2. For a change a user can see or call, run it. Follow [`verify`](../verify/SKILL.md) and keep
    the evidence (response body, screenshot) for the PR.
 3. Commit in Conventional Commits form, `type(scope): subject`, with a scope from
-   `scope-enum` in [`commitlint.config.mjs`](../../../commitlint.config.mjs). The review below
-   reads committed changes only.
-4. Review the branch with [`code-review`](../code-review/SKILL.md) against `origin/main`. With
-   subagents, run it in one with a fresh context, giving it the diff and the issue but not
-   your reasoning, so it isn't anchored on your solution.
-5. Check the diff against the issue, line by line: every requirement and acceptance criterion
-   is met, and nothing is in the diff that the issue didn't ask for.
-6. Fix what the review found, in a new commit, and re-run the checks the fix touches. Tell the
-   user about any finding you chose not to fix, and why.
+   `scope-enum` in [`commitlint.config.mjs`](../../../commitlint.config.mjs).
+4. Check the diff (`git diff origin/main...HEAD`) against the issue, line by line: every
+   requirement and acceptance criterion is met, and nothing is in the diff that the issue
+   didn't ask for. Fix any gap before going on.
 
 ## Step 7: Draft pull request
 
@@ -215,7 +210,21 @@ wait for an explicit go-ahead before pushing or posting.
    changes. Title in Conventional Commits form.
 3. End the body with the signature line from
    [Writing to GitHub](../../../AGENTS.md#writing-to-github).
-4. Push the branch and open the PR with `gh pr create --draft`. The author marks it ready.
+4. Push the branch and open the PR with `gh pr create --draft`.
+
+## Step 8: Review the draft
+
+A draft PR is not picked up by the hosted review bots, so this pass costs none of their
+shared quota and nobody else sees it.
+
+1. Run [`pr-review-inline`](../pr-review-inline/SKILL.md) on the new PR with `--dry-run`. It
+   drafts its findings and posts nothing. With subagents, run it in one with a fresh context,
+   giving it the PR number but not your reasoning, so it isn't anchored on your solution.
+2. Fix what it found, in a new commit, re-run the checks the fix touches, and push. Tell the
+   user about any finding you chose not to fix, and why.
+3. Update the PR body if the fixes changed what it says.
+
+The user marks the PR ready for review; never do that for them.
 
 Then tell the user:
 
