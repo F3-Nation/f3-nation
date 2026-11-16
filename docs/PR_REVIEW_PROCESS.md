@@ -10,7 +10,7 @@ Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the rev
 flowchart TD
     A["1. Author opens the PR as a Draft"] --> B["2. Author marks it 'Ready for review'"]
     B --> C["3. AI bots review automatically"]
-    C --> D["4. A codeowner runs pr-review-inline<br/>with --deep unless the PR is very minor"]
+    C --> D["4. A codeowner runs pr-review-inline"]
     D --> E["5. Author addresses all feedback<br/>(reply to each thread, then resolve it)"]
     E --> F{"All threads resolved?"}
     F -- "No: not yet addressed" --> E
@@ -29,7 +29,7 @@ flowchart TD
     J -- Yes --> K["Codeowner approves and merges"]
 ```
 
-`--deep` makes `pr-review-inline` add more reviewers, each focused on one aspect of the code. It takes longer and uses more tokens, so a very minor PR can skip it.
+`pr-review-inline` gives the PR to several reviewers, each focused on one aspect of the code: correctness, access and data exposure, failure handling, tests, and whether the comments and docs are true. The reviewer prompts ship with the skill, so the review is the same whichever assistant runs it. `--shallow` uses a single reviewer instead; it is for a very minor PR, and the skill ignores it on a PR from a fork or an outside contributor.
 
 On a PR's first pass, the answer to "Codeowner wants a local test?" is normally Yes. No is for a small PR (see [Small PRs](#small-prs)), or for fixes after a local test that a reviewer can confirm by reading the diff.
 
@@ -76,11 +76,10 @@ Running either skill takes one command and a PR number. Both live in [`.agents/s
 - **Install the tools each skill needs.** Each skill checks them at the start and lists anything missing in one message. The lists live in the skills themselves: the Requirements table in [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md#requirements), and the `compatibility` line at the top of [`pr-local-test`](../.agents/skills/pr-local-test/SKILL.md), which also needs Docker running. On Windows, work inside WSL 2, as [AGENTS.md](../AGENTS.md#environment-setup) describes for the whole repo.
 - **Add the recommended add-ons.** Each skill works without them and falls back on its own, but runs better with them:
 
-| Add-on                                                               | Helps                     | What you get                                                                                                                                                                             | Claude Code install                                         |
-| -------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `pr-review-toolkit` plugin                                           | `pr-review-inline --deep` | Specialist reviewers for `--deep`. Claude Code only.                                                                                                                                     | `/plugin install pr-review-toolkit@claude-plugins-official` |
-| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test`           | The agent clicks through the running apps itself and takes screenshots, instead of scripting each browser check ([details](../.agents/skills/pr-local-test/reference.md#browser-checks)) | `/plugin install playwright@claude-plugins-official`        |
-| [Superpowers](https://github.com/obra/superpowers)                   | `pr-review-inline`        | Least important: the skill ships its own copy of the reviewer brief this provides, and results are the same either way                                                                   | `/plugin install superpowers@claude-plugins-official`       |
+| Add-on                                                               | Helps                 | What you get                                                                                                                                                                             | Claude Code install                                   |
+| -------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test`       | The agent clicks through the running apps itself and takes screenshots, instead of scripting each browser check ([details](../.agents/skills/pr-local-test/reference.md#browser-checks)) | `/plugin install playwright@claude-plugins-official`  |
+| [Superpowers](https://github.com/obra/superpowers)                   | `address-pr-comments` | Least important: adds its guidance for weighing review feedback; the skill carries its own otherwise                                                                                     | `/plugin install superpowers@claude-plugins-official` |
 
 For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @playwright/mcp@latest`, and follow the Codex steps in the Superpowers README.
 
@@ -90,14 +89,14 @@ For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @
 2. **Type the skill with the PR number.** For PR 1234:
 
    ```text
-   /pr-review-inline 1234 --deep
+   /pr-review-inline 1234
    ```
 
    ```text
    /pr-local-test 1234
    ```
 
-   Leave off `--deep` only for a very minor PR; it adds focused reviewers at the cost of time and tokens. In Codex, start the command with `$` instead of `/`, or ask in plain words: "Run the pr-review-inline skill on PR 1234 with --deep."
+   Add `--shallow` only for a very minor PR; the full set of reviewers costs more time and tokens. In Codex, start the command with `$` instead of `/`, or ask in plain words: "Run the pr-review-inline skill on PR 1234."
 
 3. **Let it work.** `pr-review-inline` posts its findings as line-level comments on the PR. `pr-local-test` shows you its results and a draft review, and posts only after you tell it to.
 
@@ -162,4 +161,4 @@ The label marks the end of the bot feedback, not readiness for a codeowner's fin
 
 ## Small PRs
 
-A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline` without `--deep` and no local test, and another might be approved and merged directly. To skip the local test, a codeowner other than the PR's author adds the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.
+A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline --shallow` and no local test, and another might be approved and merged directly. To skip the local test, a codeowner other than the PR's author adds the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.
