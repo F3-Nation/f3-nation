@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# Regression tests for scripts/pr-triage.sh: one synthetic PR per stage, skill runs detected
-# from codeowners' markers only (including a clean review's "no issues" comment) and never from
-# the PR author's own runs, the cutoff
-# for shape-based detection of runs from before the markers, held local tests and the
-# `local test: not needed` label, the viewer's own PRs, the --json fields,
-# and that a hostile PR title can't break out of the HTML board's data block.
+# Regression tests for scripts/pr-triage.sh, run against synthetic PR fixtures and a fake gh.
 # Run directly: bash scripts/pr-triage.test.sh
 set -uo pipefail
 
@@ -223,7 +218,20 @@ jq -n '
     (pr(66; "codeowner author labels their own PR not needed"; "Luis") | .reviews.nodes = [inline_review]
       | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "luis")),
     (pr(67; "another codeowner labels a codeowner'"'"'s PR not needed"; "Luis") | .reviews.nodes = [inline_review]
-      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "andy"))
+      | add_label_by("local test: not needed"; "2026-10-22T03:00:00Z"; "andy")),
+    (pr(68; "author replied in the viewer'"'"'s thread"; "pax") | .reviews.nodes = [inline_review]
+      | .reviewThreads.nodes = [replied("Viewer"; "pax"; "2026-10-22T05:00:00Z")]),
+    (pr(69; "author replied to a bot, viewer assigned"; "pax") | .reviews.nodes = [inline_review]
+      | .assignees = {nodes: [{login: "viewer"}]}
+      | .reviewThreads.nodes = [replied("coderabbitai"; "pax"; "2026-10-22T05:00:00Z")]),
+    (pr(70; "author replied to a codeowner, viewer assigned"; "pax") | .reviews.nodes = [inline_review]
+      | .assignees = {nodes: [{login: "viewer"}]}
+      | .reviewThreads.nodes = [replied("andy"; "pax"; "2026-10-22T05:00:00Z")]),
+    (pr(71; "open threads, viewer assigned"; "someone") | .reviews.nodes = [inline_review]
+      | .assignees = {nodes: [{login: "viewer"}]} | .reviewThreads.nodes = [thread(false; "andy")]),
+    (pr(72; "author replied in the viewer'"'"'s thread, another codeowner assigned"; "pax")
+      | .reviews.nodes = [inline_review] | .assignees = {nodes: [{login: "andy"}]}
+      | .reviewThreads.nodes = [replied("viewer"; "pax"; "2026-10-22T05:00:00Z")])
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -329,6 +337,26 @@ assert_eq "a PR assigned only to others isn't marked assigned to the viewer" "fa
   "$(board_json | jq -r '.prs[] | select(.number == 7) | .assignedToMe')"
 assert_eq "an unassigned PR isn't marked assigned to the viewer" "false" \
   "$(board_json | jq -r '.prs[] | select(.number == 5) | .assignedToMe')"
+claimed_of() { board_json | jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .claimedByOther'; }
+assert_eq "a PR assigned to others than the author is claimed by someone else" "true" "$(claimed_of 7)"
+assert_eq "...even when the viewer is assigned too" "true" "$(claimed_of 34)"
+assert_eq "an author assigned to their own PR, in any case, hasn't been claimed by someone else" "false" \
+  "$(claimed_of 46)"
+assert_eq "an unassigned PR isn't claimed by someone else" "false" "$(claimed_of 5)"
+turn_of() { board_json | jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .viewersTurn'; }
+assert_eq "the viewer's own PR is always theirs to move" "true" "$(turn_of 10)"
+assert_eq "an unassigned PR needing a skill run can be the viewer's" "true" "$(turn_of 5)"
+assert_eq "a PR someone else has taken on isn't the viewer's" "false" "$(turn_of 7)"
+assert_eq "a PR the viewer shares with someone else can be theirs" "true" "$(turn_of 34)"
+assert_eq "a PR only its author is assigned to can be the viewer's" "true" "$(turn_of 46)"
+assert_eq "open threads assigned to the viewer wait on the author, not them" "false" "$(turn_of 71)"
+assert_eq "an author's reply in the viewer's thread, in any case, is theirs to answer" "true" "$(turn_of 68)"
+assert_eq "an author's reply to a bot falls to the assigned viewer" "true" "$(turn_of 69)"
+assert_eq "an author's reply to another codeowner isn't the assigned viewer's" "false" "$(turn_of 70)"
+assert_eq "an author's reply in the viewer's thread is theirs even when someone else is assigned" "true" \
+  "$(turn_of 72)"
+assert_eq "the board has a filter for PRs that are the viewer's responsibility" "1" \
+  "$(grep -c '\["responsible", "My responsibility", (pr) => pr.viewersTurn\]' "$tmp_dir/board.html")"
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
 assert_eq "the hostile title survives escaped" "</script><img src=x onerror=alert(1)>" \
   "$(board_json | jq -r '.prs[] | select(.number == 13) | .title')"
@@ -512,6 +540,223 @@ assert_eq "the skill's own later ledger line doesn't clear it" "LOCAL" \
   "$(bucket_with_ledger "$(printf 'acme/repo\t29\tpr-local-test\tsha\t2026-10-22T03:00:00Z')")"
 assert_eq "a mark from before the blocked report doesn't clear it" "LOCAL" \
   "$(bucket_with_ledger "$(printf 'acme/repo\t29\tpr-local-test\tsha\t2026-10-22T01:00:00Z\tmark')")"
+
+# --with-advisories: a fake gh answers the advisory list as $ADV_MODE says, and each fork's PRs.
+adv_dir="$tmp_dir/adv"
+mkdir -p "$adv_dir/bin"
+fork_a="acme/repo-ghsa-aaaa-bbbb-cccc" fork_b="acme/repo-ghsa-dddd-eeee-ffff"
+fork_board() {
+  jq --arg url "https://github.com/$1/pull/" --argjson numbers "$2" \
+    '.data.repository.pullRequests.nodes |= [.[] | select(.number | IN($numbers[]))
+      | .url = $url + (.number | tostring)]' "$tmp_dir/fixture.json"
+}
+fork_board "$fork_a" '[5, 8]' >"$adv_dir/fork-a.json"
+fork_board "$fork_b" '[5]' >"$adv_dir/fork-b.json"
+echo '{"data":null,"errors":[{"message":"Could not resolve to a Repository"}]}' >"$adv_dir/fork-c.json"
+fork_board acme/repo-ghsa-vvvv-wwww-xxxx '[]' >"$adv_dir/fork-d.json"
+# A fork whose only open PR is a draft.
+fork_board acme/repo-ghsa-yyyy-zzzz-2222 '[1]' >"$adv_dir/fork-e.json"
+advisory() { jq -nc --arg id "$1" --arg severity "$2" --arg fork "$3" --arg at "$4" --arg summary "${5:-Summary of $1}" \
+  '{ghsa_id: $id, severity: (if $severity == "" then null else $severity end), created_at: $at,
+    summary: $summary, private_fork: (if $fork == "" then null else {full_name: $fork} end)}'; }
+{
+  echo "["
+  advisory GHSA-dddd-eeee-ffff critical "$fork_b" 2026-10-02T00:00:00Z; echo ","
+  advisory GHSA-aaaa-bbbb-cccc high "$fork_a" 2026-10-01T00:00:00Z; echo ","
+  # Read again in the draft state with a fork: the later record wins.
+  advisory GHSA-gggg-hhhh-jjjj low "" 2026-10-03T00:00:00Z
+  echo "]"
+} >"$adv_dir/triage.json"
+{
+  echo "["
+  # Read again in the second state: it is kept once.
+  advisory GHSA-aaaa-bbbb-cccc high "$fork_a" 2026-10-01T00:00:00Z; echo ","
+  advisory GHSA-gggg-hhhh-jjjj low acme/repo-ghsa-gggg-hhhh-jjjj 2026-10-03T00:00:00Z; echo ","
+  # A fork not named <repo>-<its GHSA ID>, a malformed ID and an advisory without a fork.
+  advisory GHSA-kkkk-mmmm-nnnn high evil/repo-ghsa-kkkk-mmmm-nnnn 2026-10-04T00:00:00Z; echo ","
+  advisory GHSA-pppp-qqqq-rrrr high acme/repo-ghsa-kkkk-mmmm-nnnn 2026-10-04T00:00:00Z; echo ","
+  advisory GHSA-bad high acme/repo-ghsa-bad 2026-10-04T00:00:00Z; echo ","
+  advisory GHSA-ssss-tttt-uuuu medium "" 2026-10-05T00:00:00Z \
+    "$(printf '</script><b>x</b>\nsecond\037\302\233line')"; echo ","
+  advisory GHSA-vvvv-wwww-xxxx low acme/repo-ghsa-vvvv-wwww-xxxx 2026-10-06T00:00:00Z; echo ","
+  advisory GHSA-yyyy-zzzz-2222 high acme/repo-ghsa-yyyy-zzzz-2222 2026-10-07T00:00:00Z
+  echo "]"
+} >"$adv_dir/draft.json"
+cat >"$adv_dir/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+[[ "$*" == "auth status" ]] && exit 0
+if [[ "$1 $2" == "api --paginate" ]]; then
+  case "$ADV_MODE" in
+    notfound) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+    servererror) echo "gh: Server Error (HTTP 502)" >&2; exit 1 ;;
+    forbidden) echo '{"message":"Resource not accessible by integration"}'
+      echo "gh: Resource not accessible by integration (HTTP 403)" >&2; exit 1 ;;
+    empty) echo '[]' ;;
+    unexpected) echo '{"message":"not a list"}' ;;
+    list) case "$3" in
+        *state=triage*) cat "$ADV_DIR/triage.json" ;;
+        *) cat "$ADV_DIR/draft.json" ;;
+      esac ;;
+  esac
+  exit 0
+fi
+case "$*" in
+  *name=repo-ghsa-aaaa-bbbb-cccc*) cat "$ADV_DIR/fork-a.json" ;;
+  *name=repo-ghsa-dddd-eeee-ffff*) cat "$ADV_DIR/fork-b.json" ;;
+  *name=repo-ghsa-gggg-hhhh-jjjj*) cat "$ADV_DIR/fork-c.json" ;;
+  *name=repo-ghsa-vvvv-wwww-xxxx*) cat "$ADV_DIR/fork-d.json" ;;
+  *name=repo-ghsa-yyyy-zzzz-2222*) cat "$ADV_DIR/fork-e.json" ;;
+  *) echo "gh: unexpected call: $*" >&2; exit 1 ;;
+esac
+STUB
+chmod +x "$adv_dir/bin/gh"
+
+run_adv() {
+  local mode="$1"
+  shift
+  ADV_MODE="$mode" ADV_DIR="$adv_dir" PATH="$adv_dir/bin:$PATH" \
+    PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" \
+    PR_TRIAGE_LEDGER="${ADV_LEDGER:-$tmp_dir/no-ledger.tsv}" NO_COLOR=1 \
+    bash "$triage" -R acme/repo --with-advisories "$@"
+}
+
+# Anyone GitHub shows no advisories gets exactly the board they'd get without the flag.
+for mode in notfound forbidden empty; do
+  run_adv "$mode" >"$adv_dir/$mode.text" 2>"$adv_dir/$mode.err"
+  status=$?
+  run_adv "$mode" --json >"$adv_dir/$mode.json" 2>>"$adv_dir/$mode.err"
+  status=$((status + $?))
+  run_adv "$mode" --out "$adv_dir/$mode.html" --no-open >/dev/null 2>>"$adv_dir/$mode.err"
+  status=$((status + $?))
+  assert_eq "advisories $mode: every run exits 0" "0" "$status"
+  assert_eq "advisories $mode: nothing is said about it" "" "$(cat "$adv_dir/$mode.err")"
+  if cmp -s "$tmp_dir/text.out" "$adv_dir/$mode.text" && cmp -s "$tmp_dir/board.json" "$adv_dir/$mode.json" \
+    && cmp -s "$tmp_dir/board.html" "$adv_dir/$mode.html"; then same=yes; else same=no; fi
+  assert_eq "advisories $mode: text, JSON and HTML match a run without the flag" "yes" "$same"
+done
+
+# Any other failed read is said, on stderr and on the board.
+for mode in servererror unexpected; do
+  run_adv "$mode" --json >"$adv_dir/$mode.json" 2>"$adv_dir/$mode.err"
+  assert_eq "advisories $mode: the run exits 0" "0" "$?"
+  assert_eq "advisories $mode: stderr says the advisories couldn't be read" \
+    "pr-triage: Couldn't read the security advisories, so advisory PRs may be missing." "$(cat "$adv_dir/$mode.err")"
+  assert_eq "advisories $mode: the board notes it" \
+    '["Couldn'"'"'t read the security advisories, so advisory PRs may be missing."]' \
+    "$(jq -c .advisoryNotes "$adv_dir/$mode.json")"
+  assert_eq "advisories $mode: the repo's own PRs are unchanged" "$(jq -c .prs "$tmp_dir/board.json")" \
+    "$(jq -c .prs "$adv_dir/$mode.json")"
+done
+
+run_adv list --json >"$adv_dir/list.json" 2>"$adv_dir/list.err"
+status=$?
+assert_eq "advisories: the run exits 0" "0" "$status"
+assert_eq "advisories: nothing goes to stderr" "" "$(cat "$adv_dir/list.err")"
+adv() { jq -c "$1" "$adv_dir/list.json"; }
+assert_eq "advisories: only forks read are counted" "4" "$(adv .advisoryForks)"
+assert_eq "advisories: a fork that couldn't be read is noted" \
+  '["Couldn'"'"'t read 1 security advisory fork, so its PRs aren'"'"'t shown."]' "$(adv .advisoryNotes)"
+assert_eq "advisories: fix PRs come first, most severe first, each with its ref" \
+  '["GHSA-dddd-eeee-ffff #5","GHSA-aaaa-bbbb-cccc #5","GHSA-aaaa-bbbb-cccc #8","GHSA-yyyy-zzzz-2222 #1",null]' \
+  "$(adv '[.prs[0:5][] | .ref]')"
+assert_eq "advisories: those without a fix PR are listed, most severe first" \
+  '["GHSA-yyyy-zzzz-2222","GHSA-ssss-tttt-uuuu","GHSA-vvvv-wwww-xxxx"]' \
+  "$(adv '[.advisoriesWithoutPr[].ghsa]')"
+assert_eq "advisories: only a draft-only fork is marked as having a draft" "[true,false,false]" \
+  "$(adv '[.advisoriesWithoutPr[].draftPr]')"
+assert_eq "advisories: an advisory without a fix PR carries its details" \
+  '{"ghsa":"GHSA-vvvv-wwww-xxxx","severity":"low","summary":"Summary of GHSA-vvvv-wwww-xxxx","createdAt":"2026-10-06T00:00:00Z","url":"https://github.com/acme/repo/security/advisories/GHSA-vvvv-wwww-xxxx","draftPr":false}' \
+  "$(adv '.advisoriesWithoutPr[2]')"
+assert_eq "advisories: an advisory read in both states keeps its later record's fork" "[]" \
+  "$(adv '[.advisoriesWithoutPr[] | select(.ghsa == "GHSA-gggg-hhhh-jjjj")]')"
+assert_eq "advisories: a summary's control characters, C1 included, become spaces" "</script><b>x</b> second line" \
+  "$(adv '.advisoriesWithoutPr[1].summary' | jq -r .)"
+assert_eq "advisories: a fix PR carries its advisory" \
+  '{"ghsa":"GHSA-aaaa-bbbb-cccc","severity":"high","url":"https://github.com/acme/repo/security/advisories/GHSA-aaaa-bbbb-cccc"}' \
+  "$(adv '.prs[] | select(.ref == "GHSA-aaaa-bbbb-cccc #5") | .advisory')"
+assert_eq "advisories: a fix PR is triaged like any other" "MANUAL" \
+  "$(adv '.prs[] | select(.ref == "GHSA-aaaa-bbbb-cccc #8") | .bucket' | tr -d '"')"
+assert_eq "advisories: the repo's own PRs are unchanged" "$(jq -c .prs "$tmp_dir/board.json")" \
+  "$(adv '[.prs[] | select(.advisory == null)]')"
+
+# A draft-only fork whose PRs were cut off may have a fix PR past the cut, so it isn't listed.
+cut_dir="$tmp_dir/adv-cut"
+cp -R "$adv_dir" "$cut_dir"
+jq '.data.repository.pullRequests.pageInfo = {hasNextPage: true, endCursor: "c1"}' \
+  "$adv_dir/fork-e.json" >"$cut_dir/fork-e.json"
+cut_board=$(ADV_MODE=list ADV_DIR="$cut_dir" PATH="$adv_dir/bin:$PATH" PR_TRIAGE_MAX_PAGES=1 \
+  PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
+  bash "$triage" -R acme/repo --with-advisories --json 2>/dev/null)
+assert_eq "advisories: a cut-off fork isn't listed as without a fix PR" \
+  '["GHSA-ssss-tttt-uuuu","GHSA-vvvv-wwww-xxxx"]' "$(jq -c '[.advisoriesWithoutPr[].ghsa]' <<<"$cut_board")"
+assert_eq "advisories: a cut-off fork is noted" "1 security advisory fork has more open PRs: only the oldest are shown." \
+  "$(jq -r '.advisoryNotes[1]' <<<"$cut_board")"
+
+# An early exit waits for a slow fork read instead of leaving it writing into a removed work_dir.
+slow_dir="$tmp_dir/adv-slow"
+mkdir -p "$slow_dir/bin" "$slow_dir/tmp"
+echo '{"data":null}' >"$slow_dir/no-prs.json"
+cat >"$slow_dir/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "api --paginate" ]]; then
+  case "$3" in
+    *state=triage*) printf '[{"ghsa_id":"GHSA-aaaa-bbbb-cccc","private_fork":{"full_name":"acme/repo-ghsa-aaaa-bbbb-cccc"}}]' ;;
+    *) echo '[]' ;;
+  esac
+  exit 0
+fi
+sleep 1
+cat "$ADV_DIR/fork-a.json"
+: >"$SLOW_DONE"
+STUB
+chmod +x "$slow_dir/bin/gh"
+ADV_DIR="$adv_dir" SLOW_DONE="$slow_dir/fork-read" PATH="$slow_dir/bin:$PATH" TMPDIR="$slow_dir/tmp" \
+  PR_TRIAGE_FIXTURE="$slow_dir/no-prs.json" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
+  bash "$triage" -R acme/repo --with-advisories --json >/dev/null 2>&1
+assert_eq "advisories: an early exit waits for the fork reads" "yes" \
+  "$([[ -f "$slow_dir/fork-read" ]] && echo yes || echo no)"
+assert_eq "advisories: an early exit leaves no work directory behind" "" "$(ls -A "$slow_dir/tmp")"
+
+printf '%s\t5\tpr-review-inline\tsha\t2026-10-22T00:00:00Z\n' "$fork_a" >"$adv_dir/ledger.tsv"
+ADV_LEDGER="$adv_dir/ledger.tsv" run_adv list --json >"$adv_dir/ledger.json" 2>/dev/null
+ledger_buckets=$(jq -r '[.prs[] | select(.number == 5) | "\(.ref // "repo"):\(.bucket)"] | join(" ")' \
+  "$adv_dir/ledger.json")
+assert_eq "advisories: a ledger row counts only on its own fork's PR" \
+  "GHSA-dddd-eeee-ffff #5:INLINE GHSA-aaaa-bbbb-cccc #5:LOCAL repo:INLINE" "$ledger_buckets"
+
+run_adv list >"$adv_dir/list.text" 2>/dev/null
+assert_eq "advisories: the text header says how many forks are included" \
+  "PR triage for acme/repo (as @viewer; includes 4 security advisory forks)" "$(head -1 "$adv_dir/list.text")"
+assert_eq "advisories: the text lists advisories without a fix PR first" \
+  "Security advisories without a fix PR" "$(sed -n 4p "$adv_dir/list.text")"
+assert_eq "advisories: an advisory without a fix PR shows its severity, age and draft" \
+  "  GHSA-yyyy-zzzz-2222 [high] Summary of GHSA-yyyy-zzzz-2222|         opened 15d ago; draft fix PR open" \
+  "$(sed -n '5,6p' "$adv_dir/list.text" | paste -sd'|' -)"
+assert_eq "advisories: a hostile summary stays on one line" \
+  "  GHSA-ssss-tttt-uuuu [medium] </script><b>x</b> second line" "$(grep '^  GHSA-ssss' "$adv_dir/list.text")"
+assert_eq "advisories: the text lists the unread-fork note" \
+  "  Couldn't read 1 security advisory fork, so its PRs aren't shown." "$(sed -n 2p "$adv_dir/list.text")"
+assert_eq "advisories: a fix PR's card names its advisory and severity" \
+  "  #5 [GHSA-dddd-eeee-ffff · critical] fresh (someone)" \
+  "$(grep -m1 'GHSA-dddd' "$adv_dir/list.text")"
+
+# The board is readable only by you, even over an older board anyone could read.
+printf 'old\n' >"$adv_dir/list.html"
+chmod 644 "$adv_dir/list.html"
+# A second name for the older board's file, so -ef can tell whether the new board reused it.
+ln "$adv_dir/list.html" "$adv_dir/old-board"
+run_adv list --out "$adv_dir/list.html" --no-open >/dev/null 2>&1
+assert_eq "advisories: the HTML board replaces an older board's file instead of reusing it" "no" \
+  "$([[ "$adv_dir/list.html" -ef "$adv_dir/old-board" ]] && echo yes || echo no)"
+assert_eq "advisories: no temporary board is left beside it" "" \
+  "$(find "$adv_dir" -maxdepth 1 -name '.pr-triage.*')"
+assert_eq "advisories: the HTML board is readable only by its owner" "$adv_dir/list.html" \
+  "$(find "$adv_dir/list.html" -perm 0600)"
+assert_eq "advisories: the HTML board holds the fix PRs and the advisories without one" "4 3" \
+  "$(sed -n '/id="data">/,/<\/script>/p' "$adv_dir/list.html" | sed '1d;$d' \
+    | jq -r '"\([.prs[] | select(.advisory)] | length) \(.advisoriesWithoutPr | length)"')"
+assert_eq "advisories: a hostile summary can't close the HTML data block" "0" \
+  "$(grep -c '</script><b>' "$adv_dir/list.html")"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} pr-triage test(s) failed"
