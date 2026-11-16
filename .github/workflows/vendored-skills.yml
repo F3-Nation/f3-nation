@@ -1,0 +1,86 @@
+name: Vendored skills
+
+# Agent skills listed in skills-lock.json are copied from an upstream
+# repository. This opens one tracking issue when upstream has moved or a
+# vendored file was edited locally, so the update arrives as a reviewed diff
+# (`pnpm skills:update`) rather than silently.
+
+on:
+  schedule:
+    # Mondays, off the hour to dodge the scheduler's peak.
+    - cron: "23 12 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  check:
+    # Forks inherit the schedule trigger; the tracking issue belongs here only.
+    if: github.repository_owner == 'F3-Nation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # check out skills-lock.json and the vendored files
+      issues: write # open the tracking issue
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      # Runs without a token: the upstream repository is public, and the CLI
+      # is third-party code that has no need for this repo's credentials.
+      - name: Compare vendored skills with upstream
+        id: check
+        shell: bash
+        env:
+          DO_NOT_TRACK: "1"
+        run: |
+          set -o pipefail
+          status=0
+          pnpm skills:check 2>&1 | tee "$RUNNER_TEMP/skills-check.txt" || status=$?
+          # Fail closed: only the CLI's explicit all-clear counts as current.
+          if [ "$status" -eq 0 ] && grep -q "up to date" "$RUNNER_TEMP/skills-check.txt"; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a tracking issue
+        if: steps.check.outputs.current == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -o pipefail
+          title="Vendored agent skills are out of date"
+          existing="$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
+            --jq "[.[] | select(.title == \"$title\")] | length")"
+          if [ "$existing" -gt 0 ]; then
+            echo "Tracking issue already open."
+            exit 0
+          fi
+          {
+            echo "A skill listed in \`skills-lock.json\` no longer matches its upstream source, or one of its files was edited in this repo."
+            echo
+            echo "To fix: run \`pnpm skills:update\` on a new branch, read the diff (these files instruct coding agents), and open a PR. If a vendored file was edited locally, move that guidance into the skill that calls it first."
+            echo
+            echo "Check output: $RUN_URL"
+            echo
+            echo '```'
+            # Strip terminal colour codes from the CLI output.
+            sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' "$RUNNER_TEMP/skills-check.txt" | tail -n 40
+            echo '```'
+          } > "$RUNNER_TEMP/issue-body.md"
+          gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md"

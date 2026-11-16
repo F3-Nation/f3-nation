@@ -54,6 +54,17 @@ Code doesn't read `.agents/`, so a `SessionStart` hook in
 them into `.claude/skills/`, which is generated and gitignored — never commit
 anything under it.
 
+To implement a GitHub issue — from the issue number through to a draft pull
+request — follow
+[`.agents/skills/implement-issue/SKILL.md`](.agents/skills/implement-issue/SKILL.md).
+
+A skill listed in [`skills-lock.json`](skills-lock.json) is vendored from an
+upstream repository with the [`skills`](https://github.com/vercel-labs/skills)
+CLI. Never edit its files: put repo-specific guidance in the skill that calls
+it. Update one with `pnpm skills:update` and review the diff like any other
+dependency bump; the `vendored-skills` workflow opens an issue when upstream
+has moved.
+
 When asked for a **release plan** or a **Staging test plan** for the most
 recently merged release-please PR, follow
 [`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
