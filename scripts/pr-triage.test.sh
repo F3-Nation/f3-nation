@@ -470,6 +470,11 @@ DECISION_STUB_FAIL_ALL=1 run_decision >/dev/null
 status=$?
 assert_eq "a fallback that also fails exits non-zero" "true" "$([[ $status -ne 0 ]] && echo true || echo false)"
 
+# Sourcing the script returns with a hint instead of exiting the caller's shell.
+sourced_err=$(bash -c '. "$1" --json; echo "status=$?"' _ "$triage" 2>&1)
+assert_eq "sourcing the script returns 1 instead of exiting" "status=1" "$(echo "$sourced_err" | tail -1)"
+assert_eq "sourcing the script says how to run it" "1" "$(echo "$sourced_err" | grep -c 'not with')"
+
 # A response with no PR data reports GitHub's own errors.
 echo '{"data":null,"errors":[{"message":"boom"}]}' >"$tmp_dir/errors.json"
 err_out=$(PR_TRIAGE_FIXTURE="$tmp_dir/errors.json" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \

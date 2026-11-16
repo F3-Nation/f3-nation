@@ -38,6 +38,12 @@
 # waiting on /pr-local-test until a later run passes, a codeowner adds the `local test: not
 # needed` label after it, or you `mark` a run after it. A ❌ first waits on the author's push.
 # That label also stands in for a local test that never ran.
+
+# Sourced, every exit below would close the caller's shell and set -e would stay on in it.
+if (return 0 2>/dev/null); then
+  echo "pr-triage: run this with bash scripts/pr-triage.sh (or pnpm pr:triage), not with '.' or source" >&2
+  return 1
+fi
 set -euo pipefail
 
 LEDGER="${PR_TRIAGE_LEDGER:-${XDG_STATE_HOME:-$HOME/.local/state}/pr-triage/ledger.tsv}"
@@ -157,9 +163,13 @@ fragment reviews on PullRequestReviewConnection {
   }
 }'
 
-# GitHub can fail every read of one PR's reviewDecision while the rest of the query works.
+# GitHub can fail every read of one PR's reviewDecision while the rest of the query works,
+# so a page that keeps failing is fetched once more without it. The substitution only drops
+# the field with a space on each side; the check stops a reflowed query from turning that
+# last attempt into the same failing query.
 query_no_decision="${query/ reviewDecision / }"
-[[ "$query_no_decision" != "$query" ]] || die "the query no longer asks for reviewDecision"
+[[ "$query_no_decision" != "$query" ]] ||
+  die "the query must list reviewDecision with a space on each side, so a failing page can be retried without it"
 
 if [[ -n "${PR_TRIAGE_FIXTURE:-}" ]]; then
   data=$(cat "$PR_TRIAGE_FIXTURE")
@@ -180,8 +190,8 @@ else
       # A busy GitHub occasionally answers 502 or 504; one retry usually succeeds.
       sleep 2
       if ! gh api graphql "${args[@]}" >"$page_file"; then
-        # Without a review decision no PR on this page counts as approved, so an approved
-        # PR waits for approval instead of being shown as ready to merge.
+        # A board that asks for a second look at this page's approved PRs is better than no
+        # board; it never shows an unapproved PR as ready to merge.
         echo "pr-triage: GitHub failed page $page twice; retrying it without review decisions," \
           "so its approved PRs show as needing approval" >&2
         page_args "$query_no_decision"
