@@ -42,8 +42,8 @@
     "pr:triage:html": "bash scripts/pr-triage.sh --with-advisories --html",
     "python:install": "uv sync --all-packages",
     "reset-test-db": "turbo run reset-test-db",
-    "skills:check": "pnpm dlx skills@1.9.0 check",
-    "skills:update": "pnpm dlx skills@1.9.0 update -y -p",
+    "skills:check": "skills check",
+    "skills:update": "skills update -y -p",
     "test": "turbo test",
     "test:characterization": "turbo test:characterization",
     "typecheck": "turbo typecheck"
@@ -61,6 +61,7 @@
     "knip": "catalog:",
     "lefthook": "catalog:",
     "prettier": "catalog:",
+    "skills": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
