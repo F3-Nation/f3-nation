@@ -50,11 +50,14 @@ and records the user as the actor.**
 
 - The app sends its API key as it does today, plus an acting-user header
   carrying one F3 user id.
-- The app takes that id only from its own account link for the Slack user id
-  on the request it is handling. It never takes it from text a person typed
-  or from data that round-trips through the Slack client.
-- A request with no acting-user header is the app acting as itself. Nothing
-  about that path changes.
+- The app takes that id only from its own account link for the platform
+  account that the platform authenticated on the request it is handling (for
+  the Slackbot, the Slack user id). It never takes it from text a person
+  typed or from data that round-trips through the platform's client.
+- A request with no acting-user header is the app acting as itself. How it is
+  authorized does not change. How it is attributed in audit history does: the
+  app is recorded as `changed_via`, where today the source is null (see
+  "Calls with no acting user").
 
 ### Who may send it
 
@@ -103,7 +106,8 @@ becomes the one role mapped to an "act for a user" permission.
 
 - `changed_by` is the acting user.
 - `changed_via` is the calling app, taken from the key's own record and never
-  from a request header.
+  from a request header. Until service principals give the key an app
+  identity, there is nothing trusted to record, so `changed_via` stays empty.
 - A call with no acting user records no person. It must not fall back to the
   key's owner: that would name someone who did nothing.
 
