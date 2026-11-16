@@ -4,9 +4,12 @@
 // alone and a malformed one fails silently:
 // - the file opens with a `---` frontmatter block;
 // - `name` equals the skill's directory name;
-// - `description` is present and not empty;
+// - `description` is present and its YAML value is not empty (a value that is
+//   only a comment, or a block scalar with no text, is empty);
 // - no unquoted value contains ` #` (YAML starts a comment there and drops the
-//   rest of the line) or `: ` (YAML reads it as a nested mapping).
+//   rest of the line) or `: ` (YAML reads it as a nested mapping), on its own
+//   line or on an indented continuation line;
+// - `.agents/skills` exists and holds at least one skill.
 // Run from the repo root, or pass a root directory as the first argument.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -34,6 +37,42 @@ function unquote(value) {
   return value;
 }
 
+// Groups the frontmatter into fields: the text after `key:` and the indented
+// lines that continue it.
+function frontmatterFields(lines) {
+  const fields = [];
+  for (const line of lines) {
+    const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
+    if (match) {
+      fields.push({ key: match[1], first: match[2].trim(), rest: [] });
+    } else if (/^\s+\S/.test(line) && fields.length > 0) {
+      fields.at(-1).rest.push(line.trim());
+    }
+  }
+  return fields;
+}
+
+// Returns the value YAML gives the field, reporting the unquoted hazards.
+function fieldValue(rel, key, first, rest) {
+  if (/^[|>]/.test(first)) return rest.join(" ");
+  if (/^['"]/.test(first)) return unquote([first, ...rest].join(" "));
+  // A nested mapping or list, not a scalar.
+  if (first === "" && /^(-\s|[\w-]+:(\s|$))/.test(rest[0] ?? "")) return "";
+  const text = [first, ...rest].join(" ").trim();
+  if (text.startsWith("#")) return "";
+  if (/\s#/.test(text)) {
+    errors.push(
+      `${rel}: ${key} has an unquoted " #", so YAML drops the rest of the line as a comment`,
+    );
+  }
+  if (/:\s/.test(text)) {
+    errors.push(
+      `${rel}: ${key} has an unquoted ": ", which YAML reads as a nested mapping`,
+    );
+  }
+  return text;
+}
+
 function checkSkill(name) {
   const rel = `.agents/skills/${name}/SKILL.md`;
   const file = join(skillsDir, name, "SKILL.md");
@@ -47,23 +86,8 @@ function checkSkill(name) {
     return;
   }
   const fields = new Map();
-  for (const line of lines) {
-    const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
-    if (!match) continue;
-    const [, key, raw] = match;
-    const value = raw.trim();
-    const plain = value !== "" && !/^['">|]/.test(value);
-    if (plain && /\s#/.test(value)) {
-      errors.push(
-        `${rel}: ${key} has an unquoted " #", so YAML drops the rest of the line as a comment`,
-      );
-    }
-    if (plain && /:\s/.test(value)) {
-      errors.push(
-        `${rel}: ${key} has an unquoted ": ", which YAML reads as a nested mapping`,
-      );
-    }
-    fields.set(key, unquote(value));
+  for (const { key, first, rest } of frontmatterFields(lines)) {
+    fields.set(key, fieldValue(rel, key, first, rest));
   }
   if (fields.get("name") !== name) {
     errors.push(`${rel}: name must be "${name}", the skill's directory name`);
@@ -74,9 +98,15 @@ function checkSkill(name) {
 }
 
 if (existsSync(skillsDir)) {
-  for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
-    if (entry.isDirectory()) checkSkill(entry.name);
+  const skills = readdirSync(skillsDir, { withFileTypes: true }).filter(
+    (entry) => entry.isDirectory(),
+  );
+  if (skills.length === 0) {
+    errors.push(".agents/skills: no skill directories found");
   }
+  for (const skill of skills) checkSkill(skill.name);
+} else {
+  errors.push(".agents/skills: directory is missing");
 }
 
 if (errors.length > 0) {

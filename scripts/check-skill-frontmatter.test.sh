@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Regression tests for scripts/check-skill-frontmatter.mjs: that it passes
 # plain and quoted values (including an apostrophe and a " #" inside quotes),
-# and fails on an unquoted " #" or ": ", a name that differs from the
-# directory, a missing description, and a missing frontmatter block.
+# and fails on an unquoted " #" or ": " (also on a continuation line), a name
+# that differs from the directory, a missing or empty description (also a
+# comment-only value and an empty block scalar), a missing frontmatter block,
+# and a missing or empty skills directory.
 # Run directly: bash scripts/check-skill-frontmatter.test.sh
 set -uo pipefail
 
@@ -50,6 +52,34 @@ expect "name must match directory" 1 $'---\nname: other\ndescription: Use when a
 expect "missing description fails" 1 $'---\nname: demo\n---' 'description is missing'
 expect "empty description fails" 1 $'---\nname: demo\ndescription:\n---' 'description is missing'
 expect "missing frontmatter fails" 1 $'# Demo\n\nNo frontmatter.' 'no frontmatter block'
+expect "multiline plain value passes" 0 $'---\nname: demo\ndescription: Use when\n  asked to demo.\n---'
+expect "block scalar value passes" 0 $'---\nname: demo\ndescription: |\n  Use for "triage #123": all of it.\n---'
+expect "nested mapping field passes" 0 $'---\nname: demo\ndescription: Use when asked.\nmetadata:\n  author: someone\n---'
+expect "unquoted # on a continuation line fails" 1 $'---\nname: demo\ndescription: Use when\n  asked to triage #123.\n---' 'unquoted " #"'
+expect "unquoted colon-space on a continuation line fails" 1 $'---\nname: demo\ndescription: Use\n  when: asked.\n---' 'unquoted ": "'
+expect "comment-only description fails" 1 $'---\nname: demo\ndescription: # TODO\n---' 'description is missing'
+expect "empty block scalar description fails" 1 $'---\nname: demo\ndescription: |\n---' 'description is missing'
+
+# Runs the checker on a root that make_fixture has not filled in.
+expect_root() {
+  local description="$1" pattern="$2" dir="$3"
+  local output status
+  output="$(node "$checker" "$dir" 2>&1)"
+  status=$?
+  if [[ "$status" -ne 1 || "$output" != *"$pattern"* ]]; then
+    echo "FAIL: $description (exit $status, expected 1 with \"$pattern\")"
+    echo "$output"
+    failures=$((failures + 1))
+  else
+    echo "ok: $description"
+  fi
+}
+
+no_skills_dir="$(mktemp -d "$tmp_dir/case.XXXXXX")" || exit 1
+expect_root "missing skills directory fails" 'directory is missing' "$no_skills_dir"
+empty_skills_dir="$(mktemp -d "$tmp_dir/case.XXXXXX")" || exit 1
+mkdir -p "$empty_skills_dir/.agents/skills"
+expect_root "empty skills directory fails" 'no skill directories' "$empty_skills_dir"
 
 if [[ "$failures" -ne 0 ]]; then
   echo "$failures check-skill-frontmatter test(s) failed"
