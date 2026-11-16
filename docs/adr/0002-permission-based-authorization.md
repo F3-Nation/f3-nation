@@ -61,10 +61,13 @@ vestigial `Permissions` enums (`packages/shared/src/app/constants.ts`,
    _any_ org. They are door-checks only; they scope nothing.
 2. Org-scoped checks at call sites: `checkHasRoleOnOrg`
    (`packages/api/src/check-has-role-on-org.ts`) takes a role + org and walks
-   _up_ the org's ancestors in SQL, whatever the tree's depth (see
+   _up_ the org's ancestors in SQL without assuming a fixed set of tiers (see
    [ADR 0003](0003-depth-agnostic-org-hierarchy.md)), so a grant at Sector
-   level covers everything beneath it. `"admin"` is hard-coded as a superset
-   of any requested role.
+   level covers everything beneath it. The walk follows at most
+   `ORG_TREE_MAX_DEPTH` parent edges
+   (`packages/shared/src/app/org-hierarchy.ts`), far more than the hierarchy
+   has; a grant farther up than that does not match, so the check denies.
+   `"admin"` is hard-coded as a superset of any requested role.
 
 The endpoints behind the triggering incident still show the problem: sending
 or updating a Slack message through the API (`packages/api/src/router/slack.ts`)
@@ -79,9 +82,12 @@ requires the `admin` role on the target org, because no narrower role exists.
     `packages/auth/src/config.ts`). Grant changes do not reach a live cookie
     session until re-login or session update — the ComzQ grant above needed a
     re-login to take effect.
-  - Auth-service access tokens and API keys carry no roles; the API reads
-    their grants from the database on every request
-    (`packages/api/src/shared.ts`), so a grant change takes effect at once.
+  - Auth-service access tokens and API keys carry no roles; when one of them
+    authenticates a request, the API reads its grants from the database for
+    that request (`getSession` in `packages/api/src/shared.ts`), so a grant
+    change takes effect at once. `getSession` checks the session cookie
+    first, so a request that also carries a valid cookie is authorized with
+    the cookie session's roles instead.
 - `roles.name` is a Postgres enum (`user_role`). Adding any new role (e.g. `comz`)
   requires an `ALTER TYPE` migration, not just an insert.
 - API keys authenticate through the same role tables
