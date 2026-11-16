@@ -800,7 +800,7 @@ def main():  # pragma: no cover - CLI
     # After the session block, so the awards commit before the job reports failure.
     if failed_team_ids:
         print(f"Notifications skipped for {len(failed_team_ids)} workspace(s): {', '.join(failed_team_ids)}")
-        sys.exit(1)
+        raise RuntimeError(f"Achievement notifications skipped for {len(failed_team_ids)} workspace(s)")
 
 
 if __name__ == "__main__":  # pragma: no cover

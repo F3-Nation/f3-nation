@@ -80,6 +80,8 @@ def _import_new_team(team_id: str, store: FileInstallationStore, dry_run: bool) 
     file_bot = store.find_bot(enterprise_id=None, team_id=team_id)
     if file_bot is None:
         return "no_token"
+    if not file_bot.bot_token:
+        return "error:empty_token"
     if file_bot.team_id != team_id:
         return "team_mismatch"
     if dry_run:
@@ -108,6 +110,9 @@ def _import_team(team_id: str, token: Optional[str], store: FileInstallationStor
 
     file_bot = store.find_bot(enterprise_id=None, team_id=team_id)
     if file_bot is not None:
+        # Saving a file without a token would blank the workspace's working one.
+        if not file_bot.bot_token:
+            return "error:empty_token"
         if file_bot.team_id != team_id:
             return "team_mismatch"
         if dry_run:
