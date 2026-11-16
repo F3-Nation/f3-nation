@@ -56,7 +56,8 @@ and records the user as the actor.**
   typed or from data that round-trips through the platform's client.
 - A request with no acting-user header is the app acting as itself. How it is
   authorized does not change. How it is attributed in audit history does: the
-  app is recorded as `changed_via`, where today the source is null (see
+  app is recorded as `changed_via` once service principals give the key an app
+  identity. Until then the source is null and `changed_via` stays empty (see
   "Calls with no acting user").
 
 ### Who may send it
@@ -119,8 +120,9 @@ the procedure, so use of the grant can be reviewed.
 Scheduled jobs and other work the app does on its own (awarding
 achievements, filling in missing home regions, creating a user the first
 time someone appears in a workspace) send no acting-user header. They are
-authorized by the key's own role grants, as today, and audit history shows
-the app and no person.
+authorized by the key's own role grants, as today, and audit history records
+no person. It names the app once service principals give the key an app
+identity.
 
 ### Other first-party clients
 
