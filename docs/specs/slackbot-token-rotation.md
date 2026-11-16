@@ -169,7 +169,10 @@ refreshes earlier than its window.
 - **AC-13** — GIVEN a non-rotating row WHEN the conversion CLI runs for that
   team THEN it calls `oauth.v2.exchange` under the per-workspace lock and
   saves the access token, expiry and encrypted refresh token. GIVEN a row that
-  is already rotating THEN the CLI skips it. GIVEN an exchange failure THEN the
+  is already rotating THEN the CLI skips it. GIVEN a row whose `settings` JSON
+  still holds a `bot_token` THEN the CLI prints that team as
+  `blocked:settings_token`, makes no exchange call, leaves the row unchanged
+  and exits non-zero. GIVEN an exchange failure THEN the
   row is unchanged and the failure is printed by team ID. GIVEN Slack answers
   `token_already_exchanged`, or the exchange succeeds but the save still fails
   after retries, THEN the CLI prints that team as needing a reinstall, never
@@ -281,6 +284,8 @@ values, refresh tokens or key material, only the team ID.
 - `slack.token.refresh_failed`: team ID, path, Slack error code. Alert on any
   occurrence in the sweep.
 - `slack.token.lock_timeout`: team ID, path.
+- `slack.token.sweep_complete`: counts of workspaces refreshed, skipped and
+  failed by the hourly sweep; WARNING when any failed, INFO otherwise.
 - `slack.token.revoked_retry`: team ID, whether the retry succeeded.
 - `slack.token.decrypt_failed`: team ID.
 - `slack.token.admin_team_missing`: whether `ADMIN_TEAM_ID` is unset or has
