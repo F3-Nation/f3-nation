@@ -1,5 +1,6 @@
 import type {
   AoSearchResult,
+  LeaderEntry,
   LocationDetail,
   OrgChartItem,
   OrgDetail,
@@ -61,6 +62,16 @@ export async function fetchOrgById(id: number): Promise<OrgDetail> {
     ...detail,
     roles: detail.roles.filter((r) => VISIBLE_ROLES.has(r.title)),
   };
+}
+
+/** Every position and role holder at every non-AO org, in one request. */
+export async function fetchLeadership(): Promise<LeaderEntry[]> {
+  const data = await orgMapFetch<{ leaders: LeaderEntry[] }>(
+    "/org-chart/leadership",
+  );
+  return data.leaders.filter(
+    (l) => l.kind === "position" || VISIBLE_ROLES.has(l.title),
+  );
 }
 
 export async function fetchLocationById(

@@ -300,6 +300,104 @@ describe("Org Chart Router", () => {
     });
   });
 
+  describe("leadership", () => {
+    it("lists position and role holders at active non-AO orgs only", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      const inactive = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      if (!region || !ao || !inactive) {
+        throw new Error("Failed to create org fixtures");
+      }
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, inactive.id));
+
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-${uniqueId()}@example.com`,
+          f3Name: "Table Leader",
+          homeRegionId: region.id,
+        })
+        .returning();
+      const [position] = await db
+        .insert(schema.positions)
+        .values({ name: `Test Position ${uniqueId()}`, isActive: true })
+        .returning();
+      const [role] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+      if (!user || !position || !role) {
+        throw new Error("Failed to create user/position/role fixtures");
+      }
+      await db.insert(schema.positionsXOrgsXUsers).values([
+        { positionId: position.id, orgId: region.id, userId: user.id },
+        { positionId: position.id, orgId: ao.id, userId: user.id },
+        { positionId: position.id, orgId: inactive.id, userId: user.id },
+      ]);
+      await db
+        .insert(schema.rolesXUsersXOrg)
+        .values({ roleId: role.id, orgId: region.id, userId: user.id });
+
+      try {
+        const client = createTestClient();
+        const result = await client.orgChart.leadership();
+        const mine = result.leaders.filter((l) => l.userId === user.id);
+
+        expect(mine).toEqual(
+          expect.arrayContaining([
+            {
+              orgId: region.id,
+              kind: "position",
+              id: position.id,
+              title: position.name,
+              userId: user.id,
+              f3Name: "Table Leader",
+              avatarUrl: null,
+              homeRegionName: region.name,
+            },
+            {
+              orgId: region.id,
+              kind: "role",
+              id: role.id,
+              title: "admin",
+              userId: user.id,
+              f3Name: "Table Leader",
+              avatarUrl: null,
+              homeRegionName: region.name,
+            },
+          ]),
+        );
+        expect(mine).toHaveLength(2);
+      } finally {
+        await db
+          .delete(schema.positionsXOrgsXUsers)
+          .where(eq(schema.positionsXOrgsXUsers.positionId, position.id));
+        await db
+          .delete(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, user.id));
+        await db
+          .delete(schema.positions)
+          .where(eq(schema.positions.id, position.id));
+        await cleanup.user(user.id);
+      }
+    });
+  });
+
   describe("aos", () => {
     it("returns matching active AOs with their region and busiest location", async () => {
       const session = await createAdminSession();

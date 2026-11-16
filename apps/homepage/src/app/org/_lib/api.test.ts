@@ -3,6 +3,7 @@ import {
   fetchOrgChart,
   fetchOrgById,
   fetchLocationById,
+  fetchLeadership,
   searchAos,
 } from "./api";
 
@@ -240,5 +241,29 @@ describe("auth headers", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBeUndefined();
     expect(headers.client).toBe("https://apps.f3nation.com");
+  });
+});
+
+describe("fetchLeadership", () => {
+  it("keeps positions and only the visible roles", async () => {
+    const base = {
+      orgId: 7,
+      id: 1,
+      userId: 2,
+      f3Name: "Gator",
+      avatarUrl: null,
+    };
+    mockFetch(200, {
+      leaders: [
+        { ...base, kind: "position", title: "Nant'an" },
+        { ...base, kind: "role", title: "admin" },
+        { ...base, kind: "role", title: "password_manager" },
+      ],
+    });
+    const result = await fetchLeadership();
+    expect(result.map((l) => l.title)).toEqual(["Nant'an", "admin"]);
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toContain(
+      "/v1/org-chart/leadership",
+    );
   });
 });

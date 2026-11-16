@@ -9,7 +9,8 @@ interface SearchBoxProps {
   presentLayers: readonly OrgType[];
   onSelect: (org: Org) => void;
   getResults: (query: string) => Org[];
-  onSelectAo: (ao: AoSearchResult) => boolean;
+  /** Omit to search orgs only (no server-side AO search). */
+  onSelectAo?: (ao: AoSearchResult) => boolean;
   disabled?: boolean;
 }
 
@@ -36,7 +37,7 @@ export function SearchBox({
     results: aoResults,
     loading: aoLoading,
     error: aoError,
-  } = useAoSearch(open ? query : "");
+  } = useAoSearch(open && onSelectAo ? query : "");
 
   useEffect(() => {
     if (!query.trim()) {
@@ -98,7 +99,7 @@ export function SearchBox({
     justSelectedRef.current = true;
     setQuery(ao.name ?? "");
     setOpen(false);
-    setAoNavigateFailed(!onSelectAo(ao));
+    setAoNavigateFailed(!onSelectAo?.(ao));
   }
 
   const showAoSearchError =
@@ -117,7 +118,10 @@ export function SearchBox({
     .map((type) => orgTypeDisplay[type].pluralLabel);
   // AO search is server-side, independent of the navigable layers in the chart.
   const placeholder =
-    [...searchLabels, orgTypeDisplay.ao.pluralLabel].join(", ") + "…";
+    (onSelectAo
+      ? [...searchLabels, orgTypeDisplay.ao.pluralLabel]
+      : searchLabels
+    ).join(", ") + "…";
 
   return (
     <div ref={containerRef} className="relative">
