@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# Regression tests for scripts/check-skill-frontmatter.mjs: that it passes
-# plain and quoted values (including an apostrophe and a " #" inside quotes),
-# and fails on an unquoted " #" or ": " (also on a continuation line), a name
-# that differs from the directory, a missing or empty description (also a
-# comment-only value and an empty block scalar), a missing frontmatter block,
-# and a missing or empty skills directory.
+# Regression tests for scripts/check-skill-frontmatter.mjs: each case builds a
+# throwaway skills tree and asserts the checker's exit status and message.
 # Run directly: bash scripts/check-skill-frontmatter.test.sh
 set -uo pipefail
 
@@ -16,6 +12,8 @@ tmp_dir=""
 trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-skill-frontmatter-test.XXXXXX")" || exit 1
 
+hint="Wrap the value in quotes"
+
 # Writes one skill named "demo" whose SKILL.md is the given text.
 make_fixture() {
   local dir="$1" content="$2"
@@ -23,8 +21,9 @@ make_fixture() {
   printf '%s\n' "$content" >"$dir/.agents/skills/demo/SKILL.md"
 }
 
+# Optional 4th argument: text the output must contain; 5th: text it must not.
 expect() {
-  local description="$1" expected_status="$2" content="$3" pattern="${4:-}"
+  local description="$1" expected_status="$2" content="$3" pattern="${4:-}" absent="${5:-}"
   local dir output status
   dir="$(mktemp -d "$tmp_dir/case.XXXXXX")" || exit 1
   make_fixture "$dir" "$content"
@@ -38,6 +37,10 @@ expect() {
     echo "FAIL: $description (output lacks \"$pattern\")"
     echo "$output"
     failures=$((failures + 1))
+  elif [[ -n "$absent" && "$output" == *"$absent"* ]]; then
+    echo "FAIL: $description (output contains \"$absent\")"
+    echo "$output"
+    failures=$((failures + 1))
   else
     echo "ok: $description"
   fi
@@ -47,8 +50,13 @@ expect "plain values pass" 0 $'---\nname: demo\ndescription: Use when asked to d
 expect "quoted # and apostrophe pass" 0 $'---\nname: demo\ndescription: \'Use for "triage #123" on an issue\'\'s fields: all of them.\'\n---'
 expect "double-quoted value passes" 0 $'---\nname: demo\ndescription: "Post to #channel"\n---'
 expect "unquoted # fails" 1 $'---\nname: demo\ndescription: Use for "triage #123".\n---' 'unquoted " #"'
+expect "unquoted # prints the quoting hint" 1 $'---\nname: demo\ndescription: Use for "triage #123".\n---' "$hint"
 expect "unquoted colon-space fails" 1 $'---\nname: demo\ndescription: Use when: asked.\n---' 'unquoted ": "'
-expect "name must match directory" 1 $'---\nname: other\ndescription: Use when asked.\n---' 'name must be "demo"'
+expect "trailing colon fails" 1 $'---\nname: demo\ndescription: Use when:\n---' 'unquoted ": "'
+expect "name must match directory" 1 $'---\nname: other\ndescription: Use when asked.\n---' 'name must be "demo"' "$hint"
+expect "unclosed single quote fails" 1 $'---\nname: demo\ndescription: \'Use when asked.\n---' 'never closes' "$hint"
+expect "unclosed double quote fails" 1 $'---\nname: demo\ndescription: "Use when\n  asked.\n---' 'never closes'
+expect "multiline quoted value passes" 0 $'---\nname: demo\ndescription: \'Use when\n  asked.\'\n---'
 expect "missing description fails" 1 $'---\nname: demo\n---' 'description is missing'
 expect "empty description fails" 1 $'---\nname: demo\ndescription:\n---' 'description is missing'
 expect "missing frontmatter fails" 1 $'# Demo\n\nNo frontmatter.' 'no frontmatter block'

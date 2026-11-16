@@ -1,15 +1,9 @@
 #!/usr/bin/env node
-// Checks the YAML frontmatter of every .agents/skills/*/SKILL.md, because a
-// harness decides whether to load a skill from its `name` and `description`
-// alone and a malformed one fails silently:
-// - the file opens with a `---` frontmatter block;
-// - `name` equals the skill's directory name;
-// - `description` is present and its YAML value is not empty (a value that is
-//   only a comment, or a block scalar with no text, is empty);
-// - no unquoted value contains ` #` (YAML starts a comment there and drops the
-//   rest of the line) or `: ` (YAML reads it as a nested mapping), on its own
-//   line or on an indented continuation line;
-// - `.agents/skills` exists and holds at least one skill.
+// Fails when a .agents/skills/*/SKILL.md frontmatter would not give a harness
+// the skill's `name` and `description`. A harness decides whether to load a
+// skill from those two fields alone, so a malformed one fails silently. The
+// hazards are unquoted values: YAML drops everything after ` #` as a comment,
+// and rejects `: ` as a nested mapping.
 // Run from the repo root, or pass a root directory as the first argument.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -19,6 +13,7 @@ import process from "node:process";
 const root = process.argv[2] ?? process.cwd();
 const skillsDir = join(root, ".agents", "skills");
 const errors = [];
+let hazardFound = false;
 
 function frontmatterLines(text) {
   const lines = text.split("\n");
@@ -52,20 +47,32 @@ function frontmatterFields(lines) {
   return fields;
 }
 
-// Returns the value YAML gives the field, reporting the unquoted hazards.
+// Returns the field's value, close enough to YAML's for the name and
+// emptiness checks, and records the unquoted hazards as errors.
 function fieldValue(rel, key, first, rest) {
   if (/^[|>]/.test(first)) return rest.join(" ");
-  if (/^['"]/.test(first)) return unquote([first, ...rest].join(" "));
+  if (/^['"]/.test(first)) {
+    const quoted = [first, ...rest].join(" ");
+    if (quoted.length < 2 || !quoted.endsWith(quoted[0])) {
+      errors.push(
+        `${rel}: ${key} opens a ${quoted[0]} quote that never closes, so YAML rejects the frontmatter`,
+      );
+      return "";
+    }
+    return unquote(quoted);
+  }
   // A nested mapping or list, not a scalar.
   if (first === "" && /^(-\s|[\w-]+:(\s|$))/.test(rest[0] ?? "")) return "";
   const text = [first, ...rest].join(" ").trim();
   if (text.startsWith("#")) return "";
   if (/\s#/.test(text)) {
+    hazardFound = true;
     errors.push(
       `${rel}: ${key} has an unquoted " #", so YAML drops the rest of the line as a comment`,
     );
   }
-  if (/:\s/.test(text)) {
+  if (/:(\s|$)/.test(text)) {
+    hazardFound = true;
     errors.push(
       `${rel}: ${key} has an unquoted ": ", which YAML reads as a nested mapping`,
     );
@@ -111,8 +118,10 @@ if (existsSync(skillsDir)) {
 
 if (errors.length > 0) {
   for (const error of errors) console.error(error);
-  console.error(
-    "Wrap the value in quotes; inside single quotes, write an apostrophe as ''.",
-  );
+  if (hazardFound) {
+    console.error(
+      "Wrap the value in quotes; inside single quotes, write an apostrophe as ''.",
+    );
+  }
   process.exit(1);
 }
