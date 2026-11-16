@@ -4,12 +4,13 @@
 // offered exactly where the provider is registered.
 //
 // An allowlist, not `!== "prod"`: an unset or unknown channel must fail closed.
+// Staging is left off: it holds data derived from Production and live Slack
+// and mail credentials, so an open nation-admin login there is a real breach.
 export const DEV_MODE_CHANNELS: ReadonlySet<string> = new Set([
   "local",
   "ci",
   "branch",
   "dev",
-  "staging",
 ]);
 
 export function isDevModeChannel(channel: string | undefined): boolean {

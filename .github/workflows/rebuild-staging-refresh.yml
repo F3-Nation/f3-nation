@@ -47,6 +47,10 @@ jobs:
     permissions:
       contents: read
       checks: read # read CI check runs on github.sha
+    env:
+      REQUIRED: >-
+        build lint typecheck format-check test-coverage security-audit
+        db-schema-sync obfuscate-db-verify
     steps:
       # Belt and braces: a dispatch from another branch runs that branch's copy
       # of this file, so the real guard is the environment's branch policy.
@@ -54,6 +58,27 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: |
           echo "::error::Run this from main (--ref main), not ${GITHUB_REF}."
+          exit 1
+
+      # A dispatch soon after a push to main can start before CI has created
+      # its checks, and the wait below fails when none of them exist. So first
+      # wait for every required check to appear on this commit.
+      - name: Wait for CI to start on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          attempts=60 interval=15
+          for _ in $(seq 1 "${attempts}"); do
+            names="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+              --jq '.check_runs[].name')"
+            missing=""
+            for name in ${REQUIRED}; do
+              grep -qxF "${name}" <<<"${names}" || missing="${missing} ${name}"
+            done
+            if [[ -z "${missing}" ]]; then exit 0; fi
+            sleep "${interval}"
+          done
+          echo "::error::CI didn't start these checks on ${GITHUB_SHA} within $((attempts * interval / 60)) minutes:${missing}"
           exit 1
 
       - name: Wait for CI to pass on this commit
@@ -71,9 +96,6 @@ jobs:
       - name: Every required check passed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REQUIRED: >-
-            build lint typecheck format-check test-coverage security-audit
-            db-schema-sync obfuscate-db-verify
         run: |
           runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
             --jq '.check_runs[] | [.name, .id, (.conclusion // "pending")] | @tsv')"

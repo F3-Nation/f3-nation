@@ -1,13 +1,14 @@
 import type { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { checkEmailCode, logError } = vi.hoisted(() => ({
+const { checkEmailCode, logError, logWarn } = vi.hoisted(() => ({
   checkEmailCode: vi.fn<(email: string, code: string) => Promise<boolean>>(),
   logError: vi.fn(),
+  logWarn: vi.fn(),
 }));
 
 vi.mock("~/lib/email-mfa", () => ({ checkEmailCode }));
-vi.mock("~/lib/logging", () => ({ logError }));
+vi.mock("~/lib/logging", () => ({ logError, logWarn }));
 vi.mock("~/lib/rate-limit", () => ({
   rateLimit: vi.fn(() => ({ allowed: true })),
 }));
@@ -125,6 +126,88 @@ describe("POST /api/register", () => {
       statusText: "Boom",
       responseText: "x".repeat(500),
     });
+  });
+
+  it.each([400, 404])(
+    "returns a recoverable region error for upstream %s",
+    async (status) => {
+      checkEmailCode.mockResolvedValue(true);
+      fetchMock.mockResolvedValue(
+        Response.json(
+          {
+            message:
+              status === 404
+                ? "Home region not found"
+                : "Home region must be an active region with active ancestors",
+          },
+          { status },
+        ),
+      );
+      const res = await register({ ...valid, homeRegionId: 7 });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "That region is no longer available. Please choose another.",
+      });
+      expect(logWarn).toHaveBeenCalledWith("auth.register.region_unavailable", {
+        status,
+      });
+      expect(logError).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([400, 404])(
+    "keeps upstream %s without a selected region as a service failure",
+    async (status) => {
+      checkEmailCode.mockResolvedValue(true);
+      fetchMock.mockResolvedValue(
+        Response.json({ message: "Home region not found" }, { status }),
+      );
+      expect((await register(valid)).status).toBe(502);
+      expect(logWarn).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not mislabel another API validation error as a region rejection", async () => {
+    checkEmailCode.mockResolvedValue(true);
+    fetchMock.mockResolvedValue(
+      Response.json({ message: "Email already exists" }, { status: 400 }),
+    );
+    const res = await register({ ...valid, homeRegionId: 7 });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: "Failed to create account. Please try again.",
+    });
+    expect(logWarn).not.toHaveBeenCalled();
+    expect(logError).toHaveBeenCalledWith("auth.register.f3_api_failed", {
+      status: 400,
+      statusText: "",
+      responseText: JSON.stringify({ message: "Email already exists" }),
+    });
+  });
+
+  it("preserves service-failure handling when a region error has no JSON body", async () => {
+    checkEmailCode.mockResolvedValue(true);
+    fetchMock.mockResolvedValue(new Response("Bad request", { status: 400 }));
+    const res = await register({ ...valid, homeRegionId: 7 });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: "Failed to create account. Please try again.",
+    });
+    expect(logWarn).not.toHaveBeenCalled();
+    expect(logError).toHaveBeenCalledWith("auth.register.f3_api_failed", {
+      status: 400,
+      statusText: "",
+      responseText: "Bad request",
+    });
+  });
+
+  it("does not treat an upstream outage as a recoverable region rejection", async () => {
+    checkEmailCode.mockResolvedValue(true);
+    fetchMock.mockResolvedValue(
+      Response.json({ message: "Home region not found" }, { status: 500 }),
+    );
+    expect((await register({ ...valid, homeRegionId: 7 })).status).toBe(502);
+    expect(logWarn).not.toHaveBeenCalled();
   });
 
   it("reports an unreachable API", async () => {

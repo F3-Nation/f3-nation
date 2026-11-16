@@ -50,7 +50,11 @@ for every session hop:
    list more than one issuer; each token is checked against the JWKS of the
    allowlisted issuer its `iss` names (`packages/api/src/trusted-issuers.ts`).
    Entries are bare origins, so an auth server must sign `iss` as its bare
-   origin for its tokens to verify.
+   origin for its tokens to verify. The token's `client_id` must also be in
+   `AUTH_TRUSTED_CLIENT_IDS` (`packages/api/src/trusted-client-ids.ts`), which
+   `.github/preview/api-service.template.yaml` sets to seeded client ids; the
+   client [Recipe 3](#recipe-3--auth-server-jwt-for-api-bearer-auth-full-sso-loop)
+   signs in through must be one of them.
 
 4. **The admin app (not yet in previews) also needs no shared cookie.** It
    runs an OAuth authorization-code flow against `AUTH_PROVIDER_URL`, stores
