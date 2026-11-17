@@ -37,17 +37,19 @@ features/<module>.py   (handler function)
 
 - **What**: Slack interaction handlers. One file (or sub-package) per feature area.
 - **Allowed imports**: `application.*`, `utilities.*`, `slack_sdk.*`, stdlib.
-- **Forbidden imports**: `infrastructure.*` (except through `_build_*_service()` factories),
-  `f3_data_models.*` (being phased out).
+- **Forbidden imports**: `f3_data_models.*` for writes to shared tables; those go through the
+  F3 API.
 - **Pattern**: `EventTagViews` class for pure UI construction + handler functions for
-  orchestration. See `features/calendar/event_tag.py` as the reference.
+  orchestration. See `features/calendar/event_tag.py` as the reference. New API calls are
+  plain functions using `infrastructure.api_client`; see [API_MIGRATION.md](API_MIGRATION.md).
 
 ### `application/`
 
 - **What**: Business logic and data model definitions.
 - **Allowed imports**: `application.*`, stdlib, `pydantic`.
 - **Forbidden imports**: `infrastructure.*`, `features.*`, `slack_sdk.*`, `requests.*`.
-- **Pattern**: `<Domain>Service` class injected with a `<Domain>Repository` Protocol.
+- **Pattern**: `<Domain>Service` class injected with a `<Domain>Repository` Protocol. Existing
+  domains keep this structure; new work doesn't add domains here.
 
 ### `infrastructure/`
 
@@ -200,9 +202,10 @@ metadata = json.loads(safe_get(body, "view", "private_metadata") or "{}")
 
 ---
 
-## Feature Module Reference: Event Tags (canonical example)
+## Feature Module Reference: Event Tags
 
-See [API_MIGRATION.md](API_MIGRATION.md) for a detailed breakdown of every layer.
+An existing layered domain. Its views and handlers are a model for Slack UI code; for how new
+code calls the API, see [API_MIGRATION.md](API_MIGRATION.md).
 
 Files:
 
@@ -220,17 +223,8 @@ Files:
 
 ## API Contract Reference
 
-See [API_REFERENCE.md](API_REFERENCE.md) for the data shapes returned by
-the F3 Nation REST API.
-
-**Active endpoints used by this app:**
-
-| Domain    | Endpoint                        | Notes                                                         |
-| --------- | ------------------------------- | ------------------------------------------------------------- |
-| Event Tag | `GET /v1/event-tag/org/{orgId}` | Returns global + org-specific tags; filter by `specificOrgId` |
-| Event Tag | `GET /v1/event-tag/id/{id}`     | Single tag lookup                                             |
-| Event Tag | `POST /v1/event-tag`            | Create (no `id`) or update (with `id`)                        |
-| Event Tag | `DELETE /v1/event-tag/id/{id}`  | Soft delete                                                   |
+The API's own OpenAPI spec is the contract; see
+[where the contract lives](API_REFERENCE.md#where-the-contract-lives).
 
 ---
 
