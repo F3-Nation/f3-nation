@@ -32,8 +32,10 @@ the literal value and write it into later commands.
 ## Step 1: Pre-flight
 
 1. Run `bash scripts/gh-check.sh`. If it fails, show its message and stop.
-2. Fetch the issue. Accept `42`, `#42` or a URL, and pass on only the number or the issue URL,
-   inside single quotes, so nothing in the argument reaches the shell as syntax:
+2. Fetch the issue. Accept only a number (`42` or `#42`) or an issue URL of the form
+   `https://github.com/<owner>/<repo>/issues/<number>`. Stop on anything else, before running a
+   command: a quote in the argument would end the shell string. Pass the number or URL, and
+   nothing else, inside single quotes:
 
    ```bash
    gh issue view '<ref>' --comments
@@ -53,7 +55,7 @@ the literal value and write it into later commands.
 
    ```bash
    gh issue develop --list <number>
-   gh pr list --search "<number> in:body" --state all
+   gh pr list --search "<number> in:title,body" --state all
    ```
 
    If a branch or PR exists, report it and ask how to proceed.
@@ -77,8 +79,9 @@ git rev-list --count origin/main..HEAD
 ```
 
 **Reuse the current worktree** only when the second command printed `linked worktree`,
-`status` printed nothing, the count is `0` and the user agrees: tell them its path and branch
-and ask, because a clean worktree may belong to other work. `WT` is then the path
+`status` printed nothing, the count is `0` and the user agrees: tell them its path and branch,
+and that Step 4 renames that branch, and ask, because a clean worktree may belong to other
+work. `WT` is then the path
 `--show-toplevel` printed. Bring it up to date with `git merge --ff-only origin/main`; Step 4
 names its branch.
 
@@ -231,7 +234,7 @@ wait for an explicit go-ahead before pushing or posting.
 
 1. Run `bash scripts/gh-check.sh --require-write` against the repository you will push to
    (set `GH_REPO=<owner>/<name>` when that is your fork).
-2. Fill in every section of `.github/pull_request_template.md` as
+2. Fill in every section of `.github/PULL_REQUEST_TEMPLATE.md` as
    [Pull Request Guidelines](../../../AGENTS.md#pull-request-guidelines) describes, with
    `Closes #<number>`, and remove its placeholders. Title in Conventional Commits form.
 3. End the body with the signature line from

@@ -51,13 +51,7 @@ jobs:
           # Fail closed: only the CLI's all-clear line counts as current, and
           # only its own drift lines open an issue. Anything else (a network
           # or CLI failure, a skill deleted upstream) fails this job.
-          if [ "$status" -eq 0 ] && grep -q "All project skills are up to date" "$RUNNER_TEMP/skills-check.txt"; then
-            state=current
-          elif grep -Eq "can be updated|differ from skills-lock.json" "$RUNNER_TEMP/skills-check.txt"; then
-            state=drift
-          else
-            state=error
-          fi
+          state="$(node .github/scripts/vendored-skills-check.cjs "$RUNNER_TEMP/skills-check.txt" "$status")"
           echo "state=$state" >> "$GITHUB_OUTPUT"
           delimiter="report-$(openssl rand -hex 16)"
           {
