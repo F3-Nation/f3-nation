@@ -361,8 +361,9 @@ review-summary comment, and do not use `POST .../reviews` with a body.
 surviving findings, but no clean-review comment. In each finding, use the marker
 `<!-- pr-review-inline-incomplete -->` instead of `<!-- pr-review-inline -->`, and end the
 plain-language section with one line naming the unreviewed lanes. Neither Step 3's checkpoint
-search nor `scripts/pr-triage.sh` counts that marker, so the PR still needs a full review; say
-so in the report.
+search nor `scripts/pr-triage.sh` counts that marker, so the run is not a checkpoint and triage
+sees the PR as it did before this run. Say in the report that the unreviewed lanes still need
+reviewing.
 
 **Clean review:** if no finding survives and every lane was reviewed, post exactly one
 conversation comment instead, so
