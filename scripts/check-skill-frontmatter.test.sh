@@ -75,6 +75,8 @@ expect "text after a closing double quote fails" 1 $'---\nname: demo\ndescriptio
 expect "quoted value on the next line passes" 0 $'---\nname: demo\ndescription:\n  \'Use for triage #123: all fields.\'\n---'
 expect "backtick-led plain value fails" 1 $'---\nname: demo\ndescription: `pnpm lint` helper.\n---' 'YAML reads as syntax'
 expect "bracket-led plain value fails" 1 $'---\nname: demo\ndescription: [Draft] Use when asked.\n---' 'YAML reads as syntax'
+expect "flow list in another field passes" 0 $'---\nname: demo\ndescription: Use when asked.\nallowed-tools: [Read, Bash]\n---'
+expect "flow map in another field passes" 0 $'---\nname: demo\ndescription: Use when asked.\nmetadata: {author: someone}\n---'
 expect "leading-indicator value prints the quoting hint" 1 $'---\nname: demo\ndescription: *Use* when asked.\n---' "$hint"
 expect "key with no space after the colon fails" 1 $'---\nname: demo\ndescription:Use when asked.\n---' 'description is missing'
 

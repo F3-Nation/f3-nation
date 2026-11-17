@@ -87,6 +87,10 @@ function fieldValue(rel, key, first, rest) {
   if (first === "" && /^(-\s|[\w-]+:(\s|$))/.test(rest[0] ?? "")) return "";
   const text = [first, ...rest].join(" ").trim();
   if (text.startsWith("#")) return "";
+  // Fields other than name and description may hold a flow list or map.
+  if (key !== "name" && key !== "description" && /^[[{]/.test(text)) {
+    return text;
+  }
   if (/^([[\]{}*&!%@`,]|[-?]\s)/.test(text)) {
     hazardFound = true;
     errors.push(
