@@ -378,7 +378,13 @@ class GcsPublisher:
             raise ValueError("current pointer producer revision is malformed")
         retained = pointer["retainedPrevious"]
         if retained is not None:
-            if not isinstance(retained, dict) or not _SAFE_COMPONENT.fullmatch(str(retained.get("releaseId", ""))):
+            # GC compares releaseId with listed prefix names, so a non-string ID would leave
+            # the rollback target unprotected.
+            if (
+                not isinstance(retained, dict)
+                or not isinstance(retained.get("releaseId"), str)
+                or not _SAFE_COMPONENT.fullmatch(retained["releaseId"])
+            ):
                 raise ValueError("retained pointer metadata is malformed")
             if not re.fullmatch(r"[0-9a-f]{64}", str(retained.get("manifestSha256", ""))):
                 raise ValueError("retained pointer hash is malformed")

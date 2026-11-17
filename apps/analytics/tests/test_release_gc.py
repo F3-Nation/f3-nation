@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -10,7 +11,7 @@ from typing import Any
 import google.cloud.storage
 import google_crc32c
 import pytest
-from google.api_core.exceptions import NotFound, PreconditionFailed, TooManyRequests
+from google.api_core.exceptions import NotFound, PreconditionFailed, RetryError, TooManyRequests
 
 import analytics.cli as cli
 from analytics.publication import canonical_json_bytes
@@ -287,6 +288,23 @@ def test_plan_refuses_malformed_pointer(gcs):
         collector(gcs).plan(now=NOW, min_age=timedelta(days=7))
 
 
+def test_plan_refuses_pointer_with_non_string_retained_release_id(gcs):
+    put_release(gcs, "123", age_days=40)
+    pointer = gcs.objects[POINTER]
+    data = json.loads(pointer.content)
+    data["retainedPrevious"] = {
+        "releaseId": 123,
+        "manifestUri": f"gs://{BUCKET}/analytics/releases/123/release.json",
+        "manifestGeneration": "1",
+        "manifestSha256": "a" * 64,
+    }
+    gcs.put(POINTER, canonical_json_bytes(data))
+
+    with pytest.raises(ValueError, match="retained pointer metadata"):
+        collector(gcs).plan(now=NOW, min_age=timedelta(days=7), keep_latest=0)
+    assert "123" in release_ids(gcs)
+
+
 def test_plan_rejects_min_age_below_in_flight_floor(gcs):
     with pytest.raises(ValueError, match="floor"):
         collector(gcs).plan(now=NOW, min_age=timedelta(hours=12))
@@ -330,7 +348,12 @@ def test_apply_reports_pointer_disappearing_as_needing_a_human(gcs):
     assert raised.value.reason == "pointer_disappeared"
 
 
-def test_apply_attaches_partial_result_on_storage_error(gcs):
+@pytest.mark.parametrize(
+    "error",
+    (TooManyRequests("throttled"), RetryError("retry deadline exceeded", cause=TooManyRequests("throttled"))),
+    ids=("api_call_error", "retry_deadline"),
+)
+def test_apply_attaches_partial_result_on_storage_error(gcs, error):
     gc = collector(gcs)
     plan = gc.plan(now=NOW, min_age=timedelta(days=7), keep_latest=0)
     calls = 0
@@ -339,7 +362,7 @@ def test_apply_attaches_partial_result_on_storage_error(gcs):
         nonlocal calls
         calls += 1
         if calls == 5:
-            raise TooManyRequests("throttled")
+            raise error
 
     gcs.before_delete = fail_fifth_delete
 

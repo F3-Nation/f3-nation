@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from google.api_core.exceptions import GoogleAPICallError, NotFound, PreconditionFailed
+from google.api_core.exceptions import GoogleAPICallError, NotFound, PreconditionFailed, RetryError
 from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
 
 from .publication import _SAFE_COMPONENT, GcsPublisher
@@ -276,7 +276,7 @@ class ReleaseGarbageCollector:
             result.in_progress_release_id = current
             error.partial = result
             raise
-        except GoogleAPICallError as error:
+        except (GoogleAPICallError, RetryError) as error:
             result.in_progress_release_id = current
             raise ReleaseGcError("cleanup stopped mid-run", reason="storage_error", partial=result) from error
         return result
