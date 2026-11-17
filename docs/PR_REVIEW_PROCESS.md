@@ -29,7 +29,7 @@ flowchart TD
     J -- Yes --> K["Codeowner approves and merges"]
 ```
 
-`pr-review-inline` gives the PR to several reviewers, each focused on one aspect of the code: correctness, access and data exposure, failure handling, tests, and whether the comments and docs are true. The reviewer prompts ship with the skill, so the review is the same whichever assistant runs it. `--shallow` uses a single reviewer instead; it is for a very minor PR, and the skill ignores it on a PR from a fork or an outside contributor.
+`pr-review-inline` gives the PR to several reviewers, each focused on one aspect of the code: correctness, access and data exposure, failure handling, tests, and whether the comments and docs are true. The reviewer prompts ship with the skill, so the review is the same whichever assistant runs it. A PR that changes only ordinary docs gets just the docs reviewer. Changes to agent instructions (skills, `AGENTS.md`, `REVIEW.md`, anything under `.github/`) count as code and get all five, and so does every PR from a fork or an outside contributor. `--shallow` uses a single reviewer instead; it is for a very minor PR, and the skill ignores it on a PR from a fork or an outside contributor and on one over about 1,000 changed lines.
 
 On a PR's first pass, the answer to "Codeowner wants a local test?" is normally Yes. No is for a small PR (see [Small PRs](#small-prs)), or for fixes after a local test that a reviewer can confirm by reading the diff.
 

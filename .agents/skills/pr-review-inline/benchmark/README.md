@@ -22,27 +22,39 @@ much as that many reviews. Running a single case is fine for a quick check; say 
 
 ## How to run it
 
-Use a new session, on the agent tool and model being checked. For each case in `cases.md`:
+Use a new session, on the agent tool and model being checked. Load the skill being checked
+(`SKILL.md`, `reviewer-brief.md` and `lenses/`) from its own checkout, by absolute path, never
+from a case worktree: each case is an older commit with older copies of them. For each case in
+`cases.md`:
 
-1. Fetch the head commit and check it out in a disposable worktree, as the skill's worktree
-   step does, but by commit instead of by PR:
+1. Fetch the head commit, check it out in a disposable worktree, as the skill's worktree step
+   does but by commit instead of by PR, and enter it:
 
    ```bash
+   ORIGINAL_CWD="$(pwd)"
    git fetch origin <head>
    WORKTREE_PARENT="$(mktemp -d /tmp/pr-review-bench.XXXXXX)"
    git worktree add --detach "$WORKTREE_PARENT/case" <head>
+   cd "$WORKTREE_PARENT/case"
    ```
 
 2. Run the skill's diff-characterization step with the case's base as `DIFF_BASE`.
 3. Run the skill's review step with the default roster (no `--shallow`). Fill the brief as that
    step says, with these differences:
    - `EXISTING` and `FOCUS` are "None." and `GATED` is "Not gated."
-   - `STANDARDS_SOURCE` is: "For this run, read `REVIEW.md` from `<absolute path of the
-REVIEW.md being checked>` instead of the checkout's copy, which is older. Read the
-     `AGENTS.md` files in the checkout."
+   - `STANDARDS_SOURCE` is: "Read `REVIEW.md` from `<absolute path of the REVIEW.md being
+checked>` instead of the checkout's copy, which is older. Reading this one file is the only
+     exception to the rule to read files only in the checkout. Read the `AGENTS.md` files in
+     the checkout."
 4. Run the skill's parse and verify steps. There is nothing to de-duplicate against.
 5. Write down the surviving findings: lens, severity, `path:line`, one sentence each.
-6. Remove the worktree (`git worktree remove --force`, then `rmdir` the parent).
+6. Leave the worktree and remove it:
+
+   ```bash
+   cd "$ORIGINAL_CWD"
+   git worktree remove --force "$WORKTREE_PARENT/case"
+   rmdir "$WORKTREE_PARENT"
+   ```
 
 Make no GitHub call about a case, and post nothing. The cases are merged changes whose review
 threads hold the answers.

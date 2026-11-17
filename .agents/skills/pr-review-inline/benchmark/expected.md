@@ -16,9 +16,9 @@ afterwards. The lens is the one most likely to raise it; a catch by any seat cou
 ## `issue-fields-script`
 
 - **Important, `correctness` or `failure-paths`** —
-  `.agents/skills/issue-triage/scripts/issue-fields.sh`: an App value made only of commas or
-  spaces is documented as "leave App unchanged", but the script sends an empty App list, which
-  clears the issue's App values, then prints success and exits 0.
+  `.agents/skills/issue-triage/scripts/issue-fields.sh`: an App value that has commas but no
+  names (such as `,` or `, ,`) is documented as "leave App unchanged", but the script sends an
+  empty App list, which clears the issue's App values, then prints success and exits 0.
 
 ## `staging-refresh-ci`
 

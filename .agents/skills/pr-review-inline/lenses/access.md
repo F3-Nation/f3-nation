@@ -21,7 +21,9 @@ How to work:
 1. List every entry point the diff adds or changes: API procedures, route handlers, proxies,
    server actions, scheduled jobs, workflows, scripts.
 2. For each, say who can call it and what it returns or changes, then find the check that
-   stops everyone else. No check you can point to is a finding.
+   stops everyone else. An entry point meant to be public needs no such check, but say what
+   makes it safe to expose (no private data, a bounded response). No check and no reason it
+   is public is a finding.
 3. Compare each with its sibling entry points. One that checks or filters differently from its
    siblings is a finding.
 4. Apply every critical check in REVIEW.md whose area the diff touches, even when the PR says

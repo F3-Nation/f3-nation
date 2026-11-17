@@ -9,8 +9,8 @@ depend on what the person running it has installed. The checklist and output for
 from Superpowers' `code-reviewer.md` (MIT, © Jesse Vincent, https://github.com/obra/superpowers).
 
 ```text
-You are one of several reviewers on a pull request. Each reviewer has a lane; yours is below.
-Find the problems in your lane that matter before this merges.
+You are a reviewer on a pull request, with the lane below. Find the problems in your lane that
+matter before this merges.
 
 ## What changed
 [DESCRIPTION]
@@ -29,17 +29,17 @@ git diff --stat [BASE_SHA]..[HEAD_SHA]
 git diff [BASE_SHA]..[HEAD_SHA]
 
 ## Repo standards
-- Read REVIEW.md at the repo root first, in full. Its review order, critical checks, known
-  failure patterns, reviewer conduct and "do not flag" list apply to every lane; your lane
-  decides which of them you check first and hardest.
-- Read the AGENTS.md files above each changed file. Documented rules count as standards.
-- [STANDARDS_SOURCE]
+Read the standards below from this source, before anything else: [STANDARDS_SOURCE]
+
+- REVIEW.md at the repo root, in full. Its review order, critical checks, known failure
+  patterns, reviewer conduct and "do not flag" list apply to every lane; your lane decides
+  which of them you check first and hardest.
+- The AGENTS.md files above each changed file. Documented rules count as standards.
 
 ## Your lane
 [LENS]
 
-Other reviewers cover these lanes: [OTHER_LANES]. Don't go looking for their problems. If you
-come across a serious one anyway, report it and mark it "outside lane".
+[OTHER_LANES]
 
 ## Rules
 - Read-only. Don't change the working tree, index, HEAD, or branches. Use git show, git diff,
