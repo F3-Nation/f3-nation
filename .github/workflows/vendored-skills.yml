@@ -89,8 +89,9 @@ jobs:
         run: |
           set -o pipefail
           title="Vendored agent skills are out of date"
-          existing="$(gh issue list --state open --limit 1000 --search "in:title \"$title\"" --json number,title \
-            --jq "[.[] | select(.title == \"$title\")] | length")"
+          # The filter runs once per page, so count matches across pages.
+          existing="$(TITLE="$title" gh api --paginate -X GET "repos/$GH_REPO/issues" -f state=open -F per_page=100 \
+            --jq '.[] | select(.pull_request | not) | select(.title == env.TITLE) | .number' | wc -l)"
           if [ "$existing" -gt 0 ]; then
             echo "Tracking issue already open."
             exit 0
