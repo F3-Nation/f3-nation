@@ -1,8 +1,7 @@
 # ADR 0002: Permission-based authorization with a code-defined role map
 
-- **Status:** Proposed
 - **Date:** 2026-07-15
-- **Deciders:** @taterhead247
+- **Author(s):** @taterhead247
 
 ## Context
 
