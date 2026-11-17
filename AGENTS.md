@@ -87,7 +87,7 @@ issue missing them — follow
 [`.agents/skills/issue-triage/SKILL.md`](.agents/skills/issue-triage/SKILL.md).
 
 To post the report of open security advisories and their fix PRs to the
-private #codeowners Slack channel, follow
+private #security-managers Slack channel, follow
 [`.agents/skills/security-advisory-report/SKILL.md`](.agents/skills/security-advisory-report/SKILL.md).
 
 To address, respond to, or work through review feedback on a pull request,
