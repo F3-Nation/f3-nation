@@ -17,16 +17,26 @@ export const COUNTRY_ZOOM = 5; // below 5 it is red
 
 export enum BreakPoints {
   MD = 640,
+  /** The map shows its left panel from here up; below it is the mobile layout. */
+  PANEL = 768,
   LG = 1024,
 }
 
 export const HEADER_HEIGHT = 96;
 export const SIDEBAR_WIDTH = 360;
+/** The map's left panel between `BreakPoints.PANEL` and `BreakPoints.LG`. */
+export const SIDEBAR_WIDTH_NARROW = 280;
+
+/** Width of the map's left panel at a window width (0 on the mobile layout). */
+export const getSidebarWidth = (windowWidth: number) =>
+  windowWidth >= Number(BreakPoints.LG)
+    ? SIDEBAR_WIDTH
+    : windowWidth >= Number(BreakPoints.PANEL)
+      ? SIDEBAR_WIDTH_NARROW
+      : 0;
 
 export const ADMIN_SIDEBAR_WIDTH = 240;
 export const ADMIN_HEADER_HEIGHT = 64;
-
-export const MAX_DESKTOP_WORKOUT_PANEL_WIDTH = 448; // must match to MD
 
 export const MAX_PLACES_AUTOCOMPLETE_RADIUS = 50000;
 
@@ -70,7 +80,6 @@ export const Z_INDEX = {
 
   SELECTED_ICON_MARKER_PANE: 1102,
   PANEL_ITEM_MARKER_PANE: 1103,
-  LOCATION_PANEL: 1104,
   SELECTED_ITEM_CONTAINER_DESKTOP: 1105,
   MOBILE_SEARCH_RESULTS: 1106,
 

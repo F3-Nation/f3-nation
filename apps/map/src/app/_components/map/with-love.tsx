@@ -5,30 +5,24 @@ import { VersionInfo } from "../version-info";
 
 export default function WithLove() {
   return (
-    <div className="my-[1px] flex flex-row items-center justify-center gap-4">
-      <div className="flex gap-2 text-xs whitespace-nowrap text-foreground opacity-60">
-        <VersionInfo className="text-center text-xs text-foreground/60" />
-        <button
-          className="text-foreground underline underline-offset-2"
-          onClick={() => {
-            openModal(ModalType.ABOUT_MAP);
-          }}
-        >
-          <span className="cursor-pointer text-blue-600 underline underline-offset-2">
-            About this map
-          </span>
-        </button>{" "}
-        <button
-          className="text-foreground underline underline-offset-2"
-          onClick={() => {
-            openModal(ModalType.MAP_HELP);
-          }}
-        >
-          <span className="cursor-pointer text-blue-600 underline underline-offset-2">
-            Help
-          </span>
-        </button>
-      </div>
+    <div className="flex flex-row items-center gap-3 border-t px-4 py-2 text-[11px] whitespace-nowrap text-muted-foreground">
+      <VersionInfo className="text-[11px] text-muted-foreground" />
+      <button
+        className="underline underline-offset-2 hover:text-foreground"
+        onClick={() => {
+          openModal(ModalType.ABOUT_MAP);
+        }}
+      >
+        About this map
+      </button>
+      <button
+        className="underline underline-offset-2 hover:text-foreground"
+        onClick={() => {
+          openModal(ModalType.MAP_HELP);
+        }}
+      >
+        Help
+      </button>
     </div>
   );
 }

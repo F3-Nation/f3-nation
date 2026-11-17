@@ -19,7 +19,7 @@ export const VersionInfo = (props: HTMLAttributes<HTMLSpanElement>) => {
     <span className={cn("inline-flex items-center gap-1", className)}>
       <Link
         href="/changelog"
-        className="cursor-pointer text-blue-600 underline underline-offset-2 hover:text-blue-800"
+        className="cursor-pointer underline underline-offset-2 hover:text-foreground"
       >
         v{packageJson.version}
       </Link>

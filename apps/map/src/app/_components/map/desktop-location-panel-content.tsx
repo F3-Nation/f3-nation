@@ -1,7 +1,5 @@
-import { useWindowWidth } from "@react-hook/window-size";
-import { X } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
-import { BreakPoints } from "@acme/shared/app/constants";
 import { TestId } from "@acme/shared/common/enums";
 
 import { orpc, useQuery } from "~/orpc/react";
@@ -16,12 +14,10 @@ import {
   useEditableEventId,
 } from "./location-edit-buttons";
 
+/** Workout details in the left panel, with a link back to the nearby list. */
 export const DesktopLocationPanelContent = () => {
   const panelLocationId = selectedItemStore.use.panelLocationId();
   const panelEventId = selectedItemStore.use.panelEventId();
-  const width = useWindowWidth();
-  const isLarge = width > Number(BreakPoints.LG);
-  const isMedium = width > Number(BreakPoints.MD);
   const mode = appStore.use.mode();
 
   // Get location data including events
@@ -63,22 +59,21 @@ export const DesktopLocationPanelContent = () => {
   return (
     <div
       data-testid={TestId.PANEL}
-      className="pointer-events-auto relative flex flex-col rounded-lg bg-background p-4 shadow-sm dark:border"
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-3 pb-8"
     >
-      {/* Close button in the top right */}
       <button
         type="button"
         aria-label="Close location panel"
-        className="absolute top-2 right-2 rounded-full bg-muted-foreground px-1 py-1 text-sm text-background"
+        className="mb-4 flex w-fit flex-row items-center gap-1 text-[10px] font-bold tracking-widest text-muted-foreground uppercase hover:text-foreground"
         onClick={(e) => {
           closePanel();
           e.stopPropagation();
         }}
       >
-        <X className="h-4 w-4" />
+        <ChevronLeft aria-hidden className="size-3.5" />
+        Nearby workouts
       </button>
 
-      {/* Edit buttons at the top */}
       {mode === "edit" && showEditButtons && (
         <div className="mb-4">
           <LocationEditButtons
@@ -96,10 +91,7 @@ export const DesktopLocationPanelContent = () => {
       <WorkoutDetailsContent
         locationId={panelLocationId}
         providedEventId={panelEventId}
-        chipSize={isLarge ? "large" : isMedium ? "medium" : "small"}
       />
-
-      <div className="h-8" />
     </div>
   );
 };

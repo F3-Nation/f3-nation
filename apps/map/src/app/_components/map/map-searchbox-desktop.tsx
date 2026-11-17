@@ -2,9 +2,11 @@
 
 import type { ComponentProps } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useWindowWidth } from "@react-hook/window-size";
 import { Search, XCircle } from "lucide-react";
 
 import {
+  getSidebarWidth,
   MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS,
   SIDEBAR_WIDTH,
   Z_INDEX,
@@ -38,12 +40,8 @@ import { onClickF3RegionRow, PlaceRowF3Region } from "./place-row-f3-region";
 import { PlaceRowMap } from "./place-row-map";
 import { useTextSearchResults } from "./search-results-provider";
 
-export function MapSearchBox({
-  className,
-  // Need to remove this prop from the component props
-  hideLogo: _hideLogo,
-  ...rest
-}: ComponentProps<"div"> & { hideLogo?: true }) {
+export function MapSearchBox({ className, ...rest }: ComponentProps<"div">) {
+  const windowWidth = useWindowWidth();
   const [showResults, setShowResults] = useState({
     geo: true,
     region: true,
@@ -96,7 +94,7 @@ export function MapSearchBox({
   return (
     <div
       className={cn(
-        "-ml-1 flex flex-row items-center gap-2 px-4 transition-all",
+        "flex flex-row items-center gap-3 transition-all",
         className,
       )}
       {...rest}
@@ -126,8 +124,9 @@ export function MapSearchBox({
                 }}
                 aria-expanded={isFocused}
                 type="text"
-                // placeholder="Search by location, zip, etc."
-                placeholder={`Search ${workoutCount?.count ?? "5000+"} free, peer-led workouts`}
+                placeholder="City, zip, or AO name"
+                // The live count proves the map → API → database chain is up.
+                aria-label={`Search ${workoutCount?.count ?? "5000+"} free, peer-led workouts`}
                 onFocus={() => {
                   setIsFocused(true);
                   setFocusedIndex(0);
@@ -141,7 +140,7 @@ export function MapSearchBox({
                 }}
                 value={text}
                 className={cn(
-                  "h-[42px] w-full rounded-full bg-foreground pl-10 text-base text-background caret-background placeholder:text-sm placeholder:text-background/60",
+                  "h-10 w-full rounded-full border-input bg-card pl-9 text-sm text-foreground placeholder:text-xs placeholder:text-muted-foreground",
                   "transition-all",
                 )}
                 onChange={(e) => {
@@ -175,8 +174,8 @@ export function MapSearchBox({
                 }}
                 onSubmit={() => onSubmit()}
               />
-              <div className="pointer-events-none absolute top-2 left-3">
-                <Search color="#aaa" />
+              <div className="pointer-events-none absolute top-3 left-3 text-muted-foreground">
+                <Search aria-hidden className="size-4" />
               </div>
               <div className="absolute top-2 right-2 flex flex-row items-center gap-2">
                 {isLoading && <Spinner className="h-4 w-4 border-2" />}
@@ -186,7 +185,11 @@ export function MapSearchBox({
                       searchStore.setState({ text: "" });
                     }}
                   >
-                    <XCircle color="#aaa" />
+                    <XCircle
+                      aria-hidden
+                      className="size-5 text-muted-foreground"
+                    />
+                    <span className="sr-only">Clear search</span>
                   </button>
                 )}
               </div>
@@ -198,14 +201,11 @@ export function MapSearchBox({
             className={cn("h-[400px] overflow-scroll p-0")}
             style={{
               zIndex: Z_INDEX.MAP_SEARCHBOX_POPOVER_CONTENT_DESKTOP,
-              width: SIDEBAR_WIDTH,
+              width: getSidebarWidth(windowWidth) || SIDEBAR_WIDTH,
             }}
           >
             <>
-              <div
-                ref={checkboxContainerRef}
-                className="border-b border-gray-200 p-2"
-              >
+              <div ref={checkboxContainerRef} className="border-b p-2">
                 <div className="flex flex-row justify-center gap-4">
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -253,7 +253,7 @@ export function MapSearchBox({
               </div>
 
               {combinedResults.length === 0 ? (
-                <div className="mt-4 w-full text-center text-sm text-gray-700">
+                <div className="mt-4 w-full text-center text-sm text-muted-foreground">
                   Search for a place or F3 workout by location, city, zip, etc.
                 </div>
               ) : (

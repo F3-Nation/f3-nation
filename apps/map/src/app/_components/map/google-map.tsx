@@ -4,7 +4,7 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import { APIProvider, ControlPosition, Map } from "@vis.gl/react-google-maps";
 
-import { BreakPoints, SIDEBAR_WIDTH } from "@acme/shared/app/constants";
+import { getSidebarWidth } from "@acme/shared/app/constants";
 import { TestId } from "@acme/shared/common/enums";
 import { Button } from "@acme/ui/button";
 import { Spinner } from "@acme/ui/spinner";
@@ -166,8 +166,7 @@ const ProvidedGoogleMapComponent = memo(
       <div
         style={{
           height,
-          width:
-            width >= Number(BreakPoints.LG) ? width - SIDEBAR_WIDTH : width,
+          width: width - getSidebarWidth(width),
         }}
       >
         <Map

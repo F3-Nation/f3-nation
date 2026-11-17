@@ -34,8 +34,9 @@ export const DesktopFilterButtons = () => {
     <div className="m-2 flex flex-row gap-2">
       {/* All filters */}
       <button
+        aria-pressed={isFilterActive}
         className={cn(filterButtonClassName, {
-          "bg-red-500 text-white": isFilterActive,
+          "bg-primary text-primary-foreground": isFilterActive,
         })}
         onClick={(e) => {
           filterStore.setState((fs) => ({ allFilters: !fs.allFilters }));
@@ -48,8 +49,9 @@ export const DesktopFilterButtons = () => {
       </button>
       {/* Today */}
       <button
+        aria-pressed={today}
         className={cn(filterButtonClassName, {
-          "bg-red-500 text-white": today,
+          "bg-primary text-primary-foreground": today,
         })}
         onClick={(e) => {
           filterStore.setState((fs) => ({ [todayVar]: !fs[todayVar] }));
@@ -62,8 +64,9 @@ export const DesktopFilterButtons = () => {
       </button>
       {/* Tomorrow */}
       <button
+        aria-pressed={tomorrow}
         className={cn(filterButtonClassName, {
-          "bg-red-500 text-white": tomorrow,
+          "bg-primary text-primary-foreground": tomorrow,
         })}
         onClick={(e) => {
           filterStore.setState((fs) => ({ [tomorrowVar]: !fs[tomorrowVar] }));
@@ -76,8 +79,9 @@ export const DesktopFilterButtons = () => {
       </button>
       {/* AM */}
       <button
+        aria-pressed={am}
         className={cn(filterButtonClassName, {
-          "bg-red-500 text-white": am,
+          "bg-primary text-primary-foreground": am,
         })}
         onClick={(e) => {
           filterStore.setState((fs) => ({
@@ -93,8 +97,9 @@ export const DesktopFilterButtons = () => {
       </button>
       {/* PM */}
       <button
+        aria-pressed={pm}
         className={cn(filterButtonClassName, {
-          "bg-red-500 text-white": pm,
+          "bg-primary text-primary-foreground": pm,
         })}
         onClick={(e) => {
           filterStore.setState((fs) => ({

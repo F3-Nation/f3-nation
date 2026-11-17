@@ -60,7 +60,7 @@ export function MapSearchBoxMobile({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute right-0 bottom-1 left-0 block lg:hidden",
+        "pointer-events-none absolute right-0 bottom-1 left-0 block md:hidden",
         className,
       )}
       style={{ zIndex: Z_INDEX.MAP_SEARCHBOX_MOBILE }}

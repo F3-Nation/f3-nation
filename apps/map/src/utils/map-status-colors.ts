@@ -62,9 +62,10 @@ export const STATUS_BASE_DEFAULT =
   "border-foreground bg-foreground text-background";
 
 const SOLID_BG_DEFAULT = "bg-foreground";
-const SELECTED_BORDER_DEFAULT = "!border-red-600 dark:!border-red-400";
-const SELECTED_BG_DEFAULT = "!border-red-600 !bg-red-600 dark:!bg-red-400";
-const SELECTED_CHIP_BG_DEFAULT = "bg-red-600";
+const SELECTED_BORDER_DEFAULT = "!border-primary";
+const SELECTED_BG_DEFAULT =
+  "!border-primary !bg-primary !text-primary-foreground";
+const SELECTED_CHIP_BG_DEFAULT = "bg-primary";
 
 const getStatusStyle = (status: MapStatus) =>
   status ? STATUS_STYLES[status] : undefined;

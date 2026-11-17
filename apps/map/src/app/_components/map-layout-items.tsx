@@ -10,7 +10,6 @@ import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { mapStore } from "~/utils/store/map";
 import { DebugInfo } from "./map/debug-info";
 import { DesktopFilterButtons } from "./map/desktop-filter-buttons";
-import { DesktopLocationPanelContent } from "./map/desktop-location-panel-content";
 import DesktopSelectedItem from "./map/desktop-selected-item";
 import { GeoJsonPane } from "./map/geo-json-pane";
 import { GeolocationMarker } from "./map/geolocation-marker";
@@ -47,9 +46,6 @@ export const MapLayoutItems = () => {
       <Projection />
       <MapProvider />
       <GeolocationMarker />
-      <DesktopLocationPanelContainer>
-        <DesktopLocationPanelContent />
-      </DesktopLocationPanelContainer>
       <DesktopSelectedItem />
 
       <MapControl
@@ -79,7 +75,7 @@ export const MapLayoutItems = () => {
           <MapControl position={ControlPosition.TOP_LEFT}>
             <DesktopFilterButtons />
           </MapControl>
-          <MapControl position={ControlPosition.TOP_LEFT}>
+          <MapControl position={ControlPosition.TOP_RIGHT}>
             <HelpButton />
           </MapControl>
         </>
@@ -116,20 +112,11 @@ export const MapLayoutItems = () => {
   );
 };
 
-const DesktopLocationPanelContainer = (props: ComponentProps<"div">) => (
-  <div
-    style={{ zIndex: Z_INDEX.LOCATION_PANEL }}
-    // max-w-md must match to MAX_DESKTOP_WORKOUT_PANEL_WIDTH
-    className="scrollbar-hide pointer-events-none absolute top-0 bottom-0 left-2 hidden w-1/2 max-w-md overflow-y-auto pt-12 pb-2 lg:block"
-    {...props}
-  />
-);
-
 const MobileAboveSearchBox = (props: ComponentProps<"div">) => (
   <div
     style={{ zIndex: Z_INDEX.OVERLAY_BUTTONS }}
     // 46px and 6px to keep the slider in the middle between them
-    className="absolute right-0 bottom-[44px] left-0 block lg:hidden"
+    className="absolute right-0 bottom-[44px] left-0 block md:hidden"
     {...props}
   />
 );

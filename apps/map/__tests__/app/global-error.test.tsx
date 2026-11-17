@@ -21,7 +21,9 @@ vi.mock("~/env", () => ({
   env: envMock,
 }));
 
-vi.mock("geist/font/sans", () => ({ GeistSans: { variable: "geist-sans" } }));
+vi.mock("next/font/google", () => ({
+  Montserrat: () => ({ variable: "montserrat" }),
+}));
 vi.mock("geist/font/mono", () => ({ GeistMono: { variable: "geist-mono" } }));
 
 describe("GlobalError", () => {
@@ -69,7 +71,7 @@ describe("GlobalError", () => {
     const html = renderToStaticMarkup(
       <GlobalError error={mockError} retry={retry} />,
     );
-    expect(html).toContain("geist-sans");
+    expect(html).toContain("montserrat");
     expect(html).toContain("geist-mono");
   });
 

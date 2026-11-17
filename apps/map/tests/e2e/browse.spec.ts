@@ -61,11 +61,16 @@ test.describe("map browse & search (anonymous)", () => {
     await expect(page.getByTestId("map")).toBeVisible();
     expect(new URL(page.url()).pathname).toBe("/");
 
-    // The search placeholder swaps its "5000+" fallback for the live count
-    // once the workoutCount query resolves — this proves the whole
+    // The search box's accessible name swaps its "5000+" fallback for the
+    // live count once the workoutCount query resolves — this proves the whole
     // map → api → seeded-db chain is up (AC-2).
-    await expect(page.getByTestId("map-searchbox-input")).toHaveAttribute(
+    const search = page.getByTestId("map-searchbox-input");
+    await expect(search).toHaveAttribute(
       "placeholder",
+      "City, zip, or AO name",
+    );
+    await expect(search).toHaveAttribute(
+      "aria-label",
       /^Search \d+ free, peer-led workouts$/,
       { timeout: 30_000 },
     );
@@ -87,7 +92,8 @@ test.describe("map browse & search (anonymous)", () => {
 
     const selectedItem = await searchAndSelectWorkout(page, "The Foundry");
 
-    // Clicking the selected item opens the location detail panel (AC-8).
+    // Clicking the selected item opens the location detail in the left panel
+    // (AC-8).
     await selectedItem.click();
     const panel = page.getByTestId("panel");
     await expect(panel).toBeVisible();
@@ -99,8 +105,10 @@ test.describe("map browse & search (anonymous)", () => {
       panel.locator('a[href*="google.com/maps"]').first(),
     ).toBeVisible();
 
+    // The back link returns to the nearby list.
     await page.getByRole("button", { name: "Close location panel" }).click();
     await expect(panel).not.toBeVisible();
+    await expect(page.getByTestId("nearby-locations")).toBeVisible();
   });
 
   test("AM/PM quick filters change the nearby list and Reset restores it", async ({
@@ -133,8 +141,8 @@ test.describe("map browse & search (anonymous)", () => {
 
     // AM deactivates PM (mutually exclusive, AC-13) and matches everything.
     await amButton.click();
-    await expect(amButton).toHaveClass(/bg-red-500/);
-    await expect(pmButton).not.toHaveClass(/bg-red-500/);
+    await expect(amButton).toHaveAttribute("aria-pressed", "true");
+    await expect(pmButton).toHaveAttribute("aria-pressed", "false");
     await expect(nearby.getByText("The Dark Tower")).toBeVisible();
 
     // Reset (inside the "All filters" drawer) restores the unfiltered state
@@ -147,7 +155,7 @@ test.describe("map browse & search (anonymous)", () => {
       .getByRole("button", { name: "Reset", exact: true })
       .filter({ visible: true })
       .click();
-    await expect(amButton).not.toHaveClass(/bg-red-500/);
+    await expect(amButton).toHaveAttribute("aria-pressed", "false");
     await expect(nearby.getByText("The Dark Tower")).toBeVisible();
   });
 });

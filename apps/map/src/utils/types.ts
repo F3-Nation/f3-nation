@@ -1,6 +1,7 @@
 import type { DayOfWeek } from "@acme/shared/app/enums";
 
 import type { RouterOutputs } from "~/orpc/types";
+import type { MapEventStatusDetail } from "~/utils/event-status-map";
 
 export type F3Marker = NonNullable<
   RouterOutputs["map"]["location"]["locationWorkout"]
@@ -26,6 +27,8 @@ export interface SparseF3Marker {
     startDate: string | null;
     endDate: string | null;
     mapStatus: MapStatus;
+    /** What decided `mapStatus` for a weekly workout, for its status tag. */
+    statusDetail?: MapEventStatusDetail | null;
   }[];
 }
 

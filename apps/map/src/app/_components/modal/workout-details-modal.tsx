@@ -1,6 +1,4 @@
-import { useWindowWidth } from "@react-hook/window-size";
-
-import { BreakPoints, Z_INDEX } from "@acme/shared/app/constants";
+import { Z_INDEX } from "@acme/shared/app/constants";
 import { Dialog, DialogContent, DialogHeader } from "@acme/ui/dialog";
 
 import type { DataType, ModalType } from "~/utils/store/modal";
@@ -63,10 +61,6 @@ export const WorkoutDetailsModal = ({
     events: location?.events,
   });
 
-  const width = useWindowWidth();
-  const isLarge = width > Number(BreakPoints.LG);
-  const isMedium = width > Number(BreakPoints.MD);
-
   // Label the edit buttons with the event they actually act on, which for a
   // temporary change is the resolved parent series rather than the instance.
   const selectedEvent = results?.location?.events.find(
@@ -91,7 +85,7 @@ export const WorkoutDetailsModal = ({
     <Dialog open={true} onOpenChange={closeModal}>
       <DialogContent
         style={{ zIndex: Z_INDEX.WORKOUT_DETAILS_MODAL }}
-        className="mb-40 max-w-[95vw] rounded-lg px-3 sm:px-6 lg:rounded-none lg:px-8"
+        className="mb-40 max-h-[85dvh] max-w-[95vw] overflow-y-auto rounded-lg px-4 sm:px-6"
       >
         <DialogHeader className="flex flex-row flex-wrap items-center justify-start gap-x-2">
           {/* Empty DialogHeader to maintain structure */}
@@ -115,13 +109,12 @@ export const WorkoutDetailsModal = ({
         <WorkoutDetailsContent
           locationId={locationId}
           providedEventId={modalEventId}
-          chipSize={isLarge ? "large" : isMedium ? "medium" : "large"}
         />
 
         <div className="h-2" />
         <div className="flex w-full flex-col justify-center gap-4">
           <button
-            className="flex cursor-pointer flex-row items-center justify-center gap-2 rounded-md bg-muted-foreground px-2 py-1 text-background"
+            className="flex h-10 cursor-pointer flex-row items-center justify-center gap-2 rounded-full border border-input text-xs font-bold tracking-wider uppercase hover:bg-muted"
             onClick={() => closeModal()}
           >
             Close

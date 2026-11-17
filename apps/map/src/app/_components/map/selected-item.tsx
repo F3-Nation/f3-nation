@@ -48,7 +48,7 @@ export const SelectedItem = (props: {
         }
         className={cn(
           "text-left",
-          "pointer-events-auto relative w-full lg:w-[450px]",
+          "pointer-events-auto relative w-full md:w-[380px] lg:w-[450px]",
           "bg-background",
           "overflow-hidden overflow-y-auto rounded-lg p-2 text-sm text-foreground shadow-xl transition-all",
           "dark:border-[1px] dark:border-muted",

@@ -8,7 +8,7 @@ import { ModalType, openModal } from "~/utils/store/modal";
 
 export const SettingsButton = ({ className }: { className?: string }) => {
   return (
-    <div className={"flex flex-col lg:mx-2.5"}>
+    <div className={"flex flex-col md:mx-2.5"}>
       <button
         draggable="false"
         aria-label="Settings"

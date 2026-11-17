@@ -39,9 +39,10 @@ city X" to "this workout, this address, this time" in a few interactions.
 - **AC-1** — GIVEN an anonymous visitor WHEN the map app loads THEN the map
   renders (`data-testid="map"`) with workout pins/clusters visible at the
   default view, with no sign-in prompt or auth redirect.
-- **AC-2** — GIVEN the map is loaded THEN the search box placeholder shows the
-  live workout count ("Search N free, peer-led workouts", falling back to
-  "5000+" until loaded).
+- **AC-2** — GIVEN the map is loaded THEN the search box's placeholder reads
+  "City, zip, or AO name" and its accessible name carries the live workout
+  count ("Search N free, peer-led workouts", falling back to "5000+" until
+  loaded).
 - **AC-3** — GIVEN a zoomed-out view with a cluster bubble showing a count
   WHEN the user clicks the cluster THEN the map zooms toward its contents and
   the cluster splits into smaller clusters or individual pins.
@@ -62,12 +63,17 @@ city X" to "this workout, this address, this time" in a few interactions.
 
 ### Location detail
 
-- **AC-8** — GIVEN a visible pin WHEN the user clicks it (desktop) THEN the
-  location panel opens (`data-testid="panel"`) showing the workout name, event
-  type(s), address with a Google Maps directions link, schedule (day/time),
-  and region section; the "Close location panel" control closes it.
+- **AC-8** — GIVEN a visible pin WHEN the user clicks it (768px wide and up)
+  THEN the workout's details open in the left panel in place of the nearby
+  list (`data-testid="panel"`), showing the AO and workout name, event
+  type(s), schedule (day/time), address with a Google Maps directions link, an
+  "Add to calendar" (.ics) control, and the region section; the "Nearby
+  workouts" back link ("Close location panel") returns to the list. Below
+  768px the details open in a dialog.
 - **AC-9** — GIVEN a location with multiple workouts WHEN its panel is open
-  THEN all of that location's workouts are listed and selectable as chips.
+  THEN all of that location's workouts are listed, one entry per workout with
+  its days folded together ("Tuesday / Thursday · 5:15–6:00 AM"), the one on
+  view is marked, and picking another shows it.
 - **AC-10** — GIVEN an open location panel WHEN the user clicks "Copy Link to
   Event" THEN a URL containing `locationId` and `eventId` is copied, and
   opening that URL loads the map centered on that location.
@@ -135,6 +141,19 @@ their own query schedule.
   message (`role="alert"`) saying Google Maps isn't available, instead of the
   error page. Google disables its markers when it rejects a key, so the map is
   not kept on screen without them.
+
+### Nearby list
+
+- **AC-20** — GIVEN the nearby list THEN it shows one row per AO at a
+  location: logo (AO, then region, then F3), name and type(s), address, an
+  S M T W T F S strip with the meeting days filled, and the most common start
+  time. Days at another time get one line under the strip ("Saturday starts at
+  6:30 AM"; "Tue and Thu also 6:00 PM") and a dot; when no time repeats the
+  time reads "Times vary" and the line lists each day's time. A workout with
+  an upcoming change in the next 30 days colors its day in the pin's status
+  color and adds a tag ("Closed Sat Nov 22", "Thu Nov 26: 7:00 AM",
+  "Special: Fri Nov 27, 7:00 AM Convergence"); a fully closed row strikes
+  its time.
 
 ## 5. Roles & authorization (RBAC)
 

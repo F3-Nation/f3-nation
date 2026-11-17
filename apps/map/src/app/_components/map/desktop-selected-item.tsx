@@ -74,8 +74,8 @@ const SelectedItemWrapper = () => {
 
   return (
     <div
-      className={cn("absolute hidden lg:block", {
-        "lg:hidden": hideSelectedItem,
+      className={cn("absolute hidden md:block", {
+        "md:hidden": hideSelectedItem,
       })}
       style={{
         zIndex: Z_INDEX.SELECTED_ITEM_CONTAINER_DESKTOP,
