@@ -630,6 +630,143 @@ test("assembleReport reads facts per repo and merges the boards", async () => {
   assert.ok(calls.every((c) => c.startsWith("f3-nation ")));
 });
 
+test("assembleReport refuses a board PR from another repo without naming it", async () => {
+  const forkUrl =
+    "https://github.com/F3-Nation/f3-nation-ghsa-aaaa-bbbb-cccc/pull/1";
+  const calls = [];
+  const github = {
+    paginate: async (route) => {
+      calls.push(route);
+      return [];
+    },
+    graphql: async () => {
+      calls.push("graphql");
+      return {};
+    },
+  };
+  await assert.rejects(
+    assembleReport({
+      github,
+      sources: [
+        {
+          owner: "F3-Nation",
+          repo: "f3-nation",
+          board: { codeowners: [], prs: [pr(1), pr(2, { url: forkUrl })] },
+        },
+      ],
+      now: NOW,
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        "pr-triage's board for F3-Nation/f3-nation holds a PR from another repository.",
+      );
+      assert.doesNotMatch(error.message, /ghsa/i);
+      return true;
+    },
+  );
+  // It stops before reading anything from GitHub.
+  assert.deepEqual(calls, []);
+});
+
+test("assembleReport accepts a board PR from its own repo in any letter case", async () => {
+  const github = {
+    paginate: async () => [],
+    graphql: async () => ({
+      repository: {
+        pullRequests: { pageInfo: { hasNextPage: false }, nodes: [] },
+      },
+    }),
+  };
+  await assert.doesNotReject(
+    assembleReport({
+      github,
+      sources: [
+        {
+          owner: "F3-Nation",
+          repo: "f3-nation",
+          board: {
+            codeowners: ["andy"],
+            fetched: 1,
+            prs: [
+              pr(1, { url: "https://github.com/f3-nation/F3-NATION/pull/1" }),
+            ],
+          },
+        },
+      ],
+      now: NOW,
+    }),
+  );
+});
+
+test("assembleReport checks every board before reading GitHub", async () => {
+  const calls = [];
+  const github = {
+    paginate: async (route) => {
+      calls.push(route);
+      return [];
+    },
+    graphql: async () => {
+      calls.push("graphql");
+      return {};
+    },
+  };
+  await assert.rejects(
+    assembleReport({
+      github,
+      sources: [
+        {
+          owner: "F3-Nation",
+          repo: "f3-nation",
+          board: { codeowners: [], prs: [pr(1)] },
+        },
+        {
+          owner: "F3-Nation",
+          repo: "other",
+          board: {
+            codeowners: [],
+            prs: [
+              pr(1, {
+                url: "https://github.com/F3-Nation/f3-nation-ghsa-aaaa-bbbb-cccc/pull/1",
+              }),
+            ],
+          },
+        },
+      ],
+      now: NOW,
+    }),
+    {
+      message:
+        "pr-triage's board for F3-Nation/other holds a PR from another repository.",
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("assembleReport refuses a board that lists security advisories", async () => {
+  const github = {
+    paginate: async () => assert.fail("read GitHub"),
+    graphql: async () => assert.fail("read GitHub"),
+  };
+  await assert.rejects(
+    assembleReport({
+      github,
+      sources: [
+        {
+          owner: "F3-Nation",
+          repo: "f3-nation",
+          board: { codeowners: [], prs: [pr(1)], advisoriesWithoutPr: [] },
+        },
+      ],
+      now: NOW,
+    }),
+    {
+      message:
+        "pr-triage's board for F3-Nation/f3-nation lists security advisories.",
+    },
+  );
+});
+
 test("extra lists follow the PR lists, and their header notes end the header", () => {
   const result = buildReport(
     { codeowners: [], prs: [pr(1)] },

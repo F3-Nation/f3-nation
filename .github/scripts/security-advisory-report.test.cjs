@@ -600,7 +600,7 @@ test("triage ignores the caller's PR_TRIAGE_* overrides", (t) => {
   process.env.PR_TRIAGE_FIXTURE = "/tmp/fixture.json";
   process.env.PR_TRIAGE_MAX_PAGES = "1";
   process.env.PR_TRIAGE_CODEOWNERS = "eve";
-  assert.deepEqual(triageFork(FORK_A).env, ["PR_TRIAGE_BOT_TIMEOUT_SECS=0"]);
+  assert.deepEqual(triageFork(FORK_A).env, []);
 });
 
 test("a fix PR that is its author's turn says why", async () => {
