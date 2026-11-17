@@ -545,9 +545,11 @@ assert_eq "a mark from before the blocked report doesn't clear it" "LOCAL" \
 adv_dir="$tmp_dir/adv"
 mkdir -p "$adv_dir/bin"
 fork_a="acme/repo-ghsa-aaaa-bbbb-cccc" fork_b="acme/repo-ghsa-dddd-eeee-ffff"
+# A fork's PRs carry latestOpinionatedReviews in place of reviewDecision, as the fork query asks.
 fork_board() {
   jq --arg url "https://github.com/$1/pull/" --argjson numbers "$2" \
     '.data.repository.pullRequests.nodes |= [.[] | select(.number | IN($numbers[]))
+      | del(.reviewDecision) | .latestOpinionatedReviews = {nodes: []}
       | .url = $url + (.number | tostring)]' "$tmp_dir/fixture.json"
 }
 fork_board "$fork_a" '[5, 8]' >"$adv_dir/fork-a.json"
@@ -585,6 +587,11 @@ advisory() { jq -nc --arg id "$1" --arg severity "$2" --arg fork "$3" --arg at "
 cat >"$adv_dir/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 [[ "$*" == "auth status" ]] && exit 0
+# GitHub can fail the whole query when it computes reviewDecision on an advisory fork's PR.
+if [[ "$*" == *name=repo-ghsa-* && "$*" == *reviewDecision* ]]; then
+  echo "gh: Something went wrong while executing your query." >&2
+  exit 1
+fi
 if [[ "$1 $2" == "api --paginate" ]]; then
   case "$ADV_MODE" in
     notfound) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
@@ -606,6 +613,7 @@ case "$*" in
   *name=repo-ghsa-gggg-hhhh-jjjj*) cat "$ADV_DIR/fork-c.json" ;;
   *name=repo-ghsa-vvvv-wwww-xxxx*) cat "$ADV_DIR/fork-d.json" ;;
   *name=repo-ghsa-yyyy-zzzz-2222*) cat "$ADV_DIR/fork-e.json" ;;
+  *name=repo-ghsa-hhhh-jjjj-kkkk*) cat "$ADV_DIR/fork-f.json" ;;
   *) echo "gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 STUB
@@ -691,6 +699,33 @@ assert_eq "advisories: a cut-off fork isn't listed as without a fix PR" \
   '["GHSA-ssss-tttt-uuuu","GHSA-vvvv-wwww-xxxx"]' "$(jq -c '[.advisoriesWithoutPr[].ghsa]' <<<"$cut_board")"
 assert_eq "advisories: a cut-off fork is noted" "1 security advisory fork has more open PRs: only the oldest are shown." \
   "$(jq -r '.advisoryNotes[1]' <<<"$cut_board")"
+
+# A fork PR's approval comes from its latest opinionated reviews, the way main's ruleset reads
+# them: a codeowner's approval of the head commit, and no outstanding change request.
+jq --arg url "https://github.com/acme/repo-ghsa-hhhh-jjjj-kkkk/pull/" '
+  def opinion($by; $state; $oid): {state: $state, author: {login: $by}, commit: {oid: $oid}};
+  .data.repository.pullRequests.nodes |= ([.[] | select(.number == 8)][0] as $done
+    | [($done | .number = 41 | .latestOpinionatedReviews.nodes = [opinion("Luis"; "APPROVED"; "first")]),
+       ($done | .number = 42 | .latestOpinionatedReviews.nodes =
+         [opinion("luis"; "APPROVED"; "first"), opinion("andy"; "CHANGES_REQUESTED"; "first")]),
+       ($done | .number = 43 | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; "older")]),
+       ($done | .number = 44 | .latestOpinionatedReviews.nodes = [opinion("not-an-owner"; "APPROVED"; "first")]),
+       ($done | .number = 45 | .latestOpinionatedReviews.nodes = []),
+       ($done | .number = 46 | .author.login = "luis"
+         | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; "first")])]
+    | map(del(.reviewDecision) | .url = $url + (.number | tostring)))' \
+  "$tmp_dir/fixture.json" >"$adv_dir/fork-f.json"
+fork_only=$(ADV_MODE=list ADV_DIR="$adv_dir" PATH="$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
+  PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" bash "$triage" -R acme/repo-ghsa-hhhh-jjjj-kkkk --json 2>&1)
+assert_eq "a fork read on its own never asks for reviewDecision" "41,42,43,44,45,46" \
+  "$(jq -r '[.prs[].number] | join(",")' <<<"$fork_only" 2>/dev/null)"
+fork_bucket() { jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .bucket' <<<"$fork_only" 2>/dev/null; }
+assert_eq "fork: a codeowner's approval of the head waits to merge" "MERGE" "$(fork_bucket 41)"
+assert_eq "fork: an outstanding change request outweighs an approval" "MANUAL" "$(fork_bucket 42)"
+assert_eq "fork: an approval of an older commit doesn't count" "MANUAL" "$(fork_bucket 43)"
+assert_eq "fork: a non-codeowner's approval doesn't count" "MANUAL" "$(fork_bucket 44)"
+assert_eq "fork: no opinionated review needs approval" "MANUAL" "$(fork_bucket 45)"
+assert_eq "fork: the author's own approval doesn't count" "MANUAL" "$(fork_bucket 46)"
 
 # An early exit waits for a slow fork read instead of leaving it writing into a removed work_dir.
 slow_dir="$tmp_dir/adv-slow"

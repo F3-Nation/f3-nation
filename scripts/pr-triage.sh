@@ -169,6 +169,13 @@ fragment reviews on PullRequestReviewConnection {
   }
 }'
 
+# GitHub can fail the whole query computing reviewDecision for an advisory fork's PR, so fork
+# queries read each reviewer's latest approval or change request instead, and classify works
+# out the decision from them.
+# shellcheck disable=SC2016
+fork_query=${query/reviewDecision/'latestOpinionatedReviews(first: 100) { nodes { state author { login } commit { oid } } }'}
+is_advisory_fork() { [[ "$(tr '[:upper:]' '[:lower:]' <<<"${1#*/}")" =~ -ghsa(-[0-9a-z]{4}){3}$ ]]; }
+
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/pr-triage.XXXXXX")
 advisory_pid=""
 board_tmp=""
@@ -183,12 +190,13 @@ trap cleanup EXIT
 # Every page of a repo's open PRs into <file>: every page's PRs under the last page's pageInfo,
 # so hasNextPage still marks a cut-off list.
 fetch_prs() {
-  local target="$1" file="$2" dir cursor="" page=0 page_file
+  local target="$1" file="$2" dir cursor="" page=0 page_file q="$query"
   local -a args
+  if is_advisory_fork "$target"; then q="$fork_query"; fi
   dir=$(mktemp -d "$work_dir/pages.XXXXXX") || return 1
   while :; do
     page=$((page + 1))
-    args=(-f query="$query" -f owner="${target%%/*}" -f name="${target#*/}")
+    args=(-f query="$q" -f owner="${target%%/*}" -f name="${target#*/}")
     if [[ -n "$cursor" ]]; then args+=(-f cursor="$cursor"); fi
     page_file="$dir/$(printf '%03d' "$page").json"
     if ! gh api graphql "${args[@]}" >"$page_file"; then
@@ -380,7 +388,14 @@ classify='
       | (($open | length) > 0 and ($moreThreads | not)
           and all($openThreads[]; (.lastComment.nodes[0].author.login // "") == $author))
         as $allReplied
-      | ($pr.reviewDecision == "APPROVED") as $approved
+      # On a fork, the test the main branch ruleset applies: a codeowner other than the author
+      # approved the head commit, and no latest opinion requests changes.
+      | (if $pr | has("latestOpinionatedReviews") then
+           ($pr.latestOpinionatedReviews.nodes // []) as $opinions
+           | any($opinions[]; .state == "APPROVED" and (.author.login | codeowner) and not_by($author)
+               and .commit.oid == $head.oid)
+             and all($opinions[]; .state != "CHANGES_REQUESTED")
+         else $pr.reviewDecision == "APPROVED" end) as $approved
       | ($pr.mergeable == "CONFLICTING") as $conflicts
 
       | (if $pr.isDraft then ["DRAFT", ""]
