@@ -6,6 +6,8 @@ const assert = require("node:assert/strict");
 const {
   parseMarker,
   summarize,
+  collectFacts,
+  readCodeowners,
   decide,
   nudgeBody,
   warnMessage,
@@ -880,6 +882,43 @@ test("anyone with push access gets the team timings, whatever GitHub's associati
   assert.equal(rows[0].tier, "team");
   assert.equal(rows[0].outcome, "author's turn, under the limit");
   assert.deepEqual(notes, []);
+});
+
+test("a codeowner gets the team timings even when collaborators leave them out", async () => {
+  // GitHub reports a private org owner as a CONTRIBUTOR to the workflow's
+  // token and leaves them out of its collaborator list.
+  const github = fakeGithub(null, {
+    authorAssociation: "CONTRIBUTOR",
+    author: { login: "Pax", __typename: "User" },
+  });
+  const facts = async (codeowners) => {
+    const collected = await collectFacts({
+      github,
+      owner: "F3-Nation",
+      repo: "f3-nation",
+      codeowners,
+    });
+    return collected.factsFor(collected.prs[0]);
+  };
+  assert.equal((await facts([])).tier, "outside");
+  assert.equal((await facts(["pax"])).tier, "team");
+});
+
+test("readCodeowners lists each @handle once, lowercased, without teams or comments", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codeowners-"));
+  const file = path.join(dir, "CODEOWNERS");
+  fs.writeFileSync(
+    file,
+    "# @nobody\n* @Amy @dan # @later\n/apps/ @amy @F3-Nation/core\n",
+  );
+  assert.deepEqual(readCodeowners(file), ["amy", "dan"]);
+  assert.equal(readCodeowners(path.join(dir, "missing")), null);
+  fs.rmSync(dir, { recursive: true });
+  // The repo's own file names at least one codeowner.
+  assert.ok(readCodeowners().length > 0);
 });
 
 test("if collaborators can't be listed, the run notes it and uses the association", async () => {

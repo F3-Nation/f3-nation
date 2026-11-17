@@ -33,6 +33,9 @@
  *   node .github/scripts/pr-author-nudge.cjs [owner/repo]
  */
 
+const fs = require("node:fs");
+const path = require("node:path");
+
 const MARKER = "<!-- pr-author-nudge";
 const STALE_LABEL = "stale";
 const KEEP_OPEN_LABEL = "keep-open";
@@ -43,7 +46,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // a nudge posted at least (close - nudge) days earlier in the same stretch, so
 // nobody is closed without that much warning.
 const DAYS = {
-  team: { nudge: 5, close: 10 }, // owners, members and collaborators
+  team: { nudge: 5, close: 10 }, // owners, members, collaborators and codeowners
   outside: { nudge: 3, close: 7 }, // everyone else, including forks
 };
 // The codeowners' Slack heads-up goes out when the close is this close, and
@@ -107,13 +110,15 @@ function parseMarker(body) {
  * needs. `requiredContexts` is the list of required check names on the base.
  * `nudge` is `{ id, nudgedAt, warnedAt?, pausedAt?, body? }` for the bot's
  * newest reminder, or null. `writers` is an optional Set of logins with push
- * access, counted as team even when GitHub reports a private org member as
- * a CONTRIBUTOR.
+ * access or in CODEOWNERS, compared case-insensitively and counted as team
+ * even when GitHub reports a private org member as a CONTRIBUTOR.
  */
 function summarize(pr, requiredContexts, nudge, writers = new Set()) {
   const author = pr.author?.login ?? null;
+  const team = new Set([...writers].map((login) => login.toLowerCase()));
   const isTeam = (login, association) =>
-    TEAM_ASSOCIATIONS.has(association) || writers.has(login);
+    TEAM_ASSOCIATIONS.has(association) ||
+    team.has(String(login ?? "").toLowerCase());
   const isBotAuthor = pr.author?.__typename === "Bot";
   const created = ts(pr.createdAt);
   const timeline = pr.timelineItems?.nodes ?? [];
@@ -534,6 +539,29 @@ const PR_FIELDS = `
   }`;
 
 /**
+ * The @handles in `file` (default this repo's .github/CODEOWNERS), each once
+ * and lowercased, as pr-triage.sh reads them: comments and @org/team entries
+ * are skipped. Null when the file can't be read.
+ */
+function readCodeowners(file = path.join(__dirname, "..", "CODEOWNERS")) {
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  const handles = new Set();
+  for (const line of text.split("\n")) {
+    for (const word of line.trim().split(/\s+/)) {
+      if (word.startsWith("#")) break;
+      if (word.startsWith("@") && !word.includes("/"))
+        handles.add(word.slice(1).toLowerCase());
+    }
+  }
+  return [...handles];
+}
+
+/**
  * Reads what `summarize()` needs for every open PR: the PR nodes, the required
  * checks on the default branch, and who has push access. Writes nothing.
  * Returns `{ prs, factsFor(pr, nudge = null), writersKnown, notes }`, where
@@ -544,7 +572,13 @@ const PR_FIELDS = `
  * the team are read. A security advisory's temporary private fork has neither
  * of its own: its PRs merge into the advisory's repo, under that repo's rules.
  */
-async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
+async function collectFacts({
+  github,
+  owner,
+  repo,
+  base = { owner, repo },
+  codeowners = readCodeowners(),
+}) {
   const rules = await github.paginate(
     "GET /repos/{owner}/{repo}/rules/branches/{branch}",
     {
@@ -559,10 +593,16 @@ async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
     .flatMap((r) => r.parameters?.required_status_checks ?? [])
     .map((c) => c.context);
 
-  // Everyone with push access counts as team. GitHub can report a private
-  // org member as a CONTRIBUTOR to the workflow's token, so the association
-  // alone would give them the outside timings.
+  // Everyone with push access, and every codeowner, counts as team. GitHub
+  // can report a private org member as a CONTRIBUTOR to the workflow's token,
+  // and the token's collaborator list leaves out org owners, so neither alone
+  // would give them the team timings.
   const notes = [];
+  if (codeowners == null)
+    notes.push(
+      "Couldn't read .github/CODEOWNERS; codeowners GitHub doesn't list as " +
+        "collaborators are judged by their association.",
+    );
   let writers = new Set();
   let writersKnown = true;
   try {
@@ -605,6 +645,7 @@ async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
     cursor = connection.pageInfo.endCursor;
   }
 
+  const team = new Set([...writers, ...(codeowners ?? [])]);
   const factsFor = (pr, nudge = null) =>
     summarize(
       pr,
@@ -612,7 +653,7 @@ async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
         ? requiredContexts
         : [],
       nudge,
-      writers,
+      team,
     );
   return { prs, factsFor, writersKnown, notes };
 }
@@ -884,6 +925,7 @@ module.exports = {
   parseMarker,
   slackEscape,
   collectFacts,
+  readCodeowners,
   summarize,
   decide,
   describeReasons,

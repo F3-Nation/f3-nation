@@ -458,7 +458,13 @@ async function assembleReport({
   for (const { owner, repo, board } of sources)
     assertOwnPrs(owner, repo, board);
   for (const { owner, repo, board, base } of sources) {
-    const collected = await collectFacts({ github, owner, repo, base });
+    const collected = await collectFacts({
+      github,
+      owner,
+      repo,
+      base,
+      codeowners: board.codeowners ?? [],
+    });
     notes.push(...collected.notes);
     for (const pr of collected.prs)
       factsByUrl.set(pr.url, collected.factsFor(pr));
