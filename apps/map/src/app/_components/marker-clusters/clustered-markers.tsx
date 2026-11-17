@@ -1,7 +1,7 @@
 import type { Options } from "supercluster";
 import { useCallback, useMemo } from "react";
 import { useMap } from "@vis.gl/react-google-maps";
-import { CLOSE_ZOOM } from "@acme/shared/app/constants";
+import { DAY_LABEL_ZOOM } from "@acme/shared/app/constants";
 
 import type {
   F3ClusterProperties,
@@ -20,7 +20,9 @@ import { FeaturesClusterMarker } from "./features-cluster-marker";
 const superclusterOptions: Options<MarkerProperties, F3ClusterProperties> = {
   extent: 256, // smaller means more in a cluster
   radius: 64, // Adjust this. smaller means more smaller clusters
-  maxZoom: 12,
+  // Stop clustering a zoom before day labels appear, so every location shows
+  // as its own plain pin first.
+  maxZoom: DAY_LABEL_ZOOM - 1,
 };
 
 export const ClusteredMarkers = () => {
@@ -39,8 +41,8 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
 
   const map = useMap();
   const zoom = mapStore.use.zoom();
-  const isClose = useMemo(() => {
-    return zoom >= CLOSE_ZOOM;
+  const showDayLabels = useMemo(() => {
+    return zoom >= DAY_LABEL_ZOOM;
   }, [zoom]);
   const { clusters, getLeaves } = useSupercluster(geojson, superclusterOptions);
   const handleClusterClick = useCallback(
@@ -98,7 +100,7 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
             key={key}
             featureId={featureId}
             position={{ lat, lng }}
-            isClose={isClose}
+            showDayLabels={showDayLabels}
           />
         );
       })}
@@ -108,7 +110,7 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
             key={id}
             featureId={id}
             position={marker}
-            isClose={isClose}
+            showDayLabels={showDayLabels}
           />
         );
       })}

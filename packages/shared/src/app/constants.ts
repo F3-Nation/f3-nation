@@ -9,6 +9,9 @@ export const BOONE_CENTER = [36.211104, -81.660849] as [number, number];
 export const DEFAULT_CENTER = BOONE_CENTER;
 
 export const CLOSE_ZOOM = 13;
+// Map pins show their workout days ("Tu Th Sa") from this zoom (about a
+// 15–25 mile view); below it each location is a plain pin.
+export const DAY_LABEL_ZOOM = 12;
 // First view when the map centers on the visitor: a regional view, wider on larger screens
 export const USER_LOCATION_ZOOM = 10;
 // Map theme for visitors who haven't picked one in Settings

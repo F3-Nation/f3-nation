@@ -47,6 +47,14 @@ city X" to "this workout, this address, this time" in a few interactions.
   WHEN the user clicks the cluster THEN the map zooms toward its contents and
   the cluster splits into smaller clusters or individual pins.
 
+- **AC-21** — GIVEN the map is zoomed out below zoom 12 (`DAY_LABEL_ZOOM`)
+  THEN each unclustered location is a plain F3-red pin (its status color when
+  a workout there has an upcoming change); from zoom 12 up each pin shows its
+  workout days once each in week order ("Tu Th Sa"), a day in its status
+  color when it has one, and the location open in the panel is outlined and
+  raised. Clustering stops one zoom earlier (11), so locations show as their
+  own pins before the labels appear.
+
 ### Search
 
 - **AC-4** — GIVEN the user types 3+ characters in the search box THEN a
