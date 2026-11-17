@@ -47,7 +47,8 @@ import {
   writeUrlState,
   writeViewportToUrl,
 } from "../_lib/url-state";
-import type { MapViewport } from "../_lib/url-state";
+import type { ViewportRestore } from "../_lib/viewport-restore";
+import { viewportAction } from "../_lib/viewport-restore";
 import type { NearestAdminOrg } from "./org-info-panel";
 import { OrgInfoPanel } from "./org-info-panel";
 import { LocationInfoPanel } from "./location-info-panel";
@@ -237,16 +238,13 @@ export default function OrgMap({
   const fitInFlightRef = useRef(false);
   const pendingPinPanRef = useRef(false);
   // A center and zoom saved in the URL (?at=) that the first render restores
-  // instead of fitting, so a refresh keeps the user's view. `key` records the
-  // view (level + path) it was restored for: re-renders of that same view
-  // (e.g. React re-running effects) keep it; the first navigation fits again.
-  const restoreViewportRef = useRef<{
-    viewport: MapViewport;
-    key: string | null;
-  } | null>(
+  // instead of fitting, so a refresh keeps the user's view. It records the
+  // `selectedPath` array it restored for: redraws of that same array keep the
+  // view; the next navigation (a new array) fits again. See viewportAction.
+  const restoreViewportRef = useRef<ViewportRestore<Org[]> | null>(
     (() => {
       const viewport = readViewportFromUrl();
-      return viewport ? { viewport, key: null } : null;
+      return viewport ? { viewport, path: null } : null;
     })(),
   );
   const [isLoaded, setIsLoaded] = useState(false);
@@ -860,13 +858,13 @@ export default function OrgMap({
       polygon.addTo(layerGroup);
     }
 
-    const viewKey = `${currentLevel}:${selectedPath.map((o) => o.id).join("/")}`;
     const restore = restoreViewportRef.current;
-    if (restore?.key === null) {
+    const action = viewportAction(restore, selectedPath);
+    if (restore && action === "restore") {
       const { lat, lng, zoom } = restore.viewport;
       map.setView([lat, lng], zoom, { animate: false });
-      restore.key = viewKey;
-    } else if (restore?.key !== viewKey) {
+      restore.path = selectedPath;
+    } else if (action === "fit") {
       restoreViewportRef.current = null;
       if (allLatLngs.length > 0) fitMapTo(L.latLngBounds(allLatLngs));
     }

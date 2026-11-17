@@ -245,7 +245,7 @@ describe("auth headers", () => {
 });
 
 describe("fetchLeadership", () => {
-  it("keeps positions and only the visible roles", async () => {
+  it("returns the orgs and keeps positions and only the visible roles", async () => {
     const base = {
       orgId: 7,
       id: 1,
@@ -254,6 +254,11 @@ describe("fetchLeadership", () => {
       avatarUrl: null,
     };
     mockFetch(200, {
+      orgs: [
+        { id: 7, name: "Boone", orgType: "region", parentId: 5 },
+        { id: 9, name: null, orgType: "area", parentId: null },
+        { id: 10, name: "Odd", orgType: "galaxy", parentId: null },
+      ],
       leaders: [
         { ...base, kind: "position", title: "Nant'an" },
         { ...base, kind: "role", title: "admin" },
@@ -261,7 +266,12 @@ describe("fetchLeadership", () => {
       ],
     });
     const result = await fetchLeadership();
-    expect(result.map((l) => l.title)).toEqual(["Nant'an", "admin"]);
+    expect(result.leaders.map((l) => l.title)).toEqual(["Nant'an", "admin"]);
+    // Unknown org types are dropped; a missing name gets a placeholder.
+    expect(result.orgs).toEqual([
+      { id: 7, name: "Boone", orgType: "region", parentId: 5 },
+      { id: 9, name: "Org 9", orgType: "area", parentId: null },
+    ]);
     expect(vi.mocked(fetch).mock.calls[0]?.[0]).toContain(
       "/v1/org-chart/leadership",
     );

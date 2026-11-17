@@ -25,11 +25,13 @@ export function FilterMultiSelect({
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const id = useId();
 
-  function close() {
+  function close(restoreFocus = false) {
     setOpen(false);
     setQuery("");
+    if (restoreFocus) buttonRef.current?.focus();
   }
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export function FilterMultiSelect({
       if (!containerRef.current?.contains(e.target as Node)) close();
     }
     function onEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") close(true);
     }
     document.addEventListener("click", onClickOutside);
     document.addEventListener("keydown", onEscape);
@@ -63,7 +65,14 @@ export function FilterMultiSelect({
         : `${selectedIds.length} selected`;
 
   return (
-    <div ref={containerRef} className="relative flex min-w-0 flex-col sm:w-48">
+    <div
+      ref={containerRef}
+      // Close once keyboard focus moves past the popup to the next control.
+      onBlur={(e) => {
+        if (open && !containerRef.current?.contains(e.relatedTarget)) close();
+      }}
+      className="org-wide:w-48 relative flex min-w-0 flex-col"
+    >
       <span
         id={`${id}-label`}
         className="mb-1 text-xs tracking-widest text-muted-foreground uppercase"
@@ -71,6 +80,7 @@ export function FilterMultiSelect({
         {label}
       </span>
       <button
+        ref={buttonRef}
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -89,6 +99,8 @@ export function FilterMultiSelect({
         <div
           role="dialog"
           aria-label={`${label} filter`}
+          // Focusable, so a click on the popup's padding keeps focus inside.
+          tabIndex={-1}
           className="absolute top-full z-30 mt-1 w-full min-w-56 rounded-xl border border-border bg-card p-2 shadow-lg"
         >
           <input

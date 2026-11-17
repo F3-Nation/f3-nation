@@ -45,6 +45,11 @@ export function writeUrlState(level: OrgType, orgId: number | null): void {
   window.history.replaceState(null, "", qs ? `?${qs}` : "./");
 }
 
+/** A query string with literal commas: they read better than %2C in a link. */
+function queryWithCommas(params: URLSearchParams): string {
+  return `?${params.toString().replace(/%2C/g, ",")}`;
+}
+
 // ── Map viewport (?at=lat,lng,zoom) ─────────────────────────────────────────
 
 export interface MapViewport {
@@ -72,7 +77,7 @@ export function writeViewportToUrl({ lat, lng, zoom }: MapViewport): void {
   const params = new URLSearchParams(window.location.search);
   const round = (n: number) => Number(n.toFixed(5));
   params.set("at", `${round(lat)},${round(lng)},${round(zoom)}`);
-  window.history.replaceState(null, "", `?${params.toString()}`);
+  window.history.replaceState(null, "", queryWithCommas(params));
 }
 
 /** Point the Map at one org (or Nation), with its default level and fit. */
@@ -106,10 +111,5 @@ export function readTableOrgIdsFromUrl(): number[] {
 export function writeTableUrlState(orgIds: readonly number[]): void {
   const params = new URLSearchParams({ view: "table" });
   if (orgIds.length > 0) params.set("orgs", orgIds.join(","));
-  // Commas read better than %2C in a shared link.
-  window.history.replaceState(
-    null,
-    "",
-    `?${params.toString().replace(/%2C/g, ",")}`,
-  );
+  window.history.replaceState(null, "", queryWithCommas(params));
 }

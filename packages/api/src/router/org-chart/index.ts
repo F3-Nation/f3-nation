@@ -17,6 +17,10 @@ import {
 } from "@acme/db";
 import { OrgType } from "@acme/shared/app/enums";
 
+import {
+  ancestorOrgsAreActive,
+  orgAndAncestorsAreActive,
+} from "../../org-activity";
 import { protectedProcedure } from "../../shared";
 
 interface OrgRow {
@@ -430,10 +434,18 @@ export const orgChartRouter = {
       tags: ["Org Chart"],
       summary: "List org chart leadership",
       description:
-        "Return every position and role holder at every active non-AO org in one response, for the directory's Table view.",
+        "Return every active non-AO org whose ancestors are all active, with every position and role holder at those orgs, in one response, for the directory's Table view. Unlike the org chart, orgs are listed whether or not they have active locations.",
     })
     .output(
       z.object({
+        orgs: z.array(
+          z.object({
+            id: z.number().describe("Organization ID"),
+            name: z.string().nullable().describe("Organization name"),
+            orgType: z.enum(OrgType).describe("Organization type"),
+            parentId: z.number().nullable().describe("Parent organization ID"),
+          }),
+        ),
         leaders: z.array(
           z.object({
             orgId: z.number().describe("Organization ID"),
@@ -457,7 +469,23 @@ export const orgChartRouter = {
       const orgFilter = and(
         eq(schema.orgs.isActive, true),
         ne(schema.orgs.orgType, "ao"),
+        ancestorOrgsAreActive(schema.orgs.id),
       );
+
+      const orgs = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+          orgType: schema.orgs.orgType,
+          parentId: schema.orgs.parentId,
+        })
+        .from(schema.orgs)
+        .where(
+          and(
+            ne(schema.orgs.orgType, "ao"),
+            orgAndAncestorsAreActive(schema.orgs.id),
+          ),
+        );
 
       const positionRows = await ctx.db
         .select({
@@ -545,6 +573,7 @@ export const orgChartRouter = {
       });
 
       return {
+        orgs,
         leaders: [
           ...positionRows.map((row) => ({
             ...withRegion(row),

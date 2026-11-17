@@ -110,6 +110,28 @@ describe("buildRows", () => {
     ]);
     expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
   });
+
+  it("keeps each of two same-named orgs' rows together", () => {
+    const twins = new Map(orgById);
+    twins.set(21, { id: 21, name: "Downtown", orgType: "region", parentId: 5 });
+    twins.set(22, { id: 22, name: "Downtown", orgType: "region", parentId: 6 });
+    const rows = buildRows(
+      [
+        leader(22, "A Title", "One"),
+        leader(21, "B Title", "Two"),
+        leader(22, "C Title", "Three"),
+        leader(21, "D Title", "Four"),
+      ],
+      twins,
+      layers,
+    );
+    expect(rows.map((r) => `${r.orgId}:${r.title}`)).toEqual([
+      "21:B Title",
+      "21:D Title",
+      "22:A Title",
+      "22:C Title",
+    ]);
+  });
 });
 
 const names = (orgs: Org[]) => orgs.map((o) => o.name);

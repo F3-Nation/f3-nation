@@ -9,13 +9,12 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
-import type { LeaderEntry, OrgChartItem } from "../_lib/types";
-import { fetchLeadership, fetchOrgChart } from "../_lib/api";
+import type { LeaderEntry, Org } from "../_lib/types";
+import { fetchLeadership } from "../_lib/api";
 import { downloadCsv } from "../_lib/leadership-csv";
 import { OrgTable } from "./org-table";
 
 vi.mock("../_lib/api", () => ({
-  fetchOrgChart: vi.fn(),
   fetchLeadership: vi.fn(),
 }));
 vi.mock(import("../_lib/leadership-csv"), async (importOriginal) => ({
@@ -26,31 +25,23 @@ vi.mock("../_lib/use-ao-search", () => ({
   useAoSearch: () => ({ results: [], loading: false, error: false }),
 }));
 
-function region(
-  orgId: number,
+const org = (
+  id: number,
   name: string,
-  chain: [number, string, OrgChartItem["orgType"]][],
-): OrgChartItem {
-  return {
-    orgId,
-    name,
-    orgType: "region",
-    hierarchy: [...chain, [1, "Nation", "nation"]],
-    activeLocations: [],
-  };
-}
+  orgType: Org["orgType"],
+  parentId: number | null,
+): Org => ({ id, name, orgType, parentId });
 
-const CHART: OrgChartItem[] = [
-  region(7, "Boone", [
-    [5, "Western NC", "area"],
-    [3, "North Carolina", "territory"],
-    [2, "Southeast", "sector"],
-  ]),
-  region(8, "Coral Gables", [
-    [6, "Miami", "area"],
-    [4, "Florida", "territory"],
-    [2, "Southeast", "sector"],
-  ]),
+// The API lists every active org, with or without locations.
+const ORGS: Org[] = [
+  org(1, "Nation", "nation", null),
+  org(2, "Southeast", "sector", 1),
+  org(3, "North Carolina", "territory", 2),
+  org(4, "Florida", "territory", 2),
+  org(5, "Western NC", "area", 3),
+  org(6, "Miami", "area", 4),
+  org(7, "Boone", "region", 5),
+  org(8, "Coral Gables", "region", 6),
 ];
 
 const LEADERS: LeaderEntry[] = [
@@ -88,7 +79,6 @@ const LEADERS: LeaderEntry[] = [
 
 afterEach(() => {
   cleanup();
-  vi.mocked(fetchOrgChart).mockReset();
   vi.mocked(fetchLeadership).mockReset();
   vi.mocked(downloadCsv).mockReset();
 });
@@ -104,8 +94,10 @@ function leaderRows() {
 
 /** The table loaded; `initialOrgIds` pre-checks filters (none: sectors only). */
 async function renderLoaded(initialOrgIds: number[] = []) {
-  vi.mocked(fetchOrgChart).mockResolvedValue(CHART);
-  vi.mocked(fetchLeadership).mockResolvedValue(LEADERS);
+  vi.mocked(fetchLeadership).mockResolvedValue({
+    orgs: ORGS,
+    leaders: LEADERS,
+  });
   render(
     <OrgTable
       viewSwitcher={<span>switcher</span>}
@@ -186,8 +178,18 @@ describe("OrgTable", () => {
     });
     expect(within(dialog).getByText("No matches")).toBeTruthy();
 
-    // Escape closes; the Region filter now offers regions in both.
+    // Escape closes and returns focus to the filter's button; the Region
+    // filter now offers regions in both.
     fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(filterButton("Territory"));
+
+    // Tabbing out of the popup closes it; moving within it does not.
+    dialog = openFilter("Territory");
+    const [firstBox, secondBox] = within(dialog).getAllByRole("checkbox");
+    fireEvent.blur(firstBox!, { relatedTarget: secondBox });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.blur(secondBox!, { relatedTarget: filterButton("Area") });
     expect(screen.queryByRole("dialog")).toBeNull();
     dialog = openFilter("Region");
     expect(
@@ -241,8 +243,10 @@ describe("OrgTable", () => {
 
   it("restores filters from initial ids and keeps the URL and Map focus current", async () => {
     window.history.replaceState(null, "", "?view=table&orgs=5");
-    vi.mocked(fetchOrgChart).mockResolvedValue(CHART);
-    vi.mocked(fetchLeadership).mockResolvedValue(LEADERS);
+    vi.mocked(fetchLeadership).mockResolvedValue({
+      orgs: ORGS,
+      leaders: LEADERS,
+    });
     const onMapFocusChange = vi.fn();
     render(
       <OrgTable initialOrgIds={[5]} onMapFocusChange={onMapFocusChange} />,
@@ -341,8 +345,10 @@ describe("OrgTable", () => {
       removeEventListener: () => undefined,
     }));
     try {
-      vi.mocked(fetchOrgChart).mockResolvedValue(CHART);
-      vi.mocked(fetchLeadership).mockResolvedValue(LEADERS);
+      vi.mocked(fetchLeadership).mockResolvedValue({
+        orgs: ORGS,
+        leaders: LEADERS,
+      });
       render(<OrgTable initialOrgIds={[3]} />);
       const list = await screen.findByRole("list", {
         name: "Positions and roles by org",
@@ -373,14 +379,32 @@ describe("OrgTable", () => {
       ]);
       expect(within(list).getByText("NO PAX LISTED")).toBeTruthy();
       expect(within(list).queryByText("Switchback")).toBeNull();
+
+      // Changing the filters resets the sections: Florida's tree, with Coral
+      // Gables the first org with anyone listed, opens on Coral Gables only.
+      const dialog = openFilter("Territory");
+      fireEvent.click(within(dialog).getByLabelText("Florida"));
+      fireEvent.click(within(dialog).getByLabelText("North Carolina"));
+      fireEvent.keyDown(document, { key: "Escape" });
+      const after = screen.getByRole("list", {
+        name: "Positions and roles by org",
+      });
+      expect(
+        within(after)
+          .getAllByRole("button")
+          .map((b) => `${b.textContent} ${b.getAttribute("aria-expanded")}`),
+      ).toEqual([
+        "▶Florida (Territory) false",
+        "▶Miami (Area) false",
+        "▼Coral Gables (Region) true",
+      ]);
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
   it("shows an empty message when nothing matches", async () => {
-    vi.mocked(fetchOrgChart).mockResolvedValue([]);
-    vi.mocked(fetchLeadership).mockResolvedValue([]);
+    vi.mocked(fetchLeadership).mockResolvedValue({ orgs: [], leaders: [] });
     render(<OrgTable />);
     expect(
       await screen.findByText("No positions or roles match these filters."),
@@ -407,8 +431,7 @@ describe("OrgTable", () => {
   });
 
   it("reports a load failure", async () => {
-    vi.mocked(fetchOrgChart).mockRejectedValue(new Error("API 500"));
-    vi.mocked(fetchLeadership).mockResolvedValue([]);
+    vi.mocked(fetchLeadership).mockRejectedValue(new Error("API 500"));
     render(<OrgTable />);
     await waitFor(() =>
       expect(screen.getByText("Failed to load: API 500")).toBeTruthy(),

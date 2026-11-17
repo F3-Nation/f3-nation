@@ -2,9 +2,11 @@ import type {
   AoSearchResult,
   LeaderEntry,
   LocationDetail,
+  Org,
   OrgChartItem,
   OrgDetail,
 } from "./types";
+import { normalizeOrgType } from "./org-chart";
 
 function getApiBase(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL;
@@ -64,14 +66,34 @@ export async function fetchOrgById(id: number): Promise<OrgDetail> {
   };
 }
 
-/** Every position and role holder at every non-AO org, in one request. */
-export async function fetchLeadership(): Promise<LeaderEntry[]> {
-  const data = await orgMapFetch<{ leaders: LeaderEntry[] }>(
-    "/org-chart/leadership",
-  );
-  return data.leaders.filter(
-    (l) => l.kind === "position" || VISIBLE_ROLES.has(l.title),
-  );
+/**
+ * Every active non-AO org (with or without active locations) and every
+ * position and role holder at those orgs, in one request.
+ */
+export async function fetchLeadership(): Promise<{
+  orgs: Org[];
+  leaders: LeaderEntry[];
+}> {
+  const data = await orgMapFetch<{
+    orgs: {
+      id: number;
+      name: string | null;
+      orgType: unknown;
+      parentId: number | null;
+    }[];
+    leaders: LeaderEntry[];
+  }>("/org-chart/leadership");
+  return {
+    orgs: data.orgs.flatMap(({ id, name, orgType, parentId }) => {
+      const type = normalizeOrgType(orgType);
+      return type
+        ? [{ id, name: name ?? `Org ${id}`, orgType: type, parentId }]
+        : [];
+    }),
+    leaders: data.leaders.filter(
+      (l) => l.kind === "position" || VISIBLE_ROLES.has(l.title),
+    ),
+  };
 }
 
 export async function fetchLocationById(

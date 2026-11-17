@@ -32,7 +32,8 @@ unpopulated tier for one branch requires no per-level code.
     (Table view on portrait phones), `leader-parts.tsx` (avatar, tags, and
     placeholder labels shared by both), and `_lib/leadership-table.ts` (Table
     rows, cascading filters, org grouping), `_lib/leadership-csv.ts` (Table
-    CSV export), `_lib/use-media-query.ts` (portrait-phone detection)
+    CSV export), `_lib/use-media-query.ts` (portrait-phone detection),
+    `_lib/viewport-restore.ts` (when a refresh's saved view is restored)
   - `apps/homepage/src/app/org/_lib/`: `navigation.ts` (depth-agnostic drill
     logic), `org-chart.ts` (`LAYER_TYPES`, `orgTypeRank`, `buildOrgHierarchy`),
     `geo-utils.ts`, `url-state.ts`, `api.ts`, `use-ao-search.ts` (debounced
@@ -45,9 +46,8 @@ unpopulated tier for one branch requires no per-level code.
 
 ## 3. User stories
 
-- As a **visitor (no account)**, I want to see either a Map view (the current
-  map) or a Table view (new) of the directory, with the Map view loading by
-  default.
+- As a **visitor (no account)**, I want to see either a Map view or a Table
+  view of the directory, with the Map view loading by default.
 - As a **visitor in the Table view**, I want to search for a sector,
   territory, area, or region.
 - As a **visitor in the Table view**, I want to see all positions and roles
@@ -144,7 +144,8 @@ unpopulated tier for one branch requires no per-level code.
   zoom as `?at=<lat>,<lng>,<zoom>` (5 decimals), rewritten after each move
   without adding history entries; WHEN the page is refreshed THEN the same
   selection opens at the saved center and zoom instead of the default fit.
-  The next navigation fits as usual. An `?at=` that is malformed or out of
+  The next navigation fits as usual, including clicking the current crumb or
+  the active layer button. An `?at=` that is malformed or out of
   range (latitude beyond ±90, longitude beyond ±180, zoom outside 2–20) is
   ignored and the default fit applies.
 - **AC-36** — GIVEN the Table view THEN the URL holds `?view=table` and the
@@ -158,18 +159,20 @@ unpopulated tier for one branch requires no per-level code.
 
 ### Table view
 
-- **AC-26** — GIVEN the Table view WHEN it loads THEN all leadership is
-  fetched in a single request and the table lists one row per person per
-  position or role held at a navigable-layer org (sector, territory, area,
-  region — never nation or AO). The columns are, in order: **Org** — the
+- **AC-26** — GIVEN the Table view WHEN it loads THEN the orgs and all
+  leadership are fetched in a single request (AC-30) and the table lists one
+  row per person per position or role held at a navigable-layer org (sector,
+  territory, area, region — never nation or AO). Unlike the Map, the Table
+  includes orgs with no active locations, so leaders at an org nobody meets at
+  yet are still listed. The columns are, in order: **Org** — the
   org's name followed by its level in parentheses (the org type's display
   label, e.g. "Boone (Region)"); **PAX** — the person's avatar (initials when
   there is none), F3 name, and home region name in parentheses, e.g.
   "Gator (Coral Gables)" (the parentheses are omitted when the person has no
   active home region); and **Position/Role** — the position or role
   title with a tag saying whether it is a position or a role. Roles are limited to the same visible roles as the info panel (admin,
-  editor). Rows are ordered broadest level first, then org name, then title,
-  then F3 name.
+  editor). Rows are ordered broadest level first, then org name (orgs that
+  share a name stay apart), then title, then F3 name.
 - **AC-27** — GIVEN the Table view THEN there is one multi-select filter per
   present navigable layer, broadest first, each showing "All" when nothing is
   chosen, the org's name when one is, and "N selected" otherwise. Opening a
@@ -180,7 +183,9 @@ unpopulated tier for one branch requires no per-level code.
   North Carolina and Florida chosen, orgs in either). Checking an org also
   checks its ancestors in the broader filters; unchecking an org also unchecks
   any narrower choices inside it. Each filter has a "Clear" action that
-  unchecks everything in it and in the narrower filters.
+  unchecks everything in it and in the narrower filters. Escape closes an open
+  filter and returns focus to its button; moving focus out of the popup (e.g.
+  tabbing past its last option) or clicking outside closes it.
 - **AC-39** — GIVEN the Table view with no filter set (opened directly by
   URL, switched from the Map with nothing selected, or after Clear filters)
   THEN it lists only positions and roles at broadest-layer orgs (sectors),
@@ -220,7 +225,7 @@ unpopulated tier for one branch requires no per-level code.
   THEN a **Clear filters** button shows beside the filters; WHEN the visitor
   clicks it THEN every filter returns to "All", the table lists the sector
   rows (AC-39), the URL drops its `orgs` (AC-36), and the button hides. It is
-  hidden while no filter is set. Each filter's own Clear (AC-27) is unchanged.
+  hidden while no filter is set. Each filter's own Clear works as in AC-27.
 - **AC-41** — GIVEN the Table view on a portrait phone (the same viewports
   as AC-23's phone layout) THEN the filters stack in one column (search, then
   one filter per row, then Clear filters), and in place of the table the rows
@@ -266,7 +271,8 @@ unpopulated tier for one branch requires no per-level code.
   the selected path) sits directly above the search box, inside the search
   card — in the sidebar on desktop and in the floating search card on phones
   — not in the header. It stays on one line and scrolls sideways when long,
-  keeping the current crumb in view; the current crumb is highlighted.
+  keeping the current crumb in view; the current crumb, other than Nation,
+  is highlighted.
 - **AC-6** — GIVEN a selected path WHEN the visitor clicks a breadcrumb crumb
   (or the "Nation" crumb) THEN the view returns to that ancestor's level (the
   Nation crumb returns to the broadest present layer) and the URL updates.
@@ -388,10 +394,13 @@ unpopulated tier for one branch requires no per-level code.
   (records sharing coordinates merge, taking the max AO count).
 - **AC-30** — GIVEN the leadership endpoint WHEN the client calls
   `GET /v1/org-chart/leadership` THEN it returns, in one response, every
-  position holder (active positions) and role holder at every active org that
-  is not an AO, each with its org id, kind (position or role), title, user id,
-  F3 name, avatar URL, and home region name (null when the user has no home
-  region or it is inactive); inactive orgs and users are excluded.
+  active org that is not an AO and whose ancestors are all active, whether or
+  not it has active locations (id, name, type, parent id), and every position
+  holder (active positions) and role holder at those orgs, each with its org
+  id, kind (position or role), title, user id, F3 name, avatar URL, and home
+  region name (null when the user has no home region or it is inactive);
+  inactive orgs, orgs under an inactive ancestor, and inactive users are
+  excluded.
 
 ## 5. Roles & authorization (RBAC)
 

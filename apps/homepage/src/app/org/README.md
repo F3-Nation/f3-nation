@@ -23,11 +23,15 @@ route is nonetheless a **Client Component**, for two reasons specific to it:
 
 ## Data fetching & auth
 
-`_lib/api.ts` hits two `protectedProcedure` endpoints, so requests carry a
-read-only Bearer key plus a `client` header:
+`_lib/api.ts` hits `protectedProcedure` endpoints, so requests carry a
+read-only Bearer key plus a `client` header. The main ones:
 
-- `GET /v1/org-chart` — the full directory (`fetchOrgChart`)
+- `GET /v1/org-chart` — the Map's directory: orgs with active locations
+  (`fetchOrgChart`)
 - `GET /v1/org-chart/:id` — one org's detail (`fetchOrgById`)
+- `GET /v1/org-chart/leadership` — the Table view: every active non-AO org,
+  with or without locations, and its position and role holders
+  (`fetchLeadership`)
 
 The key is `NEXT_PUBLIC_ORG_MAP_API_KEY`. Because this is a static bundle, that
 value is **baked in at build time and visible in devtools** — it is intentionally

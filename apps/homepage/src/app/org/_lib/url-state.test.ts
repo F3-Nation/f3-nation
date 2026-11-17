@@ -162,7 +162,7 @@ describe("map viewport", () => {
     setSearch("?level=regions&org=7");
     writeViewportToUrl({ lat: 35.123456789, lng: -80.987654321, zoom: 9 });
     expect(window.location.search).toBe(
-      "?level=regions&org=7&at=35.12346%2C-80.98765%2C9",
+      "?level=regions&org=7&at=35.12346,-80.98765,9",
     );
     expect(readViewportFromUrl()).toEqual({
       lat: 35.12346,

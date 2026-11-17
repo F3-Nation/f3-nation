@@ -135,6 +135,20 @@ describe("OrgDirectory", () => {
     await waitFor(() => expect(window.location.search).toBe("?org=3"));
   });
 
+  it("forgets an earlier Table visit's focus when the Table hasn't published one", async () => {
+    window.history.replaceState(null, "", "?view=table&orgs=2,3");
+    render(<OrgDirectory />);
+    tableProps.latest!.onMapFocusChange!(3);
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    await waitFor(() => expect(window.location.search).toBe("?org=3"));
+
+    // On the Map, pick org 8, then visit the Table and leave before it loads.
+    window.history.replaceState(null, "", "?level=regions&org=8");
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    await waitFor(() => expect(window.location.search).toBe("?org=8"));
+  });
+
   it("opens the Map at Nation when the Table has no single selection", () => {
     window.history.replaceState(null, "", "?view=table");
     render(<OrgDirectory />);

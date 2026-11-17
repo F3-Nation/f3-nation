@@ -83,6 +83,8 @@ function compareDefault(a: TableRow, b: TableRow): number {
   return (
     orgTypeRank(b.org.orgType) - orgTypeRank(a.org.orgType) ||
     a.org.name.localeCompare(b.org.name) ||
+    // Keep two same-named orgs' rows apart.
+    a.org.id - b.org.id ||
     rowTitle(a).localeCompare(rowTitle(b)) ||
     rowName(a).localeCompare(rowName(b))
   );
@@ -90,8 +92,8 @@ function compareDefault(a: TableRow, b: TableRow): number {
 
 /**
  * Rows for every leader at an org in one of `layers`, in the default order:
- * broadest level first, then org name, title, and F3 name. Leaders at orgs
- * the chart doesn't include (AOs, nation, orgs off the directory) are dropped.
+ * broadest level first, then org name (and id), title, and F3 name. Leaders
+ * at orgs outside `orgById` or `layers` (AOs, nation, unknown) are dropped.
  */
 export function buildRows(
   leaders: LeaderEntry[],

@@ -35,4 +35,19 @@ describe("useMediaQuery", () => {
     unmount();
     expect(listeners.size).toBe(0);
   });
+
+  it("subscribes once across re-renders", () => {
+    const add = vi.fn();
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      media: query,
+      matches: false,
+      addEventListener: add,
+      removeEventListener: () => undefined,
+    }));
+    const { rerender, unmount } = renderHook(() => useMediaQuery("(x)"));
+    rerender();
+    rerender();
+    expect(add).toHaveBeenCalledTimes(1);
+    unmount();
+  });
 });

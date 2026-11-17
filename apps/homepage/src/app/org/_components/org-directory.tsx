@@ -38,6 +38,9 @@ export function OrgDirectory() {
     if (next === "table") {
       const orgId = readOrgIdFromUrl();
       const ids = orgId == null ? [] : [orgId];
+      // Start from the Map's org, so leaving before the Table publishes a
+      // focus (still loading, or failed) returns there, not to an older visit.
+      mapFocusRef.current = orgId;
       writeTableUrlState(ids);
       setTableOrgIds(ids);
     } else {

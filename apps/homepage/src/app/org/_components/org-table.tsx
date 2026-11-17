@@ -11,7 +11,7 @@ import type {
   SortState,
 } from "../_lib/leadership-table";
 import type { Org, OrgType } from "../_lib/types";
-import { fetchLeadership, fetchOrgChart } from "../_lib/api";
+import { fetchLeadership } from "../_lib/api";
 import { fuzzyScore } from "../_lib/geo-utils";
 import {
   downloadCsv,
@@ -35,7 +35,6 @@ import {
   sortRows,
   toggleLayerFilter,
 } from "../_lib/leadership-table";
-import { buildOrgHierarchy } from "../_lib/org-chart";
 import {
   PHONE_PORTRAIT_MEDIA_QUERY,
   useMediaQuery,
@@ -95,10 +94,12 @@ export function OrgTable({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchOrgChart(), fetchLeadership()])
-      .then(([items, leaders]) => {
+    fetchLeadership()
+      .then(({ orgs, leaders }) => {
         if (cancelled) return;
-        const { orgById } = buildOrgHierarchy(items);
+        // Every active org, not just those with locations (the map's chart),
+        // so leaders at orgs nobody meets at yet are still listed.
+        const orgById = new Map(orgs.map((org) => [org.id, org]));
         const layers = getPresentLayers(orgById);
         setFilters(filtersFromOrgIds(initialOrgIds, layers, orgById));
         setState({
@@ -200,7 +201,9 @@ export function OrgTable({
               disabled={!data}
             />
           </div>
-          <div className="org-overlay:grid-cols-1 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
+          {/* Stacked on portrait phones and tablets, a row elsewhere; keyed to the
+              same split as the accordion so the two can't disagree. */}
+          <div className="org-wide:flex org-wide:flex-wrap grid grid-cols-1 gap-3">
             {data &&
               layers.map((layer) => {
                 const options = getLayerOptions(
@@ -230,7 +233,7 @@ export function OrgTable({
               <button
                 type="button"
                 onClick={() => setFilters({})}
-                className="org-overlay:col-span-1 col-span-2 self-end rounded-lg px-3 py-2 text-left text-sm font-medium text-primary hover:bg-muted sm:col-span-1"
+                className="self-end rounded-lg px-3 py-2 text-left text-sm font-medium text-primary hover:bg-muted"
               >
                 Clear filters
               </button>
