@@ -39,8 +39,7 @@ git diff [BASE_SHA]..[HEAD_SHA]
 [LENS]
 
 Other reviewers cover these lanes: [OTHER_LANES]. Don't go looking for their problems. If you
-come across a serious one anyway, report it and mark it "outside lane". Never set a concern
-aside because another lane owns it: that lane's reviewer may not have seen it.
+come across a serious one anyway, report it and mark it "outside lane".
 
 ## Rules
 - Read-only. Don't change the working tree, index, HEAD, or branches. Use git show, git diff,
@@ -52,8 +51,6 @@ aside because another lane owns it: that lane's reviewer may not have seen it.
   were checking.
 - Only report what you verified in the code. Say "unverified" when a claim depends on
   something you couldn't check (runtime behavior, a library's semantics).
-- Before calling a concern unverifiable, search the checkout for the evidence: existing
-  migrations, callers, tests, config and docs. If the repo can answer it, answer it.
 - Report only problems in lines this PR adds or changes, or problems those lines cause
   elsewhere. A concern about code outside this diff, or about a requirement you can't
   evaluate, goes under "Declined to judge" with one line on why.
