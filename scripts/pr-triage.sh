@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
 # pr-triage: sort a repo's open PRs by what a codeowner should do next.
 #
-#   scripts/pr-triage.sh [-R owner/repo] [--html [--out FILE] [--no-open] | --json]
+#   scripts/pr-triage.sh [-R owner/repo] [--with-advisories] [--html [--out FILE] [--no-open] | --json]
 #   scripts/pr-triage.sh [-R owner/repo] mark <PR> inline|local
 #
-#   -R, --repo    repository to triage (default: F3-Nation/f3-nation)
-#   --html        write a single-page board instead of terminal text, and open it
-#   --out FILE    where to write the board (default: $TMPDIR/pr-triage-<owner>-<repo>.html)
-#   --no-open     write the board without opening it
-#   --json        print the board's data as JSON (what the Codeowners PR Report reads)
-#   mark          record a skill run by hand in your local ledger
+#   -R, --repo         repository to triage (default: F3-Nation/f3-nation)
+#   --with-advisories  also triage the fix PRs in the repo's open security advisories you can see
+#   --html             write a single-page board instead of terminal text, and open it
+#   --out FILE         where to write the board (default: $TMPDIR/pr-triage-<owner>-<repo>.html)
+#   --no-open          write the board without opening it
+#   --json             print the board's data as JSON (what the Codeowners PR Report reads)
+#   mark               record a skill run by hand in your local ledger; for an advisory fix PR,
+#                      pass its fork as -R
 #
 # Needs gh (signed in with `gh auth login`) and jq. Runs on macOS, Linux and WSL.
+#
+# --with-advisories lists the open (triage or draft) security advisories your gh login can see
+# and triages the PRs in each one's temporary private fork beside the repo's own, advisory PRs
+# first, most severe first. A first list holds the advisories with no fix PR: no fork, or a fork
+# with only drafts open; an advisory whose fork couldn't be read in full is left off it. Anyone
+# GitHub shows no advisories, or refuses them (403 or 404), gets the same board as without the
+# flag, with no message. Any other failed advisory read is said on stderr and on the board, and
+# so is a fork that couldn't be read. Advisory data is private to people with advisory access:
+# never pass the flag where the output is posted or logged publicly.
 #
 # Stages, in order:
 #   draft                                         -> ignored
@@ -51,11 +62,11 @@ NOT_NEEDED_LABEL="local test: not needed"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CODEOWNERS_FILE="${PR_TRIAGE_CODEOWNERS:-$script_dir/../.github/CODEOWNERS}"
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "pr-triage: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 is required. $2"; }
 
-repo="F3-Nation/f3-nation" html=false json=false out="" open_board=true
+repo="F3-Nation/f3-nation" html=false json=false out="" open_board=true with_advisories=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -R | --repo) [[ $# -ge 2 ]] || usage 1; repo="$2"; shift 2 ;;
@@ -63,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --out) [[ $# -ge 2 ]] || usage 1; out="$2"; html=true; shift 2 ;;
     --no-open) open_board=false; shift ;;
     --json) json=true; shift ;;
+    --with-advisories) with_advisories=true; shift ;;
     -h | --help) usage 0 ;;
     mark) break ;;
     *) usage 1 ;;
@@ -157,39 +169,114 @@ fragment reviews on PullRequestReviewConnection {
   }
 }'
 
-if [[ -n "${PR_TRIAGE_FIXTURE:-}" ]]; then
-  data=$(cat "$PR_TRIAGE_FIXTURE")
-else
-  pages_dir=$(mktemp -d "${TMPDIR:-/tmp}/pr-triage.XXXXXX")
-  trap 'rm -rf "$pages_dir"' EXIT
-  cursor="" page=0
+work_dir=$(mktemp -d "${TMPDIR:-/tmp}/pr-triage.XXXXXX")
+advisory_pid=""
+board_tmp=""
+cleanup() {
+  # Wait, not kill: killing the subshell would leave its fork fetches writing into work_dir.
+  [[ -z "$advisory_pid" ]] || wait "$advisory_pid" 2>/dev/null || true
+  [[ -z "$board_tmp" ]] || rm -f "$board_tmp"
+  rm -rf "$work_dir"
+}
+trap cleanup EXIT
+
+# Every page of a repo's open PRs into <file>: every page's PRs under the last page's pageInfo,
+# so hasNextPage still marks a cut-off list.
+fetch_prs() {
+  local target="$1" file="$2" dir cursor="" page=0 page_file
+  local -a args
+  dir=$(mktemp -d "$work_dir/pages.XXXXXX") || return 1
   while :; do
     page=$((page + 1))
-    args=(-f query="$query" -f owner="${repo%%/*}" -f name="${repo#*/}")
-    [[ -n "$cursor" ]] && args+=(-f cursor="$cursor")
-    page_file="$pages_dir/$(printf '%03d' "$page").json"
+    args=(-f query="$query" -f owner="${target%%/*}" -f name="${target#*/}")
+    if [[ -n "$cursor" ]]; then args+=(-f cursor="$cursor"); fi
+    page_file="$dir/$(printf '%03d' "$page").json"
     if ! gh api graphql "${args[@]}" >"$page_file"; then
       # A busy GitHub occasionally answers 502 or 504; one retry usually succeeds.
       sleep 2
-      gh api graphql "${args[@]}" >"$page_file"
+      gh api graphql "${args[@]}" >"$page_file" || return 1
     fi
     [[ "$(jq -r '.data.repository.pullRequests.pageInfo.hasNextPage' "$page_file")" == "true" ]] || break
     (( page < MAX_PAGES )) || break
-    cursor=$(jq -r '.data.repository.pullRequests.pageInfo.endCursor' "$page_file")
+    cursor=$(jq -r '.data.repository.pullRequests.pageInfo.endCursor' "$page_file") || return 1
   done
-  # Every page's PRs under the last page's pageInfo, so hasNextPage still marks a cut-off list.
-  data=$(jq -s '(map(.data.repository.pullRequests.nodes) | add) as $all
-    | last | .data.repository.pullRequests.nodes = $all' "$pages_dir"/*.json)
+  jq -s '(map(.data.repository.pullRequests.nodes) | add) as $all
+    | last | .data.repository.pullRequests.nodes = $all' "$dir"/*.json >"$file"
+}
+
+# The open advisories the viewer can see, most severe then oldest first, as a JSON list of
+# {ghsa, severity ("" if unset), fork ("" if none), summary, createdAt}. An advisory whose fork
+# isn't named <repo>-<its GHSA ID>, ignoring case, is dropped, so the script never triages a
+# repository other than this repo's advisory forks. A summary's control characters (C0, DEL and
+# C1) become spaces: reporters outside the team write them. An advisory read in both states,
+# because it changed state between the reads, keeps its later record. Fails on any refused or
+# unexpected answer; any failure but a 403 or 404 (no advisory access) also leaves
+# advisories.failed.
+list_advisories() {
+  local state listed="" err="$work_dir/advisories.err"
+  for state in triage draft; do
+    if ! listed+="$(gh api --paginate "repos/$repo/security-advisories?state=$state&per_page=100" 2>"$err")"; then
+      grep -qE 'HTTP 40[34]' "$err" || : >"$work_dir/advisories.failed"
+      return 1
+    fi
+    listed+=$'\n'
+  done
+  # shellcheck disable=SC2016
+  jq -cs --arg repo "$repo" '
+    def rank: . as $s | ["critical", "high", "medium", "low"] | index($s) // 4;
+    if all(.[]; type == "array") then add // [] else error("not a list of advisories") end
+    | map({ghsa: (.ghsa_id // ""), severity: (.severity // ""), fork: (.private_fork.full_name // ""),
+            summary: ((.summary // "") | tostring | gsub("[\u0000-\u001f\u007f-\u009f]+"; " ")),
+            createdAt: (.created_at // "")})
+    | map(select((.ghsa | test("^GHSA(-[a-z0-9]{4}){3}$"))
+        and (.fork == "" or (.fork | ascii_downcase) == ("\($repo)-\(.ghsa)" | ascii_downcase))))
+    | map(.severity |= (if IN("critical", "high", "medium", "low") then . else "" end))
+    # group_by keeps input order within a group, so last is the later read.
+    | group_by(.ghsa) | map(last)
+    | sort_by((.severity | rank), .createdAt)' <<<"$listed" 2>/dev/null \
+    || { : >"$work_dir/advisories.failed"; return 1; }
+}
+
+# The advisory list into advisories.json, then the n-th advisory's fork PRs into fork-<n>.json,
+# a few forks at a time, with fork-<n>.ok only once that read succeeds. A failed read leaves no
+# fork-<n>.ok, and a failed list leaves no advisories.json (see list_advisories for when it
+# leaves advisories.failed).
+discover_advisories() {
+  local list n=0 launched=0 fork
+  list=$(list_advisories) || return 0
+  [[ "$(jq 'length' <<<"$list")" -gt 0 ]] || return 0
+  printf '%s\n' "$list" >"$work_dir/advisories.json"
+  while read -r fork; do
+    n=$((n + 1))
+    [[ -n "$fork" ]] || continue
+    { fetch_prs "$fork" "$work_dir/fork-$n.json" && : >"$work_dir/fork-$n.ok"; } &
+    launched=$((launched + 1))
+    if (( launched % 4 == 0 )); then wait; fi
+  done < <(jq -r '.[].fork' <<<"$list")
+  wait
+}
+
+if $with_advisories && command -v gh >/dev/null 2>&1; then
+  ( set +e; discover_advisories ) </dev/null >/dev/null 2>&1 &
+  advisory_pid=$!
 fi
 
+if [[ -n "${PR_TRIAGE_FIXTURE:-}" ]]; then
+  data_file="$PR_TRIAGE_FIXTURE"
+else
+  data_file="$work_dir/base.json"
+  fetch_prs "$repo" "$data_file" || exit 1
+fi
+
+# Every valid ledger row, with its repo: each board reads only its own repo's rows.
 ledger_json="[]"
 if [[ -f "$LEDGER" ]]; then
-  ledger_json=$(jq -R -s --arg repo "$repo" '
+  ledger_json=$(jq -R -s '
     [split("\n")[] | select(length > 0) | split("\t")] as $rows
     | [$rows[] | select(length >= 3 and (.[1] | test("^[0-9]+$")))] as $valid
     | {bad: (($rows | length) - ($valid | length)),
-       rows: [$valid[] | select(.[0] == $repo)
-         | {pr: (.[1] | tonumber), skill: .[2], at: .[4], manual: (.[5] == "mark")}]}' "$LEDGER")
+       rows: [$valid[]
+         | {repo: .[0], pr: (.[1] | tonumber), skill: .[2], at: .[4], manual: (.[5] == "mark")}]}' "$LEDGER")
   [[ "$(jq '.bad' <<<"$ledger_json")" == "0" ]] || echo "pr-triage: ignoring malformed lines in $LEDGER" >&2
   ledger_json=$(jq -c '.rows' <<<"$ledger_json")
 fi
@@ -233,7 +320,7 @@ classify='
       # Skill runs, by codeowners other than the author or in the local ledger. The ledger holds
       # the viewer'"'"'s own runs, so on a PR the viewer wrote, every row is a self-check.
       | (if ($author | lower_login) == ($me | lower_login) then []
-         else $ledger | map(select(.pr == $pr.number)) end) as $ledgerRows
+         else $ledger | map(select(.repo == $repo and .pr == $pr.number)) end) as $ledgerRows
       | ($ledgerRows | map(.skill)) as $logged
       | [$pr.reviews.nodes[] | select((.submittedAt | ts) < ($cutoff | ts))
           | select((.author.login | codeowner) and not_by($author))] as $legacy
@@ -319,6 +406,22 @@ classify='
          end) as $verdict
       | ($verdict[0] | IN("DRAFT", "SKIP") | not) as $active
       | [$pr.assignees.nodes[]?.login] as $assignees
+      | ($me | lower_login) as $viewer
+      | any($assignees[]; lower_login == $viewer) as $viewerAssigned
+      # Someone other than the viewer and the author is assigned: they have taken it on.
+      | any($assignees[]; lower_login as $a | $a != $viewer and $a != ($author | lower_login))
+        as $claimedByOther
+      # Whether the next move can be the viewer'"'"'s: always on their own PR or when the author
+      # has replied in a thread the viewer opened; otherwise not when someone else has taken it
+      # on, the author owes a push or reply, or the threads awaiting a reply are other people'"'"'s.
+      # A thread a non-codeowner (a review bot) opened falls to the assigned codeowners, since no
+      # other codeowner will answer it.
+      | (if ($author | lower_login) == $viewer then true
+         elif $verdict[0] == "REPLY" and any($open[]; lower_login == $viewer) then true
+         elif $claimedByOther and ($viewerAssigned | not) then false
+         elif $verdict[0] == "THREADS" then false
+         elif $verdict[0] == "REPLY" then $viewerAssigned and any($open[]; codeowner | not)
+         else true end) as $viewersTurn
       | [$pr.reviewThreads.nodes[] | select((.comments.nodes[0].author.login // "") != $author)]
         as $othersThreads
 
@@ -356,20 +459,96 @@ classify='
           url: $pr.url,
           mine: ($author == $me),
           assignedToMe: ($assignees | index($me) != null),
+          claimedByOther: $claimedByOther,
+          viewersTurn: $viewersTurn,
           note: ([
             (if $verdict[1] != "" then $verdict[1] else empty end),
             (if $conflicts and $active then "merge conflicts" else empty end)
           ] | join("; "))
         }
+        # Every fork numbers its PRs from 1; the advisory ID tells them apart.
+        + (if $advisory == null then {}
+           else {advisory: $advisory, ref: "\($advisory.ghsa) #\($pr.number)"} end)
     ]
   }'
 
-jq -e '.data.repository.pullRequests.nodes' <<<"$data" >/dev/null 2>&1 \
-  || die "GitHub response had no pull request data for $repo: $(jq -c '.errors // .' <<<"$data" | head -c 300)"
-board=$(jq --arg repo "$repo" --arg cutoff "$LEGACY_CUTOFF" --arg notNeededLabel "$NOT_NEEDED_LABEL" \
-  --argjson codeowners "$codeowners_json" --argjson ledger "$ledger_json" \
-  --argjson now "${PR_TRIAGE_NOW:-null}" "$classify" <<<"$data") \
-  || die "could not classify PRs for $repo"
+# One repo's board from its fetched PRs; <advisory> is null for the repo itself.
+classify_board() {
+  jq --arg repo "$2" --arg cutoff "$LEGACY_CUTOFF" --arg notNeededLabel "$NOT_NEEDED_LABEL" \
+    --argjson codeowners "$codeowners_json" --argjson ledger "$ledger_json" \
+    --argjson advisory "$3" --argjson now "${PR_TRIAGE_NOW:-null}" "$classify" "$1"
+}
+
+jq -e '.data.repository.pullRequests.nodes' "$data_file" >/dev/null 2>&1 \
+  || die "GitHub response had no pull request data for $repo: $(jq -c '.errors // .' "$data_file" | head -c 300)"
+board=$(classify_board "$data_file" "$repo" null) || die "could not classify PRs for $repo"
+
+if [[ -n "$advisory_pid" ]]; then
+  wait "$advisory_pid" || true
+  advisory_pid=""
+fi
+if [[ -f "$work_dir/advisories.failed" ]]; then
+  note="Couldn't read the security advisories, so advisory PRs may be missing."
+  echo "pr-triage: $note" >&2
+  board=$(jq --arg note "$note" '.advisoryNotes = [$note]' <<<"$board")
+fi
+# Each fork read becomes a board of its own; the advisory PRs go first, in the list's order.
+# Every advisory is "none" (no fork), "read" (its fork's board is among fork_boards, in order)
+# or "unread".
+if [[ -s "$work_dir/advisories.json" ]]; then
+  n=0 statuses=""
+  fork_boards=()
+  while IFS="$SEP" read -r ghsa severity fork; do
+    n=$((n + 1))
+    if [[ -z "$fork" ]]; then statuses+=" none"; continue; fi
+    fork_data="$work_dir/fork-$n.json" fork_board="$work_dir/board-$(printf '%03d' "$n").json"
+    advisory=$(jq -nc --arg ghsa "$ghsa" --arg severity "$severity" --arg repo "$repo" \
+      '{ghsa: $ghsa, severity: (if $severity == "" then null else $severity end),
+        url: "https://github.com/\($repo)/security/advisories/\($ghsa)"}')
+    if [[ -f "$work_dir/fork-$n.ok" ]] \
+      && jq -e '.data.repository.pullRequests.nodes' "$fork_data" >/dev/null 2>&1 \
+      && classify_board "$fork_data" "$fork" "$advisory" >"$fork_board" 2>/dev/null; then
+      fork_boards+=("$fork_board")
+      statuses+=" read"
+    else
+      statuses+=" unread"
+    fi
+  done < <(jq -r '.[] | [.ghsa, .severity, .fork] | join("\u001f")' "$work_dir/advisories.json")
+  (( ${#fork_boards[@]} > 0 )) || fork_boards=(/dev/null)
+  # shellcheck disable=SC2016
+  board=$(jq -s --argjson base "$board" --slurpfile advisories "$work_dir/advisories.json" \
+    --arg statuses "$statuses" --arg repo "$repo" '
+    def forks($n): "\($n) security advisory fork\(if $n == 1 then "" else "s" end)";
+    . as $forks
+    | $advisories[0] as $all
+    | ($statuses | split(" ") | map(select(length > 0))) as $status
+    | ([$status[] | select(. == "unread")] | length) as $unread
+    | ([$forks[] | select(.truncated)] | length) as $cut
+    # Each advisory with its fork'"'"'s board: null for no fork, or one that was unread.
+    | [foreach range($all | length) as $i (
+        {read: 0, fork: null};
+        if $status[$i] == "read" then {read: (.read + 1), fork: $forks[.read]}
+        else {read, fork: null} end;
+        {advisory: $all[$i], status: $status[$i], fork})] as $each
+    | $base
+    | .prs = ([$forks[].prs[]] + .prs)
+    | .advisoryForks = ($forks | length)
+    # A fork that could not be read, or whose PRs were cut off, is left out: whether it has a
+    # fix PR is unknown. A draft counts as no fix PR, since drafts are off the board, and is noted.
+    | .advisoriesWithoutPr = [$each[]
+        | select(.status == "none"
+            or (.status == "read" and (.fork.truncated | not) and all(.fork.prs[]; .bucket == "DRAFT")))
+        | {ghsa: .advisory.ghsa,
+           severity: (if .advisory.severity == "" then null else .advisory.severity end),
+           summary: .advisory.summary, createdAt: .advisory.createdAt,
+           url: "https://github.com/\($repo)/security/advisories/\(.advisory.ghsa)",
+           draftPr: (.status == "read" and (.fork.prs | length) > 0)}]
+    | ([if $unread > 0 then "Couldn'"'"'t read \(forks($unread)), so \(if $unread == 1 then "its" else "their" end) PRs aren'"'"'t shown." else empty end,
+        if $cut > 0 then "\(forks($cut)) \(if $cut == 1 then "has" else "have" end) more open PRs: only the oldest are shown." else empty end])
+      as $notes
+    | if ($notes | length) > 0 then .advisoryNotes = $notes else . end' "${fork_boards[@]}") \
+    || die "could not merge the security advisory PRs"
+fi
 
 if $json; then
   printf '%s\n' "$board"
@@ -399,6 +578,10 @@ if $html; then
   [[ -d "$out" ]] && out="${out%/}/pr-triage-${repo%%/*}-${repo#*/}.html"
   # "<" is escaped so no PR title can close the <script> block it is embedded in.
   json=$(jq -c '.' <<<"$board" | sed 's/</\\u003c/g')
+  # Only you can read the board: it can name unfixed security advisories. It is written to a new
+  # mode-0600 file and renamed over any older board, so a reader holding the older board open
+  # never sees the new content.
+  board_tmp=$(mktemp "$(dirname "$out")/.pr-triage.XXXXXX") || die "could not write $out"
   {
     cat <<'HTML'
 <!doctype html>
@@ -411,7 +594,9 @@ if $html; then
   :root {
     --bg: #f6f7f9; --panel: #eceef2; --card: #ffffff; --text: #1d2330; --muted: #5d6677;
     --border: #d9dde5; --link: #1f5fbf; --chip: #e7ecf6; --chip-text: #2d4a80;
-    --warn: #8a5300; --warn-bg: #fff3dc;
+    --warn: #8a5300; --warn-bg: #fff3dc; --adv: #a3202a; --adv-bg: #fde4e4;
+    --sev-high: #b42318; --sev-high-bg: #fde4e4; --sev-medium: #9a4a00; --sev-medium-bg: #ffe6cc;
+    --sev-low: #6f5600; --sev-low-bg: #fff3b8;
     --c-inline: #6f5cc4; --c-threads: #c27c1a; --c-local: #2f86b5;
     --c-reply: #b5577d; --c-manual: #2f9b62; --c-merge: #1f7a4a; --c-own: #7a8494;
   }
@@ -419,7 +604,9 @@ if $html; then
     :root {
       --bg: #12151b; --panel: #1a1e26; --card: #222833; --text: #e5e8ee; --muted: #9aa3b2;
       --border: #313948; --link: #7fb0ff; --chip: #26324a; --chip-text: #b7cbf2;
-      --warn: #ffc56b; --warn-bg: #3a2d14;
+      --warn: #ffc56b; --warn-bg: #3a2d14; --adv: #ffb3b3; --adv-bg: #4a1d22;
+      --sev-high: #ffb3b3; --sev-high-bg: #4f1b1f; --sev-medium: #ffc787; --sev-medium-bg: #4a2a10;
+      --sev-low: #ffe58a; --sev-low-bg: #3f3510;
     }
   }
   * { box-sizing: border-box; }
@@ -453,6 +640,10 @@ if $html; then
     flex-wrap: wrap; align-items: center; }
   .chip { background: var(--chip); color: var(--chip-text); border-radius: 10px; padding: 0 7px;
     font-size: 11px; font-weight: 600; }
+  .card .advisory { background: var(--adv-bg); color: var(--adv); }
+  .card .advisory.sev-high { background: var(--sev-high-bg); color: var(--sev-high); }
+  .card .advisory.sev-medium { background: var(--sev-medium-bg); color: var(--sev-medium); }
+  .card .advisory.sev-low { background: var(--sev-low-bg); color: var(--sev-low); }
   .note { font-size: 12px; margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
   .empty { color: var(--muted); font-size: 12px; font-style: italic; }
   footer { color: var(--muted); font-size: 12px; padding: 0 16px 24px; max-width: 1800px; margin: 0 auto; }
@@ -505,15 +696,53 @@ HTML
   document.title = `PR triage · ${data.repo}`;
   const meta = document.getElementById("meta");
   meta.append(`Generated ${new Date(data.generatedAt).toLocaleString()} for @${data.viewer}. Rerun `);
-  meta.append(el("code", "", "scripts/pr-triage.sh --html"), " to refresh.");
+  const rerun = data.advisoryForks === undefined
+    ? "scripts/pr-triage.sh --html" : "scripts/pr-triage.sh --with-advisories --html";
+  meta.append(el("code", "", rerun), " to refresh.");
+  if (data.advisoryForks) {
+    const forks = data.advisoryForks;
+    meta.append(` Includes ${forks} security advisory fork${forks === 1 ? "" : "s"}.`);
+  }
+  for (const note of data.advisoryNotes ?? []) {
+    document.querySelector("header").append(el("div", "notice", note));
+  }
   if (data.truncated) {
     document.querySelector("header").append(
       el("div", "notice", `There are more open PRs: only the oldest ${data.fetched} are shown.`));
   }
 
   const board = document.getElementById("board");
+  // Advisories have no assignees, so the filters leave this column as it is.
+  const renderAdvisories = () => {
+    const advisories = data.advisoriesWithoutPr;
+    const col = el("section", "col");
+    col.style.setProperty("--accent", "var(--adv)");
+    const h2 = el("h2");
+    h2.append(el("span", "", "Advisories without a fix PR"), el("span", "count", String(advisories.length)));
+    col.append(h2, el("div", "hint", "Open security advisories with no fix PR ready for review."));
+    if (advisories.length === 0) col.append(el("div", "empty", "Nothing here."));
+    for (const advisory of advisories) {
+      const card = el("article", "card");
+      const head = el("div", "title");
+      head.append(link(advisory.url, "num", advisory.ghsa), link(advisory.url, "", advisory.summary));
+      const by = el("div", "by");
+      const tone = { high: " sev-high", medium: " sev-medium", low: " sev-low" }[advisory.severity] ?? "";
+      by.append(el("span", `chip advisory${tone}`, advisory.severity ?? "no severity"));
+      const opened = Date.parse(advisory.createdAt);
+      if (!Number.isNaN(opened)) {
+        const days = Math.max(0, Math.floor((Date.parse(data.generatedAt) - opened) / 86400000));
+        by.append(el("span", "", `opened ${days}d ago`));
+      }
+      card.append(head, by);
+      if (advisory.draftPr) card.append(el("div", "note", "Draft fix PR open"));
+      col.append(card);
+    }
+    board.append(col);
+  };
+
   const render = (keep) => {
     board.replaceChildren();
+    if (data.advisoriesWithoutPr) renderAdvisories();
     for (const [bucket, name, hint, accent] of columns) {
       const prs = data.prs.filter((pr) => pr.bucket === bucket && keep(pr));
       const col = el("section", "col");
@@ -528,6 +757,10 @@ HTML
         head.append(link(pr.url, "num", `#${pr.number}`), link(pr.url, "", pr.title));
         const by = el("div", "by");
         by.append(el("span", "", `@${pr.author}`));
+        if (pr.advisory) {
+          const severity = pr.advisory.severity ? ` · ${pr.advisory.severity}` : "";
+          by.append(link(pr.advisory.url, "chip advisory", `${pr.advisory.ghsa}${severity}`));
+        }
         if (pr.mine && bucket !== "OWN") by.append(el("span", "chip", "yours"));
         const assignee = el("div", "by",
           pr.assignee === "Unassigned" ? "Unassigned" : `Assigned: ${pr.assignee}`);
@@ -543,6 +776,8 @@ HTML
     ["all", "All", () => true],
     ["mine", "Assigned to me", (pr) => pr.assignedToMe],
     ["unassigned", "Unassigned", (pr) => pr.assignee === "Unassigned"],
+    // Only the PRs whose next move can be yours; viewersTurn holds the rule.
+    ["responsible", "My responsibility", (pr) => pr.viewersTurn],
   ];
   // Drafts and skipped PRs have no column, so they'd inflate the counts on the buttons.
   const shown = data.prs.filter((pr) => columns.some(([bucket]) => bucket === pr.bucket));
@@ -563,7 +798,7 @@ HTML
   render(() => true);
 
   const drafts = data.prs.filter((pr) => pr.bucket === "DRAFT").length;
-  const skipped = data.prs.filter((pr) => pr.bucket === "SKIP").map((pr) => `#${pr.number}`);
+  const skipped = data.prs.filter((pr) => pr.bucket === "SKIP").map((pr) => pr.ref ?? `#${pr.number}`);
   document.getElementById("footer").textContent =
     `${drafts} draft${drafts === 1 ? "" : "s"} ignored. ` +
     `Skipped (Renovate and release-please): ${skipped.join(" ") || "none"}.`;
@@ -571,7 +806,8 @@ HTML
 </body>
 </html>
 HTML
-  } >"$out"
+  } >"$board_tmp"
+  mv -f "$board_tmp" "$out"
   echo "Wrote $out"
   if $open_board; then
     open_file "$out" || echo "Open it in your browser to view the board."
@@ -586,8 +822,11 @@ else
 fi
 
 # Fields are split on \x1f, not tab: `read` collapses runs of whitespace separators, so an
-# empty note would shift the url left.
-rows=$(jq -r '.prs[] | [.bucket, (.number | tostring), (.title | gsub("\u001f"; " ")), .author, .assignee, .note, .url]
+# empty note would shift the url left. An advisory fix PR's number carries its advisory.
+rows=$(jq -r '.prs[] | [.bucket,
+    (if .advisory then "\(.number) [\(.advisory.ghsa)\(if .advisory.severity then " · \(.advisory.severity)" else "" end)]"
+     else .number | tostring end),
+    (.title | gsub("\u001f"; " ")), .author, .assignee, .note, .url]
   | join("\u001f")' <<<"$board")
 
 section() {
@@ -605,9 +844,32 @@ section() {
 }
 
 viewer=$(jq -r '.viewer' <<<"$board")
-echo "${bold}PR triage for $repo${reset} ${dim}(as @$viewer)${reset}"
+advisory_forks=$(jq -r '.advisoryForks // 0' <<<"$board")
+case "$advisory_forks" in
+  0) including="" ;;
+  1) including="; includes 1 security advisory fork" ;;
+  *) including="; includes $advisory_forks security advisory forks" ;;
+esac
+echo "${bold}PR triage for $repo${reset} ${dim}(as @$viewer$including)${reset}"
+jq -r '.advisoryNotes // [] | .[] | "  \(.)"' <<<"$board"
 if [[ "$(jq -r '.truncated' <<<"$board")" == "true" ]]; then
   echo "  There are more open PRs; only the oldest $(jq -r '.fetched' <<<"$board") are shown"
+fi
+# Advisories with no fix PR come first; the list exists only when advisories are visible.
+advisory_lines=$(jq -r '(.generatedAt | fromdate) as $at | .advisoriesWithoutPr // [] | .[]
+  | "  \(.ghsa) [\(.severity // "no severity")] \(.summary)\u001f"
+    + ((try (.createdAt | fromdate) catch null) as $opened
+       | if $opened == null then "" else "opened \((($at - $opened) / 86400 | floor | if . < 0 then 0 else . end))d ago" end)
+    + (if .draftPr then "; draft fix PR open" else "" end)
+    + "\u001f\(.url)"' <<<"$board")
+if [[ -n "$advisory_lines" ]]; then
+  printf '\n%s%s%s\n' "$bold" "Security advisories without a fix PR" "$reset"
+  while IFS="$SEP" read -r line detail url; do
+    (( ${#line} > 90 )) && line="${line:0:87}..."
+    printf '%s\n' "$line"
+    [[ -n "$detail" ]] && printf '         %s\n' "$detail"
+    printf '         %s%s%s\n' "$dim" "$url" "$reset"
+  done <<<"$advisory_lines"
 fi
 section LOCAL "Run /pr-local-test"
 section INLINE "Run /pr-review-inline"
