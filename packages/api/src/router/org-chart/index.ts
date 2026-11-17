@@ -23,6 +23,9 @@ import {
 } from "../../org-activity";
 import { protectedProcedure } from "../../shared";
 
+/** Roles the Table lists: who to contact, not access grants. */
+const LEADERSHIP_ROLE_NAMES = ["admin", "editor"] as const;
+
 interface OrgRow {
   id: number;
   name: string | null;
@@ -434,7 +437,7 @@ export const orgChartRouter = {
       tags: ["Org Chart"],
       summary: "List org chart leadership",
       description:
-        "Return every active non-AO org whose ancestors are all active, with every position and role holder at those orgs, in one response, for the directory's Table view. Unlike the org chart, orgs are listed whether or not they have active locations.",
+        "Return every active non-AO org whose ancestors are all active, with every position holder and admin/editor role holder at those orgs, in one response, for the directory's Table view. Unlike the org chart, orgs are listed whether or not they have active locations.",
     })
     .output(
       z.object({
@@ -534,7 +537,12 @@ export const orgChartRouter = {
         )
         .innerJoin(
           schema.roles,
-          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+          and(
+            eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+            // Only the contact roles the directory shows; other roles are
+            // access grants and stay out of this bulk listing.
+            inArray(schema.roles.name, LEADERSHIP_ROLE_NAMES),
+          ),
         )
         .innerJoin(
           schema.users,
@@ -559,6 +567,7 @@ export const orgChartRouter = {
               and(
                 inArray(schema.orgs.id, homeRegionIds),
                 eq(schema.orgs.isActive, true),
+                ancestorOrgsAreActive(schema.orgs.id),
               ),
             )
         : [];

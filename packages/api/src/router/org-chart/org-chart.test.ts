@@ -436,6 +436,19 @@ describe("Org Chart Router", () => {
           homeRegionId: inactive.id,
         })
         .returning();
+      // Active region, but under the inactive sector: not a home region.
+      const [orphanHome] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-${uniqueId()}@example.com`,
+          f3Name: "Orphan Home",
+          homeRegionId: underDead.id,
+        })
+        .returning();
+      const [userRole] = await db
+        .insert(schema.roles)
+        .values({ name: "user", description: "Test user role" })
+        .returning();
       const [gone] = await db
         .insert(schema.users)
         .values({
@@ -456,7 +469,15 @@ describe("Org Chart Router", () => {
         .select()
         .from(schema.roles)
         .where(eq(schema.roles.name, "admin"));
-      if (!leader || !gone || !position || !retired || !role) {
+      if (
+        !leader ||
+        !orphanHome ||
+        !userRole ||
+        !gone ||
+        !position ||
+        !retired ||
+        !role
+      ) {
         throw new Error("Failed to create user/position/role fixtures");
       }
       await db.insert(schema.positionsXOrgsXUsers).values([
@@ -464,10 +485,13 @@ describe("Org Chart Router", () => {
         { positionId: retired.id, orgId: region.id, userId: leader.id },
         { positionId: position.id, orgId: underDead.id, userId: leader.id },
         { positionId: position.id, orgId: region.id, userId: gone.id },
+        { positionId: position.id, orgId: region.id, userId: orphanHome.id },
       ]);
-      await db
-        .insert(schema.rolesXUsersXOrg)
-        .values({ roleId: role.id, orgId: region.id, userId: gone.id });
+      await db.insert(schema.rolesXUsersXOrg).values([
+        { roleId: role.id, orgId: region.id, userId: gone.id },
+        // Not a contact role: never listed.
+        { roleId: userRole.id, orgId: region.id, userId: leader.id },
+      ]);
 
       try {
         const client = createTestClient();
@@ -489,7 +513,15 @@ describe("Org Chart Router", () => {
         // Inactive users, inactive positions and orgs under an inactive
         // ancestor are dropped; an inactive home region is blanked.
         expect(result.leaders.filter((l) => l.userId === gone.id)).toEqual([]);
-        expect(result.leaders.some((l) => l.id === retired.id)).toBe(false);
+        expect(
+          result.leaders.find((l) => l.userId === orphanHome.id)
+            ?.homeRegionName,
+        ).toBeNull();
+        expect(
+          result.leaders.some(
+            (l) => l.kind === "position" && l.id === retired.id,
+          ),
+        ).toBe(false);
         expect(result.leaders.filter((l) => l.userId === leader.id)).toEqual([
           {
             orgId: region.id,
@@ -513,12 +545,14 @@ describe("Org Chart Router", () => {
           );
         await db
           .delete(schema.rolesXUsersXOrg)
-          .where(eq(schema.rolesXUsersXOrg.userId, gone.id));
+          .where(inArray(schema.rolesXUsersXOrg.userId, [gone.id, leader.id]));
+        await db.delete(schema.roles).where(eq(schema.roles.id, userRole.id));
         await db
           .delete(schema.positions)
           .where(inArray(schema.positions.id, [position.id, retired.id]));
         await cleanup.user(leader.id);
         await cleanup.user(gone.id);
+        await cleanup.user(orphanHome.id);
       }
     });
   });

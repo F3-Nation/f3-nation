@@ -34,15 +34,21 @@ export function readOrgIdFromUrl(): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
+/**
+ * Save the Map's level and org. A saved viewport (?at=) is kept: the map
+ * rewrites it after its next move, and a refresh before then still restores.
+ */
 export function writeUrlState(level: OrgType, orgId: number | null): void {
+  const at = new URLSearchParams(window.location.search).get("at");
   const params = new URLSearchParams();
   // Layers are ordered leaf → root; omit the configured broadest layer.
   if (level !== LAYER_TYPES[LAYER_TYPES.length - 1]) {
     params.set("level", toPlural(level));
   }
   if (orgId != null) params.set("org", String(orgId));
+  if (at != null) params.set("at", at);
   const qs = params.toString();
-  window.history.replaceState(null, "", qs ? `?${qs}` : "./");
+  window.history.replaceState(null, "", qs ? queryWithCommas(params) : "./");
 }
 
 /** A query string with literal commas: they read better than %2C in a link. */

@@ -33,10 +33,15 @@ export function OrgDirectory() {
   const [tableOrgIds, setTableOrgIds] = useState(readTableOrgIdsFromUrl);
   // Where the Map should open when leaving the Table; kept current by it.
   const mapFocusRef = useRef<number | null>(null);
+  // The Map's chosen org, reported by it. Not read from the URL when
+  // switching, because hovering a region rewrites the URL's org.
+  // Starts as the URL's org at page load (what the Map opens on).
+  const [orgAtLoad] = useState(readOrgIdFromUrl);
+  const mapSelectionRef = useRef<number | null>(orgAtLoad);
 
   function changeView(next: DirectoryView) {
     if (next === "table") {
-      const orgId = readOrgIdFromUrl();
+      const orgId = mapSelectionRef.current;
       const ids = orgId == null ? [] : [orgId];
       // Start from the Map's org, so leaving before the Table publishes a
       // focus (still loading, or failed) returns there, not to an older visit.
@@ -45,13 +50,20 @@ export function OrgDirectory() {
       setTableOrgIds(ids);
     } else {
       writeMapFocusUrl(mapFocusRef.current);
+      // The Map reports again once it loads; until then this is its org.
+      mapSelectionRef.current = mapFocusRef.current;
     }
     setView(next);
   }
 
   const switcher = <ViewSwitcher view={view} onChange={changeView} />;
   return view === "map" ? (
-    <OrgMap viewSwitcher={switcher} />
+    <OrgMap
+      viewSwitcher={switcher}
+      onSelectionChange={(orgId) => {
+        mapSelectionRef.current = orgId;
+      }}
+    />
   ) : (
     <OrgTable
       viewSwitcher={switcher}

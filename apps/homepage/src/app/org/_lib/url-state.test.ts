@@ -103,6 +103,15 @@ describe("readOrgIdFromUrl", () => {
 });
 
 describe("writeUrlState", () => {
+  it("keeps a saved viewport when the level or org changes", () => {
+    setSearch("?level=areas&org=3&at=35.5,-80.5,10");
+    writeUrlState("region", 7);
+    expect(window.location.search).toBe(
+      "?level=regions&org=7&at=35.5,-80.5,10",
+    );
+    expect(readViewportFromUrl()).toEqual({ lat: 35.5, lng: -80.5, zoom: 10 });
+  });
+
   it("omits level param when sector (default)", () => {
     setSearch("?level=regions&org=42");
     writeUrlState("sector", null);

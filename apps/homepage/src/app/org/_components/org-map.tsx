@@ -192,10 +192,26 @@ function getFocusBounds(
 
 export default function OrgMap({
   viewSwitcher,
+  onSelectionChange,
 }: {
   /** Map / Table toggle, rendered beside the title. */
   viewSwitcher?: ReactNode;
+  /**
+   * Told the org the visitor chose (drilled into, clicked, or deep-linked;
+   * null at Nation or a bare level). Hovering a region doesn't count.
+   */
+  onSelectionChange?: (orgId: number | null) => void;
 }) {
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  });
+  // Save a deliberate selection to the URL and report it. (Hover writes the
+  // URL directly, without reporting.)
+  const selectInUrl = useCallback((level: OrgType, orgId: number | null) => {
+    writeUrlState(level, orgId);
+    onSelectionChangeRef.current?.(orgId);
+  }, []);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   // Phone-only overlays that cover the map; fits are padded to clear them.
@@ -387,6 +403,9 @@ export default function OrgMap({
 
         setCurrentLevel(startLevel);
         setSelectedPath(startPath);
+        onSelectionChangeRef.current?.(
+          urlOrgId != null && orgById.has(urlOrgId) ? urlOrgId : null,
+        );
         setHierarchy({
           orgById,
           childrenByParent,
@@ -691,7 +710,7 @@ export default function OrgMap({
       // Always record the selected org itself, not the last breadcrumb entry:
       // for a view-only leaf (region) the breadcrumb excludes the org, so
       // path[last] would be the parent area and break the deep-link.
-      writeUrlState(level, org.id);
+      selectInUrl(level, org.id);
 
       const bounds = getFocusBounds(
         org,
@@ -703,7 +722,7 @@ export default function OrgMap({
 
       void loadOrgInfo(org);
     },
-    [loadOrgInfo, fitMapTo],
+    [loadOrgInfo, fitMapTo, selectInUrl],
   );
 
   const navigateToAo = useCallback(
@@ -728,13 +747,13 @@ export default function OrgMap({
       pinLayerGroupRef.current?.clearLayers();
       setCurrentLevel(level);
       setSelectedPath([]);
-      writeUrlState(level, null);
+      selectInUrl(level, null);
 
       // Show nation info
       const nation = orgByIdRef.current.get(1);
       if (nation) void loadOrgInfo(nation);
     },
-    [loadOrgInfo],
+    [loadOrgInfo, selectInUrl],
   );
 
   const navigateViaBreadcrumb = useCallback(
@@ -749,7 +768,7 @@ export default function OrgMap({
         setSelectedPath([]);
         const topLevel = presentLayers[presentLayers.length - 1] ?? "sector";
         setCurrentLevel(topLevel);
-        writeUrlState(topLevel, null);
+        selectInUrl(topLevel, null);
         const nation = orgByIdRef.current.get(1);
         if (nation) void loadOrgInfo(nation);
         return;
@@ -773,10 +792,10 @@ export default function OrgMap({
           : (presentLayers[presentLayers.length - 1] ?? "sector");
       setCurrentLevel(newLevel);
       const lastOrg = newPath[newPath.length - 1];
-      writeUrlState(newLevel, lastOrg?.id ?? null);
+      selectInUrl(newLevel, lastOrg?.id ?? null);
       if (lastOrg) void loadOrgInfo(lastOrg);
     },
-    [selectedPath, presentLayers, loadOrgInfo],
+    [selectedPath, presentLayers, loadOrgInfo, selectInUrl],
   );
 
   // ── Leaflet layer render ─────────────────────────────────────────────────
@@ -846,7 +865,7 @@ export default function OrgMap({
         if (org.orgType === LAYER_TYPES[0]) {
           // Leaf layer: show location pins for this org. Load its info too —
           // on touch there is no hover to have loaded it already.
-          writeUrlState(currentLevel, org.id);
+          selectInUrl(currentLevel, org.id);
           void loadOrgInfo(org);
           showPinsForOrg(org);
           schedulePinPan();
@@ -884,6 +903,7 @@ export default function OrgMap({
     showPinsForOrg,
     schedulePinPan,
     fitMapTo,
+    selectInUrl,
   ]);
 
   // Keep the current (last) crumb in view when the phone breadcrumb scrolls.

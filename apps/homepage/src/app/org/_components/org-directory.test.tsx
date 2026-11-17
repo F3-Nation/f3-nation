@@ -24,9 +24,12 @@ vi.mock("next/dynamic", () => ({
     if (String(loader).includes("org-map")) {
       return function MockMap({
         viewSwitcher,
+        onSelectionChange,
       }: {
         viewSwitcher?: React.ReactNode;
+        onSelectionChange?: (orgId: number | null) => void;
       }) {
+        mapProps.onSelectionChange = onSelectionChange;
         return (
           <div>
             map view
@@ -42,6 +45,9 @@ vi.mock("next/dynamic", () => ({
 }));
 
 const loadingPlaceholders = vi.hoisted(() => [] as (() => React.ReactNode)[]);
+const mapProps = vi.hoisted(() => ({
+  onSelectionChange: undefined as undefined | ((orgId: number | null) => void),
+}));
 
 const tableProps = vi.hoisted(() => ({
   latest: null as null | {
@@ -117,6 +123,17 @@ describe("OrgDirectory", () => {
     expect(window.location.search).toBe("?view=table&orgs=5");
   });
 
+  it("carries the Map's chosen org, not a hovered one, into the Table", () => {
+    window.history.replaceState(null, "", "?level=regions&org=5");
+    render(<OrgDirectory />);
+    // The visitor drills into org 9, then hovers region 12 (the map rewrites
+    // the URL's org on hover without reporting it).
+    mapProps.onSelectionChange!(9);
+    window.history.replaceState(null, "", "?level=regions&org=12");
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
+    expect(screen.getByText("table view [9]")).toBeTruthy();
+  });
+
   it("opens the Table empty from the Nation view", () => {
     render(<OrgDirectory />);
     fireEvent.click(screen.getByRole("button", { name: "Table" }));
@@ -143,7 +160,7 @@ describe("OrgDirectory", () => {
     await waitFor(() => expect(window.location.search).toBe("?org=3"));
 
     // On the Map, pick org 8, then visit the Table and leave before it loads.
-    window.history.replaceState(null, "", "?level=regions&org=8");
+    mapProps.onSelectionChange!(8);
     fireEvent.click(screen.getByRole("button", { name: "Table" }));
     fireEvent.click(screen.getByRole("button", { name: "Map" }));
     await waitFor(() => expect(window.location.search).toBe("?org=8"));
