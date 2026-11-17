@@ -158,9 +158,11 @@ that app's thin `deploy-<app>.yml` caller into the shared
 1. **`ci-gate`** — waits (does not re-run) for the CI checks matched by its
    `check-regexp` to succeed on the tagged SHA. That is every required check
    except `lint-title`, which runs only on pull requests and so never reports
-   on a tagged commit. The gate fails only when no matching check exists, so
-   redeploying a tag cut before a required check was added passes on the
-   checks that ran at that commit. The same `check-regexp` appears in
+   on a tagged commit. The gate fails if a matching check concludes anything
+   other than `success` (including `failure` or `skipped`), or if no check
+   matches at all. A required check that is missing on its own does not fail
+   it, so redeploying a tag cut before a required check was added passes on
+   the checks that ran at that commit. The same `check-regexp` appears in
    [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml),
    [`_deploy-cloudrun-job.yml`](../.github/workflows/_deploy-cloudrun-job.yml)
    and [`deploy-homepage.yml`](../.github/workflows/deploy-homepage.yml), and
