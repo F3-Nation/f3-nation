@@ -9,7 +9,6 @@ import { Z_INDEX } from "@acme/shared/app/constants";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { mapStore } from "~/utils/store/map";
 import { DebugInfo } from "./map/debug-info";
-import { DesktopFilterButtons } from "./map/desktop-filter-buttons";
 import DesktopSelectedItem from "./map/desktop-selected-item";
 import { GeoJsonPane } from "./map/geo-json-pane";
 import { GeolocationMarker } from "./map/geolocation-marker";
@@ -19,7 +18,7 @@ import { LayoutEditButton } from "./map/layout-edit-button";
 import { MapProvider } from "./map/map-provider";
 import { MapSearchBoxMobile } from "./map/map-searchbox-mobile";
 import { MobileAllFilters } from "./map/mobile-all-filters";
-import { MobileFilterButtons } from "./map/mobile-filter-buttons";
+import { FiltersButton } from "./map/filters-button";
 import { MobileSearchResultsAndNearbyLocations } from "./map/mobile-search-results-and-nearby-locations";
 import { MobileSelectedItem } from "./map/mobile-selected-item";
 import { NearbyLocationUpdateButton } from "./map/nearby-location-update-button";
@@ -72,9 +71,6 @@ export const MapLayoutItems = () => {
           <MapControl position={ControlPosition.RIGHT_BOTTOM}>
             <LayoutEditButton className="mb-1" />
           </MapControl>
-          <MapControl position={ControlPosition.TOP_LEFT}>
-            <DesktopFilterButtons />
-          </MapControl>
           <MapControl position={ControlPosition.TOP_RIGHT}>
             <HelpButton />
           </MapControl>
@@ -98,9 +94,9 @@ export const MapLayoutItems = () => {
       <NearbyLocationUpdateButton />
 
       <MobileAboveSearchBox>
-        <div className="mb-[0px] flex flex-row items-center justify-start gap-2 overflow-auto px-2">
-          <HelpButton />
-          <MobileFilterButtons />
+        <div className="flex flex-row items-center justify-start gap-2 px-2">
+          <FiltersButton />
+          <HelpButton className="m-0" />
         </div>
         <MobileSelectedItem />
       </MobileAboveSearchBox>

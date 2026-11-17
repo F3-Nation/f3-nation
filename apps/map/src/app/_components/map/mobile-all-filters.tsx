@@ -13,7 +13,7 @@ export const MobileAllFilters = () => {
       style={{ zIndex: Z_INDEX.MOBILE_ALL_FILTERS_CONTAINER }}
       className={cn(`absolute inset-0 block bg-background md:hidden`)}
     >
-      <FiltersAll />
+      <FiltersAll variant="screen" />
     </div>
   );
 };

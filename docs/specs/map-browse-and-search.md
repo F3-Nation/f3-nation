@@ -83,17 +83,20 @@ city X" to "this workout, this address, this time" in a few interactions.
 
 ### Filters
 
-- **AC-12** — GIVEN pins are visible WHEN the user activates a day filter
-  (e.g. "Today") THEN only locations with at least one matching event remain
-  on the map; when nothing matches, the nearby list shows a "No locations
-  found matching your filters" message. When filtering leaves only one AO at a
+- **AC-12** — GIVEN pins are visible WHEN the user opens the one Filters
+  button and picks a day (a quick pick — "Today", "Tomorrow", "This weekend"
+  for Saturday and Sunday — or days of the week) THEN only locations with at
+  least one matching event remain on the map; when nothing matches, the
+  nearby list shows a "No locations found matching your filters" message.
+  The button shows how many filter groups (day, time, type) are active, and
+  "Show N workouts" closes the filters. When filtering leaves only one AO at a
   shared location, its nearby-list row uses the remaining workouts' AO name
   and logo. A missing name falls back to the AO name assigned to the pin; a
   missing logo uses the pin's logo only when the AO names match. Otherwise,
   or when neither has a logo, the default F3 image is shown.
-- **AC-13** — GIVEN the AM quick filter is active WHEN the user activates PM
-  THEN AM deactivates (mutually exclusive), and Reset restores the unfiltered
-  pin set.
+- **AC-13** — GIVEN the Morning time filter is active WHEN the user picks
+  Evening THEN Morning deactivates (one time-of-day choice, "Any time"
+  clears it), and Reset restores the unfiltered pin set.
 
 ### Geolocation
 
@@ -201,7 +204,7 @@ shared "anonymous" bucket) — a per-instance limit, not a global cap.
 2. Search for a known AO/workout → select → map navigates to it (AC-5).
 3. Pin click opens the detail panel with name, address/directions, and
    schedule (AC-8).
-4. AM/PM filter visibly changes the pin/nearby set; reset restores it
+4. Morning/Evening filter visibly changes the pin/nearby set; reset restores it
    (AC-12/13).
 5. Copied event link reopens centered on that location (AC-10).
 6. With the API stopped, the map still renders and shows the outage banner;

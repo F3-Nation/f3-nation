@@ -123,9 +123,6 @@ export const feedbackSchema = z.object({
 
 export type FeedbackSchema = z.infer<typeof feedbackSchema>;
 
-export const filterButtonClassName =
-  "text-sm w-full whitespace-nowrap font-semibold pointer-events-auto flex items-center justify-center gap-2 rounded-md bg-card px-2 py-1 shadow-sm text-foreground";
-
 // Descriptive access level per route; nothing reads it to enforce access.
 // Real checks live in apps/admin/src/proxy.ts and the API procedures.
 type AuthType = "none" | "admin" | "basic" | "editor";
