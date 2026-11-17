@@ -65,10 +65,12 @@ and records the user as the actor.**
 - The right to act for users is a role granted to the API key in
   `roles_x_api_keys_x_org`, like every other key grant. Granting or removing
   that row turns delegation on or off for that key with no deploy.
-- It is a dedicated role that exists only for this. It is never granted to a
-  person, and it is matched exactly: the rule that `admin` satisfies any
-  requested role does not apply to it. An admin key cannot act for users
-  unless it also holds this grant.
+- It is a dedicated role that exists only for this, and it is matched
+  exactly: the rule that `admin` satisfies any requested role does not apply
+  to it, neither when a call is checked nor when the role is granted. Only a
+  nation admin can grant it to a key, and every path that grants roles to
+  people rejects it. An admin key cannot act for users unless it also holds
+  this grant.
 - The org the role is granted on is the delegation's scope. A delegated call
   can touch only resources at or beneath that org.
 - If the acting-user header arrives with any other credential (a cookie
@@ -98,10 +100,18 @@ The result is the intersection: a delegated call can do what the user may do
 refused. The app's own role grants (for example, `admin` on the nation for
 its scheduled jobs) add nothing to a delegated call.
 
-Authorization uses the role checks that exist when this is built
-(`checkHasRoleOnOrg`). When ADR 0002's permission checks replace them, the
-delegated path changes with every other caller, and the delegation role
-becomes the one role mapped to an "act for a user" permission.
+On a delegated call the session is the acting user's: its id and role
+grants are that user's, so procedure tiers and `checkHasRoleOnOrg` see only
+the acting user's grants. The session still records the calling key, so
+every check that refuses API keys (key management first) keeps refusing
+it, and each check that treats a key as never "self" states whether a
+delegated call counts as the acting user acting on their own record.
+
+Authorization uses the role checks that exist when this is built: the
+session's role list read by procedure tiers and `checkHasRoleOnOrg`. When
+ADR 0002's permission checks replace them, the delegated path changes with
+every other caller, and the delegation role becomes the one role mapped to
+an "act for a user" permission.
 
 ### Audit history
 
@@ -142,9 +152,9 @@ giving the bot's key the right to do them for anyone:
 - creating a region and granting its first admin;
 - a member's edits to their own profile and home region.
 
-Changes the bot already makes through the API under its own grant (attendance
-and Q sign-ups, event changes, backblasts) keep working without it. They
-should move to delegated calls afterwards so audit history names the person.
+Changes the bot already makes through the API under its own grant (such as
+attendance and event changes) keep working without it. They should move to
+delegated calls afterwards so audit history names the person.
 
 ### Dependencies
 
@@ -199,11 +209,14 @@ should move to delegated calls afterwards so audit history names the person.
 
 - **The key is as powerful as the most privileged user it can name**, on the
   procedures that opt in. Anyone holding the bot's key and able to reach the
-  API can act as a region admin anywhere in the delegation's scope. This is
-  narrower than today, where the bot writes to the database directly, but it
-  is the reason the opt-in list, the exact-match role and the exclusion of
-  key management and nation-admin procedures are part of the decision and
-  not implementation detail.
+  API can act as any admin within the delegation's scope. The Slackbot needs
+  self-record procedures (profile and home-region edits), so its grant sits
+  on the nation and its scope is every org: for it, the scope check narrows
+  nothing, and naming a nation admin reaches every region. This is narrower
+  than today, where the bot writes to the database directly, but it is the
+  reason the opt-in list, the exact-match role and the exclusion of key
+  management and nation-admin procedures are part of the decision and not
+  implementation detail.
 - **The API cannot verify the app's claim about who is acting.** Its trust is
   capped by the app's account link, which rests on a Slack profile email
   matching an F3 user's email. A weakness in how that link is made becomes a
@@ -212,7 +225,8 @@ should move to delegated calls afterwards so audit history names the person.
   roles) is separate work, and it matters more once this exists.
 - **Role changes apply at once** for delegated calls, because the user's
   grants are read per request. That differs from cookie sessions, which keep
-  their roles until re-login.
+  the roles read at sign-in until the session is refreshed or the person
+  signs in again.
 - **Two more things to keep correct on every delegated endpoint:** the opt-in
   and the scope check. An endpoint that opts in but checks only "has the role
   on some org" lets a region admin act outside their region through the bot,
