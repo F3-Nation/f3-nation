@@ -7,7 +7,8 @@
 
 An attendance record says that a user planned to attend, or did attend, one
 event instance. Its type says in what capacity: as a regular attendee (`PAX`),
-as the leader (`Q`), or as a co-leader (`Co-Q`).
+as the leader (`Q`), or as a co-leader (`Co-Q`). The Slack bot calls the
+`PAX` type (id 1) `HC`, for "hard commit"; both names refer to the same row.
 
 The type is stored as a many-to-many relationship. `attendance_types` is a
 lookup table with one row per type, and `attendance_x_attendance_types` links
@@ -56,9 +57,12 @@ tables are removed.
   `pax`.
 - An attendance record has exactly one type. Records that carry several
   today collapse to the highest by the precedence `q`, then `co_q`, then
-  `pax`. A record with no type becomes `pax`.
+  `pax`. The Slack bot's `HC` is the `PAX` row, so an `HC`-only record
+  becomes `pax` and a `Q` plus `HC` record becomes `q`. A record with no
+  type becomes `pax`.
 - The API reads and writes one `attendanceType` value per record in place of
-  an `attendanceTypeIds` array.
+  the `attendanceTypeIds` request array and the `attendanceTypes` response
+  array.
 
 The change is made by expand and contract, because three separately deployed
 systems read the link table directly (the API, the Slack bot and analytics),
@@ -67,10 +71,16 @@ as does anything fed by the database's change-data-capture stream:
 1. **Expand.** Add the column, backfill it, and keep it correct from the link
    table with a database trigger, so every existing writer keeps working
    unchanged.
-2. **Move readers.** Each consumer switches to reading the column.
-3. **Move writers.** Each writer sets the column and stops writing link rows.
-   This starts only when no reader of the link table is left.
-4. **Contract.** Drop the trigger, both tables and their audit tracking.
+2. **Move readers.** Each consumer switches to reading the column, and each
+   client that reads `attendanceTypes` from API responses switches to
+   `attendanceType`.
+3. **Move writers.** Each writer sets the column and keeps writing the
+   matching link rows, so the column and the trigger agree whichever writer
+   touched a record last. This starts only when no reader of the link table
+   is left.
+4. **Contract.** Once every writer sets the column, writers stop writing link
+   rows. Then drop the trigger, both tables, their audit tracking and the
+   `attendanceTypes` response field.
 
 ## Alternatives considered
 
@@ -123,16 +133,22 @@ because the enum-parity test already keeps the Python models in step with it.
   reordering or removing one means recreating the enum. This is the right
   cost for a set that has not changed, and the wrong design if regions ever
   need to define their own types.
-- **The API contract changes.** Clients that send or read `attendanceTypeIds`
-  must move to `attendanceType`. The API accepts the old field, collapsing it
-  by the same precedence, until its callers have moved.
+- **The API contract changes.** Requests send one `attendanceType` in place
+  of the `attendanceTypeIds` array; the API still accepts the old field,
+  collapsing it by the same precedence, until its callers have moved.
+  Responses gain `attendanceType` and keep the `attendanceTypes` array,
+  derived from the column, until its readers have moved; it is removed at the
+  contract step.
 - **The backfill touches every attendance row.** `attendance` is
   audit-tracked, so an unqualified update would write one audit entry per
   row. The backfill runs in batches and is excluded from audit history.
 - **The migration window has two sources of truth.** While the trigger is in
-  place the column is derived from the link table. A writer that sets the
-  column directly before the readers have moved would be invisible to them,
-  which is why writers move only after readers.
+  place the column is derived from the link table, and any link-row change
+  overwrites it. A writer that set only the column would lose its value at
+  the next link-row change, and a remove by a writer that has not moved
+  would find no link row to delete and leave the column stale. So writers
+  keep writing link rows until all of them set the column, and stop only at
+  the contract step, when no reader of the link table is left.
 - **Consumers outside this repository break at the contract step.** Anything
   reading the two tables from the replicated copy of the database has to move
   before they are dropped.
