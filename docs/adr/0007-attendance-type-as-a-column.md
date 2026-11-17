@@ -116,7 +116,8 @@ because the enum-parity test already keeps the Python models in step with it.
   and one audit entry, not two or more of each.
 - The database can enforce type rules. A partial unique index can guarantee
   one Q per planned event instance, which closes the race in the application
-  check.
+  check. Planned events that already have more than one Q are counted and
+  resolved before the index is created, since it cannot be built over them.
 - One fewer multi-million-row table and two fewer indexes to store, back up,
   copy to staging and obfuscate.
 
@@ -139,9 +140,11 @@ because the enum-parity test already keeps the Python models in step with it.
   Responses gain `attendanceType` and keep the `attendanceTypes` array,
   derived from the column, until its readers have moved; it is removed at the
   contract step.
-- **The backfill touches every attendance row.** `attendance` is
-  audit-tracked, so an unqualified update would write one audit entry per
-  row. The backfill runs in batches and is excluded from audit history.
+- **The backfill writes the leadership rows.** Adding the column with its
+  `pax` default writes no rows, so only records holding `Q` or `Co-Q` are
+  updated. Those updates run in batches and are recorded in audit history
+  like any other change; tracking on `attendance` is not disabled, because
+  that would also drop the audit entries of every live writer in the window.
 - **The migration window has two sources of truth.** While the trigger is in
   place the column is derived from the link table, and any link-row change
   overwrites it. A writer that set only the column would lose its value at
