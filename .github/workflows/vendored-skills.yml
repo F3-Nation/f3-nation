@@ -19,23 +19,26 @@ permissions: {}
 
 jobs:
   check:
-    # Forks inherit the schedule trigger; the tracking issue belongs here only.
-    if: github.repository_owner == 'F3-Nation'
+    # Forks inherit the schedule trigger, and a manual run on another branch
+    # would execute that branch's code.
+    if: github.repository_owner == 'F3-Nation' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read # check out skills-lock.json and the vendored files
-      issues: write # open the tracking issue
+    outputs:
+      state: ${{ steps.check.outputs.state }}
+      report: ${{ steps.check.outputs.report }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # Installs the `skills` CLI at the version the lockfile pins.
+      # Installs the `skills` CLI at the version pnpm-lock.yaml pins.
       - uses: ./.github/actions/setup
 
-      # Runs without a token: the upstream repository is public, and the CLI
-      # is third-party code that has no need for this repo's credentials.
+      # The CLI is third-party code, so this job holds no write token; the
+      # `report` job, on its own runner, opens the issue.
       - name: Compare vendored skills with upstream
         id: check
         shell: bash
@@ -45,39 +48,63 @@ jobs:
           set -o pipefail
           status=0
           pnpm skills:check 2>&1 | tee "$RUNNER_TEMP/skills-check.txt" || status=$?
-          # Fail closed: only the CLI's explicit all-clear counts as current.
-          if [ "$status" -eq 0 ] && grep -q "up to date" "$RUNNER_TEMP/skills-check.txt"; then
-            echo "current=true" >> "$GITHUB_OUTPUT"
+          # Fail closed: only the CLI's all-clear line counts as current, and
+          # only its own drift lines open an issue. Anything else (a network
+          # or CLI failure, a skill deleted upstream) fails this job.
+          if [ "$status" -eq 0 ] && grep -q "All project skills are up to date" "$RUNNER_TEMP/skills-check.txt"; then
+            state=current
+          elif grep -Eq "can be updated|differ from skills-lock.json" "$RUNNER_TEMP/skills-check.txt"; then
+            state=drift
           else
-            echo "current=false" >> "$GITHUB_OUTPUT"
+            state=error
+          fi
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          delimiter="report-$(openssl rand -hex 16)"
+          {
+            echo "report<<$delimiter"
+            # Strip terminal colour codes from the CLI output.
+            sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' "$RUNNER_TEMP/skills-check.txt" | tail -n 40
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$state" = error ]; then
+            echo "::error::skills check neither passed nor reported drift; see the output above."
+            exit 1
           fi
 
+  report:
+    needs: check
+    if: needs.check.outputs.state == 'drift'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # open the tracking issue
+    steps:
       - name: Open a tracking issue
-        if: steps.check.outputs.current == 'false'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT: ${{ needs.check.outputs.report }}
         run: |
           set -o pipefail
           title="Vendored agent skills are out of date"
-          existing="$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
+          existing="$(gh issue list --state open --limit 1000 --search "in:title \"$title\"" --json number,title \
             --jq "[.[] | select(.title == \"$title\")] | length")"
           if [ "$existing" -gt 0 ]; then
             echo "Tracking issue already open."
             exit 0
           fi
           {
-            echo "A skill listed in \`skills-lock.json\` no longer matches its upstream source, or one of its files was edited in this repo."
+            echo "A skill listed in \`skills-lock.json\` no longer matches its upstream source, or one of its files was edited in this repo. The check output below says which."
             echo
-            echo "To fix: run \`pnpm skills:update\` on a new branch, read the diff (these files instruct coding agents), and open a PR. If a vendored file was edited locally, move that guidance into the skill that calls it first."
+            echo "- **\"has an update\":** run \`pnpm skills:update\` on a new branch, read the diff (these files instruct coding agents), and open a PR."
+            echo "- **\"has local changes\":** move that guidance into the skill that calls the vendored one, then revert the commit that edited the vendored files. \`pnpm skills:update\` does not undo local edits."
             echo
             echo "Check output: $RUN_URL"
             echo
             echo '```'
-            # Strip terminal colour codes from the CLI output.
-            sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' "$RUNNER_TEMP/skills-check.txt" | tail -n 40
+            printf '%s\n' "$REPORT"
             echo '```'
           } > "$RUNNER_TEMP/issue-body.md"
           gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md"

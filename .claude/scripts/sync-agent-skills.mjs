@@ -8,7 +8,14 @@
  * SessionStart hook (see .claude/settings.json); plain file copies keep this
  * working on Windows, where git symlinks aren't reliable.
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,10 +35,13 @@ if (existsSync(source)) {
   mkdirSync(target, { recursive: true });
   for (const entry of readdirSync(source, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    cpSync(join(source, entry.name), join(target, entry.name), {
-      recursive: true,
-      force: true,
-    });
+    const dest = join(target, entry.name);
+    // A symlink back to the source (the `skills` CLI leaves one) makes cpSync
+    // throw; replace it with a real copy.
+    if (lstatSync(dest, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      rmSync(dest);
+    }
+    cpSync(join(source, entry.name), dest, { recursive: true, force: true });
   }
 }
 

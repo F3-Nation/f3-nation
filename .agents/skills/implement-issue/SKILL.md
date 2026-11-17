@@ -1,6 +1,6 @@
 ---
 name: implement-issue
-description: Use when the user gives a GitHub issue number or URL to build ("implement issue 42", "work on #42", "pick up this issue") — takes the issue from pre-flight checks through codebase exploration, an approved approach, test-first implementation, a draft PR and a self-review of it. Not for reviewing someone else's PR (pr-review-inline) or answering review feedback (address-pr-comments).
+description: 'Use when the user gives a GitHub issue number or URL to build ("implement issue 42", "work on #42", "pick up this issue") — takes the issue from pre-flight checks through codebase exploration, an approved approach, test-first implementation, a draft PR and a self-review of it. Not for reviewing someone else''s PR (pr-review-inline) or answering review feedback (address-pr-comments).'
 compatibility: macOS, Linux, or WSL 2 with bash, git and gh (authenticated). Works in any agent; steps that use subagents say what to do without them.
 ---
 
@@ -32,18 +32,23 @@ the literal value and write it into later commands.
 ## Step 1: Pre-flight
 
 1. Run `bash scripts/gh-check.sh`. If it fails, show its message and stop.
-2. Fetch the issue. Accept `42`, `#42` or a URL and let `gh` resolve it:
+2. Fetch the issue. Accept `42`, `#42` or a URL, and pass on only the number or the issue URL,
+   inside single quotes, so nothing in the argument reaches the shell as syntax:
 
    ```bash
-   gh issue view <ref> --comments
-   gh issue view <ref> --json number,title,body,labels,state,assignees
+   gh issue view '<ref>' --comments
+   gh issue view '<ref>' --json number,title,body,labels,state,assignees,url
+   gh repo view --json nameWithOwner --jq .nameWithOwner
+   gh api "repos/{owner}/{repo}/issues/<number>" --jq '{type: .type.name, sub_issues: .sub_issues_summary.total}'
    ```
 
    Take the issue number from the JSON, never from the raw argument, and state the title back
-   to the user so a wrong number is caught here.
+   to the user so a wrong number is caught here. Stop if `url` is not in the repository
+   `gh repo view` printed: this skill builds an issue in the checkout's own repository.
 
 3. Stop and ask before continuing if the issue is **closed**, is **assigned to someone else**,
-   or is an **Epic** or other parent issue (implement one of its sub-issues instead).
+   or is a parent issue: its `type` is `Epic` or `sub_issues` is above `0` (implement one of
+   its sub-issues instead).
 4. Look for work already under way:
 
    ```bash
@@ -54,7 +59,9 @@ the literal value and write it into later commands.
    If a branch or PR exists, report it and ask how to proceed.
 
 5. `git fetch origin`. Everything below starts from `origin/main`; the main checkout's own
-   branch and state don't matter.
+   branch and state don't matter. When `origin` is your fork, fetch the issue's repository
+   instead (`git fetch "https://github.com/<owner>/<name>.git" "+main:refs/remotes/issue-base/main"`)
+   and use `issue-base/main` wherever a later step says `origin/main`.
 
 ## Step 2: Workspace
 
@@ -62,14 +69,18 @@ Set up the worktree before exploring, so the code being read is current `origin/
 
 ```bash
 MAIN_ROOT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
-pwd
+[ "$(git rev-parse --path-format=absolute --git-dir)" = "$(git rev-parse --path-format=absolute --git-common-dir)" ] && echo "main checkout" || echo "linked worktree"
+git rev-parse --show-toplevel
+git branch --show-current
 git status --porcelain
 git rev-list --count origin/main..HEAD
 ```
 
-**Reuse the current worktree** when `pwd` is not `MAIN_ROOT`, `status` printed nothing and the
-count is `0`. Bring it up to date with `git merge --ff-only origin/main`; its branch is renamed
-in Step 4.
+**Reuse the current worktree** only when the second command printed `linked worktree`,
+`status` printed nothing, the count is `0` and the user agrees: tell them its path and branch
+and ask, because a clean worktree may belong to other work. `WT` is then the path
+`--show-toplevel` printed. Bring it up to date with `git merge --ff-only origin/main`; Step 4
+names its branch.
 
 **Otherwise create one**, detached, so nothing dangles if the work is dropped early:
 
@@ -78,19 +89,24 @@ WT="$MAIN_ROOT/.claude/worktrees/issue-<number>"
 git -C "$MAIN_ROOT" worktree add --detach "$WT" origin/main
 ```
 
+If `$WT` already exists (`git -C "$MAIN_ROOT" worktree list` shows it), stop and ask the user:
+continue in it, or create `issue-<number>-2`. Never pass `--force` or delete it.
+
 Then work only inside it. If your agent has a tool that moves the session into a worktree, use
 it; otherwise `cd` there, use absolute paths under `WT` for every read and edit, and give `WT`
 to every subagent. Never read or edit files under `MAIN_ROOT` itself.
 
-Make the worktree runnable. Commit hooks need the dependencies:
+Make the worktree runnable. Commit hooks need the dependencies, and each `.env` is created from
+the worktree's own tracked `.env.example`. Never copy the main checkout's `.env` files, which
+may hold real credentials:
 
 ```bash
-cd "$MAIN_ROOT" && git ls-files '*.env.example' | sed 's/\.example$//' | while read -r f; do [ -f "$f" ] && cp "$f" "$WT/$f" && echo "copied $f"; done
 cd "$WT" && pnpm install --frozen-lockfile
+cd "$WT" && git ls-files '*.env.example' | while read -r ex; do f="${ex%.example}"; if [ -e "$f" ] || [ -L "$f" ]; then echo "skip $f (exists)"; else cp "$ex" "$f" && echo "created $f"; fi; done
 ```
 
-The copied `.env` files point at the main checkout's local services. If the work needs running
-apps or a database of its own, ask the user before giving the worktree a slot
+Those files hold the stock local-dev values, which point at the default local services. If the
+work needs running apps or a database of its own, ask the user before giving the worktree a slot
 (`pnpm local:setup --slot N`, see
 [Running several checkouts at once](../../../docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees)).
 
@@ -161,8 +177,9 @@ changed feature updates its `docs/specs/` file in the same PR.
 Once the user approves, name the branch `<type>/<number>-<short-slug>`: `fix` for bugs, `docs`
 for documentation, `chore` for maintenance or tooling, otherwise `feat`; the slug is three to
 five lowercase hyphenated words from the title (`feat/42-add-dark-mode-toggle`). In a worktree
-created in Step 2 run `git switch -c <branch>`; in a reused one run `git branch -m <branch>`
-so no second branch is left behind.
+created in Step 2, or a reused one that is detached (`git branch --show-current` printed
+nothing), run `git switch -c <branch>`; in a reused one that is on a branch run
+`git branch -m <branch>` so no second branch is left behind.
 
 ## Step 5: Build
 
@@ -171,6 +188,12 @@ agent's skill mechanism, or read the file). The seams are the ones approved at G
 don't ask for them again unless the design has changed. One failing test, the least code that
 passes it, then the next.
 
+`tdd` is vendored and written for any repo, so three of its pointers don't apply here. It
+leaves refactoring to a review stage and names a `code-review` skill for it: tidy up once the
+last slice is green and before Step 6, with the tests still passing; Step 8 is the review. It
+names a `codebase-design` skill and a `GLOSSARY.md` that this repo doesn't have: the approach
+agreed at Gate 2 settles the interface, and terms come from the spec.
+
 While building:
 
 - Run the single test file and the affected workspace's typecheck after each slice, not the
@@ -178,9 +201,9 @@ While building:
 - Match the code around you. Follow [Coding Style](../../../AGENTS.md#coding-style--naming-conventions)
   and [Logging](../../../AGENTS.md#logging); comments follow
   [`durable-docs`](../durable-docs/SKILL.md).
-- Tests follow [Writing tests that can fail](../../../docs/testing.md#writing-tests-that-can-fail):
-  assert values and specific error codes, and cover both sides of every guard, including a
-  cross-org authorization case where one applies.
+- Tests follow [Writing tests that can fail](../../../docs/testing.md#writing-tests-that-can-fail).
+  Where `tdd` disagrees, that page wins: asserting persisted database state, and that a
+  rejected call left it unchanged, is required here, not a side channel.
 - If the approved approach turns out not to work, stop and go back to Gate 2 with what you
   found. Don't redesign silently.
 
@@ -190,27 +213,32 @@ While building:
    `pnpm lint:fix`, `pnpm format:fix`, `pnpm typecheck`, `pnpm lint:unused` and the affected
    tests, and tell the user which parts of the full sequence were skipped. Fix what fails;
    never bypass a hook or lower a coverage threshold. A test run that rewrites
-   `vitest.config.ts` thresholds upward is expected; keep the change.
+   `vitest.config.ts` thresholds upward is expected; keep the change. It is the one thing item 4
+   allows in the diff that the issue didn't ask for.
 2. For a change a user can see or call, run it. Follow [`verify`](../verify/SKILL.md) and keep
    the evidence (response body, screenshot) for the PR.
 3. Commit in Conventional Commits form, `type(scope): subject`, with a scope from
    `scope-enum` in [`commitlint.config.mjs`](../../../commitlint.config.mjs).
 4. Check the diff (`git diff origin/main...HEAD`) against the issue, line by line: every
    requirement and acceptance criterion is met, and nothing is in the diff that the issue
-   didn't ask for. Fix any gap before going on.
+   didn't ask for. Fix any gap, re-run the checks the fix touches and commit again before
+   going on.
 
 ## Step 7: Draft pull request
 
 **Gate 3.** Show the user the PR title and body, plus any issue comment drafted in Step 3, and
 wait for an explicit go-ahead before pushing or posting.
 
-1. Run `bash scripts/gh-check.sh --require-write`.
-2. Fill in the PR template: a plain-language overview first, `Closes #<number>`, the commands
-   run, and database, environment-variable and deploy-order impact. Add screenshots for UI
-   changes. Title in Conventional Commits form.
+1. Run `bash scripts/gh-check.sh --require-write` against the repository you will push to
+   (set `GH_REPO=<owner>/<name>` when that is your fork).
+2. Fill in every section of `.github/pull_request_template.md` as
+   [Pull Request Guidelines](../../../AGENTS.md#pull-request-guidelines) describes, with
+   `Closes #<number>`, and remove its placeholders. Title in Conventional Commits form.
 3. End the body with the signature line from
    [Writing to GitHub](../../../AGENTS.md#writing-to-github).
 4. Push the branch and open the PR with `gh pr create --draft`.
+5. Post any issue comment approved above with `gh issue comment <number> --body-file <file>`,
+   ending with the same signature line.
 
 ## Step 8: Review the draft
 
@@ -220,11 +248,15 @@ shared quota and nobody else sees it.
 1. Run [`pr-review-inline`](../pr-review-inline/SKILL.md) on the new PR with `--dry-run`. It
    drafts its findings and posts nothing. With subagents, run it in one with a fresh context,
    giving it the PR number but not your reasoning, so it isn't anchored on your solution.
-2. Fix what it found, in a new commit, re-run the checks the fix touches, and push. Tell the
-   user about any finding you chose not to fix, and why.
-3. Update the PR body if the fixes changed what it says.
+2. Fix what it found, in a new commit, and re-run the checks the fix touches. Tell the user
+   about any finding you chose not to fix, and why.
+3. Show the user the fix diff, and the new PR body if the fixes changed what it says, and wait
+   for a go-ahead before pushing or editing the PR: the Gate 3 approval covered only what they
+   saw then.
+4. After the last push, wait for the hosted checks (`gh pr checks <pr-number> --watch`) and
+   handle a failure the same way. `pnpm ci:local` does not run every hosted job.
 
-The user marks the PR ready for review; never do that for them.
+The user marks the PR ready for review once those checks pass; never do that for them.
 
 Then tell the user:
 
