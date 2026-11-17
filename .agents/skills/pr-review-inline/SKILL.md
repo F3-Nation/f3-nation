@@ -1,6 +1,6 @@
 ---
 name: pr-review-inline
-description: Use when the user wants a GitHub pull request reviewed with the findings posted as inline, line-level comments on the PR ("review PR #N and comment inline", "inline PR review", "leave inline review comments"). Not for reading or addressing comments already on a PR — use address-pr-comments.
+description: 'Use when the user wants a GitHub pull request reviewed with the findings posted as inline, line-level comments on the PR ("review PR #N and comment inline", "inline PR review", "leave inline review comments"). Not for reading or addressing comments already on a PR — use address-pr-comments.'
 compatibility: Any agent with a shell. Needs git, gh (authenticated), and jq. The reviewer prompts are bundled, so no plugin or other skill is needed; a sub-agent tool gives each reviewer its own context.
 ---
 
@@ -204,7 +204,7 @@ machine or in CI, or change what our own agents do:
   change what installs and which install scripts run
 - `.github/workflows/` and `.github/actions/`, especially new triggers, secrets, or
   `pull_request_target`
-- `AGENTS.md`, `CLAUDE.md`, `.agents/skills/`, `.github/copilot-instructions.md`, and other
+- `AGENTS.md`, `REVIEW.md`, `CLAUDE.md`, `.agents/skills/`, `.github/copilot-instructions.md`, and other
   agent instructions, since they change what reviewers' and authors' agents do
 - new or changed outbound URLs, `.npmrc`, `scripts/`, Docker and Next.js config
 

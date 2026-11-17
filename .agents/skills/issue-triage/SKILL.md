@@ -1,6 +1,6 @@
 ---
 name: issue-triage
-description: Set an issue's Type and its Priority, Effort and App fields — for one issue ("triage #123", "set the fields on this issue"), right after filing an issue, or for every open issue still missing them ("triage the backlog", "which issues need Priority?"). Proposes values with a one-line reason each and writes them only once approved.
+description: 'Set an issue''s Type and its Priority, Effort and App fields — for one issue ("triage #123", "set the fields on this issue"), right after filing an issue, or for every open issue still missing them ("triage the backlog", "which issues need Priority?"). Proposes values with a one-line reason each and writes them only once approved.'
 compatibility: Any agent with bash, jq and an authenticated gh. Writing needs the repo scope; reading the organization's fields needs read:org.
 ---
 

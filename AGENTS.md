@@ -52,7 +52,10 @@ Reusable agent skills (procedural runbooks in the
 Code doesn't read `.agents/`, so a `SessionStart` hook in
 `.claude/settings.json` runs `.claude/scripts/sync-agent-skills.mjs` to copy
 them into `.claude/skills/`, which is generated and gitignored — never commit
-anything under it.
+anything under it. Quote any skill frontmatter value that contains ` #` or
+`: `: YAML drops everything after an unquoted ` #` as a comment, and an
+unquoted `: ` makes YAML reject the whole frontmatter. `pnpm lint` runs
+`scripts/check-skill-frontmatter.mjs` to catch both.
 
 When asked for a **release plan** or a **Staging test plan** for the most
 recently merged release-please PR, follow
