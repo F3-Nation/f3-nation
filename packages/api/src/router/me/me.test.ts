@@ -300,7 +300,7 @@ describe("Me Router", () => {
         meta: { my_f3_why: "Brotherhood" },
       });
 
-      const meta = result.user.meta as Record<string, unknown>;
+      const meta = result.user.meta!;
       expect(meta.f3_name_origin).toBe("First post");
       expect(meta.my_f3_why).toBe("Brotherhood");
     });

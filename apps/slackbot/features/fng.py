@@ -22,7 +22,7 @@ from utilities import constants
 from utilities.builders import update_submission_wait_view
 from utilities.constants import AlertLevel
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import get_user, safe_convert, safe_get
+from utilities.helper_functions import get_user, safe_convert, safe_get, usable_invite_link
 from utilities.sendmail import send_via_sendgrid
 from utilities.slack import actions
 from utilities.slack.orm import (
@@ -44,6 +44,7 @@ FNG_PHONE = "fng_phone"
 FNG_META_BATTLE_BUDDY = "battle_buddy"
 FNG_REMINDER_DEFAULT_DAYS = 3  # used until a region picks a frequency in Welcomebot settings
 FNG_REMINDER_CHOICES = (0, 2, 3, 7)  # the Welcomebot settings radio; 0 = off
+FNG_SET_INVITE_LINK = "Ask an admin to set one in /f3-nation-settings > Downrange."
 
 
 def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
@@ -73,8 +74,11 @@ def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict,
         ),
         ContextBlock(
             element=ContextElement(
-                initial_value="This creates his F3 Nation profile, emails him the Slack invite "
-                "and lists you as his battle buddy. He's welcomed in Slack once he joins."
+                initial_value="This emails him the Slack invite and makes sure he has an F3 Nation profile. "
+                "He's welcomed in Slack once he joins."
+                if usable_invite_link(region_record.downrange_invite_link)
+                else ":warning: This region has no Slack invite link, so he won't get a welcome email. "
+                f"{FNG_SET_INVITE_LINK} He still gets an F3 Nation profile."
             )
         ),
     ]
@@ -163,7 +167,8 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     region = safe_get(DbManager.get(Org, region_record.org_id), "name") or region_record.workspace_name or "F3"
     # An existing user may still need this region's Slack invite, but greet him by his profile name, not a typed one.
     greet = safe_get(existing, "first_name") if existing else first_name
-    emailed = _send_welcome_email(email, greet, region, region_record.downrange_invite_link)
+    invite_link = usable_invite_link(region_record.downrange_invite_link)
+    emailed = _send_welcome_email(email, greet, region, invite_link)
 
     lines = [
         f"*{display_name}* already had an F3 Nation profile, so I left it as is."
@@ -172,13 +177,12 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     ]
     if emailed:
         lines.append("I emailed him the Slack invite.")
-    elif region_record.downrange_invite_link:
+    elif invite_link:
         # The result alert caps at 200 chars, which can cut off the link; a DM can't, and it's easy to forward.
         try:
             client.chat_postMessage(
                 channel=safe_get(body, "user", "id"),
-                text=f"I couldn't email *{display_name}* his Slack invite. "
-                f"Please text him this link: {region_record.downrange_invite_link}",
+                text=f"I couldn't email *{display_name}* his Slack invite. Please text him this link: {invite_link}",
             )
             lines.append("I couldn't email him, so I DMed you his invite link to text him.")
         except SlackApiError as exc:
@@ -187,9 +191,10 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
                 exc.response.get("error"),
                 extra={"json_fields": {"event": "fng.invite_dm_failed", "error": exc.response.get("error")}},
             )
-            lines.append(f"I couldn't email him; please text him {region_record.downrange_invite_link}")
+            lines.append(f"I couldn't email him; please text him {invite_link}")
     else:
-        lines.append("No invite link is set in /f3-nation-settings > Downrange, so no email went out.")
+        # First, so the 200-char alert cap can't cut off what the submitter needs to do.
+        lines.insert(0, f"No welcome email was sent: this region has no Slack invite link. {FNG_SET_INVITE_LINK}")
     done(AlertLevel.SUCCESS if emailed else AlertLevel.WARNING, " ".join(lines))
 
 

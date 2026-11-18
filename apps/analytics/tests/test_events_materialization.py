@@ -396,6 +396,64 @@ def test_event_details_materialization_orders_raw_parquet_rows(tmp_path: Path):
     assert [row["event_id"] for row in rows] == [0, 1, 2, 3, 9]
 
 
+class _RecordingConnection:
+    def __init__(self, connection):
+        self._connection = connection
+        self.statements = []
+
+    def execute(self, query, parameters=None):
+        self.statements.append(query)
+        return self._connection.execute(query, parameters or [])
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+
+def _copy_statement(statements):
+    copies = [statement for statement in statements if statement.startswith("COPY ")]
+    assert len(copies) == 1
+    return copies[0]
+
+
+def test_event_details_copy_sets_small_row_groups(tmp_path: Path):
+    c = _RecordingConnection(source())
+    materialize(
+        c, tmp_path / "details", MATERIALIZATION_REGISTRY["pv_event_details"], "2026-01-05T00:00:00Z", "2026-01-05"
+    )
+
+    assert _copy_statement(c.statements).endswith("(FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 8192)")
+
+
+def test_events_copy_keeps_default_row_groups(tmp_path: Path):
+    c = _RecordingConnection(source())
+    materialize(c, tmp_path / "events", MATERIALIZATION_REGISTRY["pv_events"], "2026-01-05T00:00:00Z", "2026-01-05")
+
+    copy = _copy_statement(c.statements)
+    assert copy.endswith("(FORMAT PARQUET, COMPRESSION ZSTD)")
+    assert "ROW_GROUP_SIZE" not in copy
+
+
+def test_event_details_parquet_row_groups_stay_within_lookup_budget(tmp_path: Path):
+    c = source()
+    c.execute(
+        "INSERT INTO pg.public.event_instances "
+        "SELECT i, 5, true, 1, 0, '{}', 'Bulk', DATE '2026-01-01', NULL, false, false, NULL, NULL, NULL, "
+        "'Backblast ' || i, NULL FROM range(100, 20100) AS t(i)"
+    )
+    artifacts = materialize(
+        c, tmp_path / "details-bulk", MATERIALIZATION_REGISTRY["pv_event_details"], "2026-01-05T00:00:00Z", "2026-01-05"
+    )
+
+    assert artifacts.row_count == 20003
+    groups = c.execute(
+        "SELECT DISTINCT row_group_id, row_group_num_rows FROM parquet_metadata(?) ORDER BY row_group_id",
+        [str(artifacts.sorted_parquet_files[0])],
+    ).fetchall()
+    assert len(groups) == 3
+    assert all(num_rows <= 8192 for _, num_rows in groups)
+    assert sum(num_rows for _, num_rows in groups) == 20003
+
+
 def test_true_exclusion_flag_excludes_event_from_both_projections():
     c = source()
     c.execute("UPDATE pg.public.event_instances SET meta = '{\"exclude_from_pax_vault\":true}' WHERE id = 1")

@@ -1340,6 +1340,7 @@ describe.each(["nation", "region", "ao"] as const)(
 describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
   const label = type === "region" ? "Region" : "AO";
   const createObjectURL = vi.fn<() => string>();
+  const revokeObjectURL = vi.fn<(url: string) => void>();
   const originalURL = URL;
   const originalCreateObjectURL = Object.getOwnPropertyDescriptor(
     URL,
@@ -1360,7 +1361,7 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
     createObjectURL.mockReturnValue("blob:preview");
     class TestURL extends originalURL {
       static createObjectURL = createObjectURL;
-      static revokeObjectURL = vi.fn();
+      static revokeObjectURL = revokeObjectURL;
     }
     vi.stubGlobal("URL", TestURL);
   });
@@ -1397,6 +1398,37 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
       badImage: false,
       orgType: type,
     });
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+  it("drops a picked logo when org.byId returns changed data", async () => {
+    const view = mount(type, 40);
+    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    const file = new File(["synthetic"], "logo.png", { type: "image/png" });
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    });
+    expect(screen.getByAltText(`${label} Logo`).getAttribute("src")).toBe(
+      "blob:preview",
+    );
+
+    // A background refetch of the same record that comes back changed.
+    const refetched = { ...record, name: "Renamed elsewhere" };
+    mocks.byId.mockResolvedValue({ org: refetched });
+    await act(async () => {
+      await clients.at(-1)!.invalidateQueries({ queryKey: ["org", "byId"] });
+    });
+    await waitFor(() => expect(field("Name").value).toBe(refetched.name));
+
+    expect(screen.getByAltText(`${label} Logo`).getAttribute("src")).toBe(
+      record.logoUrl,
+    );
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview");
+    save();
+    await waitFor(() =>
+      expect(mocks.success).toHaveBeenCalledWith(
+        `Successfully updated ${type}`,
+      ),
+    );
     expect(mocks.upload).not.toHaveBeenCalled();
   });
   it.each([false, true])(

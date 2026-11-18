@@ -43,10 +43,11 @@ declare -A SECRET_MAP=(
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
-# Cloud Run env vars). AUTH_TRUSTED_ISSUERS is required (checked after the
-# env file is sourced): without it the API accepts no JWT, so admin and me
-# can't call it.
+# Cloud Run env vars). AUTH_TRUSTED_ISSUERS and AUTH_TRUSTED_CLIENT_IDS are
+# required (checked after the env file is sourced): without either the API
+# accepts no JWT, so admin and me can't call it.
 ENV_FILE_VARS=(
+  AUTH_TRUSTED_CLIENT_IDS
   AUTH_TRUSTED_ISSUERS
   EMAIL_ADMIN_DESTINATIONS
   EMAIL_FROM
@@ -99,7 +100,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 # Source the env file.
-unset PROXY_CLIENT_IP_SECRET
+unset PROXY_CLIENT_IP_SECRET "${ENV_FILE_VARS[@]}"
 set -a
 source "$ENV_FILE"
 set +a
@@ -107,6 +108,12 @@ set +a
 if [[ -z "${AUTH_TRUSTED_ISSUERS:-}" ]]; then
   echo "Error: AUTH_TRUSTED_ISSUERS is empty in $ENV_FILE."
   echo "Set it to the auth server origin(s) whose tokens the API accepts."
+  exit 1
+fi
+
+if [[ -z "${AUTH_TRUSTED_CLIENT_IDS:-}" ]]; then
+  echo "Error: AUTH_TRUSTED_CLIENT_IDS is empty in $ENV_FILE."
+  echo "Set it to the OAUTH_CLIENT_ID values of apps/me and apps/admin."
   exit 1
 fi
 

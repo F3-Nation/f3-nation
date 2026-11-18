@@ -108,8 +108,10 @@ export function prodAheadOfImage(
   return (
     `prod has ${unknown.length} migration(s) this build's packages/db/drizzle/meta/_journal.json ` +
     `doesn't know (${unknown.map((r) => r.createdAt).join(", ")}): the copy would be ahead of the ` +
-    `code that classifies it. Rebuild the refresh image from current main ` +
-    `(tooling/scripts/staging-refresh/setup.sh) and run again.`
+    `code that classifies it. Rebuild the refresh image from current main, then run again: ` +
+    `anyone with write access to the repo can run ` +
+    `\`gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main\` ` +
+    `(or Actions > "Rebuild Staging refresh image" > Run workflow on main).`
   );
 }
 

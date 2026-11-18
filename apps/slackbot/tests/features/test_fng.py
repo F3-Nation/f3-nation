@@ -171,39 +171,70 @@ def test_failed_buddy_lookup_shows_error_and_creates_nothing(monkeypatch):
     assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
 
 
-def test_without_invite_link_no_email_goes_out(monkeypatch):
+@pytest.mark.parametrize("invite_link", [None, "", "   ", "Join me on Slack -- sign up here"])
+def test_without_invite_link_no_email_goes_out_and_submitter_is_told_to_get_an_admin(monkeypatch, invite_link):
     db, send, view = patch_db(monkeypatch)
+    client = MagicMock()
+    long_name = {fng.FNG_F3_NAME: "X" * 60, fng.FNG_FIRST_NAME: "Y" * 40}
 
-    fng.handle_fng_form(submission(), MagicMock(), MagicMock(), {}, region_record(downrange_invite_link=None))
+    fng.handle_fng_form(
+        submission(**long_name), client, MagicMock(), {}, region_record(downrange_invite_link=invite_link)
+    )
 
     db.create_record.assert_called_once()
     send.assert_not_called()
+    client.chat_postMessage.assert_not_called()
     assert view.call_args.kwargs["level"] == constants.AlertLevel.WARNING
-    assert "Downrange" in view.call_args.kwargs["text"]
+    # Leads the alert so the 200-char cap can't cut it off behind a long name.
+    assert view.call_args.kwargs["text"].startswith(
+        f"No welcome email was sent: this region has no Slack invite link. {fng.FNG_SET_INVITE_LINK}"
+    )
 
 
-def test_failed_email_dms_the_buddy_the_link(monkeypatch):
+SHARE_MESSAGE = (
+    f"Join me on Slack -- it\u2019s a faster, simpler way to work. Sign up here, from any device: {INVITE_LINK}"
+)
+# Saved invite links the handler must reduce to the bare URL before sending.
+SAVED_LINKS = pytest.mark.parametrize(
+    "saved", [INVITE_LINK, f"  {INVITE_LINK}  ", SHARE_MESSAGE], ids=["bare", "padded", "share"]
+)
+
+
+@SAVED_LINKS
+def test_saved_invite_link_emails_just_the_url(monkeypatch, saved):
+    _, send, view = patch_db(monkeypatch)
+
+    fng.handle_fng_form(submission(), MagicMock(), MagicMock(), {}, region_record(downrange_invite_link=saved))
+
+    assert f'<a href="{INVITE_LINK}">Join us here</a>' in send.call_args.kwargs["html_content"]
+    assert view.call_args.kwargs["level"] == constants.AlertLevel.SUCCESS
+
+
+@SAVED_LINKS
+def test_failed_email_dms_the_buddy_the_link(monkeypatch, saved):
     _, send, view = patch_db(monkeypatch)
     send.return_value = False
     client = MagicMock()
 
-    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record(downrange_invite_link=saved))
 
     dm = client.chat_postMessage.call_args.kwargs
-    assert dm["channel"] == "U_BUDDY" and INVITE_LINK in dm["text"]
+    assert dm["channel"] == "U_BUDDY"
+    assert dm["text"].endswith(f"Please text him this link: {INVITE_LINK}")
     assert view.call_args.kwargs["level"] == constants.AlertLevel.WARNING
     assert "DMed you" in view.call_args.kwargs["text"] and INVITE_LINK not in view.call_args.kwargs["text"]
 
 
-def test_failed_email_and_dm_fall_back_to_the_link_in_the_result(monkeypatch):
+@SAVED_LINKS
+def test_failed_email_and_dm_fall_back_to_the_link_in_the_result(monkeypatch, saved):
     _, send, view = patch_db(monkeypatch)
     send.return_value = False
     client = MagicMock()
     client.chat_postMessage.side_effect = SlackApiError("cannot_dm", {"error": "cannot_dm_bot"})
 
-    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record(downrange_invite_link=saved))
 
-    assert INVITE_LINK in view.call_args.kwargs["text"]
+    assert view.call_args.kwargs["text"].endswith(f"please text him {INVITE_LINK}")
 
 
 def test_unlinked_workspace_creates_nothing(monkeypatch):
@@ -257,6 +288,22 @@ def test_form_asks_only_for_the_fngs_details():
     ]
     picker = next(b for b in view["view"]["blocks"] if b.get("block_id") == fng.USER_FORM_BROUGHT_BY)
     assert picker["optional"] is True
+
+
+@pytest.mark.parametrize(
+    "invite_link, warns", [(INVITE_LINK, False), (None, True), ("  ", True), ("Join me on Slack", True)]
+)
+def test_form_warns_when_region_has_no_invite_link(invite_link, warns):
+    client = MagicMock()
+
+    fng.build_fng_form(
+        {"loading_id": "V_LOADING"}, client, MagicMock(), {}, region_record(downrange_invite_link=invite_link)
+    )
+
+    blocks = client.views_update.call_args.kwargs["view"]["blocks"]
+    note = next(b for b in blocks if b["type"] == "context")["elements"][0]["text"]
+    assert (fng.FNG_SET_INVITE_LINK in note) is warns
+    assert ("emails him the Slack invite" in note) is not warns
 
 
 def fng_user(**overrides):

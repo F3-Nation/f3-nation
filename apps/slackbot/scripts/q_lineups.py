@@ -1,5 +1,4 @@
 import os
-import ssl
 import sys
 from logging import Logger
 
@@ -229,10 +228,7 @@ def send_q_lineup_message(
         metadata.event_payload["week_start"] = week_start.strftime("%y-%m-%d")
         metadata.event_payload["week_end"] = week_end.strftime("%y-%m-%d")
     if slack_bot_token:
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        slack_client = WebClient(slack_bot_token, ssl=ssl_context)
+        slack_client = WebClient(slack_bot_token)
         if update_channel_id:
             channel_id = update_channel_id
         if slack_settings.send_q_lineups_method == "yes_per_ao" and safe_get(org.meta, "slack_channel_id"):

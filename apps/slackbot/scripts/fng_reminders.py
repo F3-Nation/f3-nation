@@ -23,7 +23,7 @@ from features.fng import (
     fng_reminder_days,
 )
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import safe_get
+from utilities.helper_functions import safe_get, usable_invite_link
 
 REMINDER_HOUR = 17  # US/Central, same as the home region nudge
 MAX_REMINDERS = 3
@@ -134,8 +134,9 @@ def _remind_fng(
     contact = html.escape(" · ".join(filter(None, (fng.phone, fng.email))), quote=False)
     text = f"*{fng_display_name(fng)}* hasn't joined Slack with the email from /fng yet, {days} days later."
     text += f" A text or call from you might help: {contact}." if contact else " A text from you might help."
-    if settings.downrange_invite_link:
-        text += f" Here's the invite link to send him: {settings.downrange_invite_link}"
+    invite_link = usable_invite_link(settings.downrange_invite_link)
+    if invite_link:
+        text += f" Here's the invite link to send him: {invite_link}"
     if due == MAX_REMINDERS:
         text += " This is the last reminder."
     delivered = dm_fng_contacts(client, space.team_id, fng, text, logger, contact_ids=behind)

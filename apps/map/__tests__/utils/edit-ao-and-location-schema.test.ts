@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { EditAOAndLocationSchema } from "@acme/validators/request-schemas";
+import {
+  AOFields,
+  EditAOAndLocationSchema,
+  LocationFields,
+} from "@acme/validators/request-schemas";
 
 import {
   aoFields,
@@ -63,9 +67,42 @@ describe("EditAOAndLocationSchema – valid submission", () => {
       originalLocationId: 10,
       currentValues: {},
     }));
+
+  it("keeps prior values that break today's rules", () => {
+    const currentValues = {
+      aoName: "A",
+      aoLogo: "not-a-valid-url",
+      aoWebsite: "not a url",
+      locationAddress: "123",
+      locationCity: "X",
+      locationState: "X",
+      locationZip: "1",
+      locationCountry: "X",
+    };
+    const result = EditAOAndLocationSchema.parse({ ...valid, currentValues });
+    expect(result.currentValues).toEqual(currentValues);
+  });
+
+  it("accepts null for every prior field", () => {
+    const currentValues = Object.fromEntries(
+      Object.keys({ ...AOFields.shape, ...LocationFields.shape }).map((key) => [
+        key,
+        null,
+      ]),
+    );
+    const result = EditAOAndLocationSchema.parse({ ...valid, currentValues });
+    expect(result.currentValues).toEqual(currentValues);
+  });
 });
 
 describe("EditAOAndLocationSchema – invalid submissions", () => {
+  it("rejects a prior value of the wrong type", () =>
+    expectInvalidAt(
+      EditAOAndLocationSchema,
+      { ...valid, currentValues: { aoName: 42 } },
+      "currentValues",
+    ));
+
   it("rejects an aoName shorter than 2 characters", () =>
     expectInvalidAt(
       EditAOAndLocationSchema,

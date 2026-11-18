@@ -52,7 +52,10 @@ Reusable agent skills (procedural runbooks in the
 Code doesn't read `.agents/`, so a `SessionStart` hook in
 `.claude/settings.json` runs `.claude/scripts/sync-agent-skills.mjs` to copy
 them into `.claude/skills/`, which is generated and gitignored — never commit
-anything under it.
+anything under it. Quote any skill frontmatter value that contains ` #` or
+`: `: YAML drops everything after an unquoted ` #` as a comment, and an
+unquoted `: ` makes YAML reject the whole frontmatter. `pnpm lint` runs
+`scripts/check-skill-frontmatter.mjs` to catch both.
 
 When asked for a **release plan** or a **Staging test plan** for the most
 recently merged release-please PR, follow
@@ -78,6 +81,14 @@ Who runs each of them, and when, is set by
 The review uses the [Superpowers](https://github.com/obra/superpowers)
 `requesting-code-review` skill when it is installed (optional; a bundled brief
 covers it otherwise).
+
+To set an issue's Type, Priority, Effort and App — one issue, or every open
+issue missing them — follow
+[`.agents/skills/issue-triage/SKILL.md`](.agents/skills/issue-triage/SKILL.md).
+
+To post the report of open security advisories and their fix PRs to the
+private #codeowners Slack channel, follow
+[`.agents/skills/security-advisory-report/SKILL.md`](.agents/skills/security-advisory-report/SKILL.md).
 
 To address, respond to, or work through review feedback on a pull request,
 follow
@@ -244,6 +255,7 @@ These apply to every issue an agent opens, for any reason. The full rule and its
 - One objective per issue, as small as is reasonable. A task list holds only requirements for that objective, never a batch of independent findings.
 - An audit or review that finds several problems files one issue per problem; being related doesn't make them an Epic. A parent issue of type **Epic** is only for a large, cohesive effort whose issues together deliver one outcome. To set one up through the REST API: `PATCH .../issues/<n>` with `type` set to `Epic`, and `POST .../issues/<n>/sub_issues` with `sub_issue_id` set to the child's numeric `id` (not its issue number).
 - Before filing, search open and closed issues for a duplicate; then use an issue template and lead with the plain-language impact before the root cause and fix.
+- Right after filing, propose any Type, Priority, Effort and App the issue lacks, using the [`issue-triage`](.agents/skills/issue-triage/SKILL.md) skill, and set them once the user approves.
 
 ## Pull Request Guidelines
 

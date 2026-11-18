@@ -1,7 +1,6 @@
 import copy
 import json
 import os
-import ssl
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -1261,10 +1260,6 @@ COUNT: {count}
         existing_by_team = {p["team_id"]: p for p in existing_dr_posts}
         new_dr_posts = list(existing_by_team.values())  # preserve existing; updated in-place below
 
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-
         region_org = DbManager.get(Org, region_record.org_id)
         region_name = region_org.name if region_org else region_record.workspace_name
 
@@ -1322,7 +1317,7 @@ COUNT: {count}
             )
 
             try:
-                dr_client = WebClient(token=dr_slack_space.bot_token, ssl=ssl_ctx)
+                dr_client = WebClient(token=dr_slack_space.bot_token)
                 existing_post = existing_by_team.get(dr_slack_space.team_id)
 
                 if create_or_edit == "edit" and existing_post:

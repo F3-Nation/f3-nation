@@ -38,8 +38,8 @@ merge to main (ruleset "main": PR required, merge queue required, the eight
 release-please.yml ····· accumulates merges into per-app release PRs
   │
 tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
-       ├─ ci-gate ······· waits for build/lint/typecheck/format-check/
-       │                  test-coverage on the tagged SHA
+       ├─ ci-gate ······· tag must be on main, then waits for the required
+       │                  CI checks matched by check-regexp on its SHA
        ├─ build ········· container image built once, pushed to Artifact Registry
        ├─ deploy-staging  Cloud Run (staging project) [+ cache revalidate]
        └─ deploy-prod ··· needs staging success; Cloud Run (prod project)
@@ -76,6 +76,12 @@ schedules at least one task before `--affected` is enabled. The non-Turbo
 safeguards in the `lint` job (`lint:ws`, coverage-threshold validation, Python
 task validation, Turbo scope-selection validation, and `lint:unused`) remain
 repository-wide on every run.
+
+The `pnpm lint` step in [`ci.yml`](../.github/workflows/ci.yml) passes Turbo a
+`--concurrency` limit to reduce peak memory from simultaneous type-aware ESLint
+processes on cold runs. This limits scheduling, not workspace selection: all
+selected tasks still run. Local `pnpm lint` keeps Turbo's default concurrency;
+pass the same `--concurrency` value as that step to match CI.
 
 The Turbo cache adapter runs on localhost within each job and stores task
 artifacts in GitHub Actions cache. Relative cache paths make cache versions
@@ -173,9 +179,21 @@ per-app release PRs; merging one pushes a tag like `map@1.2.3`, which triggers
 that app's thin `deploy-<app>.yml` caller into the shared
 [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml):
 
-1. **`ci-gate`** — waits (does not re-run) for
-   `build|lint|typecheck|format-check|test-coverage` to succeed on the tagged
-   SHA.
+1. **`ci-gate`** — fails unless the tag points at a commit on `main`, then
+   waits (does not re-run) for the CI checks matched by its `check-regexp` to
+   succeed on the tagged SHA. That is every required check
+   except `lint-title`, which runs only on pull requests and so never reports
+   on a tagged commit. The gate fails if a matching check concludes anything
+   other than `success` (including `failure` or `skipped`), or if no check
+   matches at all. A required check that is missing on its own does not fail
+   it, so redeploying a tag cut before a required check was added passes on
+   the checks that ran at that commit. The same `check-regexp` appears in
+   [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml),
+   [`_deploy-cloudrun-job.yml`](../.github/workflows/_deploy-cloudrun-job.yml)
+   and [`deploy-homepage.yml`](../.github/workflows/deploy-homepage.yml), and
+   is maintained separately from the `main` ruleset; see
+   [GitHub Actions Conventions](../AGENTS.md#github-actions-conventions) for
+   keeping them in step.
 2. **`build`** — the deploy image is built once and pushed to Artifact
    Registry.
 3. **`deploy-staging`** — Cloud Run in the staging project; optional
@@ -245,9 +263,6 @@ build check is named `build-homepage` to stay distinct from CI's `build`.
   gated to `pull_request` and `push`, so a queued fork PR can only read. Giving
   a merge-queue job a secret or a write grant gives it to every queued PR's
   code as well.
-- The deploy `ci-gate` regexp waits on the five build/test checks but not
-  `security-audit` (the audit already gated the merge; a tag cut from an
-  unmerged or old SHA relies on that earlier gate).
 - The two reserved rungs below are the planned homes for end-to-end
   verification, which today has no rung at all.
 

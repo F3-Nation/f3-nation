@@ -103,8 +103,10 @@ async function linksInto(sql: Sql, ref: string): Promise<FkEdge[]> {
  * Trim the (throwaway) copy in place, in one transaction: empty every table
  * outside SNAPSHOT_TABLES, drop private event series and instances, keep
  * only event_instances inside SNAPSHOT_WINDOW (and their link rows), drop
- * locations only private events use, their blasts and users' free-text
- * profile answers, then empty the history the audit triggers just wrote.
+ * locations only private events use, their blasts and the free-text meta
+ * of users, attendance and awards, then empty the history the audit
+ * triggers just wrote. attendance goes with its instances (its FK into
+ * event_instances is one of the link rows), and its type rows with it.
  */
 export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
   const links = await linksInto(sql, "public.event_instances");
@@ -201,6 +203,11 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
     // obfuscate-db only scrubs emails and phones in it; the profile answers
     // (my_f3_why, f3_name_origin, …) are free text.
     await tx`UPDATE public.users SET meta = NULL WHERE meta IS NOT NULL`;
+    // obfuscate-db only scrubs emails and phones in attendance.meta and copies
+    // achievements_x_users untouched; both can hold free text.
+    await tx`UPDATE public.attendance SET meta = NULL WHERE meta IS NOT NULL`;
+    await tx`
+      UPDATE public.achievements_x_users SET meta = NULL WHERE meta IS NOT NULL`;
     const [kept] = await tx<{ n: number }[]>`
       SELECT count(*)::int AS n FROM public.event_instances`;
 

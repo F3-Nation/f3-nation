@@ -205,3 +205,14 @@ def test_runs_only_at_the_reminder_hour_unless_forced(monkeypatch):
 def test_without_invite_link_the_reminder_still_goes_out(monkeypatch):
     text = run(monkeypatch, [fng_created_days_ago(3)], downrange_invite_link=None).call_args.args[3]
     assert text.endswith("might help: 828-555-0100 · john@example.com.")
+
+
+def test_reminder_sends_only_the_url_from_a_saved_share_message(monkeypatch):
+    saved = f"Join me on Slack -- sign up here, from any device: {INVITE_LINK}"
+    text = run(monkeypatch, [fng_created_days_ago(3)], downrange_invite_link=saved).call_args.args[3]
+    assert text.endswith(f"Here's the invite link to send him: {INVITE_LINK}")
+
+
+def test_reminder_leaves_out_a_saved_link_with_no_url(monkeypatch):
+    text = run(monkeypatch, [fng_created_days_ago(3)], downrange_invite_link="Join me on Slack").call_args.args[3]
+    assert "invite link" not in text

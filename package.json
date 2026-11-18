@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "^26.12.1"
+    "node": "^26.13.0"
   },
-  "packageManager": "pnpm@12.16.0+sha512.e9ccc91a0b8d52da297c16841f9ee05f3ddd631bd757ef26a211687d4a38de653c614453649294438c58be74c2ba62d53e633a4e153708c012296d0f3ee27b36",
+  "packageManager": "pnpm@12.18.0+sha512.9d7882d5dc82147ecfc4e062aa34834e0ad0296710a1837a1115ae012127d36b7109e321ac1598a1dd0a65597681b1e99917e12ed0d749eae91187943363beb3",
   "scripts": {
     "build": "turbo build",
     "ci:local": "pnpm format && pnpm lint && pnpm lint:unused && pnpm typecheck && pnpm build && pnpm test",
@@ -38,8 +38,8 @@
     "lint": "bash scripts/lint.sh",
     "local:setup": "bash scripts/local-setup.sh",
     "postinstall": "bash scripts/postinstall-uv-sync.sh",
-    "pr:triage": "bash scripts/pr-triage.sh",
-    "pr:triage:html": "bash scripts/pr-triage.sh --html",
+    "pr:triage": "bash scripts/pr-triage.sh --with-advisories",
+    "pr:triage:html": "bash scripts/pr-triage.sh --with-advisories --html",
     "python:install": "uv sync --all-packages",
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",

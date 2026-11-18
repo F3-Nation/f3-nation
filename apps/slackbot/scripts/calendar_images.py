@@ -30,8 +30,6 @@ from f3_data_models.models import (
     SlackSpace,
     User,
 )
-
-# import dataframe_image as dfi
 from f3_data_models.utils import DbManager, get_session
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -39,6 +37,7 @@ from slack_sdk.models import blocks
 from sqlalchemy import Integer, and_, bindparam, func, or_, select
 from sqlalchemy.orm import aliased, joinedload
 
+from scripts.calendar_render import export_table_png
 from utilities import storage
 from utilities.constants import (
     EVENT_TAG_COLORS,
@@ -208,6 +207,17 @@ def set_text_color(s, color_dicts):
         if not found:
             text_color_list.append("color: #F0FFFF")
     return text_color_list
+
+
+def _style_calendar_table(df, styles, color_dicts):
+    # Table text comes from user-edited records; escape every cell and header before Chromium renders it.
+    return (
+        df.style.format(escape="html")
+        .format_index(escape="html", axis=1)
+        .set_table_styles(styles)
+        .apply(highlight_cells, color_dicts=color_dicts)
+        .hide(axis="index")
+    )
 
 
 def _remove_week_image(
@@ -457,7 +467,6 @@ def _build_calendar_query(session, current_week_start, overall_end):
 
 
 def generate_calendar_images(force: bool = False):
-    import dataframe_image as dfi
     import pandas as pd
 
     with get_session() as session:
@@ -725,11 +734,7 @@ def generate_calendar_images(force: bool = False):
                             # set style and export png
                             # df_styled = df2.style.set_table_styles(styles).apply(highlight_cells).hide_index()
                             # apply styles, hide the index
-                            df_styled = (
-                                df2.style.set_table_styles(styles)
-                                .apply(highlight_cells, color_dicts=all_color_dicts)
-                                .hide(axis="index")
-                            )
+                            df_styled = _style_calendar_table(df2, styles, all_color_dicts)
                             df_styled = df_styled.apply(set_text_color, color_dicts=all_color_dicts, axis=1)
 
                             # create calendar image
@@ -741,7 +746,7 @@ def generate_calendar_images(force: bool = False):
                             )
                             filename_static = f"{region_id}-{week}.png"
                             with storage.writable_path(storage.CALENDAR_IMAGES, filename, "image/png") as path:
-                                dfi.export(df_styled, path, table_conversion="playwright")
+                                export_table_png(df_styled, path)
                             generated_backing_files.append((week, filename))
                             if DB_SCHEMA == "f3_prod":
                                 storage.copy(storage.CALENDAR_IMAGES, filename, filename_static)

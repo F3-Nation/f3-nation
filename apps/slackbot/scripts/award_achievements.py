@@ -1,7 +1,7 @@
 """Daily (idempotent) auto-award achievements script.
 
-Usage (from repo root, with env + poetry activated):
-  poetry run python scripts/award_achievements.py --dry-run
+Usage from the repository root:
+  uv run --directory apps/slackbot --group scripts python -m scripts.award_achievements --dry-run
 
 Core logic:
   1. Load active, auto_award achievements
@@ -33,7 +33,6 @@ If filter keys are unrecognised, they are ignored (logged at DEBUG level).
 from __future__ import annotations
 
 import os
-import ssl
 import sys
 
 import pytz
@@ -436,14 +435,6 @@ class RegionAchievementGroup:
     achievements: Dict[int, List[Tuple[AwardedUserInfo, CandidateAward]]]
 
 
-def _get_ssl_context():
-    """Create SSL context for Slack client."""
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    return ssl_context
-
-
 def _build_achievement_message(achievement: Achievement, user_tag: str) -> str:
     """Build a message for a single achievement award."""
     msg = f"🏆 *{achievement.name}*"
@@ -634,8 +625,7 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
                 print(f"  - {ach_name}: {', '.join(users)}")
             continue
 
-        ssl_context = _get_ssl_context()
-        client = WebClient(group.bot_token, ssl=ssl_context)
+        client = WebClient(group.bot_token)
 
         if send_option == "post_individually":
             _post_individually(client, achievement_channel, group, achievements_by_id, team_id)
@@ -752,19 +742,11 @@ def _send_dms(
                 print(f"[{team_id}] Error sending DM to {slack_user_id}: {e}")
 
 
-def main():  # pragma: no cover - CLI
-    parser = argparse.ArgumentParser(description="Auto-award achievements")
-    parser.add_argument("--achievement-id", type=int, help="Process only a single achievement id", default=None)
-    parser.add_argument("--dry-run", action="store_true", help="Do not persist, only log actions")
-    parser.add_argument("--skip-post", action="store_true", help="Skip posting achievements to Slack")
-    parser.add_argument(
-        "--today", type=str, help="Override today's date (YYYY-MM-DD, UTC) for backfilling / testing", default=None
-    )
-    args = parser.parse_args()
+def run(achievement_id=None, dry_run=False, skip_post=False, today: date | None = None):
     print(f"Auto-award achievements started at {datetime.now(UTC).isoformat()}")
-    print(f"Arguments: achievement_id={args.achievement_id}, dry_run={args.dry_run}, today={args.today}")
+    print(f"Arguments: achievement_id={achievement_id}, dry_run={dry_run}, today={today}")
 
-    today = datetime.strptime(args.today, "%Y-%m-%d").date() if args.today else datetime.now(UTC).date()
+    today = today if today is not None else datetime.now(UTC).date()
     current_hour = datetime.now(pytz.timezone("US/Central")).hour
 
     if current_hour != constants.ACHIEVEMENT_AWARD_HOUR_CST:
@@ -772,30 +754,47 @@ def main():  # pragma: no cover - CLI
 
     with get_session() as session:
         ach_query = select(Achievement).filter(Achievement.auto_award.is_(True), Achievement.is_active.is_(True))
-        if args.achievement_id:
-            ach_query = ach_query.filter(Achievement.id == args.achievement_id)
+        if achievement_id:
+            ach_query = ach_query.filter(Achievement.id == achievement_id)
         achievements = session.scalars(ach_query).all()
         print(f"Processing {len(achievements)} achievements...")
         total_candidates = 0
         all_candidates = []
         for ach in achievements:
             cands = process_achievement(session, ach, today)
-            award_candidates(session, cands, args.dry_run)
+            award_candidates(session, cands, dry_run)
             total_candidates += len(cands)
             all_candidates.extend(cands)
 
         # Post achievement notifications
-        if all_candidates and not args.skip_post:
+        if all_candidates and not skip_post:
             print(f"\nPosting {len(all_candidates)} achievement notifications...")
-            post_achievements(session, all_candidates, args.dry_run)
+            post_achievements(session, all_candidates, dry_run)
 
         # save a csv of candidates for record-keeping
-        if all_candidates and args.dry_run:
+        if all_candidates and dry_run:
             with open(f"achievement_candidates_{today}.csv", "w") as f:
                 f.write("achievement_id,user_id,award_year,award_period,metric\n")
                 for c in all_candidates:
                     f.write(f"{c.achievement_id},{c.user_id},{c.award_year},{c.award_period},{c.metric}\n")
         print(f"Done. Candidates processed: {total_candidates}")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Auto-award achievements")
+    parser.add_argument("--achievement-id", type=int, help="Process only a single achievement id", default=None)
+    parser.add_argument("--dry-run", action="store_true", help="Do not persist, only log actions")
+    parser.add_argument("--skip-post", action="store_true", help="Skip posting achievements to Slack")
+    parser.add_argument(
+        "--today", type=str, help="Override today's date (YYYY-MM-DD, UTC) for backfilling / testing", default=None
+    )
+    args = parser.parse_args(argv)
+    run(
+        achievement_id=args.achievement_id,
+        dry_run=args.dry_run,
+        skip_post=args.skip_post,
+        today=datetime.strptime(args.today, "%Y-%m-%d").date() if args.today else None,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

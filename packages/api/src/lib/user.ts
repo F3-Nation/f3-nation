@@ -1,3 +1,4 @@
+import { stripStravaMetadata } from "./user-metadata";
 import type { SQL } from "@acme/db";
 import {
   aliasedTable,
@@ -58,8 +59,10 @@ export const shapeUserPii = <T extends Partial<UserSelectType>>(
   user: T,
   includePii: boolean,
 ): T | Omit<T, keyof typeof userPiiColumns> => {
-  if (includePii) return user;
   const publicUser = { ...user };
+  if ("meta" in publicUser)
+    publicUser.meta = stripStravaMetadata(publicUser.meta);
+  if (includePii) return publicUser;
   for (const column of Object.keys(userPiiColumns)) {
     delete publicUser[column as keyof typeof userPiiColumns];
   }
@@ -232,7 +235,7 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
       .record(z.string(), z.unknown())
       .nullable()
       .optional()
-      .describe("User metadata"),
+      .describe("User metadata excluding top-level strava_* keys"),
     homeRegion: z
       .object({
         homeRegionId: z.number().describe("Home region ID"),
@@ -263,7 +266,7 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
       .record(z.string(), z.unknown())
       .nullable()
       .optional()
-      .describe("User metadata"),
+      .describe("User metadata excluding top-level strava_* keys"),
     homeRegion: z
       .object({
         homeRegionId: z.number().describe("Home region ID"),
@@ -419,6 +422,7 @@ export const buildUserListQuery = async ({
   return {
     users: users.map((user: (typeof users)[number]) => ({
       ...user,
+      meta: stripStravaMetadata(user.meta),
       name: [user.firstName, user.lastName].join(" ").trim(),
       homeRegion: user.homeRegion ?? null,
     })),
@@ -506,6 +510,7 @@ export const buildSingleUserQuery = async (
   return {
     user: {
       ...user,
+      meta: stripStravaMetadata(user.meta),
       homeRegion: user.homeRegion ?? null,
       positions,
     },

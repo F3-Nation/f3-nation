@@ -1,5 +1,4 @@
 import os
-import ssl
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -175,10 +174,7 @@ def upload_files_to_slack(file_paths: List[str], settings: SlackSettings, text: 
         print("Slack bot token or reporting channel not configured; skipping upload")
         return
 
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    client = WebClient(token=settings.bot_token, ssl=ssl_context)
+    client = WebClient(token=settings.bot_token)
 
     file_list = []
     for fp in file_paths:

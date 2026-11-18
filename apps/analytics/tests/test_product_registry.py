@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from analytics.materializations import (
@@ -83,3 +85,15 @@ def test_product_targets_and_sql_resources_are_registered():
             assert item.nonprod_prefix == f"gs://f3-analytics-nonprod/{product}/{item.name}"
             assert item.production_prefix == f"gs://f3-analytics/{product}/{item.name}"
             assert select_materializations([item.name], product=product) == (item,)
+
+
+def test_only_event_details_overrides_parquet_row_group_size():
+    overrides = {item.name: item.row_group_size for item in MATERIALIZATIONS_BY_NAME.values() if item.row_group_size}
+    assert overrides == {"pv_event_details": 8192}
+
+
+@pytest.mark.parametrize("value", [0, -1, True, 8192.0, "8192"])
+def test_row_group_size_must_be_a_positive_integer(value):
+    template = MATERIALIZATIONS_BY_NAME["pv_event_details"]
+    with pytest.raises(ValueError, match="row_group_size"):
+        replace(template, row_group_size=value)
