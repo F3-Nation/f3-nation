@@ -5,7 +5,7 @@ placeholder as that step describes, paste the seat's lens file where `[LENS]` is
 result to a fresh sub-agent with nothing else: no session history, no PR title or body.
 
 Every seat gets this same text, whichever agent tool runs the review, so that a review doesn't
-depend on what the person running it has installed. The checklist and output format are adapted
+depend on what the person running it has installed. The rules and output format are adapted
 from Superpowers' `code-reviewer.md` (MIT, © Jesse Vincent, https://github.com/obra/superpowers).
 
 ```text
@@ -86,7 +86,8 @@ Clarity, small improvements.
 
 For each issue give: path (repo-relative); line or line range; side (RIGHT for added or
 changed code, numbered as in the HEAD version of the file; LEFT for removed code, numbered as
-in the base version); what is wrong; why it matters; and a fix. If the fix is a drop-in
+in the base version); the lane it belongs to (one of the "Lane:" names in your lane text, or
+"outside lane"); what is wrong; why it matters; and a fix. If the fix is a drop-in
 replacement for exactly those lines, give the replacement code.
 
 ### Declined to judge

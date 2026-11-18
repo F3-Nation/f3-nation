@@ -78,9 +78,9 @@ or
 [`.agents/skills/pr-local-test/SKILL.md`](.agents/skills/pr-local-test/SKILL.md).
 Who runs each of them, and when, is set by
 [`docs/PR_REVIEW_PROCESS.md`](docs/PR_REVIEW_PROCESS.md).
-`pr-review-inline` is the repo's only review skill. Its reviewer prompts are
-bundled with it, so it runs the same in every assistant, and its `--dry-run`
-option reviews your own draft PR without posting anything.
+`pr-review-inline`'s reviewer prompts are bundled with it, so every assistant
+runs the same prompts, and its `--dry-run` option reviews your own draft PR
+without posting anything.
 
 To set an issue's Type, Priority, Effort and App — one issue, or every open
 issue missing them — follow

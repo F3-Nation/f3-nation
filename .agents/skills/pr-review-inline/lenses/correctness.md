@@ -15,6 +15,9 @@ Look for:
   pooled connection that cheap calls then queue behind.
 - Requirements: behavior the requirements ask for that is missing or partial, and behavior
   nobody asked for.
+- Data and schema: a migration that fails or loses data on existing rows (a NOT NULL column
+  with no default or backfill, a narrowed type, a dropped column or enum value still read),
+  and a schema or API change that code already deployed can't handle during the rollout.
 
 How to work:
 

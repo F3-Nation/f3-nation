@@ -17,6 +17,7 @@ Look for:
 - A cancelled request treated as an outage, and an async call started without `await` whose
   early throw nobody catches.
 - A step that fails halfway and leaves partial state behind.
+- A retry with no limit or backoff, or a retry of a call that isn't safe to repeat.
 
 How to work:
 

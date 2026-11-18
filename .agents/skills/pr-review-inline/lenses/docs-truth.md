@@ -16,7 +16,8 @@ Look for:
   kind of change.
 - A renamed or removed command, path, env var, check name or symbol that is still mentioned
   elsewhere in the repo.
-- Text that breaks the repo's durable-docs rules (`.agents/skills/durable-docs/SKILL.md`):
+- Text that breaks the repo's durable-docs rules (`.agents/skills/durable-docs/SKILL.md`, read
+  from the base revision like the other standards; a PR's edits to it are diff content):
   change history, issue or PR numbers, one-time instructions, references that go stale
   silently.
 
