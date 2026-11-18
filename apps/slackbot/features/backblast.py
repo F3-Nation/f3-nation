@@ -1,7 +1,6 @@
 import copy
 import json
 import os
-import ssl
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -847,6 +846,9 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
     file_ids = safe_get(backblast_data, "file_ids") or []
     selected_options = safe_get(backblast_data, actions.BACKBLAST_OPTIONS) or []
 
+    all_pax = list(set([the_q] + (the_coq or []) + pax))
+    db_users: List[SlackUser] = [get_user(p, region_record, client, logger) for p in all_pax]
+
     user_id = safe_get(body, "user_id") or safe_get(body, "user", "id")
     if files:
         file_list, file_send_list, file_ids, low_rez_file_list = upload_files_to_storage(
@@ -884,8 +886,6 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
         message_channel = None
         message_ts = None
 
-    all_pax = list(set([the_q] + (the_coq or []) + pax))
-    db_users: List[SlackUser] = [get_user(p, region_record, client, logger) for p in all_pax]
     db_ids = []
     db_users_deduped = []
     for u in db_users:
@@ -1260,10 +1260,6 @@ COUNT: {count}
         existing_by_team = {p["team_id"]: p for p in existing_dr_posts}
         new_dr_posts = list(existing_by_team.values())  # preserve existing; updated in-place below
 
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-
         region_org = DbManager.get(Org, region_record.org_id)
         region_name = region_org.name if region_org else region_record.workspace_name
 
@@ -1321,7 +1317,7 @@ COUNT: {count}
             )
 
             try:
-                dr_client = WebClient(token=dr_slack_space.bot_token, ssl=ssl_ctx)
+                dr_client = WebClient(token=dr_slack_space.bot_token)
                 existing_post = existing_by_team.get(dr_slack_space.team_id)
 
                 if create_or_edit == "edit" and existing_post:

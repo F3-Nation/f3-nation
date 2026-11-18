@@ -174,6 +174,8 @@ describe("layout app router", () => {
           "/api/runtime-config",
         ),
       );
+      // No saved Settings choice, so the map opens in dark mode
+      await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
     },
     layoutImportTimeout,
   );

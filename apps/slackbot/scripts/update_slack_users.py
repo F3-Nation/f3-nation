@@ -11,7 +11,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from utilities.constants import is_production_deployment
-from utilities.helper_functions import create_user, is_deactivated_slack_user, safe_get
+from utilities.helper_functions import create_user, is_deactivated_slack_user, safe_get, slack_identity_error_context
 
 
 def update_slack_users(force=False):
@@ -23,7 +23,7 @@ def update_slack_users(force=False):
         return
 
     all_slack_users = DbManager.find_records(cls=SlackUser, filters=[True])
-    slack_user_dict = {user.slack_id: user for user in all_slack_users}
+    slack_user_dict = {(user.slack_team_id, user.slack_id): user for user in all_slack_users}
     all_slack_spaces: list[tuple[SlackSpace, Org_x_SlackSpace]] = DbManager.find_join_records2(
         SlackSpace,
         Org_x_SlackSpace,
@@ -43,17 +43,22 @@ def update_slack_users(force=False):
                 response = client.users_list(cursor=response["response_metadata"]["next_cursor"])
                 users.extend(response["members"])
 
+            created = 0
             for user in users:
                 if user["is_bot"] or user["id"] == "USLACKBOT":
                     continue  # Skip bots and the Slackbot
                 if is_deactivated_slack_user(user):
                     continue  # Skip deactivated accounts
 
-                slack_user = slack_user_dict.get(user["id"])
+                pair = (slack_space.team_id, user["id"])
+                slack_user = slack_user_dict.get(pair)
                 if not safe_get(slack_user, "user_id"):
-                    print(f"Creating new Slack user {user['id']} ({user.get('name')})")
-                    slack_user = create_user(user, region_org_record.org_id)
-                elif slack_user.slack_updated and slack_user.slack_updated >= user["updated"] and not force:
+                    is_new_identity = slack_user is None
+                    slack_user = create_user(user, region_org_record.org_id, team_id=slack_space.team_id)
+                    slack_user_dict[pair] = slack_user
+                    if is_new_identity or slack_user.user_id is not None:
+                        created += 1
+                if slack_user.slack_updated and slack_user.slack_updated >= user["updated"] and not force:
                     continue
                 else:
                     update_fields = {
@@ -68,10 +73,23 @@ def update_slack_users(force=False):
                     }
                     DbManager.update_record(SlackUser, slack_user.id, update_fields)
 
-            print("Slack users updated successfully.")
+            team_id = slack_identity_error_context(slack_space.team_id, Exception())["team_id"]
+            logging.getLogger(__name__).info(
+                "slack.identity.sync_summary team_id=%s created=%s",
+                team_id,
+                created,
+                extra={"json_fields": {"event": "slack.identity.sync_summary", "team_id": team_id, "created": created}},
+            )
 
-        except SlackApiError as e:
-            print(f"Error updating Slack users for {slack_space.workspace_name}: {e.response['error']}")
+        except SlackApiError as error:
+            context = slack_identity_error_context(slack_space.team_id, error)
+            logging.getLogger(__name__).error(
+                "slack.identity.sync_failed team_id=%s error_type=%s slack_error=%s",
+                context["team_id"],
+                context["error_type"],
+                context["slack_error"],
+                extra={"json_fields": {"event": "slack.identity.sync_failed", **context}},
+            )
             continue
 
 

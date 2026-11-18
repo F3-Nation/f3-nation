@@ -1,6 +1,17 @@
 import { vi } from "vitest";
+import type * as orgTree from "../org-tree";
 
 const mockLimit = vi.hoisted(() => vi.fn());
+const mockDepthScan = vi.hoisted(() => vi.fn());
+vi.mock("../org-tree", async (importOriginal) => {
+  const original = await importOriginal<typeof orgTree>();
+  return {
+    ...original,
+    logIfOrgTreeExceedsMaxDepth: mockDepthScan.mockImplementation(
+      original.logIfOrgTreeExceedsMaxDepth,
+    ),
+  };
+});
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
     return { limit: mockLimit };
@@ -678,6 +689,106 @@ describe("public reads exclude inactive organization hierarchies", () => {
         .flatMap((page) => page.eventTypes)
         .find((type) => type.id === nationalTypeId)?.count,
     ).toBe(5);
+  });
+
+  it("never relaxes anonymous ancestor filtering when explicitly disabled", async () => {
+    await mockAuthWithSession(null);
+    const result = await createTestClient().org.all({
+      orgTypes: ["region"],
+      searchTerm: prefix,
+      statuses: ["active", "inactive"],
+      activeAncestorsOnly: false,
+      pageSize: 100,
+    });
+    const expected = ["activeA", "activeB", "inactiveAO"]
+      .map((label) => branches[label]!.regionId)
+      .sort((a, b) => a - b);
+    expect(result.orgs.map((org) => org.id).sort((a, b) => a - b)).toEqual(
+      expected,
+    );
+    expect(result.total).toBe(expected.length);
+  });
+
+  it("intersects inactive status with the active-ancestor filter for lists and counts", async () => {
+    await mockAuthWithSession(createNoPermissionSession());
+    const client = createTestClient();
+    const filter = {
+      orgTypes: ["region"] as const,
+      searchTerm: prefix,
+      statuses: ["inactive"] as const,
+      activeAncestorsOnly: true,
+    };
+    const listed = await client.org.all({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+    });
+    const counted = await client.org.count({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+    });
+    expect(listed.orgs).toEqual([]);
+    expect(listed.total).toBe(0);
+    expect(counted.count).toBe(0);
+    const inactive = await client.org.all({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+      activeAncestorsOnly: false,
+    });
+    expect(inactive.orgs.map((org) => org.id)).toEqual([
+      branches.inactiveRegion!.regionId,
+    ]);
+    expect(inactive.total).toBe(1);
+    const inactiveCount = await client.org.count({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+      activeAncestorsOnly: false,
+    });
+    expect(inactiveCount.count).toBe(1);
+  });
+
+  it("opts signed-in organization choices into active-ancestor filtering", async () => {
+    await mockAuthWithSession(createNoPermissionSession());
+    const client = createTestClient();
+    const filter = {
+      orgTypes: ["region"] as const,
+      searchTerm: prefix,
+      statuses: ["active", "inactive"] as const,
+      activeAncestorsOnly: true,
+    };
+    const listed = await client.org.all({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+      pageSize: 100,
+    });
+    expect(mockDepthScan).toHaveBeenCalledWith(db);
+    mockDepthScan.mockClear();
+    const counted = await client.org.count({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+    });
+    expect(mockDepthScan).toHaveBeenCalledWith(db);
+    const expected = ["activeA", "activeB", "inactiveAO"]
+      .map((label) => branches[label]!.regionId)
+      .sort((a, b) => a - b);
+    expect(listed.orgs.map((org) => org.id).sort((a, b) => a - b)).toEqual(
+      expected,
+    );
+    expect(listed.total).toBe(expected.length);
+    expect(counted.count).toBe(expected.length);
+    const unfiltered = await client.org.all({
+      ...filter,
+      orgTypes: [...filter.orgTypes],
+      statuses: [...filter.statuses],
+      activeAncestorsOnly: false,
+      pageSize: 100,
+    });
+    expect(unfiltered.total).toBe(primaryLabels.length);
   });
 
   it("preserves ordinary signed-in access to retired branches and sensitive fields", async () => {

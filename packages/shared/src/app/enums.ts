@@ -118,21 +118,6 @@ export enum EventTypes {
   // Mobility/Stretch // Mobility
 }
 
-export enum EventTags {
-  Open = "Open",
-  VQ = "VQ",
-  Manniversary = "Manniversary",
-  Convergence = "Convergence",
-}
-
-export enum EventCategories {
-  "1st F - Core Workout" = "1st F - Core Workout",
-  "1st F - Pre Workout" = "1st F - Pre Workout",
-  "1st F - Off the books" = "1st F - Off the books",
-  "2nd F - Fellowship" = "2nd F - Fellowship",
-  "3rd F - Faith" = "3rd F - Faith",
-}
-
 export const FeedbackType = [
   "bug",
   "feature request",

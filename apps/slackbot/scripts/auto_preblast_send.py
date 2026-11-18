@@ -1,6 +1,5 @@
 import logging
 import os
-import ssl
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -69,6 +68,17 @@ class PreblastList:
             .alias()
         )
 
+        ranked_slack_users = select(
+            SlackUser,
+            func.row_number()
+            .over(
+                partition_by=(SlackUser.user_id, SlackUser.slack_team_id),
+                order_by=(SlackUser.slack_updated.desc().nulls_last(), SlackUser.id.asc()),
+            )
+            .label("identity_rank"),
+        ).subquery()
+        SelectedSlackUser = aliased(SlackUser, ranked_slack_users)
+
         query = (
             session.query(
                 EventInstance,
@@ -76,7 +86,7 @@ class PreblastList:
                 Org,
                 ParentOrg,
                 User.f3_name.label("q_name"),
-                SlackUser.slack_id,
+                SelectedSlackUser.slack_id,
                 User.avatar_url.label("q_avatar_url"),
                 SlackSpace.settings,
             )
@@ -92,7 +102,14 @@ class PreblastList:
             .outerjoin(User, User.id == firstq_subquery.c.user_id)
             .join(Org_x_SlackSpace, ParentOrg.id == Org_x_SlackSpace.org_id)
             .join(SlackSpace, Org_x_SlackSpace.slack_space_id == SlackSpace.id)
-            .outerjoin(SlackUser, and_(User.id == SlackUser.user_id, SlackUser.slack_team_id == SlackSpace.team_id))
+            .outerjoin(
+                SelectedSlackUser,
+                and_(
+                    User.id == SelectedSlackUser.user_id,
+                    SelectedSlackUser.slack_team_id == SlackSpace.team_id,
+                    ranked_slack_users.c.identity_rank == 1,
+                ),
+            )
             .filter(*filters)
             .order_by(ParentOrg.name, Org.name, EventInstance.start_time)
         )
@@ -158,10 +175,7 @@ def send_automated_preblasts(force: bool = False):
             continue
 
         try:
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            slack_client = WebClient(preblast.slack_settings.bot_token, ssl=ssl_context)
+            slack_client = WebClient(preblast.slack_settings.bot_token)
             event_preblast.send_preblast(
                 event_instance_id=preblast.event.id,
                 region_record=preblast.slack_settings,

@@ -1,6 +1,5 @@
 import os
 import re
-import ssl
 from logging import Logger
 
 from f3_data_models.models import Org, Org_x_SlackSpace, Role, Role_x_User_x_Org, SlackSpace
@@ -297,12 +296,9 @@ def handle_existing_region_selection(
             ]
         ),
     ]
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
     if os.environ.get("ADMIN_BOT_TOKEN") and os.environ.get("ADMIN_CHANNEL_ID"):
         try:
-            send_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"), ssl=ssl_context)
+            send_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"))
             send_client.chat_postMessage(
                 channel=os.environ.get("ADMIN_CHANNEL_ID"),
                 text="Region Connection Request",
@@ -358,6 +354,9 @@ def handle_approve_connection(
     region_record.bot_token = slack_space_record.bot_token
     requester_client = WebClient(token=slack_space_record.bot_token)
     org_record = DbManager.get(Org, metadata.get("region_id"))
+    region_record.org_id = org_record.id
+    slack_user_id = metadata.get("user_id")
+    user_id = get_user(slack_user_id, region_record, requester_client, logger).user_id
 
     # Connect the slack space to the new org
     if team_id:
@@ -368,7 +367,6 @@ def handle_approve_connection(
             )
             DbManager.create_record(connect_record)
         # Update the slack space record with the new org
-        region_record.org_id = org_record.id
         region_record.migration_date = metadata.get("migration_date")
         DbManager.update_records(
             cls=SlackSpace,
@@ -376,8 +374,6 @@ def handle_approve_connection(
             fields={SlackSpace.settings: region_record.__dict__},
         )
     # Make the current user an admin of the new org
-    slack_user_id = metadata.get("user_id")
-    user_id = get_user(slack_user_id, region_record, requester_client, logger).user_id
     admin_role_id = DbManager.find_first_record(Role, filters=[Role.name == "admin"]).id
     try:
         DbManager.create_record(
@@ -410,12 +406,9 @@ def handle_approve_connection(
             text=f"Your region connection request was approved by the F3 Nation Admins! Your slack space is now connected to {metadata.get('region_name')}. Your PAX can start signing up to Q through the `/f3-calendar` command."  # noqa
         ),
     ]
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
     if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=slack_space_record.bot_token, ssl=ssl_context)
+            send_client = WebClient(token=slack_space_record.bot_token)
             send_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Approved",
@@ -444,7 +437,7 @@ def handle_approve_connection(
                     )
                 ),
             ]
-            admin_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"), ssl=ssl_context)
+            admin_client = WebClient(token=os.environ.get("ADMIN_BOT_TOKEN"))
             admin_client.chat_update(
                 channel=channel_id,
                 ts=message_ts,
@@ -470,12 +463,9 @@ def handle_deny_connection(body: dict, client: WebClient, logger: Logger, contex
             text="Your region connection request was denied by the F3 Nation Admins. Please reach out to it@f3nation.com for more information."  # noqa
         ),
     ]
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
     if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=slack_space_record.bot_token, ssl=ssl_context)
+            send_client = WebClient(token=slack_space_record.bot_token)
             send_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Denied",

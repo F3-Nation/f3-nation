@@ -3,7 +3,7 @@ import { randomInt } from "node:crypto";
 import { env } from "@acme/env";
 import { ProviderId } from "@acme/shared/common/enums";
 
-import { sendOtpVerificationRequestServer } from "./send-otp-verification-request-server";
+import { sendOtpEmail } from "./send-otp-email";
 
 const OtpProvider = {
   id: ProviderId.OTP,
@@ -21,7 +21,7 @@ const OtpProvider = {
     ).join("");
     return Promise.resolve(token);
   },
-  sendVerificationRequest: sendOtpVerificationRequestServer,
+  sendVerificationRequest: sendOtpEmail,
 } as const;
 
 export default OtpProvider;

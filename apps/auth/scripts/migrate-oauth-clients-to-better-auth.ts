@@ -38,6 +38,9 @@
  * secret and enabling it is separate provisioning work.
  *
  * Settings each new row gets, matching what relying parties do today:
+ *   - refused when its scopes include anything outside
+ *     SUPPORTED_OAUTH_SCOPES or lack openid (rows already present aren't
+ *     checked, since their scopes are never rewritten);
  *   - offline_access is added to the client's scopes, since Better Auth only
  *     issues refresh tokens when it is granted (the hand-rolled server
  *     always issued one);
@@ -72,7 +75,10 @@ import postgres from "postgres";
 import * as _schema from "@acme/db/schema/schema";
 
 import { logError, logInfo, logWarn } from "../src/lib/logging";
-import { F3_NATION_CLIENT_REFERENCE_ID } from "../src/lib/oauth-client-reference";
+import {
+  F3_NATION_CLIENT_REFERENCE_ID,
+  SUPPORTED_OAUTH_SCOPES,
+} from "../src/lib/oauth-client-reference";
 
 const {
   oauthClients,
@@ -127,7 +133,7 @@ export function buildClientRow(client: OAuthClientRow, now: Date) {
     trimmedScopes && trimmedScopes.length > 0
       ? trimmedScopes
       : "openid profile email";
-  const scopes = scopeString.split(/\s+/);
+  const scopes = [...new Set(scopeString.split(/\s+/))];
   // See the file comment: no refresh token without it.
   if (!scopes.includes("offline_access")) scopes.push("offline_access");
 
@@ -159,6 +165,51 @@ export function buildClientRow(client: OAuthClientRow, now: Date) {
   };
 }
 
+/**
+ * Why a new row's scopes can't be inserted, or null when they're fine. Only
+ * what auth3 serves (SUPPORTED_OAUTH_SCOPES), and openid is required. Refused
+ * instead of silently dropped, the same way a bad redirect_uris row is
+ * handled: an unknown scope means the legacy row needs a human look.
+ */
+function scopeProblem(clientId: string, scopes: string[]): string | null {
+  const unsupported = scopes.filter(
+    (scope) => !(SUPPORTED_OAUTH_SCOPES as readonly string[]).includes(scope),
+  );
+  if (unsupported.length > 0) {
+    return (
+      `oauth_clients.scopes for "${clientId}" has unsupported scope(s) ` +
+      `${unsupported.join(", ")} (auth3 supports ` +
+      `${SUPPORTED_OAUTH_SCOPES.join(", ")})`
+    );
+  }
+  if (!scopes.includes("openid")) {
+    return (
+      `oauth_clients.scopes for "${clientId}" has no openid, and auth3 only ` +
+      "serves OpenID Connect requests"
+    );
+  }
+  return null;
+}
+
+/**
+ * Throws once, naming every row that can't be inserted because of its
+ * scopes, so they can all be fixed in one pass. Only rows that will be
+ * inserted are checked: rows already present never have their scopes
+ * rewritten, so a stale legacy value there doesn't block a re-run.
+ */
+export function assertSupportedScopes(
+  rows: { clientId: string; scopes: string[] }[],
+): void {
+  const problems = rows
+    .map((row) => scopeProblem(row.clientId, row.scopes))
+    .filter((problem): problem is string => problem !== null);
+  if (problems.length > 0) {
+    throw new Error(
+      `${problems.join("\n")}\nFix those oauth_clients rows before migrating.`,
+    );
+  }
+}
+
 /** What a run inserts, stamps, reports and links, given what is already there. */
 export function planMigration({
   rows,
@@ -171,6 +222,7 @@ export function planMigration({
 }) {
   const alreadyPresentIds = new Set(alreadyPresent.map((row) => row.clientId));
   const newRows = rows.filter((row) => !alreadyPresentIds.has(row.clientId));
+  assertSupportedScopes(newRows);
   // An already-present row without a referenceId (e.g. from an earlier run).
   // Stamp it unless it is pinned to an individual user (userId is checked
   // before referenceId, so setting one would change nothing and hide the

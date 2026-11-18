@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { MoveAOToNewLocationSchema } from "@acme/validators/request-schemas";
 
@@ -19,6 +19,19 @@ const valid = {
 };
 
 describe("MoveAOToNewLocationSchema", () => {
+  it("keeps prior values that break today's rules", () => {
+    const currentValues = { locationAddress: "123", locationZip: "1" };
+    const result = MoveAOToNewLocationSchema.parse({ ...valid, currentValues });
+    expect(result.currentValues).toEqual(currentValues);
+  });
+
+  it("rejects a prior value of the wrong type", () =>
+    expectInvalidAt(
+      MoveAOToNewLocationSchema,
+      { ...valid, currentValues: { locationLat: "35.5" } },
+      "currentValues",
+    ));
+
   it("accepts a move-to-new-location request", () =>
     expectValid(MoveAOToNewLocationSchema, valid));
 

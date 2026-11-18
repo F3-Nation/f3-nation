@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertSupportedScopes,
   buildClientRow,
   planMigration,
 } from "../../scripts/migrate-oauth-clients-to-better-auth";
@@ -60,6 +61,39 @@ describe("buildClientRow", () => {
     ]);
   });
 
+  it.each([
+    ["openid admin", /unsupported scope\(s\) admin/],
+    ["openid openid_required", /unsupported scope\(s\) openid_required/],
+    ["profile email", /has no openid/],
+  ])("refuses legacy scopes %s", (scopes, message) => {
+    const row = buildClientRow(legacy({ scopes }), NOW);
+    expect(() => assertSupportedScopes([row])).toThrow(message);
+  });
+
+  it("builds a row for an unsupported scope without throwing", () => {
+    expect(
+      buildClientRow(legacy({ scopes: "openid admin" }), NOW).scopes,
+    ).toEqual(["openid", "admin", "offline_access"]);
+  });
+
+  it("names every refused client in one error", () => {
+    const rows = [
+      buildClientRow(legacy({ id: "a", scopes: "openid admin" }), NOW),
+      buildClientRow(legacy({ id: "b", scopes: "profile" }), NOW),
+      buildClientRow(legacy({ id: "c" }), NOW),
+    ];
+    expect(() => assertSupportedScopes(rows)).toThrow(
+      /"a" has unsupported scope\(s\) admin[\s\S]*"b" has no openid/,
+    );
+    expect(() => assertSupportedScopes([rows[2]!])).not.toThrow();
+  });
+
+  it("drops repeated scopes", () => {
+    expect(
+      buildClientRow(legacy({ scopes: "openid openid profile" }), NOW).scopes,
+    ).toEqual(["openid", "profile", "offline_access"]);
+  });
+
   it.each(["not json", '{"a":1}', "[1,2]"])(
     "refuses malformed redirect_uris %s",
     (redirectUris) => {
@@ -82,6 +116,28 @@ describe("planMigration", () => {
   });
   const rowsFor = (...ids: string[]) =>
     ids.map((id) => buildClientRow(legacy({ id }), NOW));
+
+  it("refuses a new row with an unsupported scope", () => {
+    expect(() =>
+      planMigration({
+        rows: [
+          buildClientRow(legacy({ id: "a", scopes: "openid admin" }), NOW),
+        ],
+        alreadyPresent: [],
+        linkedClientIds: new Set(),
+      }),
+    ).toThrow(/"a" has unsupported scope\(s\) admin/);
+  });
+
+  it("doesn't check the scopes of a row already present", () => {
+    const plan = planMigration({
+      rows: [buildClientRow(legacy({ id: "a", scopes: "openid admin" }), NOW)],
+      alreadyPresent: [existing("a")],
+      linkedClientIds: new Set(),
+    });
+    expect(plan.newRows).toEqual([]);
+    expect(plan.toStamp.map((r) => r.clientId)).toEqual(["a"]);
+  });
 
   it("inserts clients that aren't there and links them", () => {
     const plan = planMigration({

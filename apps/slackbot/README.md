@@ -280,3 +280,28 @@ the current service or job does not retrofit older revisions/templates. These
 are operator-run commands for manual changes/rollback, not an automated
 cleanup. The app does not automatically delete synthetic users or clean up
 historical profile data.
+
+### Scheduled-job logging
+
+The hourly entrypoint uses Cloud Logging JSON records in deployment and a stream
+handler in local development, with `LOG_LEVEL=DEBUG` selecting DEBUG and other
+values selecting INFO. Slack member synchronization records one summary per
+completed workspace-region pass, including the
+number of identities created or linked, without member profile fields. Cached
+identity-link failures retain the cached row and report bounded SQLSTATE and
+allowlisted constraint diagnostics for database errors.
+
+### Unlinked workspace identities
+
+In production, an identity without a usable member email or established F3 link
+stays unlinked. Calendar browsing, help and downrange remain available.
+Account-dependent writes require a verified link and report when the app needs
+access to a member's email. Sync refreshes unlinked display profiles and retries
+linking when email becomes available; it does not create placeholder F3 accounts.
+Direct-email Downrange invitations require a usable email address. FNG creation
+can proceed without linking its optional battle buddy when the actor is unlinked.
+
+The disposable identity PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`.
+`SLACKBOT_POSTGRES_IMAGE` optionally overrides their pinned local PostgreSQL
+image; CI supplies the same mirrored image as its database service. Every test
+container is removed by its fixture.

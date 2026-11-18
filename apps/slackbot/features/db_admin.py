@@ -1,6 +1,5 @@
 import copy
 import os
-import ssl
 from logging import Logger
 
 from f3_data_models.models import Org, Org_Type, Org_x_SlackSpace, Role, Role_x_User_x_Org, SlackSpace
@@ -262,10 +261,7 @@ def handle_send_admin_announcement(
             slack_admin_ids = {safe_get(u, 1, "slack_id") for u in admin_users if safe_get(u, 1, "slack_id")}
             for slack_user_id in slack_admin_ids:
                 try:
-                    ssl_context = ssl.create_default_context()
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = ssl.CERT_NONE
-                    slack_client = WebClient(slack_space.settings.get("bot_token"), ssl=ssl_context)
+                    slack_client = WebClient(slack_space.settings.get("bot_token"))
                     slack_client.chat_postMessage(
                         channel=slack_user_id,
                         blocks=[announcement_text],

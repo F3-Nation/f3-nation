@@ -1,5 +1,4 @@
 import os
-import ssl
 import sys
 from datetime import timedelta
 
@@ -72,10 +71,7 @@ def update_special_events():
             )
             if events and slack_settings.special_events_channel:
                 blocks = create_special_events_blocks(events, slack_settings)
-                ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-                WebClient(token=slack_settings.bot_token, ssl=ssl_context).chat_postMessage(
+                WebClient(token=slack_settings.bot_token).chat_postMessage(
                     channel=slack_settings.special_events_channel,
                     text=f"Upcoming events for {region.name}:",
                     blocks=blocks,

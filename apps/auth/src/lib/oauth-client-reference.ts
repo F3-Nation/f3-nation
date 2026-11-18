@@ -5,3 +5,8 @@
 // oauthProvider's clientReference option in better-auth.ts and by the
 // oauth_clients migration script, which has to stamp it on the rows it copies.
 export const F3_NATION_CLIENT_REFERENCE_ID = "f3-nation";
+
+// The scopes auth3's oauthProvider advertises and will issue. The list lives
+// in @acme/shared so packages/api's admin PATCH checks the same one;
+// re-exported here for better-auth.ts and the apps/auth scripts.
+export { SUPPORTED_OAUTH_SCOPES } from "@acme/shared/common/oauth-scopes";

@@ -48,6 +48,7 @@ const config: KnipConfig = {
       entry: [
         "scripts/check-eslint-suppressions.mjs",
         "scripts/check-review-links.mjs",
+        "scripts/check-skill-frontmatter.mjs",
         "scripts/check-security-headers-coverage.mjs",
       ],
     },
@@ -70,6 +71,9 @@ const config: KnipConfig = {
       // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
       // internal call; no static import exists for knip to trace.
       ignoreDependencies: ["@f3nation/sso", ...tailwindLintDeps],
+      // Nothing imports typed-routes.ts; tsc loads it through the tsconfig
+      // `include` to pull in the generated typedRoutes declarations.
+      entry: ["typed-routes.ts"],
     },
     "apps/homepage": { ignoreDependencies: tailwindLintDeps },
     "apps/map": { ignoreDependencies: tailwindLintDeps },

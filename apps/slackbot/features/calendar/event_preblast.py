@@ -271,7 +271,9 @@ def build_event_preblast_select_form(
       2. A link to the calendar so the user can sign up to Q for an event.
       3. A button to create a preblast for an unscheduled event.
     """
-    user_id = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger).user_id
+    user_id = get_user(
+        safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger, require_link=False
+    ).user_id
 
     # Query for upcoming events where this user is Q or Co-Q, no preblast yet
     event_records = event_attendance_query(
@@ -660,9 +662,9 @@ def handle_event_preblast_edit(
                 client=client,
                 title="Co-Qs not saved",
                 text=(
-                    f"{photo_note}Preblast details were saved, but Co-Qs were not updated because "
-                    f"these Slack users could not be resolved: {failed_coqs}. "
-                    "Please reopen the form and try again."
+                    f"{photo_note}Preblast details were saved, but Co-Qs were not updated. "
+                    "Check app email access and account links before retrying: "
+                    f"{failed_coqs}."
                 ),
                 level=constants.AlertLevel.ERROR,
                 logger=logger,
@@ -948,7 +950,7 @@ def send_preblast(
     # Username / icon
     if body:
         slack_id = q_slack_id or slack_user_id
-        q_name, q_url = get_user_names([slack_id], logger, client, return_urls=True)
+        q_name, q_url = get_user_names([slack_id], logger, client, return_urls=True, team_id=region_record.team_id)
         q_name = (q_name or [""])[0]
         q_url = q_url[0] if q_url else None
         username = f"{q_name} (via F3 Nation)"
@@ -1130,7 +1132,9 @@ def build_preblast_info(
     user_id = None
     user_is_q = False
     if body:
-        user_obj = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger)
+        user_obj = get_user(
+            safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger, require_link=False
+        )
         user_id = user_obj.user_id
         user_is_q = any(
             att.user_id == user_id
@@ -1379,7 +1383,9 @@ def handle_event_preblast_action(
             ]
             _insert_preblast_image(blocks, preblast_info.event_record.meta)
 
-            q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
+            q_name, q_url = get_user_names(
+                [slack_user_id], logger, client, return_urls=True, team_id=region_record.team_id
+            )
             q_name = (q_name or [""])[0]
             q_url = q_url[0] if q_url else None
             preblast_channel = get_preblast_channel(region_record, preblast_info)
@@ -1487,7 +1493,9 @@ def handle_event_preblast_action(
             blocks = list(preblast_info.preblast_blocks) + [b.as_form_field() for b in button_blocks]
             _insert_preblast_image(blocks, preblast_info.event_record.meta)
 
-            q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
+            q_name, q_url = get_user_names(
+                [slack_user_id], logger, client, return_urls=True, team_id=region_record.team_id
+            )
             q_name = (q_name or [""])[0]
             q_url = q_url[0] if q_url else None
             preblast_channel = get_preblast_channel(region_record, preblast_info)

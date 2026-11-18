@@ -13,7 +13,8 @@ import { env } from "~/env";
 import { logDebug, logWarn } from "~/lib/logging";
 import { getMyProfile } from "~/lib/api/client";
 
-const NO_ADMIN_ACCESS_PATH = `${routes.admin.noAccess.__path}?reason=no-admin-access`;
+const NO_ADMIN_ACCESS_PATH =
+  `${routes.admin.noAccess.__path}?reason=no-admin-access` as const;
 
 const getCachedSessionPayload = cache(async (accessToken: string) => {
   const result = await verifyAccessToken(

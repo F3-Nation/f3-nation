@@ -1,7 +1,6 @@
 import copy
 import json
 import re
-import ssl
 from logging import Logger
 
 from f3_data_models.models import Org, Org_x_SlackSpace, SlackSpace, User
@@ -14,10 +13,12 @@ from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users
 from utilities.helper_functions import (
     REGION_RECORDS,
+    get_member_email,
     get_user,
     safe_convert,
     safe_get,
     update_local_region_records,
+    usable_invite_link,
 )
 from utilities.slack import actions
 from utilities.slack.orm import (
@@ -34,6 +35,7 @@ from utilities.slack.orm import (
     PlainTextInputElement,
     RadioButtonsElement,
     SectionBlock,
+    URLInputElement,
     as_selector_options,
 )
 
@@ -48,7 +50,7 @@ def _is_admin(body: dict, region_record: SlackSettings, client: WebClient, logge
     if not region_record.org_id:
         return False
     user_id = safe_get(body, "user_id") or safe_get(body, "user", "id")
-    slack_user = get_user(user_id, region_record, client, logger)
+    slack_user = get_user(user_id, region_record, client, logger, require_link=False)
     admin_users = get_admin_users(region_record.org_id, region_record.team_id)
     return any(
         u[0].id == slack_user.user_id for u in admin_users if u[1] and u[1].slack_id and u[1].slack_id != "USLACKBOT"
@@ -176,6 +178,7 @@ def _build_region_info_blocks(
     org=None,
 ) -> list:
     """Return the dynamic info blocks shown after a region is selected."""
+    requester_email = get_member_email(requester_email) or ""
     blocks = [DividerBlock()]
 
     if not has_slack:
@@ -199,12 +202,12 @@ def _build_region_info_blocks(
     if (
         target_settings
         and target_settings.downrange_invite_sharing == "proactive"
-        and target_settings.downrange_invite_link
+        and usable_invite_link(target_settings.downrange_invite_link)
     ):
         blocks.append(
             SectionBlock(label=f":white_check_mark: *{selected_org_name}* is on Slack! Here is their invite link:")
         )
-        blocks.append(SectionBlock(label=target_settings.downrange_invite_link))
+        blocks.append(SectionBlock(label=usable_invite_link(target_settings.downrange_invite_link)))
         blocks.append(
             ContextBlock(
                 element=ContextElement(
@@ -224,6 +227,14 @@ def _build_region_info_blocks(
             )
         )
     elif target_settings and target_settings.downrange_invite_sharing == "direct_email":
+        if not requester_email:
+            blocks.append(
+                SectionBlock(
+                    label="This region requires an email address for invitations. "
+                    "Check that the app can read your email, then reopen Downrange."
+                )
+            )
+            return blocks
         blocks.append(
             SectionBlock(
                 label=f":email: *{selected_org_name}* is on Slack! They accept invite requests via direct email."
@@ -345,13 +356,6 @@ def _update_request_modal_for_resubmit(body: dict, client: WebClient, logger: Lo
         logger.info("Downrange resubmission guidance could not be displayed")
 
 
-def _ssl_context():
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
-
-
 # Blocks for the admin settings section (appended below the search when user is admin)
 DOWNRANGE_ADMIN_BLOCKS = [
     DividerBlock(),
@@ -376,7 +380,7 @@ DOWNRANGE_ADMIN_BLOCKS = [
     InputBlock(
         label="Slack invite link",
         action=actions.DOWNRANGE_INVITE_LINK,
-        element=PlainTextInputElement(
+        element=URLInputElement(
             placeholder="https://join.slack.com/t/your-workspace/...",
         ),
         optional=True,
@@ -430,7 +434,7 @@ def build_downrange_menu(body: dict, client: WebClient, logger: Logger, context:
         form.set_initial_values(
             {
                 actions.DOWNRANGE_INVITE_SHARING: region_record.downrange_invite_sharing or "request_only",
-                actions.DOWNRANGE_INVITE_LINK: region_record.downrange_invite_link or "",
+                actions.DOWNRANGE_INVITE_LINK: usable_invite_link(region_record.downrange_invite_link) or "",
                 actions.DOWNRANGE_CHANNEL_POSTING: region_record.downrange_channel_posting or "off",
                 actions.DOWNRANGE_CHANNEL: region_record.downrange_channel,
             }
@@ -481,9 +485,9 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
     safe_metadata = {"is_admin": bool(is_admin_user)}
 
     # Look up requester info
-    requester_slack_user = get_user(user_id, region_record, client, logger)
+    requester_slack_user = get_user(user_id, region_record, client, logger, require_link=False)
     requester_name = requester_slack_user.user_name or "Unknown"
-    requester_email = requester_slack_user.email or ""
+    requester_email = get_member_email(requester_slack_user.email) or ""
     requester_region_name = None
     if requester_slack_user.user_id:
         requester_user = DbManager.get(User, requester_slack_user.user_id, joinedloads=[User.home_region_org])
@@ -527,8 +531,10 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
                 actions.DOWNRANGE_INVITE_SHARING: _get_radio_value(current_values, actions.DOWNRANGE_INVITE_SHARING)
                 or region_record.downrange_invite_sharing
                 or "request_only",
-                actions.DOWNRANGE_INVITE_LINK: _get_text_value(current_values, actions.DOWNRANGE_INVITE_LINK)
-                or region_record.downrange_invite_link
+                actions.DOWNRANGE_INVITE_LINK: usable_invite_link(
+                    _get_text_value(current_values, actions.DOWNRANGE_INVITE_LINK)
+                )
+                or usable_invite_link(region_record.downrange_invite_link)
                 or "",
                 actions.DOWNRANGE_CHANNEL_POSTING: _get_radio_value(current_values, actions.DOWNRANGE_CHANNEL_POSTING)
                 or region_record.downrange_channel_posting
@@ -563,7 +569,7 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
     requester_user_id = action_value.get("requester_user_id") or safe_get(body, "user", "id")
     requester_name = action_value.get("requester_name", "Unknown")
     requester_region_name = action_value.get("requester_region_name", "Unknown")
-    requester_email = action_value.get("requester_email", "")
+    requester_email = get_member_email(action_value.get("requester_email")) or ""
 
     # Get intro text from form state (may be None)
     state_values = safe_get(body, "view", "state", "values") or {}
@@ -613,6 +619,22 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
     # Get the target region's current invite-sharing setting to determine DM format
     _, _, target_settings = _get_target_region_info(target_org_id, logger)
     is_direct_email = target_settings and target_settings.downrange_invite_sharing == "direct_email"
+    if is_direct_email and not requester_email:
+        BlockView(
+            blocks=[
+                SectionBlock(
+                    label="This invite requires an email address. "
+                    "Check that the app can read your email, then reopen Downrange."
+                )
+            ]
+        ).update_modal(
+            client=client,
+            view_id=safe_get(body, "view", "id"),
+            title_text="Email needed",
+            callback_id=actions.DOWNRANGE_CALLBACK_ID,
+            submit_button_text="None",
+        )
+        return
 
     # Build request message for target admins
     intro_section = f"\n\n*Their intro:*\n{intro_text}" if intro_text else ""
@@ -695,7 +717,7 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
         ]
 
     try:
-        target_client = WebClient(token=target_bot_token, ssl=_ssl_context())
+        target_client = WebClient(token=target_bot_token)
         dm = target_client.conversations_open(users=",".join(admin_slack_ids))
         dm_channel = safe_get(dm, "channel", "id")
         target_client.chat_postMessage(
@@ -737,7 +759,7 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    invite_link = region_record.downrange_invite_link
+    invite_link = usable_invite_link(region_record.downrange_invite_link)
 
     if not invite_link:
         # Admin needs to set the invite link first
@@ -785,7 +807,7 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} has been approved!",
@@ -830,7 +852,7 @@ def handle_invite_deny(body: dict, client: WebClient, logger: Logger, context: d
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} was not approved at this time.",
@@ -887,7 +909,7 @@ def handle_invite_link_broken(
         ]
         if admin_slack_ids:
             try:
-                target_client = WebClient(token=target_bot_token, ssl=_ssl_context())
+                target_client = WebClient(token=target_bot_token)
                 dm = target_client.conversations_open(users=",".join(admin_slack_ids))
                 dm_channel = safe_get(dm, "channel", "id")
                 target_client.chat_postMessage(
@@ -938,7 +960,7 @@ def handle_invite_mark_done(body: dict, client: WebClient, logger: Logger, conte
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token)
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite to {target_org_name} has been sent — check your email!",
@@ -983,7 +1005,15 @@ def handle_downrange_settings(
     form_data = BlockView(blocks=copy.deepcopy(DOWNRANGE_ADMIN_BLOCKS)).get_selected_values(body)
 
     region_record.downrange_invite_sharing = safe_get(form_data, actions.DOWNRANGE_INVITE_SHARING) or "request_only"
-    region_record.downrange_invite_link = safe_get(form_data, actions.DOWNRANGE_INVITE_LINK) or None
+    submitted_link = safe_get(form_data, actions.DOWNRANGE_INVITE_LINK)
+    invite_link = usable_invite_link(submitted_link)
+    if submitted_link and not invite_link:
+        # Keep the saved link rather than clear it as a side effect of unusable input; an empty box still clears it.
+        logger.warning(
+            f"Downrange settings for team {region_record.team_id}: invite link had no usable URL, kept the saved one"
+        )
+        invite_link = usable_invite_link(region_record.downrange_invite_link)
+    region_record.downrange_invite_link = invite_link
     region_record.downrange_channel_posting = safe_get(form_data, actions.DOWNRANGE_CHANNEL_POSTING) or "off"
     region_record.downrange_channel = safe_get(form_data, actions.DOWNRANGE_CHANNEL) or None
 

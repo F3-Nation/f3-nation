@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getTrustedClientIp } from "@acme/shared/common/client-ip";
 
 import { checkEmailCode } from "~/lib/email-mfa";
-import { logError } from "~/lib/logging";
+import { logError, logWarn } from "~/lib/logging";
 import { env } from "~/env";
 import { rateLimit } from "~/lib/rate-limit";
 
@@ -120,6 +120,30 @@ export async function POST(request: NextRequest) {
     });
 
     if (!res.ok) {
+      if (payload.homeRegionId && (res.status === 400 || res.status === 404)) {
+        const failure = z.object({ message: z.string() }).safeParse(
+          await res
+            .clone()
+            .json()
+            .catch(() => null),
+        );
+        if (
+          failure.success &&
+          [
+            "Home region not found",
+            "Home region must be an active region with active ancestors",
+          ].includes(failure.data.message)
+        ) {
+          logWarn("auth.register.region_unavailable", { status: res.status });
+          return NextResponse.json(
+            {
+              error:
+                "That region is no longer available. Please choose another.",
+            },
+            { status: 400 },
+          );
+        }
+      }
       const text = await res.text();
       logError("auth.register.f3_api_failed", {
         status: res.status,

@@ -115,6 +115,8 @@ jobs:
     permissions:
       contents: read
       checks: read
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
     steps:
       - name: Validate deploy ref is an existing release tag
         if: inputs.ref != ''
@@ -132,10 +134,46 @@ jobs:
             exit 1
           fi
 
-      # lint-title is deliberately excluded: it only runs on `pull_request`
-      # (pr-title.yml has no `push` trigger), so it never has a check-run
-      # against a commit reached via tag push -- waiting on it here would
-      # hang until timeout, not deploy.
+      # Deploys only code main already contains, for a tag push and for a
+      # workflow_dispatch re-deploy. A run from another branch can edit this
+      # step, so the production environments' deployment policy is what keeps
+      # such a run out of production. Fails closed: a lookup error or any
+      # compare status but identical/behind stops the deploy. Later jobs build
+      # the commit resolved here, so a tag moved meanwhile isn't built.
+      - name: Check the release commit is on main
+        id: release
+        env:
+          REF: ${{ inputs.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # A tag push builds the pushed commit; a dispatch builds the commit its tag names.
+          if [[ -n "${REF}" ]]; then
+            if ! sha="$(gh api "repos/${REPO}/commits/refs/tags/${REF}" --jq '.sha')"; then
+              echo "::error::could not resolve release tag '${REF}'"
+              exit 1
+            fi
+          else
+            sha="${EVENT_SHA}"
+          fi
+          if ! status="$(gh api "repos/${REPO}/compare/refs/heads/main...${sha}" --jq '.status')"; then
+            echo "::error::could not compare ${sha} with main"
+            exit 1
+          fi
+          case "${status}" in
+            identical | behind) ;;
+            *)
+              echo "::error::release commit ${sha} is not on main (compare status: ${status})"
+              exit 1
+              ;;
+          esac
+          echo "sha=${sha}" >>"$GITHUB_OUTPUT"
+
+      # lint-title is deliberately excluded: it never runs on `push`
+      # (pr-title.yml triggers only on `pull_request` and `merge_group`), so a
+      # commit that reached main outside the merge queue has no check-run for
+      # it -- waiting on it here would hang until timeout, not deploy.
       #
       # NOTE: wait-on-check-action only fails when the filtered check list is
       # completely empty (fail-on-no-checks). Redeploying a tag older than the
@@ -145,7 +183,7 @@ jobs:
       - name: Wait for CI to pass
         uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ steps.release.outputs.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync)$"
           wait-interval: 15
@@ -165,7 +203,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.ci-gate.outputs.sha }}
           persist-credentials: false
 
       - name: Authenticate to GCP (staging project for AR)

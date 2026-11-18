@@ -1,5 +1,4 @@
 import os
-import ssl
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -71,16 +70,27 @@ class PreblastList:
             .alias()
         )
 
+        ranked_slack_users = select(
+            SlackUser,
+            func.row_number()
+            .over(
+                partition_by=(SlackUser.user_id, SlackUser.slack_team_id),
+                order_by=(SlackUser.slack_updated.desc().nulls_last(), SlackUser.id.asc()),
+            )
+            .label("identity_rank"),
+        ).subquery()
+        SelectedSlackUser = aliased(SlackUser, ranked_slack_users)
+
         query = (
             session.query(
                 EventInstance,
                 EventType,
                 Org,
                 ParentOrg,
-                func.coalesce(SlackUser.user_name, User.f3_name).label("q_name"),
-                SlackUser.slack_id,
-                func.coalesce(User.avatar_url, SlackUser.avatar_url).label("q_avatar_url"),
-                SlackUser.avatar_url.label("slack_avatar_url"),
+                func.coalesce(SelectedSlackUser.user_name, User.f3_name).label("q_name"),
+                SelectedSlackUser.slack_id,
+                func.coalesce(User.avatar_url, SelectedSlackUser.avatar_url).label("q_avatar_url"),
+                SelectedSlackUser.avatar_url.label("slack_avatar_url"),
                 SlackSpace.settings,
             )
             .select_from(EventInstance)
@@ -95,7 +105,14 @@ class PreblastList:
             .outerjoin(User, User.id == firstq_subquery.c.user_id)
             .join(Org_x_SlackSpace, ParentOrg.id == Org_x_SlackSpace.org_id)
             .join(SlackSpace, Org_x_SlackSpace.slack_space_id == SlackSpace.id)
-            .outerjoin(SlackUser, and_(User.id == SlackUser.user_id, SlackUser.slack_team_id == SlackSpace.team_id))
+            .outerjoin(
+                SelectedSlackUser,
+                and_(
+                    User.id == SelectedSlackUser.user_id,
+                    SelectedSlackUser.slack_team_id == SlackSpace.team_id,
+                    ranked_slack_users.c.identity_rank == 1,
+                ),
+            )
             .filter(*filters)
             .order_by(ParentOrg.name, Org.name, EventInstance.start_time)
         )
@@ -158,10 +175,7 @@ def send_preblast_reminders(force: bool = False):
 
         slack_bot_token = preblast.slack_settings.bot_token
         if slack_bot_token and preblast.slack_user_id:
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            slack_client = WebClient(slack_bot_token, ssl=ssl_context)
+            slack_client = WebClient(slack_bot_token)
             blocks: List[orm.BaseBlock] = [
                 orm.SectionBlock(label=msg),
                 orm.ActionsBlock(

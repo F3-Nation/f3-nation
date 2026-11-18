@@ -228,15 +228,29 @@ export default function OrgMap() {
   const fitInFlightRef = useRef(false);
   const pendingPinPanRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  // The loaded hierarchy, for values derived during render (the info panel).
+  // Set in the same update as isLoaded; the refs above hold the same maps for
+  // Leaflet callbacks and event handlers.
+  const [hierarchy, setHierarchy] = useState<
+    | (Omit<ReturnType<typeof buildOrgHierarchy>, "orgLocationsById"> & {
+        descendantCache: Map<number, number[]>;
+      })
+    | null
+  >(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentLevel, setCurrentLevel] = useState<OrgType>("sector");
   const [selectedPath, setSelectedPath] = useState<Org[]>([]);
   const [infoState, setInfoState] = useState<InfoState>({ status: "idle" });
-  const [nearestAdminOrg, setNearestAdminOrg] =
-    useState<NearestAdminOrg | null>(null);
-  // True when the ancestor climb couldn't verify admins (a lookup failed),
-  // so the UI can say "couldn't check" instead of a false "none listed".
-  const [adminLookupInconclusive, setAdminLookupInconclusive] = useState(false);
+  // Result of the ancestor-admin climb, tagged with the infoState it ran for.
+  // It applies only while that infoState is current, so a new selection drops
+  // the previous org's admin in the same render as the new info state.
+  // `inconclusive` is true when a lookup failed, so the UI can say "couldn't
+  // check" instead of a false "none listed".
+  const [adminLookup, setAdminLookup] = useState<{
+    forInfoState: InfoState;
+    nearestAdminOrg: NearestAdminOrg | null;
+    inconclusive: boolean;
+  } | null>(null);
   // Set by an AO search selection; consumed by the focus effect below.
   const [aoFocus, setAoFocus] = useState<{
     orgId: number;
@@ -253,14 +267,9 @@ export default function OrgMap() {
   // ── info loading ─────────────────────────────────────────────────────────
 
   const loadOrgInfo = useCallback(async (org: Org) => {
-    // selectOrg returns true on a switch to a different org; drop the previous
-    // org's fallback in the same commit as the new detail, so a switch to an
-    // already-cached org can't render its admin for a frame. A still-pending
-    // pin fetch is invalidated by selectOrg clearing the location selection.
-    if (infoGuardRef.current.selectOrg(org.id)) {
-      setNearestAdminOrg(null);
-      setAdminLookupInconclusive(false);
-    }
+    // A still-pending pin fetch is invalidated by selectOrg clearing the
+    // location selection.
+    infoGuardRef.current.selectOrg(org.id);
 
     const cached = orgInfoCacheRef.current.get(org.id);
     if (cached) {
@@ -358,6 +367,13 @@ export default function OrgMap() {
 
         setCurrentLevel(startLevel);
         setSelectedPath(startPath);
+        setHierarchy({
+          orgById,
+          childrenByParent,
+          pointsById,
+          metricsById,
+          descendantCache: descendantCacheRef.current,
+        });
         setIsLoaded(true);
       })
       .catch((err: unknown) => {
@@ -862,18 +878,12 @@ export default function OrgMap() {
 
   useEffect(() => {
     if (infoState.status !== "loaded" || infoState.detail.roles.length > 0) {
-      setNearestAdminOrg(null);
-      setAdminLookupInconclusive(false);
       return;
     }
 
+    const lookupFor = infoState;
     const { org } = infoState;
     let cancelled = false;
-
-    // Reset immediately so the previously-viewed org's admin isn't shown while
-    // this org's asynchronous ancestor climb is still running.
-    setNearestAdminOrg(null);
-    setAdminLookupInconclusive(false);
 
     // Climb every ancestor, nation included: if the nation is the only level
     // with admins we still want to surface it rather than "No admins listed".
@@ -910,10 +920,14 @@ export default function OrgMap() {
           // The guard flips synchronously on switch (before any await
           // resolves), so a stale climb can't overwrite a newer org's panel.
           if (infoGuardRef.current.isOrgCurrent(org.id)) {
-            setNearestAdminOrg({
-              name: ancestor.name,
-              orgType: ancestor.orgType,
-              adminNames: admins.map((a) => a.f3Name ?? "Unknown"),
+            setAdminLookup({
+              forInfoState: lookupFor,
+              nearestAdminOrg: {
+                name: ancestor.name,
+                orgType: ancestor.orgType,
+                adminNames: admins.map((a) => a.f3Name ?? "Unknown"),
+              },
+              inconclusive: false,
             });
           }
           return;
@@ -924,14 +938,22 @@ export default function OrgMap() {
       // Reached the top with no admin found: only claim "none" when every
       // ancestor was actually checked; a failed lookup makes it inconclusive.
       if (!cancelled && infoGuardRef.current.isOrgCurrent(org.id)) {
-        setAdminLookupInconclusive(hadFailure);
+        setAdminLookup({
+          forInfoState: lookupFor,
+          nearestAdminOrg: null,
+          inconclusive: hadFailure,
+        });
       }
     }
 
     void climb().catch(() => {
       // An unexpected shape must surface as inconclusive, not a false "none".
       if (!cancelled && infoGuardRef.current.isOrgCurrent(org.id)) {
-        setAdminLookupInconclusive(true);
+        setAdminLookup({
+          forInfoState: lookupFor,
+          nearestAdminOrg: null,
+          inconclusive: true,
+        });
       }
     });
 
@@ -968,42 +990,49 @@ export default function OrgMap() {
       ? undefined
       : infoState.org;
 
+  // Ignore a climb result tagged with an earlier infoState. Until the current
+  // climb reports, an org with no roles of its own shows "No admins listed."
+  const currentAdminLookup =
+    adminLookup?.forInfoState === infoState ? adminLookup : null;
+  const nearestAdminOrg = currentAdminLookup?.nearestAdminOrg ?? null;
+  const adminLookupInconclusive = currentAdminLookup?.inconclusive ?? false;
+
   const infoDescendants = useMemo(() => {
-    if (!infoOrg || !isLoaded) return [];
+    if (!infoOrg || !hierarchy) return [];
     const ids = getDescendants(
       infoOrg.id,
-      childrenByParentRef.current,
-      descendantCacheRef.current,
+      hierarchy.childrenByParent,
+      hierarchy.descendantCache,
     );
     return ids
-      .map((id) => orgByIdRef.current.get(id))
+      .map((id) => hierarchy.orgById.get(id))
       .filter((o): o is Org => !!o);
-  }, [infoOrg, isLoaded]);
+  }, [infoOrg, hierarchy]);
 
   const infoMetrics = useMemo(() => {
-    if (!infoOrg || !isLoaded) return undefined;
+    if (!infoOrg || !hierarchy) return undefined;
     return getAggregatedMetrics(
       infoOrg,
-      childrenByParentRef.current,
-      metricsByIdRef.current,
-      descendantCacheRef.current,
+      hierarchy.childrenByParent,
+      hierarchy.metricsById,
+      hierarchy.descendantCache,
     );
-  }, [infoOrg, isLoaded]);
+  }, [infoOrg, hierarchy]);
 
   const infoFootprint = useMemo(() => {
-    if (!infoOrg || !isLoaded) return null;
+    if (!infoOrg || !hierarchy) return null;
     const detail = infoState.status === "loaded" ? infoState.detail : undefined;
     if ((detail?.orgType ?? infoOrg.orgType) !== "region") return null;
     const pts = getOrgPoints(
       infoOrg,
-      childrenByParentRef.current,
-      pointsByIdRef.current,
-      descendantCacheRef.current,
+      hierarchy.childrenByParent,
+      hierarchy.pointsById,
+      hierarchy.descendantCache,
     );
     if (pts.length < 3) return null;
     const hull = convexHull(pts);
     return hull.length >= 3 ? polygonAreaSqMi(hull) : null;
-  }, [infoOrg, infoState, isLoaded]);
+  }, [infoOrg, infoState, hierarchy]);
 
   // ── breadcrumb data ──────────────────────────────────────────────────────
 

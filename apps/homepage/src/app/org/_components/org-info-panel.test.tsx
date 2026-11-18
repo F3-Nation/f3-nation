@@ -76,12 +76,16 @@ describe("OrgInfoPanel", () => {
       ...baseDetail,
       website: "https://f3.test",
       twitter: "https://twitter.com/f3",
+      facebook: "https://facebook.com/f3",
+      instagram: "https://instagram.com/f3",
     };
     const html = renderToStaticMarkup(
       <OrgInfoPanel status="loaded" org={baseOrg} detail={detail} />,
     );
     expect(html).toContain("https://f3.test");
     expect(html).toContain("https://twitter.com/f3");
+    expect(html).toContain("https://facebook.com/f3");
+    expect(html).toContain("https://instagram.com/f3");
   });
 
   it("renders positions list", () => {

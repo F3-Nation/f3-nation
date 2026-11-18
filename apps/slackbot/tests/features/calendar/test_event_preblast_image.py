@@ -373,18 +373,24 @@ def test_failed_upload_on_already_posted_preblast_passes_warning_to_send_preblas
 
 
 @pytest.mark.usefixtures("wired_services")
-@pytest.mark.parametrize("coq_failure", ["unresolved", "assign"])
+@pytest.mark.parametrize("coq_failure", ["unresolved", "unlinked", "assign"])
 def test_failed_upload_warning_survives_truncation_when_coqs_also_fail(coq_failure):
     """Runs the real update_submission_wait_view, which cuts text at 200 characters."""
-    coqs = [f"U_COQ_{n:03d}" for n in range(4)]
+    from utilities.helper_functions import UnlinkedSlackIdentityError
+
+    coqs = [f"U_COQ_{n:03d}" for n in range(8)]
     body = _submission_body(files=[SLACK_FILE])
     body["view"]["state"]["values"][actions.EVENT_PREBLAST_COQS] = {
         actions.EVENT_PREBLAST_COQS: {"type": "multi_users_select", "selected_users": coqs},
     }
     client = MagicMock()
     coq_patch = (
-        patch.object(event_preblast, "get_user", side_effect=RuntimeError("unknown user"))
-        if coq_failure == "unresolved"
+        patch.object(
+            event_preblast,
+            "get_user",
+            side_effect=(UnlinkedSlackIdentityError() if coq_failure == "unlinked" else RuntimeError("unknown user")),
+        )
+        if coq_failure in ("unresolved", "unlinked")
         else patch.object(event_preblast, "_build_attendance_service", side_effect=RuntimeError("api down"))
     )
     with (
@@ -399,6 +405,8 @@ def test_failed_upload_warning_survives_truncation_when_coqs_also_fail(coq_failu
     assert view["title"]["text"] == "Co-Qs not saved"
     assert shown.endswith("...")
     assert shown.startswith("The photo was not saved. Preblast details were saved")
+    if coq_failure == "unlinked":
+        assert "Check app email access and account links" in shown
 
 
 def test_send_now_posts_the_photo_uploaded_in_the_same_submission(api_client, wired_services):
@@ -475,7 +483,7 @@ SEND_PREBLAST_BLOCKS = [
 ]
 
 
-def _send(meta, mode, warning=None, preblast_ts=None, client=None, channel="C_AO", preblast_blocks=None):
+def _send(meta, mode, warning=None, preblast_ts=None, client=None, channel="C_AO", preblast_blocks=None, names=None):
     if client is None:
         client = MagicMock()
         client.chat_postMessage.return_value = {"ts": "1761800000.000100"}
@@ -493,7 +501,7 @@ def _send(meta, mode, warning=None, preblast_ts=None, client=None, channel="C_AO
         patch.object(event_preblast, "build_preblast_info", return_value=info),
         patch.object(event_preblast, "_build_preblast_service", return_value=svc),
         patch.object(event_preblast, "get_preblast_channel", return_value=channel),
-        patch.object(event_preblast, "get_user_names", return_value=(["Q"], ["https://img/q.png"])),
+        patch.object(event_preblast, "get_user_names", side_effect=names, return_value=(["Q"], ["https://img/q.png"])),
         patch.object(event_preblast, "post_bot_log") as bot_log,
         patch.object(event_preblast, "update_submission_wait_view") as wait_view,
     ):
@@ -817,3 +825,22 @@ def test_hc_refresh_retries_without_photo_when_slack_rejects_it(body_factory):
 
     assert client.chat_update.call_count == 2
     assert _image_blocks(client.chat_update.call_args_list[1].kwargs["blocks"]) == []
+
+
+def test_send_preblast_uses_workspace_name_and_avatar(monkeypatch):
+    from types import SimpleNamespace
+
+    from utilities import helper_functions
+
+    monkeypatch.setattr(helper_functions, "session_scope", lambda: pytest.fail("caller-only test must not access DB"))
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: pytest.fail("no DB"))
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS.update(
+        {
+            ("T_OTHER", "U_Q"): SimpleNamespace(user_name="Other Q", avatar_url="other-avatar"),
+            ("T1", "U_Q"): SimpleNamespace(user_name="Active Q", avatar_url="active-avatar"),
+        }
+    )
+    client, _, _ = _send({}, PostMode.POST_NEW, names=helper_functions.get_user_names)
+    assert client.chat_postMessage.call_args.kwargs["username"] == "Active Q (via F3 Nation)"
+    assert client.chat_postMessage.call_args.kwargs["icon_url"] == "active-avatar"

@@ -1592,17 +1592,21 @@ export const eventRouter = {
           message: "You are not authorized to delete this Event",
         });
       }
-      await ctx.db
-        .update(schema.events)
-        .set({ isActive: false })
-        .where(
-          and(eq(schema.events.id, input.id), eq(schema.events.isActive, true)),
-        );
+      await ctx.db.transaction(async (tx) => {
+        await tx
+          .update(schema.events)
+          .set({ isActive: false })
+          .where(
+            and(
+              eq(schema.events.id, input.id),
+              eq(schema.events.isActive, true),
+            ),
+          );
 
-      // Cascade delete event instances for series events
-      const { softDeleteFutureInstancesForSeries } =
-        await import("../lib/cascade-service");
-      await softDeleteFutureInstancesForSeries(ctx.db, input.id);
+        const { softDeleteFutureInstancesForSeries } =
+          await import("../lib/cascade-service");
+        await softDeleteFutureInstancesForSeries(tx, input.id);
+      });
 
       // Notify webhooks and invalidate cache about the event deletion
       notifyMapDataChange({ type: "event.deleted", eventId: input.id });

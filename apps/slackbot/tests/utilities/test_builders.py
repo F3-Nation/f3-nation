@@ -81,3 +81,13 @@ def test_send_error_response_does_not_dm_when_loading_modal_is_current():
 
     client.views_update.assert_called_once()
     client.chat_postMessage.assert_not_called()
+
+
+def test_send_error_response_targets_app_mention_user():
+    client = MagicMock()
+    send_error_response(
+        {"event": {"type": "app_mention", "user": "U_MENTION", "channel": "C_TEST"}},
+        client,
+        "Account link required.",
+    )
+    assert client.chat_postMessage.call_args.kwargs["channel"] == "U_MENTION"

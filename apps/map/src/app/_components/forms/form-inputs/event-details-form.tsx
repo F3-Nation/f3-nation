@@ -1,5 +1,5 @@
 import { Controller, useFormContext } from "react-hook-form";
-import type { EventFieldsType } from "@acme/validators/request-schemas";
+import type { EditEventType } from "@acme/validators/request-schemas";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { Case } from "@acme/shared/common/enums";
 import { convertCase } from "@acme/shared/common/functions";
@@ -21,7 +21,7 @@ interface EventDetailsFormValues {
   eventStartTime?: string;
   eventEndTime?: string;
   eventDescription?: string;
-  currentValues?: Partial<EventFieldsType>;
+  currentValues?: EditEventType["currentValues"];
 }
 
 // _T lets callers assert their form type includes these fields (`<X<FormType> />`).

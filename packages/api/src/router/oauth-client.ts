@@ -3,6 +3,7 @@ import { SafeUrlSchema } from "@better-auth/core/utils/redirect-uri";
 import { z } from "zod";
 
 import { authSchema, desc, eq, sql } from "@acme/db";
+import { SUPPORTED_OAUTH_SCOPES } from "@acme/shared/common/oauth-scopes";
 
 import { nationAdminProcedure } from "../shared";
 
@@ -39,6 +40,27 @@ import { nationAdminProcedure } from "../shared";
  * packages/db/drizzle/schema.ts's "DRAFTED, NOT APPLIED" comment. This
  * router is shaped and ready for when it is.
  */
+
+/**
+ * A client registered with a scope auth3 doesn't serve can't use it: the
+ * plugin only issues scopes it supports, and auth3 rejects an authorize
+ * request without `openid`. The allowlist also keeps an admin from
+ * registering the reserved `openid_required` marker apps/auth uses
+ * internally to force invalid_scope.
+ */
+const clientScopesSchema = z
+  .array(z.enum(SUPPORTED_OAUTH_SCOPES))
+  .min(1)
+  .refine((scopes) => scopes.includes("openid"), {
+    message:
+      "scopes must include openid: auth3 only serves OpenID Connect requests",
+  })
+  .refine((scopes) => new Set(scopes).size === scopes.length, {
+    message: "scopes must not repeat",
+  })
+  .describe(
+    `Scopes the client may request. Each must be one of ${SUPPORTED_OAUTH_SCOPES.join(", ")}, and openid is required.`,
+  );
 
 const oauthClientSchema = z.object({
   clientId: z.string(),
@@ -96,7 +118,7 @@ export const oauthClientRouter = {
         clientId: z.string(),
         name: z.string().min(1).optional(),
         redirectUris: z.array(SafeUrlSchema).min(1).optional(),
-        scopes: z.array(z.string()).optional(),
+        scopes: clientScopesSchema.optional(),
         disabled: z
           .boolean()
           .optional()

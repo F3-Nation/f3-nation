@@ -22,13 +22,21 @@ import {
   FormMessage,
   useForm,
 } from "@acme/ui/form";
+import { SUPPORTED_OAUTH_SCOPES } from "@acme/shared/common/oauth-scopes";
 import { Checkbox } from "@acme/ui/checkbox";
 import { Input } from "@acme/ui/input";
 import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 
-import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
+import type { RouterInputs } from "~/orpc/types";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 
@@ -40,6 +48,33 @@ const OauthClientFormSchema = z.object({
     .min(1, { error: "At least one redirect URI is required" }),
   offlineAccess: z.boolean(),
 });
+
+type ClientScopes = NonNullable<
+  RouterInputs["oauthClient"]["update"]["scopes"]
+>;
+
+// The server only answers a bad scope list with a generic "Input validation
+// failed", so when a save that sent scopes is refused and those scopes hold
+// one auth3 doesn't serve (an older client's), say that instead of the
+// generic failure.
+const UNSUPPORTED_SCOPES_MESSAGE =
+  "This client has scopes auth3 doesn't support, so offline_access can't " +
+  "be changed here. Fix its scopes first.";
+
+function updateErrorMessage(error: unknown, variables: unknown): string {
+  const scopes = (variables as { scopes?: string[] } | undefined)?.scopes;
+  const hasUnsupported = scopes?.some(
+    (scope) => !(SUPPORTED_OAUTH_SCOPES as readonly string[]).includes(scope),
+  );
+  if (
+    error instanceof ORPCError &&
+    error.code === "BAD_REQUEST" &&
+    hasUnsupported
+  ) {
+    return UNSUPPORTED_SCOPES_MESSAGE;
+  }
+  return "Unable to update OAuth client";
+}
 
 // One URI per line, trimmed, blanks dropped. No validation here — the
 // server's SafeUrlSchema (packages/api/src/router/oauth-client.ts) is the
@@ -131,8 +166,8 @@ export default function AdminOauthClientsModal({
         }
         closeModal();
       },
-      onError: () => {
-        toast.error("Unable to update OAuth client");
+      onError: (error, variables) => {
+        toast.error(updateErrorMessage(error, variables));
       },
     }),
   );
@@ -174,28 +209,38 @@ export default function AdminOauthClientsModal({
                 className="space-y-4"
                 onSubmit={form.handleSubmit(
                   async (values) => {
-                    // Preserve the client's actual scopes rather than
-                    // assuming a fixed baseline — a client registered with a
-                    // narrower set (e.g. apps/auth/scripts/add-client.ts's
-                    // free-text prompt, or carried over by
-                    // migrate-oauth-clients-to-better-auth.ts) shouldn't
-                    // silently gain "profile"/"email", and a pure-OAuth2
-                    // client that was never granted "openid" shouldn't
-                    // silently become ID-token-capable, either — both from
-                    // an edit to unrelated fields. This form has no control
-                    // that requests "openid", so it never adds it.
-                    const base = (existing?.scopes ?? []).filter(
+                    // Only touch scopes when the offline_access checkbox
+                    // actually changed. Otherwise an edit to the name or
+                    // redirect URIs would resend the stored scopes, and the
+                    // server now rejects any outside openid, profile, email
+                    // and offline_access (or a set without openid), so a
+                    // legacy client couldn't even be renamed. When it did
+                    // change, keep the client's other scopes as they are
+                    // rather than assuming a baseline: a client registered
+                    // with a narrower set shouldn't silently gain "profile"
+                    // or "email". No validation here; as with redirect URIs,
+                    // the server's schema is the gate. A refusal because the
+                    // client already holds an unsupported scope gets its own
+                    // toast (updateErrorMessage); anything else gets the
+                    // generic one.
+                    const currentScopes = existing?.scopes ?? [];
+                    const offlineChanged =
+                      values.offlineAccess !==
+                      currentScopes.includes("offline_access");
+                    const base = currentScopes.filter(
                       (scope) => scope !== "offline_access",
                     );
-                    const scopes = values.offlineAccess
-                      ? [...base, "offline_access"]
-                      : base;
+                    const scopes = offlineChanged
+                      ? ((values.offlineAccess
+                          ? [...base, "offline_access"]
+                          : base) as ClientScopes)
+                      : undefined;
                     try {
                       await updateClient.mutateAsync({
                         clientId,
                         name: values.name,
                         redirectUris: parseRedirectUris(values.redirectUris),
-                        scopes,
+                        ...(scopes ? { scopes } : {}),
                       });
                     } catch {
                       // onError above already shows the failure toast;

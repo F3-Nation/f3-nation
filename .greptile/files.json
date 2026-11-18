@@ -1,6 +1,23 @@
 {
   "files": [
     {
+      "path": "docs/specs/admin-user-home-region.md",
+      "description": "Source-admin home-region correction permissions, active destination validation, concurrency, confirmation and attribution; no member notifications.",
+      "scope": [
+        "packages/api/src/router/user*",
+        "packages/api/src/check-has-role-on-org.ts",
+        "packages/api/src/shared.ts",
+        "packages/api/src/lib/user.ts",
+        "packages/api/src/org-activity.ts",
+        "apps/auth/src/app/api/regions/**",
+        "apps/auth/src/app/api/onboarding/**",
+        "apps/api/characterization/wire/registration-regions.char.test.ts",
+        "apps/api/characterization/wire/api-key-roles.char.test.ts",
+        "apps/admin/src/app/_components/modal/admin-users-modal.tsx",
+        "apps/admin/__tests__/app/_components/modal/admin-users-modal.test.tsx"
+      ]
+    },
+    {
       "path": "REVIEW.md",
       "description": "Code-review priorities, critical checks, reviewer conduct and do-not-flag decisions for the whole repo."
     },
@@ -248,6 +265,11 @@
       "scope": ["apps/slackbot/**"]
     },
     {
+      "path": "docs/specs/slackbot-workspace-identities.md",
+      "description": "Feature spec: Slack identities within a workspace, concurrent creation and scheduled workout messages. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**", "packages/db/**", "packages/db-python/**"]
+    },
+    {
       "path": "docs/specs/territory-org-type.md",
       "description": "Feature spec: Territory organization type. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": [
@@ -255,6 +277,17 @@
         "packages/db/**",
         "packages/db-python/**",
         "packages/shared/**"
+      ]
+    },
+    {
+      "path": "docs/specs/strava-credential-isolation.md",
+      "description": "Feature spec: Strava credential isolation, metadata boundaries, migration precedence and sanitized database copies. Acceptance criteria and authorization for changed behavior.",
+      "scope": [
+        "packages/api/**",
+        "apps/slackbot/**",
+        "packages/db/**",
+        "packages/db-python/**",
+        "tooling/scripts/**"
       ]
     }
   ]

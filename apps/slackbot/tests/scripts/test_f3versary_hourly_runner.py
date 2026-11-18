@@ -16,7 +16,7 @@ def silence_other_jobs(monkeypatch, achievement_callback=lambda: None):
     monkeypatch.setattr(hourly_runner.update_slack_users, "update_home_regions", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.fng_reminders, "send_fng_reminders", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.home_region_nudge, "send_home_region_nudges", lambda *args, **kwargs: None)
-    monkeypatch.setattr(hourly_runner.award_achievements, "main", achievement_callback)
+    monkeypatch.setattr(hourly_runner.award_achievements, "run", achievement_callback)
     monkeypatch.setattr(hourly_runner.requests, "post", lambda *args, **kwargs: None)
 
 
@@ -34,7 +34,7 @@ def test_hourly_runner_calls_f3versary_job_with_force(monkeypatch):
     assert calls == [{"force": True}]
 
 
-def test_hourly_runner_continues_when_f3versary_job_fails(monkeypatch, capsys):
+def test_hourly_runner_continues_when_f3versary_job_fails(monkeypatch, caplog):
     achievements = []
     silence_other_jobs(monkeypatch, achievement_callback=lambda: achievements.append("ran"))
     monkeypatch.setattr(
@@ -46,4 +46,5 @@ def test_hourly_runner_continues_when_f3versary_job_fails(monkeypatch, capsys):
     hourly_runner.run_all_hourly_scripts(run_reporting=False)
 
     assert achievements == ["ran"]
-    assert "Error running F3versary announcements: test failure" in capsys.readouterr().out
+    assert "job=f3versary_announcements.send_f3versary_announcements error_type=RuntimeError" in caplog.text
+    assert "test failure" not in caplog.text

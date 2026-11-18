@@ -329,7 +329,7 @@ def build_nearby_events_modal(
 ):
     """Open or refresh the Nearby Special Events modal."""
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
-    user = get_user(slack_user_id, region_record, client, logger)
+    user = get_user(slack_user_id, region_record, client, logger, require_link=False)
     user_id = user.user_id if user else None
 
     existing_view_id = safe_get(body, "view", "id")
