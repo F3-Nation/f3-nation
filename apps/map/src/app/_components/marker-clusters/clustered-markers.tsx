@@ -8,11 +8,10 @@ import type {
   MarkerProperties,
   MarkersProps,
 } from "./types";
-import { dayLabelSegments } from "~/utils/day-label-segments";
 import { getClusterFeatureKey } from "~/utils/get-cluster-feature-key";
 import { getGeojson } from "~/utils/get-geojson";
 import { getMapPosForLeaves } from "~/utils/get-map-pos-for-leaves";
-import { pickLabeledPins } from "~/utils/label-collisions";
+import { labeledPinIds } from "~/utils/label-collisions";
 import { useSupercluster } from "~/utils/hooks/use-supercluster";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
@@ -56,29 +55,13 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
   // plain pins until the map is zoomed in far enough.
   const labeledPins = useMemo(() => {
     if (!showDayLabels) return new Set<number>();
-    const eventsById = new Map(
-      (filteredLocationMarkers ?? []).map((m) => [m.id, m.events]),
-    );
-    const positions = new Map<number, { lat: number; lng: number }>();
-    for (const feature of clusters) {
-      if ("cluster" in feature.properties) continue;
-      const [lng, lat] = feature.geometry.coordinates;
-      if (typeof lng !== "number" || typeof lat !== "number") continue;
-      positions.set(Number(feature.id), { lat, lng });
-    }
-    for (const [id, marker] of Object.entries(modifiedLocationMarkers)) {
-      positions.set(Number(id), marker);
-    }
-    return pickLabeledPins(
-      [...positions].map(([id, { lat, lng }]) => ({
-        id,
-        lat,
-        lng,
-        segments: dayLabelSegments(eventsById.get(id) ?? []).length,
-        pinned: id === selectedLocationId || id === panelLocationId,
-      })),
+    return labeledPinIds({
+      clusters,
+      modifiedLocationMarkers,
+      locationMarkers: filteredLocationMarkers ?? [],
+      pinnedIds: [selectedLocationId, panelLocationId],
       zoom,
-    );
+    });
   }, [
     showDayLabels,
     clusters,

@@ -1,3 +1,8 @@
+import type { DayOfWeek } from "@acme/shared/app/enums";
+
+import type { MapStatus } from "~/utils/types";
+import { dayLabelSegments } from "~/utils/day-label-segments";
+
 /** One pin that could show a day label. */
 export interface LabelCandidate {
   id: number;
@@ -69,4 +74,56 @@ export function pickLabeledPins(
     labeled.add(pin.id);
   }
   return labeled;
+}
+
+/**
+ * The labeled pins among what the map draws: supercluster's point features
+ * (clusters are skipped) plus pins moved in edit mode, with each pin's label
+ * size taken from its workouts.
+ */
+export function labeledPinIds({
+  clusters,
+  modifiedLocationMarkers,
+  locationMarkers,
+  pinnedIds,
+  zoom,
+}: {
+  clusters: readonly {
+    id?: string | number;
+    geometry: { coordinates: number[] };
+    properties: object;
+  }[];
+  modifiedLocationMarkers: Record<string, { lat: number; lng: number }>;
+  locationMarkers: readonly {
+    id: number;
+    events: readonly {
+      id: number;
+      dayOfWeek: DayOfWeek | null;
+      mapStatus: MapStatus;
+    }[];
+  }[];
+  pinnedIds: readonly (number | null | undefined)[];
+  zoom: number;
+}): Set<number> {
+  const eventsById = new Map(locationMarkers.map((m) => [m.id, m.events]));
+  const positions = new Map<number, { lat: number; lng: number }>();
+  for (const feature of clusters) {
+    if ("cluster" in feature.properties) continue;
+    const [lng, lat] = feature.geometry.coordinates;
+    if (typeof lng !== "number" || typeof lat !== "number") continue;
+    positions.set(Number(feature.id), { lat, lng });
+  }
+  for (const [id, marker] of Object.entries(modifiedLocationMarkers)) {
+    positions.set(Number(id), marker);
+  }
+  return pickLabeledPins(
+    [...positions].map(([id, { lat, lng }]) => ({
+      id,
+      lat,
+      lng,
+      segments: dayLabelSegments(eventsById.get(id) ?? []).length,
+      pinned: pinnedIds.includes(id),
+    })),
+    zoom,
+  );
 }

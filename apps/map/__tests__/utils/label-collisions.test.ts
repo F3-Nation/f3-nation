@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pickLabeledPins } from "~/utils/label-collisions";
+import { labeledPinIds, pickLabeledPins } from "~/utils/label-collisions";
 
 // At zoom 12 near Charlotte one CSS pixel is about 0.0000839° of longitude.
 const PX = 360 / (256 * 2 ** 12);
@@ -86,5 +86,66 @@ describe("pickLabeledPins", () => {
       12,
     );
     expect(labeled.size).toBe(2);
+  });
+});
+
+describe("labeledPinIds", () => {
+  const point = (id: number, lng: number) => ({
+    id,
+    geometry: { coordinates: [lng, 35.2] },
+    properties: {},
+  });
+  const events = (id: number, days: ("monday" | "tuesday" | "friday")[]) => ({
+    id,
+    events: days.map((dayOfWeek, i) => ({
+      id: id * 10 + i,
+      dayOfWeek,
+      mapStatus: null,
+    })),
+  });
+
+  it("skips clusters and sizes labels from each pin's workout days", () => {
+    const labeled = labeledPinIds({
+      clusters: [
+        point(1, -80.8),
+        point(2, -80.8 + 30 * PX),
+        {
+          id: 99,
+          geometry: { coordinates: [-80.8, 35.2] },
+          properties: { cluster: true },
+        },
+      ],
+      modifiedLocationMarkers: {},
+      locationMarkers: [
+        events(1, ["monday"]),
+        events(2, ["monday", "tuesday", "friday"]),
+      ],
+      pinnedIds: [],
+      zoom: 12,
+    });
+    expect([...labeled]).toEqual([2]);
+  });
+
+  it("uses a pin's edited position and keeps the selected pin labeled", () => {
+    const labeled = labeledPinIds({
+      clusters: [point(1, -80.8), point(2, -80.0)],
+      // Pin 2 dragged right next to pin 1.
+      modifiedLocationMarkers: { "2": { lat: 35.2, lng: -80.8 + 10 * PX } },
+      locationMarkers: [events(1, ["monday", "friday"]), events(2, ["monday"])],
+      pinnedIds: [2, null],
+      zoom: 12,
+    });
+    expect([...labeled]).toEqual([2]);
+  });
+
+  it("ignores features without numeric coordinates", () => {
+    const labeled = labeledPinIds({
+      clusters: [{ id: 5, geometry: { coordinates: [] }, properties: {} }],
+      modifiedLocationMarkers: {},
+      locationMarkers: [],
+      pinnedIds: [],
+      zoom: 12,
+    });
+    expect(labeled.size).toBe(0);
   });
 });
