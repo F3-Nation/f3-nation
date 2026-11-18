@@ -38,8 +38,8 @@ merge to main (ruleset "main": PR required, merge queue required, the eight
 release-please.yml ····· accumulates merges into per-app release PRs
   │
 tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
-       ├─ ci-gate ······· waits for build/lint/typecheck/format-check/
-       │                  test-coverage on the tagged SHA
+       ├─ ci-gate ······· tag must be on main, then waits for build/lint/
+       │                  typecheck/format-check/test-coverage on its SHA
        ├─ build ········· container image built once, pushed to Artifact Registry
        ├─ deploy-staging  Cloud Run (staging project) [+ cache revalidate]
        └─ deploy-prod ··· needs staging success; Cloud Run (prod project)
@@ -179,7 +179,8 @@ per-app release PRs; merging one pushes a tag like `map@1.2.3`, which triggers
 that app's thin `deploy-<app>.yml` caller into the shared
 [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml):
 
-1. **`ci-gate`** — waits (does not re-run) for
+1. **`ci-gate`** — fails unless the tag points at a commit on `main`, then
+   waits (does not re-run) for
    `build|lint|typecheck|format-check|test-coverage` to succeed on the tagged
    SHA.
 2. **`build`** — the deploy image is built once and pushed to Artifact
@@ -252,8 +253,8 @@ build check is named `build-homepage` to stay distinct from CI's `build`.
   a merge-queue job a secret or a write grant gives it to every queued PR's
   code as well.
 - The deploy `ci-gate` regexp waits on the five build/test checks but not
-  `security-audit` (the audit already gated the merge; a tag cut from an
-  unmerged or old SHA relies on that earlier gate).
+  `security-audit` (the audit already gated the merge; a tag on an older
+  `main` SHA relies on that earlier gate).
 - The two reserved rungs below are the planned homes for end-to-end
   verification, which today has no rung at all.
 
