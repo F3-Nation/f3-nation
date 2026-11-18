@@ -24,7 +24,7 @@ from features.fng import (
     fng_reminder_days,
 )
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import safe_get, usable_invite_link
+from utilities.helper_functions import error_stack, safe_get, usable_invite_link
 
 REMINDER_HOUR = 17  # US/Central, same as the home region nudge
 MAX_REMINDERS = 3
@@ -57,6 +57,7 @@ def send_fng_reminders(force: bool = False):
                         "event": "fng.reminders_region_failed",
                         "team_id": space.team_id,
                         "error_type": type(exc).__name__,
+                        "error_stack": error_stack(exc),
                     }
                 },
             )
@@ -90,6 +91,7 @@ def _remind_space(space: SlackSpace, org_x_space: Org_x_SlackSpace, now: datetim
                         "team_id": space.team_id,
                         "user_id": fng.id,
                         "error_type": type(exc).__name__,
+                        "error_stack": error_stack(exc),
                     }
                 },
             )
@@ -98,7 +100,8 @@ def _remind_space(space: SlackSpace, org_x_space: Org_x_SlackSpace, now: datetim
 
 def save_reminders_sent(session: Session, user_id: int, received: dict[str, int]) -> None:
     """Sets only the reminder counts in ``User.meta``, merging in the database, so the rest of ``meta`` is left as
-    stored. Only this job writes the key, so replacing it whole is safe."""
+    stored. The key is replaced whole, so ``received`` must be read under the FNG's row lock (``_lock_fng``) in the
+    same transaction; otherwise an overlapping run's counts would be overwritten."""
     session.query(User).filter(User.id == user_id).update(
         {
             # meta can be SQL NULL or JSON null (how the ORM stores None); either would turn the merge into NULL or
@@ -135,13 +138,21 @@ def _remind_fng(
     if claim is None:
         return 0
     previous, message = claim
+    delivered: list[int] = []
+    attempted: set[int] = set()
     try:
-        delivered = dm_fng_contacts(client, space.team_id, fng, message, logger, contact_ids=list(previous))
+        # One contact at a time, so an error that escapes dm_fng_contacts leaves the earlier ones counted as sent.
+        for contact_id in previous:
+            attempted.add(contact_id)
+            delivered += dm_fng_contacts(client, space.team_id, fng, message, logger, contact_ids=[contact_id])
     except Exception:
-        _safe_hand_back(space, fng.id, previous, due)
+        # The contact in flight may have received it, so only those never attempted are handed back.
+        _safe_hand_back(space, fng.id, {user_id: n for user_id, n in previous.items() if user_id not in attempted}, due)
         raise
-    _safe_hand_back(space, fng.id, {user_id: n for user_id, n in previous.items() if user_id not in delivered}, due)
-    if not delivered:
+    handed_back = _safe_hand_back(
+        space, fng.id, {user_id: n for user_id, n in previous.items() if user_id not in delivered}, due
+    )
+    if not delivered and handed_back:
         logger.warning(
             "fng.reminder_undeliverable",
             extra={
@@ -187,11 +198,13 @@ def _claim_reminder(
         )
 
 
-def _safe_hand_back(space: SlackSpace, user_id: int, previous: dict[int, int | None], due: int) -> None:
+def _safe_hand_back(space: SlackSpace, user_id: int, previous: dict[int, int | None], due: int) -> bool:
     """Hands back the claim without letting a failure replace the send's own error. A failed hand-back leaves the
-    contacts counted as reminded, so it gets its own event."""
+    contacts counted as reminded and never retried, so it gets its own event with their pre-claim counts for a manual
+    repair, and returns False."""
     try:
         _hand_back(user_id, previous, due)
+        return True
     except Exception as exc:
         logger.error(
             "fng.reminder_hand_back_failed error_type=%s",
@@ -202,10 +215,13 @@ def _safe_hand_back(space: SlackSpace, user_id: int, previous: dict[int, int | N
                     "team_id": space.team_id,
                     "user_id": user_id,
                     "due": due,
+                    "unreminded_contacts": {str(contact_id): count for contact_id, count in previous.items()},
                     "error_type": type(exc).__name__,
+                    "error_stack": error_stack(exc),
                 }
             },
         )
+        return False
 
 
 def _hand_back(user_id: int, previous: dict[int, int | None], due: int) -> None:

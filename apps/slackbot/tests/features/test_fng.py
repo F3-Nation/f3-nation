@@ -260,6 +260,7 @@ def test_failed_user_create_shows_error_and_sends_nothing(monkeypatch):
     assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
     call = logger.error.call_args
     assert "exc_info" not in call.kwargs and "john@example.com" not in repr(call)
+    assert "fng.py:" in call.kwargs["extra"]["json_fields"]["error_stack"]
 
 
 def test_blank_names_create_nothing(monkeypatch):

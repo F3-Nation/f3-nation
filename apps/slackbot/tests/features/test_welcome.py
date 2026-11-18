@@ -55,6 +55,7 @@ def test_team_join_survives_a_failed_fng_lookup(monkeypatch):
 
     logger.error.assert_called_once()
     assert "exc_info" not in logger.error.call_args.kwargs and "john@example.com" not in repr(logger.error.call_args)
+    assert "welcome.py:" in logger.error.call_args.kwargs["extra"]["json_fields"]["error_stack"]
     client.chat_postMessage.assert_called_once_with(channel="U_FNG", blocks=[{"type": "section"}], text="Welcome!")
 
 

@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -13,6 +14,7 @@ from f3_data_models import utils as data_model_utils
 from f3_data_models.models import Base, User
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -148,7 +150,7 @@ def test_overlapping_runs_send_each_reminder_once(isolated_postgres, monkeypatch
     def dm(client, team_id, fng, text, logger, contact_ids):
         if not first_sending.is_set():
             first_sending.set()
-            time.sleep(1)  # the second run reaches the lock while this one is still sending
+            time.sleep(3)  # the second run reaches the lock while this one is still sending
         return contact_ids
 
     dm_mock = MagicMock(side_effect=dm)
@@ -177,7 +179,7 @@ def test_overlapping_runs_send_each_reminder_once(isolated_postgres, monkeypatch
 
     assert not first.is_alive() and not first_errors
     assert dm_mock.call_count == 1
-    assert waited < 0.8  # read the first run's claim without waiting for its send
+    assert waited < 2  # read the first run's claim without waiting for its send
     assert _meta(isolated_postgres, user_id)["fng_reminders_sent"] == {"7": 1}
 
 
@@ -212,3 +214,59 @@ def test_no_row_lock_is_held_while_the_dm_is_sent(isolated_postgres, monkeypatch
 
     assert fng_reminders.dm_fng_contacts.call_count == 1
     assert _meta(isolated_postgres, user_id)["fng_reminders_sent"] == {}
+
+
+def _hold_row_lock_with_count(engine, user_id, meta):
+    """Opens a transaction that locks the FNG's row and writes ``meta`` without committing."""
+    connection = engine.connect()
+    transaction = connection.begin()
+    connection.execute(text("SELECT id FROM users WHERE id = :id FOR UPDATE"), {"id": user_id})
+    connection.execute(
+        text("UPDATE users SET meta = CAST(:meta AS jsonb) WHERE id = :id"), {"id": user_id, "meta": json.dumps(meta)}
+    )
+    return connection, transaction
+
+
+def test_claim_waits_for_another_writers_lock_and_reads_its_count(isolated_postgres):
+    user_id = _insert_user(isolated_postgres, {"battle_buddy": 7})
+    connection, transaction = _hold_row_lock_with_count(
+        isolated_postgres, user_id, {"battle_buddy": 7, "fng_reminders_sent": {"7": 1}}
+    )
+    result = []
+    claim = threading.Thread(
+        target=lambda: result.append(
+            fng_reminders._claim_reminder(fng_reminders.SlackSettings(team_id="T1", bot_token="xoxb"), user_id, 3, 1)
+        )
+    )
+    try:
+        claim.start()
+        time.sleep(0.2)
+        assert claim.is_alive()  # blocked on the row lock
+        transaction.commit()
+    finally:
+        connection.close()
+    claim.join(10)
+
+    assert not claim.is_alive() and result == [None]
+    assert _meta(isolated_postgres, user_id)["fng_reminders_sent"] == {"7": 1}
+
+
+def test_claim_gives_up_after_lock_timeout(isolated_postgres, monkeypatch):
+    monkeypatch.setattr(fng_reminders, "LOCK_TIMEOUT", "200ms")
+    user_id = _insert_user(isolated_postgres, {"battle_buddy": 7})
+    connection, transaction = _hold_row_lock_with_count(isolated_postgres, user_id, {"battle_buddy": 7})
+    # Released after a while, so a claim that waits without a bound fails the test instead of hanging it.
+    release = threading.Timer(3, transaction.rollback)
+    release.start()
+    try:
+        started = time.monotonic()
+        with pytest.raises(OperationalError) as raised:
+            fng_reminders._claim_reminder(fng_reminders.SlackSettings(team_id="T1", bot_token="xoxb"), user_id, 3, 1)
+        assert time.monotonic() - started < 2
+        assert raised.value.orig.pgcode == "55P03"  # lock_not_available
+    finally:
+        release.cancel()
+        release.join()
+        if transaction.is_active:
+            transaction.rollback()
+        connection.close()

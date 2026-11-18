@@ -95,7 +95,9 @@ def run(
             raise outcome
         if callable(outcome):
             return outcome(*args, **kwargs)
-        return list(delivered) if outcome is None else outcome
+        if outcome is None:
+            return [contact_id for contact_id in kwargs["contact_ids"] if contact_id in delivered]
+        return outcome
 
     monkeypatch.setattr(fng_reminders, "session_scope", session_scope)
     monkeypatch.setattr(fng_reminders, "save_reminders_sent", MagicMock(side_effect=save_reminders_sent))
@@ -167,13 +169,13 @@ def test_contact_whose_dm_failed_is_retried_without_repeating_it_to_the_other(mo
     both = {"battle_buddy": 7, "brought_by": 9}
     dm = run(monkeypatch, [fng_created_days_ago(3, meta=both)], delivered=(9,))
 
-    assert dm.call_args.kwargs["contact_ids"] == [7, 9]
+    assert [c.kwargs["contact_ids"] for c in dm.call_args_list] == [[7], [9]]
     received = fng_reminders.save_reminders_sent.call_args.args[2]
     assert received == {"9": 1}
 
     dm = run(monkeypatch, [fng_created_days_ago(4, meta={**both, "fng_reminders_sent": received})], delivered=(7,))
 
-    assert dm.call_args.kwargs["contact_ids"] == [7]
+    assert [c.kwargs["contact_ids"] for c in dm.call_args_list] == [[7]]
     assert fng_reminders.save_reminders_sent.call_args.args[2] == {"9": 1, "7": 1}
 
 
@@ -239,10 +241,9 @@ def test_a_failing_fng_does_not_stop_the_next_one(monkeypatch):
     dm = run(monkeypatch, fngs, dm_side_effect=[RuntimeError("slack timeout"), [7]])
 
     assert [c.args[2].id for c in dm.call_args_list] == [42, 43]
-    # 42's claim is handed back so tomorrow's run retries him.
+    # 7 was in flight when 42's send raised and may have got it, so his claim stands rather than risk a repeat.
     assert [c.args[1:] for c in fng_reminders.save_reminders_sent.call_args_list] == [
         (42, {"7": 1}),
-        (42, {}),
         (43, {"7": 1}),
     ]
     fng_reminders.logger.error.assert_called_once()
@@ -283,10 +284,26 @@ def test_reminder_uses_the_locked_row(monkeypatch):
 
 def test_deleted_fng_is_skipped(monkeypatch):
     run(monkeypatch, [fng_created_days_ago(3)], locked={}).assert_not_called()
+    fng_reminders.save_reminders_sent.assert_not_called()
+    fng_reminders.logger.error.assert_not_called()
+
+
+def test_fng_deleted_while_his_reminder_is_sent_is_not_an_error(monkeypatch):
+    fng = fng_created_days_ago(3)
+    locked = {42: fng}
+
+    def deleted_during_the_dm(*args, **kwargs):
+        locked.pop(42)
+        return []
+
+    run(monkeypatch, [fng], locked=locked, dm_side_effect=deleted_during_the_dm)
+
+    fng_reminders.logger.error.assert_not_called()
 
 
 def test_lock_wait_is_bounded_instead_of_skipped(monkeypatch):
-    # The lock is only held for a quick read and write, so waiting on it can't lose his reminder for the day.
+    # Waits for the lock (bounded by LOCK_TIMEOUT) instead of NOWAIT or SKIP LOCKED, so another writer's brief hold
+    # doesn't cost him the day's reminder.
     session = run(monkeypatch, [fng_created_days_ago(3)]).session
 
     assert session.lock_options and all(options == {} for options in session.lock_options)
@@ -303,11 +320,16 @@ def test_failed_reminder_restores_the_count_he_had(monkeypatch):
     assert fng.meta["fng_reminders_sent"] == {"7": 1}
 
 
-@pytest.mark.parametrize("dm_side_effect", [None, RuntimeError("slack timeout")], ids=["undelivered", "send raised"])
-def test_failed_hand_back_is_logged_without_hiding_the_send_error(monkeypatch, dm_side_effect):
+@pytest.mark.parametrize(
+    "dm_side_effect, unreminded",
+    [(None, {"7": None, "9": None}), ([RuntimeError("slack timeout")], {"9": None})],
+    ids=["undelivered", "send raised"],
+)
+def test_failed_hand_back_is_logged_without_hiding_the_send_error(monkeypatch, dm_side_effect, unreminded):
+    send_raised = dm_side_effect is not None
     run(
         monkeypatch,
-        [fng_created_days_ago(3)],
+        [fng_created_days_ago(3, meta={"battle_buddy": 7, "brought_by": 9})],
         delivered=(),
         dm_side_effect=dm_side_effect,
         hand_back_error=TimeoutError("lock timeout"),
@@ -319,12 +341,16 @@ def test_failed_hand_back_is_logged_without_hiding_the_send_error(monkeypatch, d
         "team_id": "T1",
         "user_id": 42,
         "due": 1,
+        "unreminded_contacts": unreminded,
         "error_type": "TimeoutError",
+        "error_stack": ANY,
     }
-    if dm_side_effect:
+    if send_raised:
         assert errors[1]["event"] == "fng.reminder_failed" and errors[1]["error_type"] == "RuntimeError"
     else:
         assert len(errors) == 1
+        # The contacts stay counted as reminded, so saying the next run will retry them would be wrong.
+        fng_reminders.logger.warning.assert_not_called()
 
 
 def test_handing_back_a_failed_claim_keeps_a_newer_count(monkeypatch):
@@ -352,6 +378,7 @@ def test_failure_logs_carry_no_traceback(monkeypatch, failing):
 
     call = fng_reminders.logger.error.call_args
     assert "exc_info" not in call.kwargs and "john@example.com" not in repr(call)
+    assert "fng_reminders.py:" in call.kwargs["extra"]["json_fields"]["error_stack"]
 
 
 def test_reminder_sends_only_the_url_from_a_saved_share_message(monkeypatch):
@@ -363,3 +390,42 @@ def test_reminder_sends_only_the_url_from_a_saved_share_message(monkeypatch):
 def test_reminder_leaves_out_a_saved_link_with_no_url(monkeypatch):
     text = run(monkeypatch, [fng_created_days_ago(3)], downrange_invite_link="Join me on Slack").call_args.args[3]
     assert "invite link" not in text
+
+
+def test_error_after_a_delivered_dm_does_not_repeat_it(monkeypatch):
+    fng = fng_created_days_ago(3, meta={"battle_buddy": 7, "brought_by": 9})
+
+    run(monkeypatch, [fng], dm_side_effect=[[7], TimeoutError("read timed out")])
+
+    # 7 got it and 9 was in flight, so neither is handed back: losing 9's reminder beats repeating 7's.
+    assert fng.meta["fng_reminders_sent"] == {"7": 1, "9": 1}
+    assert fng_reminders.logger.error.call_args.args[0].startswith("fng.reminder_failed")
+
+
+def test_error_on_the_first_dm_hands_back_the_contacts_not_yet_tried(monkeypatch):
+    fng = fng_created_days_ago(3, meta={"battle_buddy": 7, "brought_by": 9})
+
+    dm = run(monkeypatch, [fng], dm_side_effect=[TimeoutError("read timed out")])
+
+    dm.assert_called_once()
+    assert fng.meta["fng_reminders_sent"] == {"7": 1}
+
+
+def test_hand_back_restores_every_contact_it_claimed(monkeypatch):
+    fng = fng_created_days_ago(6, meta={"battle_buddy": 7, "brought_by": 9, "fng_reminders_sent": {"9": 1}})
+
+    run(monkeypatch, [fng], dm_side_effect=[[], []])
+
+    assert fng.meta["fng_reminders_sent"] == {"9": 1}
+
+
+def test_hand_back_skips_a_newer_count_and_still_restores_the_next_contact(monkeypatch):
+    fng = fng_created_days_ago(3, meta={"battle_buddy": 7, "brought_by": 9})
+
+    def newer_count_for_7_then_nothing_delivered(*args, **kwargs):
+        fng.meta = {**fng.meta, "fng_reminders_sent": {"7": 2, "9": 1}}
+        return []
+
+    run(monkeypatch, [fng], dm_side_effect=newer_count_for_7_then_nothing_delivered)
+
+    assert fng.meta["fng_reminders_sent"] == {"7": 2}
