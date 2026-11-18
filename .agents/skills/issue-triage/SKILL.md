@@ -193,6 +193,9 @@ when the user agrees.
 
 ## The backlog
 
+A run without an issue number follows these steps over the issues
+`untriaged` returns, not every open issue.
+
 1. `bash $S options`, then `bash $S untriaged > <scratch>/untriaged.jsonl`.
    `untriaged` lists issues missing any of the four values; when the user asks
    about one field, keep only the issues missing it, e.g.
