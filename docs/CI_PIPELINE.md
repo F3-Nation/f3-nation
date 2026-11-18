@@ -266,6 +266,11 @@ These do not exist yet and are documented for future reference:
   `preview` label; scale-to-zero; own seeded database; torn down on PR
   close/merge plus a daily TTL reaper. Slots in as a PR job alongside the
   existing gates.
+  Add the `preview-snapshot` label as well to build the database from the
+  sanitized dev snapshot instead (map tables only, trimmed by
+  `.github/preview/trim-snapshot.sql`, with the local seed on top), for
+  reviewing map changes on real-shaped data. The blocking E2E tier fails on
+  purpose while that label is on; remove it to run the tier before merge.
 - **`e2e-blocking`** — a deliberately small Playwright suite (the
   critical-path cases from each feature spec in [`docs/specs/`](specs/), plus an
   RBAC matrix) running against the preview environment, with traces/video on

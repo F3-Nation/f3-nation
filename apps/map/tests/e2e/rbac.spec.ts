@@ -140,8 +140,11 @@ async function resolveSeedRefs(request: APIRequestContext): Promise<SeedRefs> {
     return { aoId: event.parents[0].parentId, locationId: event.locationId };
   };
 
+  // Search for it: the list is paged, and a preview loaded with the dev
+  // snapshot has hundreds of event types.
   const eventTypesRes = await request.get(`${API}/v1/event-type`, {
     headers: headers(KEYS.readOnly),
+    params: { searchTerm: "Bootcamp", nationalOnly: true },
   });
   expect(eventTypesRes.ok()).toBe(true);
   const { eventTypes } = (await eventTypesRes.json()) as {
