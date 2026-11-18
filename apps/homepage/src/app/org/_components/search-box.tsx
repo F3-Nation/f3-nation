@@ -52,8 +52,9 @@ export function SearchBox({
     return () => document.removeEventListener("click", onClickOutside);
   }, []);
 
-  // Only typing opens the list. Selecting a result also sets the query, but
-  // goes through handleSelect/handleSelectAo, which keep it closed.
+  // Typing a non-empty query opens the list, as does refocusing one (onFocus).
+  // A selection also sets the query, but handleSelect/handleSelectAo close the
+  // list and set the query directly, not through handleChange.
   function handleChange(value: string) {
     setQuery(value);
     setOpen(value.trim() !== "");

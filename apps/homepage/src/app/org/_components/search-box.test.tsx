@@ -6,13 +6,31 @@ import { SearchBox } from "./search-box";
 import type { Org, OrgType } from "../_lib/types";
 
 // Stub the debounced AO hook so these tests stay synchronous: it returns a
-// canned AO only for queries containing "boot", a simulated fetch failure for
-// queries containing "err", and nothing otherwise.
+// canned AO only for queries containing "boot", an unnamed AO for "anon", a
+// simulated fetch failure for queries containing "err", and nothing otherwise.
 vi.mock("../_lib/use-ao-search", () => ({
   useAoSearch: (q: string) => {
     const query = q.toLowerCase();
     if (query.includes("err")) {
       return { results: [], loading: false, error: true };
+    }
+    if (query.includes("anon")) {
+      return {
+        results: [
+          {
+            id: 98,
+            name: null,
+            regionId: 10,
+            regionName: "Charlotte",
+            locationId: 5,
+            latitude: 1,
+            longitude: 2,
+            eventCount: 1,
+          },
+        ],
+        loading: false,
+        error: false,
+      };
     }
     if (query.includes("boot")) {
       return {
@@ -52,6 +70,41 @@ afterEach(() => {
 });
 
 describe("SearchBox", () => {
+  it("keeps the AO fallback message when an unnamed AO can't be located", () => {
+    render(
+      <SearchBox
+        presentLayers={["region", "area", "sector"]}
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn(() => false)}
+      />,
+    );
+    const input = screen.getByRole<HTMLInputElement>("searchbox");
+    fireEvent.change(input, { target: { value: "anon" } });
+    fireEvent.click(screen.getByText("Unnamed AO"));
+
+    expect(input.value).toBe("");
+    expect(screen.getByText("Couldn't locate that AO on the map")).toBeTruthy();
+  });
+
+  it("reopens the list when typing after picking a result that matched the query exactly", () => {
+    render(
+      <SearchBox
+        presentLayers={["region", "area", "sector"]}
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
+    const input = screen.getByRole("searchbox");
+    fireEvent.change(input, { target: { value: "Charlotte" } });
+    fireEvent.click(screen.getByText("Charlotte"));
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    fireEvent.change(input, { target: { value: "Charlott" } });
+    expect(screen.getByRole("listbox")).toBeTruthy();
+  });
+
   it.each([
     {
       layers: ["region", "area", "sector"],

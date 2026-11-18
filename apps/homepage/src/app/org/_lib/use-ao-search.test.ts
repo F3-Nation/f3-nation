@@ -30,6 +30,49 @@ describe("useAoSearch", () => {
     vi.useRealTimers();
   });
 
+  it("keeps results and does not refetch when only surrounding whitespace changes", async () => {
+    searchAosMock.mockResolvedValue([hit]);
+    const { result, rerender } = renderHook(({ q }) => useAoSearch(q), {
+      initialProps: { q: "boot" },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.results).toHaveLength(1);
+
+    rerender({ q: "boot " });
+    expect(result.current.results).toHaveLength(1);
+    expect(result.current.loading).toBe(false);
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(searchAosMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for a fresh response when the same query is searched again after closing", async () => {
+    searchAosMock.mockResolvedValue([hit]);
+    const { result, rerender } = renderHook(({ q }) => useAoSearch(q), {
+      initialProps: { q: "boot" },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.results).toHaveLength(1);
+
+    // The search box passes "" while its list is closed.
+    rerender({ q: "" });
+    rerender({ q: "boot" });
+    expect(result.current.results).toEqual([]);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.results).toHaveLength(1);
+    expect(searchAosMock).toHaveBeenCalledTimes(2);
+  });
+
   it("does not search for queries shorter than 2 characters", () => {
     const { result } = renderHook(({ q }) => useAoSearch(q), {
       initialProps: { q: "a" },

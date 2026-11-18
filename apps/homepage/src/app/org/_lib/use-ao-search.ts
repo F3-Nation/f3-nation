@@ -31,6 +31,10 @@ export function useAoSearch(query: string): {
 
   const trimmed = query.trim();
   const searchable = trimmed.length >= MIN_SEARCH_LENGTH;
+  // Closing the list passes an empty query. Forget the last response then, so
+  // reopening with the same text waits for a fresh one instead of showing the
+  // old AOs or an old error. Set during render, not in the effect below.
+  if (!searchable && settled !== null) setSettled(null);
   // Only a result for the current query counts. Anything else means the new
   // query is still waiting on its debounce or request, so it reads as empty
   // and loading: Enter can't select stale AOs, and the empty-results UI
