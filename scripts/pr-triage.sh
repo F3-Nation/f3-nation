@@ -439,7 +439,7 @@ classify='
            ($pr.latestOpinionatedReviews.nodes // []) as $opinions
            | ($pr.latestOpinionatedReviews.pageInfo.hasNextPage != true)
              and any($opinions[]; .state == "APPROVED" and (.author.login | full_owner) and not_by($author)
-               and .commit.oid == $head.oid)
+               and $head.oid != null and .commit.oid == $head.oid)
              and all($opinions[]; .state != "CHANGES_REQUESTED")
          else $pr.reviewDecision == "APPROVED" end) as $approved
       | ($pr.mergeable == "CONFLICTING") as $conflicts

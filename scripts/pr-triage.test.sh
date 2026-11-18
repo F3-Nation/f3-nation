@@ -602,6 +602,9 @@ fork_board() {
       | .url = $url + (.number | tostring)]' "$tmp_dir/fixture.json"
 }
 fork_board "$fork_a" '[5, 8]' >"$adv_dir/fork-a.json"
+# What a fork read without review decisions returns: neither approval field.
+no_decision() { jq '.data.repository.pullRequests.nodes |= map(del(.reviewDecision, .latestOpinionatedReviews))' "$1"; }
+no_decision "$adv_dir/fork-a.json" >"$adv_dir/fork-a-no-decision.json"
 fork_board "$fork_b" '[5]' >"$adv_dir/fork-b.json"
 echo '{"data":null,"errors":[{"message":"Could not resolve to a Repository"}]}' >"$adv_dir/fork-c.json"
 fork_board acme/repo-ghsa-vvvv-wwww-xxxx '[]' >"$adv_dir/fork-d.json"
@@ -660,12 +663,15 @@ case "$*" in
   *latestOpinionatedReviews*name=repo-ghsa-aaaa-bbbb-cccc*)
     if [[ -n "${ADV_FORK_A_NO_DECISION:-}" ]]; then exit 1; fi
     cat "$ADV_DIR/fork-a.json" ;;
-  *name=repo-ghsa-aaaa-bbbb-cccc*) cat "$ADV_DIR/fork-a.json" ;;
+  *name=repo-ghsa-aaaa-bbbb-cccc*) cat "$ADV_DIR/fork-a-no-decision.json" ;;
   *name=repo-ghsa-dddd-eeee-ffff*) cat "$ADV_DIR/fork-b.json" ;;
   *name=repo-ghsa-gggg-hhhh-jjjj*) cat "$ADV_DIR/fork-c.json" ;;
   *name=repo-ghsa-vvvv-wwww-xxxx*) cat "$ADV_DIR/fork-d.json" ;;
   *name=repo-ghsa-yyyy-zzzz-2222*) cat "$ADV_DIR/fork-e.json" ;;
-  *name=repo-ghsa-hhhh-jjjj-kkkk*) cat "$ADV_DIR/fork-f.json" ;;
+  *latestOpinionatedReviews*name=repo-ghsa-hhhh-jjjj-kkkk*)
+    if [[ -n "${ADV_FORK_F_NO_DECISION:-}" ]]; then exit 1; fi
+    cat "$ADV_DIR/fork-f.json" ;;
+  *name=repo-ghsa-hhhh-jjjj-kkkk*) cat "$ADV_DIR/fork-f-no-decision.json" ;;
   *) echo "gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 STUB
@@ -780,12 +786,15 @@ jq --arg url "https://github.com/acme/repo-ghsa-hhhh-jjjj-kkkk/pull/" '
          | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; "first")]),
        ($done | .number = 47 | .latestOpinionatedReviews.nodes = [opinion("andy"; "APPROVED"; "first")]),
        ($done | .number = 48 | .latestOpinionatedReviews =
-         {pageInfo: {hasNextPage: true}, nodes: [opinion("luis"; "APPROVED"; "first")]})]
+         {pageInfo: {hasNextPage: true}, nodes: [opinion("luis"; "APPROVED"; "first")]}),
+       ($done | .number = 49 | .commits.nodes = []
+         | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; null)])]
     | map(del(.reviewDecision) | .url = $url + (.number | tostring)))' \
   "$tmp_dir/fixture.json" >"$adv_dir/fork-f.json"
+no_decision "$adv_dir/fork-f.json" >"$adv_dir/fork-f-no-decision.json"
 fork_only=$(ADV_MODE=list ADV_DIR="$adv_dir" PATH="$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
   PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" bash "$triage" -R acme/repo-ghsa-hhhh-jjjj-kkkk --json 2>&1)
-assert_eq "a fork read on its own never asks for reviewDecision" "41,42,43,44,45,46,47,48" \
+assert_eq "a fork read on its own never asks for reviewDecision" "41,42,43,44,45,46,47,48,49" \
   "$(jq -r '[.prs[].number] | join(",")' <<<"$fork_only" 2>/dev/null)"
 fork_bucket() { jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .bucket' <<<"$fork_only" 2>/dev/null; }
 assert_eq "fork: a codeowner's approval of the head waits to merge" "MERGE" "$(fork_bucket 41)"
@@ -796,6 +805,15 @@ assert_eq "fork: no opinionated review needs approval" "MANUAL" "$(fork_bucket 4
 assert_eq "fork: the author's own approval doesn't count" "MANUAL" "$(fork_bucket 46)"
 assert_eq "fork: an approval from an owner of only some paths doesn't count" "MANUAL" "$(fork_bucket 47)"
 assert_eq "fork: a cut-off review list doesn't count as approved" "MANUAL" "$(fork_bucket 48)"
+assert_eq "fork: no head commit can't match an approval without one" "MANUAL" "$(fork_bucket 49)"
+
+# A fork read that only succeeds without approvals shows its approved PR as needing approval.
+fork_fallback=$(ADV_FORK_F_NO_DECISION=1 ADV_MODE=list ADV_DIR="$adv_dir" \
+  PATH="$decision_stub/sleep-only:$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
+  PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" bash "$triage" -R acme/repo-ghsa-hhhh-jjjj-kkkk --json 2>/dev/null)
+assert_eq "fork: the fallback board is marked" "true" "$(jq -r .reviewDecisionsMissing <<<"$fork_fallback")"
+assert_eq "fork: an approved PR needs approval on the fallback" "MANUAL" \
+  "$(jq -r '.prs[] | select(.number == 41) | .bucket' <<<"$fork_fallback")"
 
 # An early exit waits for a slow fork read instead of leaving it writing into a removed work_dir.
 slow_dir="$tmp_dir/adv-slow"
