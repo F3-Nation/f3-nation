@@ -540,8 +540,10 @@ const PR_FIELDS = `
 
 /**
  * The @handles in `file` (default this repo's .github/CODEOWNERS), each once
- * and lowercased, as pr-triage.sh reads them: comments and @org/team entries
- * are skipped. Null when the file can't be read.
+ * and lowercased; comments and @org/team entries are skipped. Null when the
+ * file can't be read. The Codeowners PR Report takes its list from
+ * scripts/pr-triage.sh instead, so a change to which entries count goes in
+ * both, or the report and the nudge disagree on who is team.
  */
 function readCodeowners(file = path.join(__dirname, "..", "CODEOWNERS")) {
   let text;
@@ -563,14 +565,20 @@ function readCodeowners(file = path.join(__dirname, "..", "CODEOWNERS")) {
 
 /**
  * Reads what `summarize()` needs for every open PR: the PR nodes, the required
- * checks on the default branch, and who has push access. Writes nothing.
- * Returns `{ prs, factsFor(pr, nudge = null), writersKnown, notes }`, where
+ * checks on the default branch, who has push access, and who the codeowners
+ * are. Writes nothing. Returns `{ prs, factsFor(pr, nudge = null), teamKnown,
+ * notes }`, where `teamKnown` is false when either list couldn't be read and
  * `notes` are warnings for the workflow log. Exported so every report that
  * asks whose turn a PR is answers it with the same rules as the nudge.
  *
  * `base` (`{ owner, repo }`, default the PR repo) is where the branch rules and
  * the team are read. A security advisory's temporary private fork has neither
  * of its own: its PRs merge into the advisory's repo, under that repo's rules.
+ *
+ * `codeowners` is the lowercased @handles counted as team alongside push
+ * access (default `readCodeowners()`). Null means the list couldn't be read:
+ * the run adds a note, judges those authors by their association, and
+ * `teamKnown` is false.
  */
 async function collectFacts({
   github,
@@ -601,7 +609,8 @@ async function collectFacts({
   if (codeowners == null)
     notes.push(
       "Couldn't read .github/CODEOWNERS; codeowners GitHub doesn't list as " +
-        "collaborators are judged by their association.",
+        "collaborators are judged by their association, and their " +
+        "outside-timing heads-ups and closes are held.",
     );
   let writers = new Set();
   let writersKnown = true;
@@ -655,7 +664,12 @@ async function collectFacts({
       nudge,
       team,
     );
-  return { prs, factsFor, writersKnown, notes };
+  return {
+    prs,
+    factsFor,
+    teamKnown: writersKnown && codeowners != null,
+    notes,
+  };
 }
 
 /**
@@ -666,7 +680,8 @@ async function collectFacts({
  * rows fail. `limits` caps the nudges, heads-ups and closes in one run
  * (MAX_PER_RUN by default); dry runs count against it too, so their report
  * matches what a live run would do; an action left out of `limits` keeps its
- * default. Returns `{ rows, slackNote, slackSent, notes }`: the job summary
+ * default. `codeowners` goes to `collectFacts()` (default `readCodeowners()`).
+ * Returns `{ rows, slackNote, slackSent, notes }`: the job summary
  * rows, the heads-up text, whether it reached Slack, and warnings for the
  * workflow log.
  */
@@ -680,15 +695,17 @@ async function run({
   log = console.log,
   notify = null,
   limits = MAX_PER_RUN,
+  codeowners = readCodeowners(),
 }) {
-  const { prs, factsFor, writersKnown, notes } = await collectFacts({
+  const { prs, factsFor, teamKnown, notes } = await collectFacts({
     github,
     owner,
     repo,
+    codeowners,
   });
-  if (!writersKnown)
+  if (!teamKnown)
     notes.push(
-      "No heads-ups or closes for authors who might be team until collaborators can be listed.",
+      "No heads-ups or closes for authors who might be team until collaborators and codeowners can be read.",
     );
 
   // First read and decide every PR, so the per-run limits go to the PRs that
@@ -756,10 +773,10 @@ async function run({
     }
   }
 
-  // Outside-tier heads-ups and closes are held anyway while collaborators are
+  // Outside-tier heads-ups and closes are held anyway while the team is
   // unknown, so they don't take a slot.
   const heldUnknown = (e) =>
-    !writersKnown &&
+    !teamKnown &&
     e.facts.tier === "outside" &&
     (e.decision.action === "warn" || e.decision.action === "close");
   for (const action of Object.keys(MAX_PER_RUN)) {
@@ -808,7 +825,7 @@ async function run({
       } else if (heldUnknown({ facts, decision })) {
         // The author may be a private org member with team timings, so the
         // shorter outside deadline can't be trusted. Held, retried next run.
-        row.outcome = `FAILED: ${decision.action} held, collaborators unknown`;
+        row.outcome = `FAILED: ${decision.action} held, team unknown`;
         row.failed = true;
       } else if (overLimit != null) {
         // Not a failure: the next run picks it up, oldest first.

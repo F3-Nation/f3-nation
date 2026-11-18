@@ -986,10 +986,7 @@ test("without the collaborator list, outside-timing heads-ups and closes are hel
     const github = fakeGithub(state, outside, unknown);
     const { rows } = await liveRun(github, nowDays);
     assert.ok(rows[0].failed);
-    assert.equal(
-      rows[0].outcome,
-      `FAILED: ${action} held, collaborators unknown`,
-    );
+    assert.equal(rows[0].outcome, `FAILED: ${action} held, team unknown`);
     assert.equal(github.writes.length, 0);
   }
   // A known member's PR isn't held: its association already says team.
@@ -999,6 +996,31 @@ test("without the collaborator list, outside-timing heads-ups and closes are hel
     unknown,
   );
   const { rows } = await liveRun(member, 10.1);
+  assert.equal(rows[0].outcome, "closed");
+});
+
+test("without the codeowner list, outside-timing heads-ups and closes are held", async () => {
+  const outside = { authorAssociation: "CONTRIBUTOR" };
+  for (const [state, nowDays, action] of [
+    [{ nudgedAt: at(3) }, 6.1, "warn"],
+    [{ nudgedAt: at(3), warnedAt: at(6.1) }, 7.1, "close"],
+  ]) {
+    const github = fakeGithub(state, outside, []);
+    const { rows, notes } = await liveRun(github, nowDays, {
+      codeowners: null,
+    });
+    assert.ok(rows[0].failed);
+    assert.equal(rows[0].outcome, `FAILED: ${action} held, team unknown`);
+    assert.equal(github.writes.length, 0);
+    assert.match(notes[0], /Couldn't read \.github\/CODEOWNERS/);
+  }
+  // With the list read, the same PR closes on the outside timings.
+  const github = fakeGithub(
+    { nudgedAt: at(3), warnedAt: at(6.1) },
+    outside,
+    [],
+  );
+  const { rows } = await liveRun(github, 7.1, { codeowners: [] });
   assert.equal(rows[0].outcome, "closed");
 });
 
@@ -1275,8 +1297,8 @@ test("PRs held for unknown collaborators don't take the run's slots", async () =
   assert.deepEqual(
     rows.map((r) => r.outcome),
     [
-      "FAILED: close held, collaborators unknown",
-      "FAILED: close held, collaborators unknown",
+      "FAILED: close held, team unknown",
+      "FAILED: close held, team unknown",
       "closed",
     ],
   );
