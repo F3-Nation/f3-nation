@@ -127,6 +127,10 @@ jobs:
           if [ "${USE_SNAPSHOT}" = "true" ]; then
             # Sanitized dev snapshot (docs/LOCAL_DEV_DOCKER.md), trimmed to the
             # map's tables; the seed below then adds the E2E fixtures back.
+            # seed-pg is a fresh throwaway container: mark it disposable the
+            # way pnpm local:setup does, so the loader's local-only guard passes.
+            docker exec seed-pg psql -U f3local -d f3nation -q \
+              -c "COMMENT ON DATABASE f3nation IS 'f3-disposable-local-v1'"
             CI= SKIP_ENV_VALIDATION=1 pnpm db:load:snapshot --yes
             docker exec -i seed-pg psql -U f3local -d f3nation -v ON_ERROR_STOP=1 -q \
               < .github/preview/trim-snapshot.sql
