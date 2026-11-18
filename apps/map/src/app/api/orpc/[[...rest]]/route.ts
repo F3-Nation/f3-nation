@@ -118,7 +118,8 @@ export function withStallTimeout<T>(
     cancel(reason) {
       cancelled = true;
       onCancel?.();
-      return reader.cancel(reason);
+      // Not awaited, for the same reason as in `pull`.
+      void reader.cancel(reason).catch(() => undefined);
     },
   });
 }
@@ -240,8 +241,10 @@ async function proxyRequest(request: NextRequest) {
       upstreamResponse.body,
       UPSTREAM_TIMEOUT_MS,
       (err) => {
-        // Headers already went out, so the browser sees a failed download
-        // rather than a 503; this log is the only record of why.
+        // Fail the downstream body and record why the upstream read failed.
+        // Next sends the headers only with the first body chunk, so on a
+        // first-chunk stall the browser's own timeout (started earlier) fires
+        // first and cancels instead; that stall is reported by the client alone.
         upstreamTimeout.abort();
         logWarn("map.orpc_proxy.upstream_body_failed", {
           path: proxiedPath,
@@ -256,7 +259,9 @@ async function proxyRequest(request: NextRequest) {
   // doesn't compress (see apps/api/src/app.ts), so eventsAndLocations went out
   // as 1.5 MB on every map load. Doing it in the proxy can't break an older
   // map revision the way enabling it in the API could. Streams (e.g.
-  // text/event-stream) and non-JSON bodies pass through untouched. Only
+  // text/event-stream) and non-JSON bodies aren't compressed, though
+  // withStallTimeout still ends any body that goes quiet for
+  // UPSTREAM_TIMEOUT_MS, streams included. Only
   // PUBLIC_PATHS responses are compressed: SIGNED_IN_ONLY_PATHS carry the
   // caller's own data, and leaving them uncompressed rules out BREACH-style
   // length leaks for the price of a few small responses.

@@ -8,8 +8,8 @@ vi.mock("~/lib/logging", () => ({ logWarn }));
 
 const fetchSpy = vi
   .fn<(url: URL, init: RequestInit) => Promise<Response>>()
-  // A fresh Response per call: the proxy reads every body, and a shared one
-  // stays locked after the first test reads it.
+  // A fresh Response per call: the proxy takes its own reader on every body,
+  // which locks it, so a shared Response would fail on the next request.
   .mockImplementation(() => Promise.resolve(new Response("ok")));
 vi.stubGlobal("fetch", fetchSpy);
 
@@ -402,12 +402,13 @@ describe("oRPC proxy route", () => {
       await vi.advanceTimersByTimeAsync(20_000);
 
       expect(response.status).toBe(200);
-      expect(await text).toBeInstanceOf(Error);
+      expect(await text).toMatchObject({ name: "TimeoutError" });
       expect(upstreamSignal?.aborted).toBe(true);
-      expect(logWarn).toHaveBeenCalledWith(
+      expect(logWarn).toHaveBeenCalledTimes(1);
+      expect(logWarn.mock.lastCall).toMatchObject([
         "map.orpc_proxy.upstream_body_failed",
-        expect.objectContaining({ path: "/v1/ping" }),
-      );
+        { path: "/v1/ping", err: { name: "TimeoutError" } },
+      ]);
     } finally {
       vi.useRealTimers();
     }
@@ -628,6 +629,57 @@ describe("oRPC proxy route", () => {
       const res = await call("gzip");
       expect(res.headers.get("content-encoding")).toBeNull();
     });
+
+    it("fails a gzipped body that stalls mid-body", async () => {
+      vi.useFakeTimers();
+      try {
+        let upstreamSignal: AbortSignal | undefined;
+        fetchSpy.mockImplementationOnce((_url, init) => {
+          upstreamSignal = init.signal ?? undefined;
+          const body = new ReadableStream<Uint8Array>({
+            start(c) {
+              c.enqueue(new TextEncoder().encode('{"json":'));
+            },
+          });
+          return Promise.resolve(
+            new Response(body, {
+              headers: { "content-type": "application/json" },
+            }),
+          );
+        });
+        const res = await call("gzip");
+        expect(res.headers.get("content-encoding")).toBe("gzip");
+        const read = res.arrayBuffer().catch((err: unknown) => err);
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(await read).toMatchObject({ name: "TimeoutError" });
+        expect(upstreamSignal?.aborted).toBe(true);
+        expect(logWarn).toHaveBeenCalledWith(
+          "map.orpc_proxy.upstream_body_failed",
+          expect.objectContaining({
+            path: "/v1/map/location/eventsAndLocations",
+          }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("aborts the API request when the browser leaves a gzipped body", async () => {
+      let upstreamSignal: AbortSignal | undefined;
+      fetchSpy.mockImplementationOnce((_url, init) => {
+        upstreamSignal = init.signal ?? undefined;
+        return Promise.resolve(
+          new Response(new ReadableStream<Uint8Array>(), {
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      });
+      const res = await call("gzip");
+      expect(res.headers.get("content-encoding")).toBe("gzip");
+      await res.body!.cancel("gone");
+      await vi.waitFor(() => expect(upstreamSignal?.aborted).toBe(true));
+      expect(logWarn).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -707,5 +759,147 @@ describe("withStallTimeout", () => {
     await expect(pending).resolves.toEqual({ done: true, value: undefined });
     await sleep(10);
     expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("doesn't report a failure when cancelling makes the pending read reject", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    let rejectRead!: (err: unknown) => void;
+    const body = {
+      getReader: () => ({
+        read: () =>
+          new Promise((_, reject) => {
+            rejectRead = reject;
+          }),
+        cancel: () => {
+          rejectRead(new TypeError("aborted"));
+          return Promise.resolve();
+        },
+      }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const onFailure = vi.fn();
+    const reader = withStallTimeout(body, 60_000, onFailure).getReader();
+
+    const pending = reader.read();
+    await sleep(0);
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    await sleep(0);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("cancels the upstream body when it stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const cancel = vi.fn();
+      const source = new ReadableStream<Uint8Array>({ cancel });
+      const onFailure = vi.fn();
+      const read = withStallTimeout(source, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+      expect(cancel).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails a stalled tee branch without waiting for the other branch", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const [branch] = new ReadableStream<Uint8Array>().tee();
+      const onFailure = vi.fn();
+      const read = withStallTimeout(branch, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles cancel on a tee branch without waiting for the other branch", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const [branch] = new ReadableStream<Uint8Array>().tee();
+    const onCancel = vi.fn();
+    const cancelled = withStallTimeout(branch, 1_000, vi.fn(), onCancel).cancel(
+      "gone",
+    );
+
+    await expect(
+      Promise.race([cancelled.then(() => "settled"), sleep(50)]),
+    ).resolves.toBe("settled");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles a browser cancel even when the upstream cancel rejects", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const source = new ReadableStream<Uint8Array>({
+      cancel() {
+        throw new TypeError("cancel failed");
+      },
+    });
+
+    await expect(
+      withStallTimeout(source, 1_000, vi.fn()).cancel("gone"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("reports the stall, not a rejected upstream cancel", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const source = new ReadableStream<Uint8Array>({
+        cancel() {
+          throw new TypeError("cancel failed");
+        },
+      });
+      const onFailure = vi.fn();
+      const read = withStallTimeout(source, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves no timer behind once a chunk arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const chunks = ["a", "b", "c"].map((c) => new TextEncoder().encode(c));
+      const source = new ReadableStream<Uint8Array>({
+        pull(c) {
+          const next = chunks.shift();
+          if (next) c.enqueue(next);
+          else c.close();
+        },
+      });
+      expect(
+        await new Response(withStallTimeout(source, 20_000, vi.fn())).text(),
+      ).toBe("abc");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
