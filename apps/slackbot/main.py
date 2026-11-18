@@ -19,13 +19,13 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
-import scripts
 from features import strava
 from infrastructure.api_client.exceptions import (
     F3ApiAuthError,
     F3ApiError,
     F3ApiNotFoundError,
 )
+from infrastructure.strava_credentials import StravaNotConnectedError
 from utilities.builders import SUBMISSION_WAIT_VIEW, add_debug_form, add_loading_form, send_error_response
 from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE, is_production_deployment
 from utilities.database.orm import SlackSettings
@@ -62,7 +62,7 @@ setup_debugger()
 
 
 def get_user_facing_error_message(exc: Exception) -> str:
-    if isinstance(exc, UnlinkedSlackIdentityError):
+    if isinstance(exc, (UnlinkedSlackIdentityError, StravaNotConnectedError)):
         return str(exc)
     if isinstance(exc, F3ApiAuthError):
         return "The Slackbot could not authenticate with the F3 Nation API."
@@ -138,14 +138,9 @@ if not LOCAL_DEVELOPMENT:
     def handler(request: Request):
         if request.path == "/":
             return Response("Service is running", status=200, headers={"Access-Control-Allow-Origin": "*"})
-        elif request.path == "/gcp_event":
-            logging.info("GCP Event")
-            return scripts.handle(request)
         elif request.path == "/exchange_token":
-            logging.info("Strava token exchange request")
-            logging.info(f"Request query parameters: {request.args}")
-            logging.info(f"Request headers: {request.headers}")
-            logging.info(f"Request body: {request.get_data(as_text=True)}")
+            # The query string carries the OAuth code and state; never log the request.
+            logging.info("slack.strava.token_exchange.received")
             return strava.strava_exchange_token(request)
         elif request.path[:6] == "/slack":
             slack_handler = SlackRequestHandler(app=get_slack_app())
@@ -223,7 +218,9 @@ def main_response(body: dict, logger: logging.Logger, client: WebClient, ack: Ac
             )
             if isinstance(exc, F3ApiError):
                 logger.error(f"F3 API detail: {exc.detail}")
-            if isinstance(exc, SlackApiError):
+            if isinstance(exc, StravaNotConnectedError):
+                logger.warning("strava.connection.not_found")
+            elif isinstance(exc, SlackApiError):
                 logger.error(
                     "slack.api.handler_failed type=%s handler=%s error=%s",
                     request_type,

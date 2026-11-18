@@ -2194,6 +2194,50 @@ describe("Request Router", () => {
         expect.objectContaining({ type: "map.deleted" }),
       );
     });
+
+    // `currentValues` is a snapshot of the entity as it stands, so a value older
+    // than today's rules has to pass the input schema or it blocks the approval.
+    it("approves an edit whose currentValues predate today's rules", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const location = await createTestLocation(ao.id);
+      const event = await createTestEvent(ao.id, location.id);
+
+      const requestId = crypto.randomUUID();
+      await insertPendingRequest({
+        id: requestId,
+        regionId: region.id,
+        requestType: "edit_event",
+      });
+
+      const eventName = `Edited ${uniqueId()}`;
+      const client = createTestClient();
+      const result = await client.request.validateSubmissionByAdmin({
+        id: requestId,
+        requestType: "edit_event",
+        submittedBy: "submitter@example.com",
+        originalEventId: event.id,
+        originalRegionId: region.id,
+        eventName,
+        currentValues: {
+          eventName: "AB",
+          eventStartTime: "530",
+          eventDescription: null,
+          eventTypeIds: [],
+        },
+      });
+
+      expect(result.status).toBe("approved");
+
+      const [applied] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(applied?.name).toBe(eventName);
+    });
   });
 
   describe("submit*Request review path — permission gate parity with validateSubmissionByAdmin", () => {

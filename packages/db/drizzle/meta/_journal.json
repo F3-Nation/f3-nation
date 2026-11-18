@@ -246,6 +246,27 @@
       "when": 1793996023567,
       "tag": "0034_slack_user_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794366137958,
+      "tag": "0035_strava_credential_store",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794366241362,
+      "tag": "0036_isolate_legacy_strava_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794538891362,
+      "tag": "0037_auth_verification_sends",
+      "breakpoints": true
     }
   ]
 }

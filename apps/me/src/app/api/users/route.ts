@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/server";
 import { getUsers } from "@/lib/api/client";
 import { logError } from "@/lib/logging";
+import { env } from "@/env";
 
 export async function GET(request: NextRequest) {
   let sessionUserId: number | undefined;
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
       "me.users.fetch_failed",
       {
         sessionUserId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
+        apiBaseUrl: env.F3_API_BASE_URL,
       },
       err,
     );

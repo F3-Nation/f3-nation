@@ -20,7 +20,9 @@ import { closePanel, setSelectedItem } from "~/utils/store/selected-item";
 import { MapEventListener } from "../map-event-listener";
 import { MapLayoutItems } from "../map-layout-items";
 import { ClusteredMarkers } from "../marker-clusters/clustered-markers";
+import { GoogleMapsAuthFailureBoundary } from "./google-maps-auth-failure-boundary";
 import { useInitialLocation } from "./initial-location-provider";
+import { useGoogleMapsAuthFailed } from "./use-google-maps-auth-failure";
 import { PlaceResultIconPane } from "./place-result-icon-pane";
 import { UpdatePane } from "./update-pane";
 
@@ -63,17 +65,29 @@ const MAP_CONFIGS: MapConfig[] = [
 export const GoogleMapComponent = () => {
   const { initialCenter, initialZoom } = useInitialLocation();
   const { googleApiKey, status } = useRuntimeConfig();
+  const googleMapsAuthFailed = useGoogleMapsAuthFailed();
 
   // Key loads async; show a loader/error instead of a blank screen until it's ready.
   if (!googleApiKey) return <MapConfigFallback status={status} />;
 
+  // Google disables its markers when it rejects the key, so any marker the map
+  // mounts or moves afterwards throws: unmount the map. The boundary stays
+  // mounted across that switch so it can catch marker errors React flushes
+  // while making it.
+  const authFailureFallback = <MapConfigFallback status="auth_failure" />;
   return (
-    <APIProvider apiKey={googleApiKey}>
-      <ProvidedGoogleMapComponent
-        defaultZoom={initialZoom}
-        defaultCenter={initialCenter}
-      />
-    </APIProvider>
+    <GoogleMapsAuthFailureBoundary fallback={authFailureFallback}>
+      {googleMapsAuthFailed ? (
+        authFailureFallback
+      ) : (
+        <APIProvider apiKey={googleApiKey}>
+          <ProvidedGoogleMapComponent
+            defaultZoom={initialZoom}
+            defaultCenter={initialCenter}
+          />
+        </APIProvider>
+      )}
+    </GoogleMapsAuthFailureBoundary>
   );
 };
 
@@ -198,15 +212,20 @@ const UrlUpdater = () => {
   return null;
 };
 
-const MapConfigFallback = ({ status }: { status: RuntimeConfigStatus }) => {
-  const isError = status === "error";
+const MapConfigFallback = ({
+  status,
+}: {
+  status: RuntimeConfigStatus | "auth_failure";
+}) => {
+  const isError = status === "error" || status === "auth_failure";
   return (
     <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background text-center">
       {isError ? (
         <>
-          <p className="max-w-sm text-sm text-foreground/70">
-            We couldn&apos;t load the map right now. We&apos;ll keep trying, or
-            you can reload the page.
+          <p role="alert" className="max-w-sm text-sm text-foreground/70">
+            {status === "auth_failure"
+              ? "Google Maps isn't available right now, so we can't show the map. Please try again later."
+              : "We couldn't load the map right now. We'll keep trying, or you can reload the page."}
           </p>
           <Button variant="outline" onClick={() => window.location.reload()}>
             Try again

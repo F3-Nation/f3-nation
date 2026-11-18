@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from logging import Logger
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urlparse
 
 import pytz
 import requests
@@ -919,6 +920,27 @@ def remove_keys_from_dict(d, keys_to_remove):
         return [remove_keys_from_dict(item, keys_to_remove) for item in d]
     else:
         return d
+
+
+_URL_IN_TEXT = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+
+
+def usable_invite_link(saved: str | None) -> str | None:
+    """The first http(s) URL in a region's saved Slack invite link, minus trailing punctuation.
+
+    Returns None when the text has no URL or the first one has no host. A saved link can be Slack's whole share
+    message ("Join me on Slack -- ... from any device: https://...") rather than a bare URL, and sending that text
+    as a link gives the recipient a broken link.
+    """
+    match = _URL_IN_TEXT.search(saved or "")
+    if not match:
+        return None
+    url = match.group(0).rstrip(".,;:!?)]}")
+    try:
+        netloc = urlparse(url).netloc
+    except ValueError:  # e.g. an unmatched IPv6 bracket ("https://[::1")
+        return None
+    return url if netloc else None
 
 
 def safe_convert(value: str | None, conversion, args: list = None, default=None):

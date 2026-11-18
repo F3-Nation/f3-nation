@@ -1,13 +1,15 @@
 {
   "name": "@acme/api",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts",
     "./lib/admin-url": "./src/lib/admin-url.ts",
-    "./services/map-request-notification": "./src/services/map-request-notification.ts"
+    "./services/map-request-notification": "./src/services/map-request-notification.ts",
+    "./org-activity": "./src/org-activity.ts",
+    "./org-tree": "./src/org-tree.ts"
   },
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -43,6 +45,7 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@acme/vitest-config": "workspace:*",
+    "@auth/core": "catalog:",
     "@types/lodash": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "dotenv-cli": "catalog:",

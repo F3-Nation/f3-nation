@@ -136,6 +136,10 @@ reads and do not promise a shared snapshot or identical event rows. Consumers
 may join them on `event_id`; use a `LEFT JOIN` from `pv_events` and tolerate
 missing matches on either side (including detail rows without an event row).
 `pv_events.v3` retains type/tag descriptions.
+`pv_event_details` is written sorted by `event_id` in row groups of at most
+8,192 rows, so a single-`event_id` lookup decompresses only one small row group
+and fits a reader with a few hundred MB of DuckDB memory. Row-group size is a
+physical layout choice: it does not change the schema version or fingerprint.
 `pv_areas.v2` and `pv_sectors.v2` carry revised hierarchy outputs. These
 requirements must be reflected in schema versions, fingerprints, columns, and
 consumer compatibility checks. Each dataset must have `manifest.json`, with all

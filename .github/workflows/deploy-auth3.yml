@@ -10,8 +10,10 @@ name: Deploy Auth3
 # its own hand-made `auth3@x.y.z` tags (release-please doesn't manage it), so
 # it can ship newer Better Auth code without cutting an f3-auth release.
 # deploy-auth.yml's `auth@*` trigger doesn't match `auth3@` tags. To release:
-# tag a main commit whose CI is green (e.g. `git tag auth3@0.1.0 <sha> &&
-# git push origin auth3@0.1.0`), then dispatch this workflow with that tag.
+# someone the release-tags ruleset lets create tags (scripts/release-protections.sh
+# sets it) tags a main commit whose CI is green (e.g. `git tag auth3@0.1.0 <sha> &&
+# git push origin auth3@0.1.0`), then dispatches this workflow from main with that
+# tag: auth-production accepts runs from main or `auth@*` tags, never `auth3@*`.
 # First-time setup order: dispatch once to create the service (it fails
 # health checks until configured), then run
 # apps/auth/scripts/cloud-run-env-auth3.sh to set its env and secrets; that

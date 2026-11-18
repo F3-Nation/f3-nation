@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: ["**"]
     types: [opened, synchronize, reopened]
+  # Required checks must also report on merge-queue commits, or the queue
+  # waits for them until the check times out. Merge-group runs test every
+  # workspace: affected-only selection needs a PR's base and head.
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -65,7 +70,7 @@ jobs:
       # and CI points it at this repo's own mirrored GHCR image via
       # OBFUSCATE_VERIFY_POSTGRES_IMAGE below instead.
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -316,13 +321,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          # Merge groups need history too: the suppression check compares
+          # against the queue's base commit.
+          fetch-depth: ${{ github.event_name != 'push' && '0' || '1' }}
       - uses: ./.github/actions/setup
         with:
           enable-turbo-cache: "true"
           select-turbo-affected: "true"
           turbo-task: lint
-      - run: pnpm lint ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
+      # Without a base, check-eslint-suppressions.mjs skips. Turbo reads
+      # TURBO_SCM_BASE only with --affected, which merge groups never use.
+      - name: Pin suppression-check base for merge groups
+        if: github.event_name == 'merge_group'
+        env:
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: echo "TURBO_SCM_BASE=${MERGE_GROUP_BASE_SHA}" >> "$GITHUB_ENV"
+      # Limit simultaneous type-aware ESLint processes to reduce peak memory
+      # when every workspace needs linting without cached results.
+      - run: pnpm lint --concurrency=2 ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
       - run: pnpm lint:unused
 
   typecheck:
@@ -591,7 +607,7 @@ jobs:
       - name: Log in to GHCR
         id: login
         continue-on-error: true
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -681,7 +697,7 @@ jobs:
       - name: Log in to GHCR
         id: login
         continue-on-error: true
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

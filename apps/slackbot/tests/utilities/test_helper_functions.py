@@ -14,7 +14,7 @@ from sqlalchemy.exc import OperationalError
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from utilities import helper_functions
-from utilities.helper_functions import is_deactivated_slack_user, safe_get
+from utilities.helper_functions import is_deactivated_slack_user, safe_get, usable_invite_link
 
 
 def test_safe_get():
@@ -1163,3 +1163,31 @@ def test_cached_database_diagnostic_extraction_cannot_leak_or_raise(monkeypatch,
         expected_sqlstate="none" if diagnostic == "throws" else "other",
         expected_constraint="none" if diagnostic == "throws" else "other",
     )
+
+
+INVITE_URL = "https://join.slack.com/t/f3boone/shared_invite/zt-abc"
+
+
+@pytest.mark.parametrize(
+    "saved, expected",
+    [
+        (INVITE_URL, INVITE_URL),
+        (f"  {INVITE_URL}  ", INVITE_URL),
+        (
+            f"Join me on Slack -- it\u2019s a faster, simpler way to work. Sign up here, from any device: {INVITE_URL}",
+            INVITE_URL,
+        ),
+        (f"Join us ({INVITE_URL}).", INVITE_URL),
+        ("Join me on Slack -- sign up here", None),
+        ("join.slack.com/t/f3boone", None),
+        ("https://", None),
+        ("https://[::1", None),
+        ("https:///join.slack.com/t/f3boone", None),
+        ("Sign up: https://.", None),
+        ("", None),
+        ("   ", None),
+        (None, None),
+    ],
+)
+def test_usable_invite_link_keeps_only_the_url(saved, expected):
+    assert usable_invite_link(saved) == expected

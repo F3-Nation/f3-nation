@@ -352,3 +352,14 @@ def test_failure_logs_carry_no_traceback(monkeypatch, failing):
 
     call = fng_reminders.logger.error.call_args
     assert "exc_info" not in call.kwargs and "john@example.com" not in repr(call)
+
+
+def test_reminder_sends_only_the_url_from_a_saved_share_message(monkeypatch):
+    saved = f"Join me on Slack -- sign up here, from any device: {INVITE_LINK}"
+    text = run(monkeypatch, [fng_created_days_ago(3)], downrange_invite_link=saved).call_args.args[3]
+    assert text.endswith(f"Here's the invite link to send him: {INVITE_LINK}")
+
+
+def test_reminder_leaves_out_a_saved_link_with_no_url(monkeypatch):
+    text = run(monkeypatch, [fng_created_days_ago(3)], downrange_invite_link="Join me on Slack").call_args.args[3]
+    assert "invite link" not in text

@@ -7,6 +7,9 @@ import { logInfo } from "../src/lib/logging";
 /** Must match the kid apps/auth/src/lib/jwt.ts stamps on real tokens. */
 export const FIXTURE_KID = "f3-auth-1";
 
+/** The client_id signFixtureJwt signs; the API must trust it. */
+export const FIXTURE_CLIENT_ID = "characterization";
+
 /** Stable synthetic origin, matched to transport.ts's CHAR_BASE. */
 const CHAR_BASE = "http://api.characterization.test";
 
@@ -49,6 +52,7 @@ export async function setup(): Promise<void> {
   // not in a setupFile.
   process.env.NEXT_PUBLIC_AUTH_URL = `http://127.0.0.1:${address.port}`;
   process.env.AUTH_TRUSTED_ISSUERS = process.env.NEXT_PUBLIC_AUTH_URL;
+  process.env.AUTH_TRUSTED_CLIENT_IDS = FIXTURE_CLIENT_ID;
   // Pin the API base so the `/` redirect target and the OpenAPI servers[0].url
   // are identical across developers and targets instead of leaking a per-dev
   // NEXT_PUBLIC_API_URL from apps/api/.env into goldens.
