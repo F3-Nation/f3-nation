@@ -464,6 +464,55 @@ paged=$(PR_TRIAGE_MAX_PAGES=1 run_paged)
 assert_eq "the page cap stops fetching" "5" "$(jq -r '[.prs[].number] | join(" ")' <<<"$paged")"
 assert_eq "a capped fetch is marked cut off" "true 1" "$(jq -r '"\(.truncated) \(.fetched)"' <<<"$paged")"
 
+# GitHub failing every read of reviewDecision: the page is fetched again without it, and an
+# approved PR falls back to needing approval. A fallback that also fails still fails the run.
+decision_stub="$tmp_dir/decision-stub"
+mkdir -p "$decision_stub"
+jq '.data.repository.pullRequests |= (.pageInfo = {hasNextPage: false, endCursor: null}
+  | .nodes = [.nodes[] | select(.number == 8 or .number == 9) | del(.reviewDecision)])' \
+  "$tmp_dir/fixture.json" >"$decision_stub/page.json"
+cat >"$decision_stub/gh" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+  "auth status") exit 0 ;;
+  *reviewDecision*) echo "gh: Something went wrong" >&2; exit 1 ;;
+  *) [[ -n "\${DECISION_STUB_FAIL_ALL:-}" ]] && exit 1; cat "$decision_stub/page.json" ;;
+esac
+STUB
+chmod +x "$decision_stub/gh"
+# sleep is stubbed so the retry doesn't slow the suite.
+printf '#!/usr/bin/env bash\nexit 0\n' >"$decision_stub/sleep"
+chmod +x "$decision_stub/sleep"
+mkdir -p "$decision_stub/sleep-only"
+cp "$decision_stub/sleep" "$decision_stub/sleep-only/sleep"
+
+run_decision() {
+  PATH="$decision_stub:$PATH" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
+    bash "$triage" -R acme/repo --json 2>"$tmp_dir/decision.err"
+}
+decision_out=$(run_decision)
+status=$?
+assert_eq "a failing reviewDecision falls back and exits 0" "0" "$status"
+assert_eq "without a review decision an approved PR needs approval" "MANUAL MANUAL" \
+  "$(jq -r '[.prs[] | select(.number == 8 or .number == 9) | .bucket] | join(" ")' <<<"$decision_out")"
+assert_eq "the fallback is reported" "1" "$(grep -c 'without review decisions' "$tmp_dir/decision.err")"
+assert_eq "the fallback is marked on the board" "true" "$(jq -r .reviewDecisionsMissing <<<"$decision_out")"
+assert_eq "a board without a fallback has no such mark" "false" "$(jq 'has("reviewDecisionsMissing")' "$tmp_dir/board.json")"
+decision_text=$(PATH="$decision_stub:$PATH" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
+  NO_COLOR=1 bash "$triage" -R acme/repo 2>/dev/null)
+assert_eq "the text board says approvals couldn't be read" "1" \
+  "$(grep -c "GitHub couldn't read approvals for some PRs" <<<"$decision_text")"
+assert_eq "the text board without a fallback doesn't" "0" \
+  "$(grep -c "couldn't read approvals" "$tmp_dir/text.out")"
+DECISION_STUB_FAIL_ALL=1 run_decision >/dev/null
+status=$?
+assert_eq "a fallback that also fails exits non-zero" "true" "$([[ $status -ne 0 ]] && echo true || echo false)"
+
+# Sourcing the script returns with a hint instead of exiting the caller's shell.
+sourced_err=$(bash -c '. "$1" --json; echo "status=$?"' _ "$triage" 2>&1)
+assert_eq "sourcing the script returns 1 instead of exiting" "status=1" "$(echo "$sourced_err" | tail -1)"
+assert_eq "sourcing the script says how to run it" "1" "$(echo "$sourced_err" | grep -c 'not with')"
+
 # A response with no PR data reports GitHub's own errors.
 echo '{"data":null,"errors":[{"message":"boom"}]}' >"$tmp_dir/errors.json"
 err_out=$(PR_TRIAGE_FIXTURE="$tmp_dir/errors.json" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
@@ -608,6 +657,9 @@ if [[ "$1 $2" == "api --paginate" ]]; then
   exit 0
 fi
 case "$*" in
+  *latestOpinionatedReviews*name=repo-ghsa-aaaa-bbbb-cccc*)
+    if [[ -n "${ADV_FORK_A_NO_DECISION:-}" ]]; then exit 1; fi
+    cat "$ADV_DIR/fork-a.json" ;;
   *name=repo-ghsa-aaaa-bbbb-cccc*) cat "$ADV_DIR/fork-a.json" ;;
   *name=repo-ghsa-dddd-eeee-ffff*) cat "$ADV_DIR/fork-b.json" ;;
   *name=repo-ghsa-gggg-hhhh-jjjj*) cat "$ADV_DIR/fork-c.json" ;;
@@ -686,6 +738,18 @@ assert_eq "advisories: a fix PR is triaged like any other" "MANUAL" \
   "$(adv '.prs[] | select(.ref == "GHSA-aaaa-bbbb-cccc #8") | .bucket' | tr -d '"')"
 assert_eq "advisories: the repo's own PRs are unchanged" "$(jq -c .prs "$tmp_dir/board.json")" \
   "$(adv '[.prs[] | select(.advisory == null)]')"
+assert_eq "advisories: no fallback leaves no approvals mark" "false" "$(adv 'has("reviewDecisionsMissing")')"
+
+# A fork read that only succeeds without review decisions still marks the board, though the
+# fork's warning goes to a discarded stderr. sleep is stubbed so the retry doesn't slow the suite.
+ADV_FORK_A_NO_DECISION=1 PATH="$decision_stub/sleep-only:$PATH" run_adv list --json \
+  >"$adv_dir/no-decision.json" 2>/dev/null
+assert_eq "advisories: a fork's fallback exits 0" "0" "$?"
+assert_eq "advisories: a fork's fallback is marked on the board" "true" \
+  "$(jq -r .reviewDecisionsMissing "$adv_dir/no-decision.json")"
+assert_eq "advisories: a fork read through the fallback is still shown" \
+  '["GHSA-aaaa-bbbb-cccc #5","GHSA-aaaa-bbbb-cccc #8"]' \
+  "$(jq -c '[.prs[] | select(.advisory.ghsa == "GHSA-aaaa-bbbb-cccc") | .ref]' "$adv_dir/no-decision.json")"
 
 # A draft-only fork whose PRs were cut off may have a fix PR past the cut, so it isn't listed.
 cut_dir="$tmp_dir/adv-cut"

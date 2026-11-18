@@ -49,6 +49,12 @@
 # waiting on /pr-local-test until a later run passes, a codeowner adds the `local test: not
 # needed` label after it, or you `mark` a run after it. A ❌ first waits on the author's push.
 # That label also stands in for a local test that never ran.
+
+# Sourced, every exit below would close the caller's shell and set -e would stay on in it.
+if (return 0 2>/dev/null); then
+  echo "pr-triage: run this with bash scripts/pr-triage.sh (or pnpm pr:triage), not with '.' or source" >&2
+  return 1
+fi
 set -euo pipefail
 
 LEDGER="${PR_TRIAGE_LEDGER:-${XDG_STATE_HOME:-$HOME/.local/state}/pr-triage/ledger.tsv}"
@@ -169,9 +175,18 @@ fragment reviews on PullRequestReviewConnection {
   }
 }'
 
+# GitHub can fail every read of one PR's reviewDecision while the rest of the query works,
+# so a page that keeps failing is fetched once more without it. The substitution only drops
+# the field with a space on each side; the check stops a reflowed query from turning that
+# last attempt into the same failing query.
+query_no_decision="${query/ reviewDecision / }"
+[[ "$query_no_decision" != "$query" ]] ||
+  die "the query must list reviewDecision with a space on each side, so a failing page can be retried without it"
+
 # GitHub can fail the whole query computing reviewDecision for an advisory fork's PR, so fork
 # queries read each reviewer's latest approval or change request instead, and classify works
-# out the decision from them.
+# out the decision from them. A fork page that keeps failing falls back to query_no_decision
+# too, which reads neither.
 # shellcheck disable=SC2016
 fork_query=${query/reviewDecision/'latestOpinionatedReviews(first: 100) { nodes { state author { login } commit { oid } } }'}
 is_advisory_fork() { [[ "$(tr '[:upper:]' '[:lower:]' <<<"${1#*/}")" =~ -ghsa(-[0-9a-z]{4}){3}$ ]]; }
@@ -194,15 +209,27 @@ fetch_prs() {
   local -a args
   if is_advisory_fork "$target"; then q="$fork_query"; fi
   dir=$(mktemp -d "$work_dir/pages.XXXXXX") || return 1
+  page_args() {
+    args=(-f query="$1" -f owner="${target%%/*}" -f name="${target#*/}")
+    if [[ -n "$cursor" ]]; then args+=(-f cursor="$cursor"); fi
+  }
   while :; do
     page=$((page + 1))
-    args=(-f query="$q" -f owner="${target%%/*}" -f name="${target#*/}")
-    if [[ -n "$cursor" ]]; then args+=(-f cursor="$cursor"); fi
+    page_args "$q"
     page_file="$dir/$(printf '%03d' "$page").json"
     if ! gh api graphql "${args[@]}" >"$page_file"; then
       # A busy GitHub occasionally answers 502 or 504; one retry usually succeeds.
       sleep 2
-      gh api graphql "${args[@]}" >"$page_file" || return 1
+      if ! gh api graphql "${args[@]}" >"$page_file"; then
+        # A board that asks for a second look at this page's approved PRs is better than no
+        # board; it never shows an unapproved PR as ready to merge. <file>.no-decision tells the
+        # board, since a fork's fetch runs in a subshell whose stderr is discarded.
+        echo "pr-triage: GitHub failed page $page of $target twice; retrying it without review" \
+          "decisions, so its approved PRs show as needing approval" >&2
+        page_args "$query_no_decision"
+        gh api graphql "${args[@]}" >"$page_file" || return 1
+        : >"$file.no-decision"
+      fi
     fi
     [[ "$(jq -r '.data.repository.pullRequests.pageInfo.hasNextPage' "$page_file")" == "true" ]] || break
     (( page < MAX_PAGES )) || break
@@ -497,6 +524,8 @@ classify_board() {
 jq -e '.data.repository.pullRequests.nodes' "$data_file" >/dev/null 2>&1 \
   || die "GitHub response had no pull request data for $repo: $(jq -c '.errors // .' "$data_file" | head -c 300)"
 board=$(classify_board "$data_file" "$repo" null) || die "could not classify PRs for $repo"
+decisions_missing=false
+if [[ -f "$data_file.no-decision" ]]; then decisions_missing=true; fi
 
 if [[ -n "$advisory_pid" ]]; then
   wait "$advisory_pid" || true
@@ -525,6 +554,7 @@ if [[ -s "$work_dir/advisories.json" ]]; then
       && classify_board "$fork_data" "$fork" "$advisory" >"$fork_board" 2>/dev/null; then
       fork_boards+=("$fork_board")
       statuses+=" read"
+      if [[ -f "$fork_data.no-decision" ]]; then decisions_missing=true; fi
     else
       statuses+=" unread"
     fi
@@ -563,6 +593,9 @@ if [[ -s "$work_dir/advisories.json" ]]; then
       as $notes
     | if ($notes | length) > 0 then .advisoryNotes = $notes else . end' "${fork_boards[@]}") \
     || die "could not merge the security advisory PRs"
+fi
+if $decisions_missing; then
+  board=$(jq '.reviewDecisionsMissing = true' <<<"$board")
 fi
 
 if $json; then
@@ -725,6 +758,10 @@ HTML
     document.querySelector("header").append(
       el("div", "notice", `There are more open PRs: only the oldest ${data.fetched} are shown.`));
   }
+  if (data.reviewDecisionsMissing) {
+    document.querySelector("header").append(el("div", "notice",
+      "GitHub couldn't read approvals for some PRs, so approved ones show as needing approval."));
+  }
 
   const board = document.getElementById("board");
   // Advisories have no assignees, so the filters leave this column as it is.
@@ -869,6 +906,9 @@ echo "${bold}PR triage for $repo${reset} ${dim}(as @$viewer$including)${reset}"
 jq -r '.advisoryNotes // [] | .[] | "  \(.)"' <<<"$board"
 if [[ "$(jq -r '.truncated' <<<"$board")" == "true" ]]; then
   echo "  There are more open PRs; only the oldest $(jq -r '.fetched' <<<"$board") are shown"
+fi
+if [[ "$(jq -r '.reviewDecisionsMissing // false' <<<"$board")" == "true" ]]; then
+  echo "  GitHub couldn't read approvals for some PRs, so approved ones show as needing approval"
 fi
 # Advisories with no fix PR come first; the list exists only when advisories are visible.
 advisory_lines=$(jq -r '(.generatedAt | fromdate) as $at | .advisoriesWithoutPr // [] | .[]
