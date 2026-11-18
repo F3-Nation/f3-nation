@@ -1,6 +1,6 @@
 ---
 name: issue-triage
-description: 'Set an issue''s Type and its Priority, Effort and App fields — for one issue ("triage #123", "set the fields on this issue"), right after filing an issue, or for every open issue still missing them ("triage the backlog", "which issues need Priority?"). Proposes values with a one-line reason each and writes them only once approved.'
+description: 'Set an issue''s Type and its Priority, Effort and App fields, and recommend the `good first issue` label — for one issue ("triage #123", "set the fields on this issue"), right after filing an issue, or for every open issue still missing them ("triage the backlog", "which issues need Priority?", "which issues are good first issues?"). Proposes values with a one-line reason each and writes them only once approved.'
 compatibility: Any agent with bash, jq and an authenticated gh. Writing needs the repo scope; reading the organization's fields needs read:org.
 ---
 
@@ -9,7 +9,9 @@ compatibility: Any agent with bash, jq and an authenticated gh. Writing needs th
 Every issue in this repo should have four values: **Type** (the issue's own
 type) and three organization issue fields, **Priority**, **Effort** and
 **App**. This skill decides them from the issue's content and sets them with
-[`scripts/issue-fields.sh`](scripts/issue-fields.sh).
+[`scripts/issue-fields.sh`](scripts/issue-fields.sh). It also recommends the
+`good first issue` label for issues a newcomer could pick up (see
+[Good first issue](#good-first-issue)).
 
 The allowed values are set at the organization level and can change. Never
 type them from memory: run `issue-fields.sh options` first and choose only
@@ -52,6 +54,8 @@ bash $S get 123 456             # one JSON object per issue, current values + bo
 bash $S untriaged > <scratch>/untriaged.jsonl  # open issues missing any of the four
 bash $S set 123 --type Bug --priority Medium --effort Low --app Map
 bash $S apply <scratch>/proposals.tsv  # bulk write; checks every row before writing any
+gh issue view 123 --json assignees,closedByPullRequestsReferences  # claimed or in progress?
+gh issue edit 123 --add-label "good first issue"
 ```
 
 `apply` reads tab-separated rows of `number`, `type`, `priority`, `effort`,
@@ -148,13 +152,40 @@ Most issues are Low or Medium. Judge the work the issue describes, not the
 worst case: a repo-wide sweep of a known pattern is still Low or Medium when
 each change is mechanical. An Epic's Effort covers all its sub-issues.
 
+### Good first issue
+
+The `good first issue` label points newcomers to work they can finish without
+knowing the codebase or holding production access. A wrong label costs a
+volunteer's first attempt, so recommend it only when every one of these holds:
+
+- **Effort is Low** (the issue's value, or the one you are proposing).
+- **Type is Bug, Story or Task**, never Epic or Discussion.
+- **The body says what to change and what done looks like**: the files or
+  screen involved, and the expected result. A newcomer could start without
+  asking a maintainer first. No open design question or "investigate why".
+- **No sensitive area**: not auth, sign-in, permissions or API keys; not a
+  security fix; not a schema change or migration; not deploy, Cloud Run,
+  secrets or release tooling.
+- **No outside access**: reproducing and testing it works in the local Docker
+  setup, without Staging or Production data, Slack workspaces or cloud
+  consoles.
+- **Free to take**: no assignee, no open PR that closes it, and no unfinished
+  sub-issue or blocking issue.
+
+Priority doesn't matter: a Low-priority polish item can be a fine first issue.
+Recommend only adding the label. If an issue already has it but fails a
+condition above, say which one in the proposal, and remove the label only
+when the user agrees.
+
 ## One issue
 
 1. `bash $S options`, then `bash $S get <n>`.
 2. Decide each missing value using "Deciding each value", and show the user a
-   short table: value, then a one-line reason.
+   short table: value, then a one-line reason. Add a `good first issue` row
+   when the issue qualifies, or when it carries the label but doesn't.
 3. On approval (or straight away if asked to set them), run `bash $S set`
-   with the approved values, then `bash $S get <n>` to confirm.
+   with the approved values and `gh issue edit` for an approved label, then
+   `bash $S get <n>` to confirm.
 
 ## The backlog
 
@@ -163,12 +194,21 @@ each change is mechanical. An Epic's Effort covers all its sub-issues.
    about one field, keep only the issues missing it, e.g.
    `jq -c 'select(.priority == null)' <scratch>/untriaged.jsonl > <scratch>/todo.jsonl`
    (for App, `select(.app == [])`), and work from that file.
+   When the user asks only which issues are good first issues, work from
+   every open issue without the label instead:
+   `gh issue list --state open --limit 500 --search '-label:"good first issue"' --json number --jq '.[].number'`,
+   then `get` those numbers.
 2. For more than about 20 issues, split the file and give each part to a
    subagent along with this file; each returns TSV rows. Tell them to leave
-   cells empty for values the issue already has.
+   cells empty for values the issue already has, and to put `yes` in the
+   `gfi` column only for issues that meet every
+   [Good first issue](#good-first-issue) condition.
 3. Combine the rows into `<scratch>/proposals.tsv` with the header
-   `# number	type	priority	effort	app	title	reason` and show it to the user
-   as a table, grouped by App.
-4. Apply the rows the user approves with `bash $S apply`, then re-run
-   `untriaged` with the same filter as step 1 to confirm that only the issues
-   they held back remain.
+   `# number	type	priority	effort	app	gfi	title	reason` and show it to
+   the user as a table, grouped by App. `apply` ignores `gfi` and the columns
+   after it.
+4. Add the label to each approved `gfi` issue with `gh issue edit`. Apply the
+   approved rows with `bash $S apply`, leaving out rows whose four values are
+   all empty (a label-only row is an error there). Then re-run `untriaged`
+   with the same filter as step 1 to confirm that only the issues they held
+   back remain.
