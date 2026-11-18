@@ -54,8 +54,9 @@ bash $S get 123 456             # one JSON object per issue, current values + bo
 bash $S untriaged > <scratch>/untriaged.jsonl  # open issues missing any of the four
 bash $S set 123 --type Bug --priority Medium --effort Low --app Map
 bash $S apply <scratch>/proposals.tsv  # bulk write; checks every row before writing any
-gh issue view 123 --json assignees,closedByPullRequestsReferences  # claimed or in progress?
+gh api graphql -F owner='{owner}' -F name='{repo}' -F n=123 -f query='query($owner:String!,$name:String!,$n:Int!){ repository(owner:$owner,name:$name){ issue(number:$n){ assignees(first:5){ nodes{ login } } closedByPullRequestsReferences(first:5){ nodes{ number state } } blockedBy(first:10){ nodes{ number state } } subIssuesSummary{ total completed } } } }' --jq '.data.repository.issue'  # free to take?
 gh issue edit 123 --add-label "good first issue"
+gh issue edit 123 --remove-label "good first issue"
 ```
 
 `apply` reads tab-separated rows of `number`, `type`, `priority`, `effort`,
@@ -179,13 +180,16 @@ when the user agrees.
 
 ## One issue
 
-1. `bash $S options`, then `bash $S get <n>`.
+1. `bash $S options`, then `bash $S get <n>`, and, for a possible
+   `good first issue`, the free-to-take query above.
 2. Decide each missing value using "Deciding each value", and show the user a
    short table: value, then a one-line reason. Add a `good first issue` row
    when the issue qualifies, or when it carries the label but doesn't.
 3. On approval (or straight away if asked to set them), run `bash $S set`
-   with the approved values and `gh issue edit` for an approved label, then
-   `bash $S get <n>` to confirm.
+   with the approved values, skipping it when no Type or field value was
+   approved (it exits with `nothing to set`). Only after `set` succeeds,
+   change an approved label with `gh issue edit`. Then run `bash $S get <n>`
+   to confirm.
 
 ## The backlog
 
@@ -195,20 +199,29 @@ when the user agrees.
    `jq -c 'select(.priority == null)' <scratch>/untriaged.jsonl > <scratch>/todo.jsonl`
    (for App, `select(.app == [])`), and work from that file.
    When the user asks only which issues are good first issues, work from
-   every open issue without the label instead:
-   `gh issue list --state open --limit 500 --search '-label:"good first issue"' --json number --jq '.[].number'`,
+   every open issue instead:
+   `gh issue list --state open --limit 2000 --json number --jq '.[].number'`,
    then `get` those numbers.
 2. For more than about 20 issues, split the file and give each part to a
    subagent along with this file; each returns TSV rows. Tell them to leave
-   cells empty for values the issue already has, and to put `yes` in the
-   `gfi` column only for issues that meet every
-   [Good first issue](#good-first-issue) condition.
+   cells empty for values the issue already has, and to run the
+   free-to-take query for each possible `good first issue`. In the `gfi`
+   column, put `yes` only for an issue without the label that meets every
+   [Good first issue](#good-first-issue) condition, and `remove` for an issue
+   that has the label but fails one, naming the failed condition in `reason`.
 3. Combine the rows into `<scratch>/proposals.tsv` with the header
    `# number	type	priority	effort	app	gfi	title	reason` and show it to
    the user as a table, grouped by App. `apply` ignores `gfi` and the columns
    after it.
-4. Add the label to each approved `gfi` issue with `gh issue edit`. Apply the
-   approved rows with `bash $S apply`, leaving out rows whose four values are
-   all empty (a label-only row is an error there). Then re-run `untriaged`
-   with the same filter as step 1 to confirm that only the issues they held
-   back remain.
+4. Apply the approved rows with `bash $S apply`, leaving out rows whose four
+   values are all empty (a label-only row is an error there); skip `apply`
+   when no rows remain, since it exits with `no rows in` on an empty file.
+   Once it succeeds, re-run the free-to-take query for each approved `yes`
+   issue, skip and report any that is no longer free, and add the label to
+   the rest with `gh issue edit --add-label`. Remove it from each approved
+   `remove` issue with `gh issue edit --remove-label`.
+5. Then confirm: for field rows, re-run `untriaged` with the same filter as
+   step 1 and check that only the issues the user held back remain; for
+   labels, run `bash $S get` on the approved `gfi` numbers and check that
+   each one's `labels` includes `good first issue` (or no longer does, for
+   `remove`).

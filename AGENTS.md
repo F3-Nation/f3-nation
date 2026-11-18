@@ -82,9 +82,8 @@ The review uses the [Superpowers](https://github.com/obra/superpowers)
 `requesting-code-review` skill when it is installed (optional; a bundled brief
 covers it otherwise).
 
-To set an issue's Type, Priority, Effort and App and decide whether it gets
-the `good first issue` label — right after filing any issue, for one issue,
-or for every open issue missing them — follow
+To set an issue's Type, Priority, Effort and App, or decide whether it gets
+the `good first issue` label — one issue, or the open backlog — follow
 [`.agents/skills/issue-triage/SKILL.md`](.agents/skills/issue-triage/SKILL.md),
 even if your tool does not load skills automatically.
 
