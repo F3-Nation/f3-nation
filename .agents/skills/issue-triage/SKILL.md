@@ -1,6 +1,6 @@
 ---
 name: issue-triage
-description: 'Set an issue''s Type and its Priority, Effort and App fields, and recommend the `good first issue` label — for one issue ("triage #123", "set the fields on this issue"), right after filing an issue, or for every open issue still missing them ("triage the backlog", "which issues need Priority?", "which issues are good first issues?"). Proposes values with a one-line reason each and writes them only once approved.'
+description: 'Use right after creating any GitHub issue in this repo (gh issue create, an issue filed from an audit or review, a bug found while coding), even when the user never mentions triage, and whenever asked to triage issues ("triage #123", "triage the backlog", "which issues need Priority?", "which issues are good first issues?"). Proposes the issue''s Type, Priority, Effort and App, and whether it should get the `good first issue` label, with a one-line reason each, and writes them only once approved.'
 compatibility: Any agent with bash, jq and an authenticated gh. Writing needs the repo scope; reading the organization's fields needs read:org.
 ---
 
