@@ -62,8 +62,8 @@ A skill listed in [`skills-lock.json`](skills-lock.json) is vendored from an
 upstream repository with the [`skills`](https://github.com/vercel-labs/skills)
 CLI. Never edit its files: put repo-specific guidance in the skill that calls
 it. Where a vendored skill conflicts with this file or `docs/`, the repo's
-rule wins. Where it names a skill or file this repo doesn't have, skip that
-pointer and work from the repo's own sources: the feature spec, ADRs and the
+rule wins. Where it names a skill or file this repo doesn't have, or a skill
+whose name matches a repo skill that does something else, skip that pointer and work from the repo's own sources: the feature spec, ADRs and the
 surrounding code. `pnpm skills:update` updates every vendored skill; review the diff
 like any other dependency bump. It does not undo a local edit: revert that
 commit instead. Add a newly vendored skill's directory to `.prettierignore`.

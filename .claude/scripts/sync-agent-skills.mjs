@@ -2,8 +2,9 @@
 /**
  * Mirror vendor-neutral agent skills from .agents/skills/ (canonical,
  * checked in — see https://agentskills.io) into gitignored .claude/skills/,
- * which is the only project location Claude Code scans. Copies overwrite but
- * never delete, so local-only skills in .claude/skills/ survive; only the
+ * which is the only project location Claude Code scans. Copies overwrite (a
+ * symlinked destination is unlinked and replaced by a real copy) but never
+ * delete otherwise, so local-only skills in .claude/skills/ survive; only the
  * mirrors of skills listed in RETIRED_SKILLS are removed. Runs from a
  * SessionStart hook (see .claude/settings.json); plain file copies keep this
  * working on Windows, where git symlinks aren't reliable.

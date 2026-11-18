@@ -1,7 +1,7 @@
 ---
 name: implement-issue
 description: 'Use when the user gives a GitHub issue number or URL to build ("implement issue 42", "work on #42", "pick up this issue") — takes the issue from pre-flight checks through codebase exploration, an approved approach, test-first implementation, a draft PR and a self-review of it. Not for reviewing someone else''s PR (pr-review-inline) or answering review feedback (address-pr-comments).'
-compatibility: macOS, Linux, or WSL 2 with bash, git and gh (authenticated). Works in any agent; steps that use subagents say what to do without them.
+compatibility: macOS, Linux, or WSL 2 with bash, git, gh (authenticated) and jq. Works in any agent; steps that use subagents say what to do without them.
 ---
 
 # Implement a GitHub issue
@@ -31,7 +31,9 @@ the literal value and write it into later commands.
 
 ## Step 1: Pre-flight
 
-1. Run `bash scripts/gh-check.sh`. If it fails, show its message and stop.
+1. Run `bash scripts/gh-check.sh`. If it fails, show its message and stop. Check that `jq` is
+   installed (`command -v jq`); the Step 8 review needs it. If it is missing, stop and give the
+   install hint: `brew install jq` (macOS) or `sudo apt install jq` (WSL/Linux).
 2. Fetch the issue. Accept only a number (`42` or `#42`) or an issue URL of the form
    `https://github.com/<owner>/<repo>/issues/<number>`. Stop on anything else, before running a
    command: a quote in the argument would end the shell string. Pass the number or URL, and
@@ -55,10 +57,11 @@ the literal value and write it into later commands.
 
    ```bash
    gh issue develop --list <number>
-   gh pr list --search "<number> in:title,body" --state all
+   gh pr list --search "<number> in:title,body" --state all --limit 100
    ```
 
-   If a branch or PR exists, report it and ask how to proceed.
+   If a branch or PR exists, report it and ask how to proceed. If `gh pr list` returns 100 rows,
+   treat the list as incomplete and ask the user.
 
 5. `git fetch origin`. Everything below starts from `origin/main`; the main checkout's own
    branch and state don't matter. When `origin` is your fork, fetch the issue's repository
@@ -108,8 +111,10 @@ cd "$WT" && pnpm install --frozen-lockfile
 cd "$WT" && git ls-files '*.env.example' | while read -r ex; do f="${ex%.example}"; if [ -e "$f" ] || [ -L "$f" ]; then echo "skip $f (exists)"; else cp "$ex" "$f" && echo "created $f"; fi; done
 ```
 
-Those files hold the stock local-dev values, which point at the default local services. If the
-work needs running apps or a database of its own, ask the user before giving the worktree a slot
+Those files hold the stock local-dev values, which point at the default local services. The
+copied `apps/auth/.env` keeps a placeholder signing key (`AUTH_JWT_PRIVATE_KEY`) that only
+`pnpm local:setup` replaces, so sign-in fails until the worktree has a slot. If the work needs
+running apps, sign-in or a database of its own, ask the user before giving the worktree a slot
 (`pnpm local:setup --slot N`, see
 [Running several checkouts at once](../../../docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees)).
 
@@ -192,7 +197,8 @@ don't ask for them again unless the design has changed. One failing test, the le
 passes it, then the next.
 
 `tdd` is vendored and written for any repo, so three of its pointers don't apply here. It
-leaves refactoring to a review stage and names a `code-review` skill for it: tidy up once the
+leaves refactoring to a review stage and points to a `code-review` skill for it. This repo's
+`code-review` is a defect review, not a refactor step, so don't run it here: tidy up once the
 last slice is green and before Step 6, with the tests still passing; Step 8 is the review. It
 names a `codebase-design` skill and a `GLOSSARY.md` that this repo doesn't have: the approach
 agreed at Gate 2 settles the interface, and terms come from the spec.
@@ -215,11 +221,13 @@ While building:
 1. Run `pnpm ci:local` in the worktree. If it is too slow to repeat, run at least
    `pnpm lint:fix`, `pnpm format:fix`, `pnpm typecheck`, `pnpm lint:unused` and the affected
    tests, and tell the user which parts of the full sequence were skipped. Fix what fails;
-   never bypass a hook or lower a coverage threshold. A test run that rewrites
-   `vitest.config.ts` thresholds upward is expected; keep the change. It is the one thing item 4
-   allows in the diff that the issue didn't ask for.
+   never bypass a hook or lower a coverage threshold. A test run that raises the coverage
+   thresholds in a `vitest.config.*` file is expected; keep the change. Item 4 treats it, and
+   everything approved at Gate 2 (spec update, migration, tests), as in scope.
 2. For a change a user can see or call, run it. Follow [`verify`](../verify/SKILL.md) and keep
-   the evidence (response body, screenshot) for the PR.
+   the evidence (response body, screenshot) for the PR. In a slotted worktree, use the ports in
+   its root `.env` (`F3_API_PORT`, `F3_MAP_PORT` and the rest) in place of the default ports
+   `verify` names.
 3. Commit in Conventional Commits form, `type(scope): subject`, with a scope from
    `scope-enum` in [`commitlint.config.mjs`](../../../commitlint.config.mjs).
 4. Check the diff (`git diff origin/main...HEAD`) against the issue, line by line: every

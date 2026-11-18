@@ -57,6 +57,22 @@ test("output with no recognised line is an error", () => {
   assert.equal(classify("ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL\n", 1), "error");
 });
 
+test("a skill deleted upstream (exit 0, no all-clear line) is an error", () => {
+  const deleted =
+    "Warning: The following skills from mattpocock/skills appear to have been deleted upstream:\n  • tdd\nSkipping deletion in non-interactive mode.\n1 project skill(s) already up to date\n";
+  assert.equal(classify(deleted, 0), "error");
+});
+
+test("an all-clear that skipped a lock entry without skillPath is an error", () => {
+  const legacy =
+    "1 project skill(s) cannot be updated automatically (installed before skillPath tracking):";
+  assert.equal(classify(`${ALL_CLEAR}\n${legacy}\n`, 0), "error");
+  assert.equal(
+    classify(`No project skills can be updated in place.\n${legacy}\n`, 0),
+    "error",
+  );
+});
+
 test("the command prints the state for an output file and exit status", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vendored-skills-check-"));
   try {

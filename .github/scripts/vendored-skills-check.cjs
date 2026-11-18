@@ -6,9 +6,10 @@
 
 const ALL_CLEAR = "All project skills are up to date";
 const DRIFT = /can be updated|differ from skills-lock\.json/;
-// The CLI marks a source it could not check with ✗, and counts the skills it
-// could not update.
-const FAILURE = /✗|Failed to |Cannot update /;
+// The CLI marks a source it could not check with ✗, counts the skills it
+// could not update, and lists lock entries without a skillPath that it never
+// compared with upstream.
+const FAILURE = /✗|Failed to |Cannot update |cannot be updated automatically/;
 
 /**
  * Fails closed: only the all-clear line with a zero exit counts as current,
