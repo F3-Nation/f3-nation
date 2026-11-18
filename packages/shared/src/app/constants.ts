@@ -72,6 +72,8 @@ export const Z_INDEX = {
   DEBUG_INFO: 1000,
   CENTER_POINT_MARKER_PANE: 1000,
   NON_HOVERED_MAP_MARKER: 1000,
+  // A plain pin drawn among day-labeled pins sits under their labels.
+  PLAIN_MAP_MARKER: 999,
   ZOOM_AND_TILE_BUTTONS: 1000,
   OVERLAY_BUTTONS: 1001,
 

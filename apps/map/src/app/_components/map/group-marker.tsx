@@ -130,7 +130,7 @@ export const FeatureMarker = ({
         zIndex={
           isCurrentSelectedLocation || isCurrentPanelLocation
             ? Z_INDEX.SELECTED_MARKER
-            : Z_INDEX.NON_HOVERED_MAP_MARKER
+            : Z_INDEX.PLAIN_MAP_MARKER
         }
         onClick={(e) => {
           clickLocation();

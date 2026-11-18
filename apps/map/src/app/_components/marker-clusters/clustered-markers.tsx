@@ -8,11 +8,14 @@ import type {
   MarkerProperties,
   MarkersProps,
 } from "./types";
+import { dayLabelSegments } from "~/utils/day-label-segments";
 import { getClusterFeatureKey } from "~/utils/get-cluster-feature-key";
 import { getGeojson } from "~/utils/get-geojson";
 import { getMapPosForLeaves } from "~/utils/get-map-pos-for-leaves";
+import { pickLabeledPins } from "~/utils/label-collisions";
 import { useSupercluster } from "~/utils/hooks/use-supercluster";
 import { mapStore } from "~/utils/store/map";
+import { selectedItemStore } from "~/utils/store/selected-item";
 import { useFilteredMapResults } from "../map/filtered-map-results-provider";
 import { FeatureMarker } from "../map/group-marker";
 import { FeaturesClusterMarker } from "./features-cluster-marker";
@@ -45,6 +48,46 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
     return zoom >= DAY_LABEL_ZOOM;
   }, [zoom]);
   const { clusters, getLeaves } = useSupercluster(geojson, superclusterOptions);
+  const { filteredLocationMarkers } = useFilteredMapResults();
+  const selectedLocationId = selectedItemStore.use.locationId();
+  const panelLocationId = selectedItemStore.use.panelLocationId();
+
+  // Pins whose day label fits without covering another label. The rest stay
+  // plain pins until the map is zoomed in far enough.
+  const labeledPins = useMemo(() => {
+    if (!showDayLabels) return new Set<number>();
+    const eventsById = new Map(
+      (filteredLocationMarkers ?? []).map((m) => [m.id, m.events]),
+    );
+    const positions = new Map<number, { lat: number; lng: number }>();
+    for (const feature of clusters) {
+      if ("cluster" in feature.properties) continue;
+      const [lng, lat] = feature.geometry.coordinates;
+      if (typeof lng !== "number" || typeof lat !== "number") continue;
+      positions.set(Number(feature.id), { lat, lng });
+    }
+    for (const [id, marker] of Object.entries(modifiedLocationMarkers)) {
+      positions.set(Number(id), marker);
+    }
+    return pickLabeledPins(
+      [...positions].map(([id, { lat, lng }]) => ({
+        id,
+        lat,
+        lng,
+        segments: dayLabelSegments(eventsById.get(id) ?? []).length,
+        pinned: id === selectedLocationId || id === panelLocationId,
+      })),
+      zoom,
+    );
+  }, [
+    showDayLabels,
+    clusters,
+    modifiedLocationMarkers,
+    filteredLocationMarkers,
+    selectedLocationId,
+    panelLocationId,
+    zoom,
+  ]);
   const handleClusterClick = useCallback(
     (marker: google.maps.marker.AdvancedMarkerElement, clusterId: number) => {
       const leaves = getLeaves(clusterId);
@@ -100,7 +143,7 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
             key={key}
             featureId={featureId}
             position={{ lat, lng }}
-            showDayLabels={showDayLabels}
+            showDayLabels={labeledPins.has(Number(featureId))}
           />
         );
       })}
@@ -110,7 +153,7 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
             key={id}
             featureId={id}
             position={marker}
-            showDayLabels={showDayLabels}
+            showDayLabels={labeledPins.has(Number(id))}
           />
         );
       })}
