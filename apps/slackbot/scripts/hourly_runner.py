@@ -146,9 +146,9 @@ def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, repo
 
     print("Running achievements update")
     try:
-        award_achievements.main()
+        award_achievements.run()
     except Exception as e:
-        log_job_failure("award_achievements.main", e)
+        log_job_failure("award_achievements.run", e)
 
     print("Notifying completion endpoint to update settings cache")
     try:

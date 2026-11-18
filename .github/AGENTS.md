@@ -15,6 +15,14 @@ upkeep. These rules apply to new and changed workflows.
   `actions/github-script` or an action this repo already uses; a new one
   needs a reason in the PR and a maintained, widely used publisher, and is
   SHA-pinned like the rest.
+- A checkout of another repository (`repository:`) pins `ref:` to a full
+  commit SHA with a version comment, and needs the same justification as a
+  new third-party action; Renovate doesn't track `ref:`, so update it by hand.
+  Code from it, built or run, never shares a job with a write token,
+  `id-token: write`, or a secret that can deploy, mint keys or spend without a
+  cap, even one scoped to a different step: earlier steps can tamper with
+  later ones in the same job. If that job needs a provider key, give it a
+  spend-capped key in an environment-scoped secret.
 - Never interpolate `${{ github.event.* }}`, `inputs.*` or `steps.*.outputs`
   into `run:`; pass them through `env:` and quote them.
 - Validate `workflow_dispatch` refs and tags against the workflow's tag prefix

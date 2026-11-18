@@ -1,6 +1,6 @@
 ---
 name: security-advisory-report
-description: Post the Security Advisory Report to the private #codeowners Slack channel — every open security advisory in F3-Nation/f3-nation, with its fix PR (in the advisory's temporary private fork) sorted and formatted like the daily Codeowners PR Report, or listed as having no fix PR yet. Use when someone asks for the security advisory report, which advisories or GHSA fix PRs are waiting or still need work, or to remind codeowners about security fixes.
+description: "Post the Security Advisory Report to the private #codeowners Slack channel — every open security advisory in F3-Nation/f3-nation, with its fix PR (in the advisory's temporary private fork) sorted and formatted like the daily Codeowners PR Report, or listed as having no fix PR yet. Use when someone asks for the security advisory report, which advisories or GHSA fix PRs are waiting or still need work, or to remind codeowners about security fixes."
 compatibility: Any agent (Claude Code, Codex) with node, bash, jq, a signed-in gh, and a Slack connection that posts as the person running it (Slack's MCP server). Needs an F3-Nation org owner, security manager, or admin of F3-Nation/f3-nation.
 ---
 
