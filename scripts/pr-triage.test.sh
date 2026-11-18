@@ -765,7 +765,8 @@ assert_eq "advisories: a cut-off fork is noted" "1 security advisory fork has mo
   "$(jq -r '.advisoryNotes[1]' <<<"$cut_board")"
 
 # A fork PR's approval comes from its latest opinionated reviews, the way main's ruleset reads
-# them: a codeowner's approval of the head commit, and no outstanding change request.
+# them: an approval of the head commit by an owner of every path, and no outstanding change
+# request. Only luis is on every CODEOWNERS line; andy owns only the `*` rule.
 jq --arg url "https://github.com/acme/repo-ghsa-hhhh-jjjj-kkkk/pull/" '
   def opinion($by; $state; $oid): {state: $state, author: {login: $by}, commit: {oid: $oid}};
   .data.repository.pullRequests.nodes |= ([.[] | select(.number == 8)][0] as $done
@@ -776,12 +777,15 @@ jq --arg url "https://github.com/acme/repo-ghsa-hhhh-jjjj-kkkk/pull/" '
        ($done | .number = 44 | .latestOpinionatedReviews.nodes = [opinion("not-an-owner"; "APPROVED"; "first")]),
        ($done | .number = 45 | .latestOpinionatedReviews.nodes = []),
        ($done | .number = 46 | .author.login = "luis"
-         | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; "first")])]
+         | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; "first")]),
+       ($done | .number = 47 | .latestOpinionatedReviews.nodes = [opinion("andy"; "APPROVED"; "first")]),
+       ($done | .number = 48 | .latestOpinionatedReviews =
+         {pageInfo: {hasNextPage: true}, nodes: [opinion("luis"; "APPROVED"; "first")]})]
     | map(del(.reviewDecision) | .url = $url + (.number | tostring)))' \
   "$tmp_dir/fixture.json" >"$adv_dir/fork-f.json"
 fork_only=$(ADV_MODE=list ADV_DIR="$adv_dir" PATH="$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
   PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" bash "$triage" -R acme/repo-ghsa-hhhh-jjjj-kkkk --json 2>&1)
-assert_eq "a fork read on its own never asks for reviewDecision" "41,42,43,44,45,46" \
+assert_eq "a fork read on its own never asks for reviewDecision" "41,42,43,44,45,46,47,48" \
   "$(jq -r '[.prs[].number] | join(",")' <<<"$fork_only" 2>/dev/null)"
 fork_bucket() { jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .bucket' <<<"$fork_only" 2>/dev/null; }
 assert_eq "fork: a codeowner's approval of the head waits to merge" "MERGE" "$(fork_bucket 41)"
@@ -790,6 +794,8 @@ assert_eq "fork: an approval of an older commit doesn't count" "MANUAL" "$(fork_
 assert_eq "fork: a non-codeowner's approval doesn't count" "MANUAL" "$(fork_bucket 44)"
 assert_eq "fork: no opinionated review needs approval" "MANUAL" "$(fork_bucket 45)"
 assert_eq "fork: the author's own approval doesn't count" "MANUAL" "$(fork_bucket 46)"
+assert_eq "fork: an approval from an owner of only some paths doesn't count" "MANUAL" "$(fork_bucket 47)"
+assert_eq "fork: a cut-off review list doesn't count as approved" "MANUAL" "$(fork_bucket 48)"
 
 # An early exit waits for a slow fork read instead of leaving it writing into a removed work_dir.
 slow_dir="$tmp_dir/adv-slow"

@@ -122,6 +122,17 @@ team=$(grep / <<<"$codeowners" | head -1 || true)
 [[ -z "$team" ]] || die "$CODEOWNERS_FILE names the team @$team; list each codeowner's own @handle instead"
 [[ -n "$codeowners" ]] || die "$CODEOWNERS_FILE lists no @handles"
 codeowners_json=$(jq -R -s -c 'split("\n") | map(select(length > 0))' <<<"$codeowners")
+# The handles on every ownership line: without a PR's changed files, only their approval is
+# sure to come from an owner of each file. A line with no handles leaves its paths unowned.
+full_owners_json=$(awk '
+  { split("", seen); owned = 0
+    for (i = 1; i <= NF; i++) {
+      if ($i ~ /^#/) break
+      if ($i ~ /^@/) { h = tolower(substr($i, 2)); if (!(h in seen)) { seen[h] = 1; count[h]++ }; owned = 1 }
+    }
+    lines += owned }
+  END { for (h in count) if (count[h] == lines) print h }' "$CODEOWNERS_FILE" |
+  sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
 
 # shellcheck disable=SC2016
 query='
@@ -188,7 +199,11 @@ query_no_decision="${query/ reviewDecision / }"
 # out the decision from them. A fork page that keeps failing falls back to query_no_decision
 # too, which reads neither.
 # shellcheck disable=SC2016
-fork_query=${query/reviewDecision/'latestOpinionatedReviews(first: 100) { nodes { state author { login } commit { oid } } }'}
+opinions_fragment='latestOpinionatedReviews(first: 100) {
+  pageInfo { hasNextPage }
+  nodes { state author { login } commit { oid } }
+}'
+fork_query=${query/reviewDecision/$opinions_fragment}
 is_advisory_fork() { [[ "$(tr '[:upper:]' '[:lower:]' <<<"${1#*/}")" =~ -ghsa(-[0-9a-z]{4}){3}$ ]]; }
 
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/pr-triage.XXXXXX")
@@ -324,6 +339,8 @@ classify='
   def lower_login: (. // "") | ascii_downcase;
   ($codeowners | map({key: ., value: true}) | from_entries) as $owners
   | def codeowner: $owners[lower_login] == true;
+  ($fullOwners | map({key: ., value: true}) | from_entries) as $full
+  | def full_owner: $full[lower_login] == true;
   # Only a codeowner'"'"'s run moves a PR; anyone else'"'"'s is extra input. That also leaves out
   # review bots, which quote the markers back in their own comments.
   def owner_marker($m): (.author.login | codeowner) and (.body | has_marker($m));
@@ -415,11 +432,13 @@ classify='
       | (($open | length) > 0 and ($moreThreads | not)
           and all($openThreads[]; (.lastComment.nodes[0].author.login // "") == $author))
         as $allReplied
-      # On a fork, the test the main branch ruleset applies: a codeowner other than the author
-      # approved the head commit, and no latest opinion requests changes.
+      # On a fork, the test the main branch ruleset applies: an owner of every path other than
+      # the author approved the head commit, and no latest opinion requests changes. A cut-off
+      # list may hide a change request, so it never counts as approved.
       | (if $pr | has("latestOpinionatedReviews") then
            ($pr.latestOpinionatedReviews.nodes // []) as $opinions
-           | any($opinions[]; .state == "APPROVED" and (.author.login | codeowner) and not_by($author)
+           | ($pr.latestOpinionatedReviews.pageInfo.hasNextPage != true)
+             and any($opinions[]; .state == "APPROVED" and (.author.login | full_owner) and not_by($author)
                and .commit.oid == $head.oid)
              and all($opinions[]; .state != "CHANGES_REQUESTED")
          else $pr.reviewDecision == "APPROVED" end) as $approved
@@ -517,7 +536,7 @@ classify='
 # One repo's board from its fetched PRs; <advisory> is null for the repo itself.
 classify_board() {
   jq --arg repo "$2" --arg cutoff "$LEGACY_CUTOFF" --arg notNeededLabel "$NOT_NEEDED_LABEL" \
-    --argjson codeowners "$codeowners_json" --argjson ledger "$ledger_json" \
+    --argjson codeowners "$codeowners_json" --argjson fullOwners "$full_owners_json" --argjson ledger "$ledger_json" \
     --argjson advisory "$3" --argjson now "${PR_TRIAGE_NOW:-null}" "$classify" "$1"
 }
 
