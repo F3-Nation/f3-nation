@@ -33,7 +33,9 @@ unpopulated tier for one branch requires no per-level code.
     placeholder labels shared by both), and `_lib/leadership-table.ts` (Table
     rows, cascading filters, org grouping), `_lib/leadership-csv.ts` (Table
     CSV export), `_lib/use-media-query.ts` (portrait-phone detection),
-    `_lib/viewport-restore.ts` (when a refresh's saved view is restored)
+    `_lib/viewport-restore.ts` (when a refresh's saved view is restored),
+    `_lib/cancellable.ts` (drops the Map's first load when dev Strict Mode
+    runs it twice)
   - `apps/homepage/src/app/org/_lib/`: `navigation.ts` (depth-agnostic drill
     logic), `org-chart.ts` (`LAYER_TYPES`, `orgTypeRank`, `buildOrgHierarchy`),
     `geo-utils.ts`, `url-state.ts`, `api.ts`, `use-ao-search.ts` (debounced

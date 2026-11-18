@@ -40,6 +40,7 @@ import {
   pathForNavigatingTo,
 } from "../_lib/navigation";
 import { fetchLocationById, fetchOrgById, fetchOrgChart } from "../_lib/api";
+import { runCancellable } from "../_lib/cancellable";
 import {
   readLevelFromUrl,
   readOrgIdFromUrl,
@@ -340,9 +341,13 @@ export default function OrgMap({
 
   // ── initial data load ────────────────────────────────────────────────────
 
+  // Cancellable so that in dev, where Strict Mode runs this twice, only the
+  // surviving run applies its result; otherwise the second run's fresh path
+  // looks like a new selection and replaces a restored ?at= view with a fit.
   useEffect(() => {
-    fetchOrgChart()
-      .then((items) => {
+    return runCancellable(
+      fetchOrgChart(),
+      (items) => {
         const {
           orgById,
           childrenByParent,
@@ -414,11 +419,12 @@ export default function OrgMap({
           descendantCache: descendantCacheRef.current,
         });
         setIsLoaded(true);
-      })
-      .catch((err: unknown) => {
+      },
+      (err: unknown) => {
         const msg = err instanceof Error ? err.message : "Unknown error";
         setLoadError(msg);
-      });
+      },
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
