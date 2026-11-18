@@ -27,7 +27,8 @@ turn), and every advisory without one under "No open fix PR". It only reads,
 and writes no files.
 
 The channel is fixed: **#security-managers, Slack channel ID `C0CHYF852M7`**, a
-private channel.
+private channel. Every codeowner is a member, so the codeowners, reviewers and
+authors the report mentions are notified, and can reply in its thread.
 
 ## Rules for every run
 
