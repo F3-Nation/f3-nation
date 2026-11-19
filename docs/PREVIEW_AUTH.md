@@ -65,7 +65,7 @@ for every session hop:
 5. **The auth server's own session cookie is host-only by design** — no
    `domain` attribute at all (`apps/auth/src/lib/auth-options.ts:21-32`). In
    the preview image `NODE_ENV=production`, so the cookie is named
-   `__session` (`Secure`, `SameSite=None`).
+   `__session` (`Secure`, `SameSite=Lax`).
 
 Conclusion: previews use **bearer JWTs and server-side cookie forwarding**,
 never shared browser cookies. Browser SSO across preview apps (e.g. sign in
@@ -245,7 +245,7 @@ tmpfs sidecar, never real data. That's the one load-bearing assumption:
   email (new-user MFA send, magic links for arbitrary addresses) fails in
   previews. Use the fixture code `424242` with the seeded dev users.
 - **`NODE_ENV=production` semantics** in the auth image: session cookie is
-  `__session` (Secure, SameSite=None), and the `/api/verify-email` rate limit
+  `__session` (Secure, SameSite=Lax), and the `/api/verify-email` rate limit
   (10/min/IP) is active — irrelevant when using the fixture-code recipe.
 - **MFA fixture codes are finite per warm instance** (40 per dev user,
   consume-once). Practically unlimited for E2E runs; a cold start (scale to

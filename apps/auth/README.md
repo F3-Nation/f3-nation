@@ -632,5 +632,6 @@ The current rate limiter is in-memory (suitable for single Cloud Run instances).
 - Brute-force protection (max 5 attempts per code)
 - Rate limiting on all public endpoints
 - Per-client CORS with origin validation
-- `httpOnly`, `secure`, `sameSite=none` cookies (production); `sameSite=lax` in dev
+- `httpOnly`, `sameSite=lax` session cookie, `secure` in production
+- Cookie-authenticated POST routes reject cross-site requests (`Sec-Fetch-Site`, else `Origin` vs `Host`) and require a JSON body where they read one (`src/lib/same-origin.ts`)
 - Non-root Docker user

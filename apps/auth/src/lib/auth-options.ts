@@ -24,7 +24,10 @@ export const authOptions: NextAuthConfig = {
         env.NODE_ENV === "production" ? "__session" : "next-auth.session-token",
       options: {
         httpOnly: true,
-        sameSite: env.NODE_ENV === "production" ? "none" : "lax",
+        // Cross-site flows that need this cookie use top-level GET
+        // navigation, which carries a Lax cookie. Pages refuse framing,
+        // and Lax keeps the cookie off cross-site POSTs.
+        sameSite: "lax",
         path: "/",
         secure: env.NODE_ENV === "production",
       },
