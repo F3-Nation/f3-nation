@@ -462,8 +462,9 @@ async function assembleReport({
   for (const { owner, repo, board, base, approvalsFor } of sources) {
     const collected = await collectFacts({ github, owner, repo, base });
     notes.push(...collected.notes);
-    // pr-triage re-read these PRs without their reviews, so it placed every
-    // approved one as still needing approval.
+    // pr-triage re-read at least one page of these PRs without their review
+    // decisions, so it placed each approved PR on that page as still needing
+    // approval.
     if (board.reviewDecisionsMissing)
       notes.push(
         `GitHub couldn't read approvals for ${approvalsFor ?? "some PRs"}, so approved ones show as needing approval.`,
