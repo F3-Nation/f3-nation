@@ -199,27 +199,32 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   Only if that printed `true`:
 
   ```bash
-  git fetch origin main && git switch --detach {{RELEASE_SHA}}
-  RUNNERS=paste-the-runner-list-here
-  STAGING_REFRESH_RUNNERS="$RUNNERS" bash tooling/scripts/staging-refresh/setup.sh
-  git switch -
+  if git fetch origin main && git switch --detach {{RELEASE_SHA}}; then
+    RUNNERS=paste-the-runner-list-here
+    STAGING_REFRESH_RUNNERS="$RUNNERS" bash tooling/scripts/staging-refresh/setup.sh && OK=true || OK=false
+    git switch -
+    echo "setup ok: $OK"
+  else
+    echo "checkout ok: false"
+  fi
   ```
 
-  - **Expected:** it ends with `Done. Image …` and no errors. The notes it prints every time (the GitHub environment and the slackbot restart) are informational once they're set up.
+  - **Expected:** the setup ends with `Done. Image …` and no errors, then `setup ok: true`. The notes it prints every time (the GitHub environment and the slackbot restart) are informational once they're set up.
 
 - [ ] **Rebuild the Staging refresh image** from `main` and wait for it, after any re-grant above: the re-grant deploys an image built from the release commit. Anyone with write access to the repo can run it. Owner: Release lead
 
   ```bash
-  BEFORE=$(gh run list -R F3-Nation/f3-nation --workflow rebuild-staging-refresh.yml --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-  gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
-  RUN=""
-  for i in $(seq 1 12); do
-    sleep 5
-    RUN=$(gh run list -R F3-Nation/f3-nation --workflow rebuild-staging-refresh.yml --event workflow_dispatch --limit 1 --json databaseId --jq ".[0].databaseId | select(. > $BEFORE)")
-    [ -n "$RUN" ] && break
-  done
-  test -n "$RUN" && gh run watch "$RUN" -R F3-Nation/f3-nation --exit-status >/dev/null 2>&1 && echo "rebuild green: true" || echo "rebuild green: false"
+  RUN=$(gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main 2>&1 \
+    | grep -oE 'actions/runs/[0-9]+' | head -n 1 | cut -d/ -f3)
+  if [ -n "$RUN" ]; then
+    gh run watch "$RUN" -R F3-Nation/f3-nation --exit-status >/dev/null 2>&1 \
+      && echo "rebuild green: true" || echo "rebuild green: false"
+  else
+    echo "run found: false"
+  fi
   ```
+
+  - **If it prints `run found: false`:** `gh` didn't print the new run's link (older `gh` versions don't). Find the run on the [workflow's Actions page](https://github.com/F3-Nation/f3-nation/actions/workflows/rebuild-staging-refresh.yml) and confirm it went green; don't start a second one.
 
 ### Step 6: Let it run, then decide
 

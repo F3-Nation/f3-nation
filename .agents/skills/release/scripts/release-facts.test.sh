@@ -51,6 +51,7 @@ case "$1 $2" in
   "run list")
     case "$*" in
       *deploy-homepage.yml*) cat "$FAKE_DIR/homepage-runs.json" ;;
+      *"--status in_progress"*) cat "$FAKE_DIR/in-progress-runs.json" ;;
       *)
         [ -z "${FAIL_WAITING:-}" ] || exit 1
         cat "$FAKE_DIR/waiting-runs.json"
@@ -78,10 +79,21 @@ case "$1 $2" in
 esac
 GH
 chmod +x "$tmp_dir/bin/gh"
+
+# Wraps the real git so a test can make one of the script's list commands fail.
+real_git="$(command -v git)"
+cat >"$tmp_dir/bin/git" <<GIT
+#!/usr/bin/env bash
+if [ -n "\${FAIL_GIT_MIGRATIONS:-}" ] && [ "\$1 \$3" = "diff --diff-filter=A" ]; then exit 1; fi
+if [ -n "\${FAIL_GIT_REV_LIST:-}" ] && [ "\$1" = rev-list ]; then exit 1; fi
+exec "$real_git" "\$@"
+GIT
+chmod +x "$tmp_dir/bin/git"
 export PATH="$tmp_dir/bin:$PATH"
 
-# A repo with two releases: the first, then a feature, an advisory merge, a
-# commit whose PR was closed unmerged, migrations, and the second release.
+# A repo with two releases: the first, then a feature, an advisory merge (two
+# parents, like GitHub's), a commit whose PR was closed unmerged, migrations,
+# and the second release. Only the apps have deploy workflows.
 git init -q --bare "$tmp_dir/origin.git"
 git init -q -b main "$tmp_dir/work"
 cd "$tmp_dir/work" || exit 1
@@ -93,12 +105,20 @@ commit() {
   git add -A && git commit -q -m "$1" && git rev-parse HEAD
 }
 echo one >README.md
+mkdir -p .github/workflows
+for app in api homepage me slackbot; do echo "name: Deploy $app" >".github/workflows/deploy-$app.yml"; done
+echo 'name: CI' >.github/workflows/ci.yml
 first_release="$(commit "chore: release main (#1)")"
 mkdir -p apps/api packages/db/drizzle
 echo 'X=1' >apps/api/.env.example
 feature="$(commit "feat(api): add a setting (#2)")"
+git switch -q -c fork
 echo 'fixed' >apps/api/handler.ts
-advisory="$(commit "Merge commit from fork")"
+commit "fix(api): guard input" >/dev/null
+git switch -q main
+git merge -q --no-ff -m "Merge commit from fork" fork
+advisory="$(git rev-parse HEAD)"
+git branch -q -D fork
 echo 'closed' >apps/api/other.ts
 closed_pr="$(commit "fix(api): tidy (#5)")"
 echo 'CREATE TABLE things (id int);' >packages/db/drizzle/0001_things.sql
@@ -115,6 +135,8 @@ git tag api@1.0.0 "$release"
 git tag homepage@1.0.0 "$release"
 git tag me@1.0.0 "$release"
 git tag pkg-db@1.0.0 "$release"
+git tag slackbot@1.0.0 "$release"
+git tag tailwind-config@1.0.0 "$release"
 git tag api@0.9.0 "$first_release"
 git push -q origin main --tags
 
@@ -151,7 +173,15 @@ cat >"$FAKE_DIR/waiting-runs.json" <<JSON
 [{"databaseId":11,"workflowName":"Deploy API","headBranch":"api@1.0.0"},
  {"databaseId":12,"workflowName":"Deploy API","headBranch":"api@0.9.0"}]
 JSON
+# Slackbot's run is in_progress while one of its two deploy jobs waits; Me's
+# is still deploying to Staging, with nothing waiting yet.
+cat >"$FAKE_DIR/in-progress-runs.json" <<JSON
+[{"databaseId":13,"workflowName":"Deploy Slackbot","headBranch":"slackbot@1.0.0"},
+ {"databaseId":14,"workflowName":"Deploy Me","headBranch":"me@1.0.0"}]
+JSON
 echo '[{"environment":{"name":"api-production"}}]' >"$FAKE_DIR/pending-11.json"
+echo '[{"environment":{"name":"slackbot-production"}}]' >"$FAKE_DIR/pending-13.json"
+echo '[]' >"$FAKE_DIR/pending-14.json"
 echo '[{"status":"completed","conclusion":"success"}]' >"$FAKE_DIR/homepage-runs.json"
 
 run_facts() {
@@ -165,7 +195,9 @@ assert_eq "a merged release PR succeeds" "0" "$status"
 assert_eq "release commit" "$release" "$(jq -r '.release_sha' <<<"$out")"
 assert_eq "previous release is the last release commit before it" "$first_release" "$(jq -r '.previous_release_sha' <<<"$out")"
 assert_eq "components come from the changelog headings" '["api","homepage"]' "$(jq -c '.components' <<<"$out")"
-assert_eq "tags on the release commit only" '["api@1.0.0","homepage@1.0.0","me@1.0.0","pkg-db@1.0.0"]' "$(jq -c '.tags' <<<"$out")"
+assert_eq "tags on the release commit only" \
+  '["api@1.0.0","homepage@1.0.0","me@1.0.0","pkg-db@1.0.0","slackbot@1.0.0","tailwind-config@1.0.0"]' \
+  "$(jq -c '.tags' <<<"$out")"
 assert_eq "migrations in order, CREATE TABLE needs the refresh setup" \
   '[{"file":"packages/db/drizzle/0001_things.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0002_backfill.sql","needs_refresh_setup":false},{"file":"packages/db/drizzle/0003_big.sql","needs_refresh_setup":true}]' \
   "$(jq -c '.migrations' <<<"$out")"
@@ -175,10 +207,11 @@ assert_eq "commits without a merged PR, advisory merge flagged" \
   "$(jq -c '[.commits_without_pr[] | {sha, advisory_merge}]' <<<"$out")"
 assert_eq "an unlisted commit lists its files" '["apps/api/handler.ts"]' \
   "$(jq -c --arg s "$advisory" '.commits_without_pr[] | select(.sha == $s) | .files' <<<"$out")"
-assert_eq "only this release's waiting runs, with their environments" \
-  '[{"run_id":11,"workflow":"Deploy API","tag":"api@1.0.0","environments":["api-production"]}]' \
+assert_eq "this release's runs with a deployment waiting, in_progress ones included" \
+  '[{"run_id":11,"workflow":"Deploy API","tag":"api@1.0.0","environments":["api-production"]},{"run_id":13,"workflow":"Deploy Slackbot","tag":"slackbot@1.0.0","environments":["slackbot-production"]}]' \
   "$(jq -c '.pending_deploys' <<<"$out")"
-assert_eq "an app tag with no waiting run is reported; packages and Homepage aren't" '["me@1.0.0"]' "$(jq -c '.tags_without_waiting_run' <<<"$out")"
+assert_eq "an app tag with no deployment waiting is reported; packages, tailwind-config and Homepage aren't" \
+  '["me@1.0.0"]' "$(jq -c '.tags_without_waiting_run' <<<"$out")"
 assert_eq "Homepage deploy state" "success" "$(jq -r '.homepage_deploy' <<<"$out")"
 assert_eq "never writes to GitHub" "0" "$(grep -cE -- '-X|--method|(POST|PATCH|PUT|DELETE)|issue create|pr (edit|create|merge)' "$CALL_LOG")"
 
@@ -218,6 +251,14 @@ assert_eq "an unreadable list of waiting runs fails the run" "1" "$status"
 
 FAIL_PULLS=1 run_facts --pr 4 --no-fetch
 assert_eq "an unreadable commit fails the run instead of being guessed" "1" "$status"
+
+FAIL_GIT_MIGRATIONS=1 run_facts --pr 4 --no-fetch
+assert_eq "a failed migration listing fails the run" "1" "$status"
+assert_eq "and prints no facts" "" "$out"
+
+FAIL_GIT_REV_LIST=1 run_facts --pr 4 --no-fetch
+assert_eq "a failed commit listing fails the run" "1" "$status"
+assert_eq "and prints no facts" "" "$out"
 
 if [ "$failures" -ne 0 ]; then
   echo "${failures} release-facts test(s) failed"

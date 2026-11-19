@@ -87,7 +87,9 @@ run someone already approved on the Actions page counts as approved:
 ```bash
 APPROVED=""
 for RUN in 111 222; do
-  ENV_ID=$(gh api repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments --jq '.[0].environment.id // empty')
+  PENDING=$(gh api repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments) \
+    || { echo "approved $RUN: false (read failed)"; continue; }
+  ENV_ID=$(printf '%s' "$PENDING" | jq -r '.[0].environment.id // empty')
   if [ -z "$ENV_ID" ]; then
     echo "approved $RUN: true (nothing waiting)"; APPROVED="$APPROVED $RUN"; continue
   fi

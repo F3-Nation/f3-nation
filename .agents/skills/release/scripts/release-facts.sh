@@ -99,6 +99,8 @@ tags_json="$(git ls-remote --tags origin \
   | awk -v sha="$release_sha" '$1 == sha { sub("^refs/tags/", "", $2); sub("\\^\\{\\}$", "", $2); print $2 }' \
   | sort -u | jq -R -s 'split("\n") | map(select(length > 0))')"
 
+new_migrations="$(git diff --name-only --diff-filter=A "$previous_sha" "$release_sha" -- 'packages/db/drizzle/*.sql' \
+  | sort)" || die "can't list the migrations added since $previous_sha"
 migrations_json='[]'
 while IFS= read -r file; do
   [ -n "$file" ] || continue
@@ -111,7 +113,7 @@ while IFS= read -r file; do
   fi
   migrations_json="$(jq --arg file "$file" --argjson setup "$needs_setup" \
     '. + [{file: $file, needs_refresh_setup: $setup}]' <<<"$migrations_json")"
-done < <(git diff --name-only --diff-filter=A "$previous_sha" "$release_sha" -- 'packages/db/drizzle/*.sql' | sort)
+done <<<"$new_migrations"
 
 env_files_json="$(git diff --name-only "$previous_sha" "$release_sha" \
   | { grep -E "$ENV_FILE_PATTERN" || true; } | jq -R -s 'split("\n") | map(select(length > 0))')"
@@ -119,6 +121,8 @@ env_files_json="$(git diff --name-only "$previous_sha" "$release_sha" \
 # Commits with no merged pull request. GitHub lands a security advisory's fix
 # from its private fork as one commit named "Merge commit from fork"; it has no
 # conventional-commit type, so release-please leaves it out of the changelog.
+candidates="$(git rev-list --first-parent "$previous_sha..$release_sha^")" \
+  || die "can't list the commits between $previous_sha and $release_sha"
 unlisted_json='[]'
 while IFS= read -r sha; do
   [ -n "$sha" ] || continue
@@ -126,11 +130,14 @@ while IFS= read -r sha; do
     || die "can't read the pull requests for commit $sha"
   [ "$merged" -eq 0 ] || continue
   subject="$(git log -1 --format=%s "$sha")"
-  files_json="$(git show --name-only --format= "$sha" | jq -R -s 'split("\n") | map(select(length > 0))')"
+  # Against the first parent: a merge's own diff lists only files that differ
+  # from every parent, which for an advisory merge is usually none.
+  files_json="$(git diff --name-only "$sha^1" "$sha" | jq -R -s 'split("\n") | map(select(length > 0))')" \
+    || die "can't list the files commit $sha changed"
   unlisted_json="$(jq --arg sha "$sha" --arg subject "$subject" --argjson files "$files_json" \
     '. + [{sha: $sha, subject: $subject, advisory_merge: ($subject == "Merge commit from fork"), files: $files}]' \
     <<<"$unlisted_json")"
-done < <(git rev-list --first-parent "$previous_sha..$release_sha^")
+done <<<"$candidates"
 
 if [ "$(jq 'length' <<<"$tags_json")" -eq 0 ] && [ "$(jq 'length' <<<"$components_json")" -gt 0 ]; then
   die "no release tags on $release_sha at origin; check that origin is $repo and that the release is tagged"
@@ -139,30 +146,56 @@ fi
 pending_json='[]'
 homepage_deploy="not_in_release"
 if [ "$(jq 'length' <<<"$tags_json")" -gt 0 ]; then
-  waiting_tsv="$(gh run list --repo "$repo" --status waiting --limit 100 --json databaseId,workflowName,headBranch \
-    | jq -r --argjson tags "$tags_json" '.[] | select(.headBranch as $b | $tags | index($b)) | [.databaseId, .workflowName, .headBranch] | @tsv')" \
+  # A run with parallel deploy jobs (Slackbot's service and scripts) stays
+  # in_progress while one job waits for approval, so both states are read and
+  # a run counts only when it has a deployment waiting.
+  waiting_runs="$(gh run list --repo "$repo" --status waiting --limit 100 \
+    --json databaseId,workflowName,headBranch)" \
     || die "can't list the deploy runs waiting for approval"
+  running_runs="$(gh run list --repo "$repo" --status in_progress --limit 100 \
+    --json databaseId,workflowName,headBranch)" \
+    || die "can't list the deploy runs in progress"
+  runs_tsv="$(printf '%s\n%s\n' "$waiting_runs" "$running_runs" \
+    | jq -r -s --argjson tags "$tags_json" \
+      'add | unique_by(.databaseId)[]
+        | select(.headBranch as $b | $tags | index($b))
+        | [.databaseId, .workflowName, .headBranch] | @tsv')" \
+    || die "can't read the deploy run lists"
   while IFS=$'\t' read -r run_id workflow tag; do
     [ -n "$run_id" ] || continue
     environments="$(gh api "repos/$repo/actions/runs/$run_id/pending_deployments" | jq '[.[].environment.name]')" \
       || die "can't read the pending deployments of run $run_id"
-    pending_json="$(jq --argjson id "$run_id" --arg workflow "$workflow" --arg tag "$tag" --argjson envs "$environments" \
+    [ "$(jq 'length' <<<"$environments")" -gt 0 ] || continue
+    pending_json="$(jq --argjson id "$run_id" --arg workflow "$workflow" --arg tag "$tag" \
+      --argjson envs "$environments" \
       '. + [{run_id: $id, workflow: $workflow, tag: $tag, environments: $envs}]' <<<"$pending_json")"
-  done <<<"$waiting_tsv"
+  done <<<"$runs_tsv"
 
   homepage_tag="$(jq -r '.[] | select(startswith("homepage@"))' <<<"$tags_json" | head -n 1)"
   if [ -n "$homepage_tag" ]; then
-    homepage_deploy="$(gh run list --repo "$repo" --workflow deploy-homepage.yml --branch "$homepage_tag" --limit 1 --json status,conclusion \
-      | jq -r 'if length == 0 then "missing" elif .[0].status != "completed" then "pending" else .[0].conclusion end')" \
+    homepage_deploy="$(gh run list --repo "$repo" --workflow deploy-homepage.yml --branch "$homepage_tag" \
+      --limit 1 --json status,conclusion \
+      | jq -r 'if length == 0 then "missing"
+               elif .[0].status != "completed" then "pending"
+               else .[0].conclusion end')" \
       || die "can't read the Homepage deploy run for $homepage_tag"
   fi
 fi
 
-# Release tags whose deploy has no run waiting for approval: already approved,
-# failed, cancelled or started again from main. Packages have no deploy, the
-# Homepage deploys without approval and Analytics is left out of the plans.
-missing_runs_json="$(jq -c --argjson pending "$pending_json" \
-  '[.[] | select((startswith("pkg-") or startswith("homepage@") or startswith("analytics@")) | not)
+# Components with a deploy-<component>.yml workflow at the release commit. A
+# tag of any other component (the packages, tailwind-config) has no deploy.
+deployable_json="$(git ls-tree --full-name --name-only "$release_sha" .github/workflows/ \
+  | sed -n 's#^\.github/workflows/deploy-\(.*\)\.yml$#\1#p' \
+  | jq -R -s 'split("\n") | map(select(length > 0))')" \
+  || die "can't list the deploy workflows at $release_sha"
+
+# Release tags whose deploy has no deployment waiting for approval: already
+# approved, failed, cancelled, still deploying to Staging, or started again
+# from main. The Homepage deploys without approval and Analytics is left out
+# of the plans.
+missing_runs_json="$(jq -c --argjson pending "$pending_json" --argjson deployable "$deployable_json" \
+  '[.[] | select(sub("@[^@]*$"; "") | IN($deployable[]))
+    | select((startswith("homepage@") or startswith("analytics@")) | not)
     | select(. as $t | $pending | map(.tag) | index($t) | not)]' <<<"$tags_json")"
 
 jq -n \

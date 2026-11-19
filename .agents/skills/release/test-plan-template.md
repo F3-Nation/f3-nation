@@ -16,7 +16,10 @@
 <!-- Keep only rows for apps in this release. -->
 
 **Need a test account?** Ask the Release lead by commenting here or in `#monorepo`; accounts are sent privately, never posted here.{{OPTIONAL: the roles a story needs}}
-**Found a problem?** Comment on this issue (or post in `#monorepo`) with the time, the app, and what you did.<!-- Added by an edit once the release plan is filed: " It blocks the go/no-go in #{{RELEASE_PLAN_ISSUE}}." OPTIONAL (when the release has a migration), before the period: "; start only after that issue's migration step is checked off". -->
+**Found a problem?** Comment on this issue (or post in `#monorepo`) with the time, the app, and what you did.<!-- Added by an edit once the release plan is filed: " It blocks the go/no-go in #{{RELEASE_PLAN_ISSUE}}." -->
+<!-- OPTIONAL (when the release has a migration): -->
+
+**Start after the database migration:** begin only once the migration step in this release's release plan is checked off.
 
 **Before you start a section,** comment its name here so two people don't take the same one. Can't tick the boxes? Comment which checks passed.
 

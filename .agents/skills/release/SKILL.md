@@ -164,9 +164,10 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
     exception in both modes: when the Staging test plan exists but the
     Staging release plan doesn't, file the release plan and link the two.
     Otherwise file the test plan first, with its reporting line ending at
-    "…what you did." (no release plan number yet), then the release plan
-    with the test plan's number in its test step, then edit the test plan to
-    add the release plan's clause, so no filed issue ever holds a
+    "…what you did." (no release plan number yet) and, when the release has
+    a migration, its migration line already in place. Then file the release
+    plan with the test plan's number in its test step, then edit the test
+    plan to add the release plan's clause, so no filed issue ever holds a
     `{{PLACEHOLDER}}`:
 
     ```bash
@@ -266,7 +267,8 @@ check is not a deploy; see the
    its lines from [`smoke-checks.md`](smoke-checks.md) plus that app's app
    checks. Apps with only one or two checks may share a section.
 3. **Nothing above the first story** but the template's URL table,
-   test-accounts line, reporting line and claiming line.
+   test-accounts line, reporting line, migration line (only when the release
+   has a migration) and claiming line.
 4. **Each story:** a `###` heading naming the feature, `~N min`, at most one
    sentence of context, then checkboxes. **Each checkbox:** one action and
    what the tester should see, in one or two plain sentences, starting with
