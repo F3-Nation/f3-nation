@@ -235,18 +235,18 @@ async function proxyRequest(request: NextRequest) {
       () => upstreamTimeout.abort(),
     );
 
-  // Compression is left to Next.js's server, which gzips or deflates by the
-  // caller's Accept-Encoding (and adds Vary). The API doesn't compress (see
-  // apps/api/src/app.ts), and eventsAndLocations is about 1.5 MB, so this
-  // matters. Since Next.js 16.4.5 a route handler can't set Content-Encoding
-  // itself (send-response.js drops it), so gzipping here sent compressed bytes
-  // unlabelled and the map broke (issue 1704).
+  // Never encode the body here: Next.js (16.4.5 and later) drops a route
+  // handler's Content-Encoding, so a body gzipped here would reach the browser
+  // as unlabelled compressed bytes. Next.js's own server compresses instead,
+  // choosing gzip or deflate from the caller's Accept-Encoding and adding Vary.
+  // The API sends bodies uncompressed (see apps/api/src/app.ts) and
+  // eventsAndLocations is large, so this compression matters.
   //
-  // `no-transform` tells Next.js not to compress. SIGNED_IN_ONLY_PATHS carry
-  // the caller's own data, and leaving them uncompressed rules out
-  // BREACH-style length leaks for the price of a few small responses.
-  // Non-JSON bodies (e.g. text/event-stream) must stream as sent, though
-  // withStallTimeout still ends any body that goes quiet for
+  // `no-transform` tells Next.js not to compress. SIGNED_IN_ONLY_PATHS stay
+  // uncompressed so their length can't leak the caller's data (BREACH-style),
+  // for the price of a few small responses. Non-JSON bodies (e.g.
+  // text/event-stream) stay uncompressed so the compressor can't hold back
+  // streamed events. withStallTimeout still ends any body that goes quiet for
   // UPSTREAM_TIMEOUT_MS, streams included.
   const isJson = (headers.get("content-type") ?? "").includes(
     "application/json",

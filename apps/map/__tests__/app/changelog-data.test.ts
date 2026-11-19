@@ -42,7 +42,8 @@ describe("getChangelog", () => {
         "",
         "### Features",
         "",
-        "* **map,shared:** add a table view ([#1705](https://github.com/x/issues/1705)) ([abc1234](https://github.com/x/commit/abc1234))",
+        "* **map,shared:** add a table view ([#1705](https://github.com/x/issues/1705)) " +
+          "([abc1234](https://github.com/x/commit/abc1234))",
         "- **map:** show [the docs](https://example.com) in **bold** help",
         "",
         "### Bug Fixes",

@@ -462,6 +462,11 @@ describe("oRPC proxy route", () => {
   });
 
   it("sets Cache-Control: no-store on a signed-in-only response", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response('{"ok":true}', {
+        headers: { "content-type": "application/json" },
+      }),
+    );
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");
 
@@ -502,9 +507,7 @@ describe("oRPC proxy route", () => {
   });
 
   // fetch() decodes a compressed upstream body but keeps its headers; passing
-  // them on makes the browser try to decode plain bytes again. No
-  // accept-encoding here, so the proxy passes the body through as is and the
-  // upstream headers are the only way an encoding could appear.
+  // them on would make the browser try to decode plain bytes again.
   it.each(["/v1/ping", "/v1/request/canEditRegions"])(
     "drops upstream Content-Encoding and Content-Length on %s",
     async (path) => {
@@ -530,8 +533,8 @@ describe("oRPC proxy route", () => {
     },
   );
 
-  // Since Next.js 16.4.5 a route handler's Content-Encoding is dropped on the
-  // way out, so the proxy must never encode a body itself (issue 1704).
+  // Next.js (16.4.5 and later) drops a route handler's Content-Encoding on the
+  // way out, so the proxy must never encode a body itself.
   // Next.js's server compresses instead, unless Cache-Control says
   // no-transform.
   describe("compression", () => {
