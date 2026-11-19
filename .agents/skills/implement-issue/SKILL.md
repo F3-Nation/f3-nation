@@ -305,8 +305,10 @@ shared quota and nobody else sees it.
    ```
 
    If the list holds commits that aren't on the base branch, someone pushed new work to the
-   PR branch: run item 1's review again on the merged head before pushing. A merge of the
-   base branch alone brings in only reviewed, merged work and needs no second review.
+   PR branch. Item 1's review reads the PR's head on GitHub, so it can only see the merge
+   once it is pushed; the PR is still a draft, so the hosted bots skip it. After that push,
+   run item 1's review again and repeat items 2 and 3 for what it finds. A merge of the base
+   branch alone brings in only reviewed, merged work and needs no second review.
 
 4. After the last push, wait for the hosted checks (`gh pr checks <pr-number> --repo <ISSUE_REPO> --watch`) and
    handle a failure the same way. `pnpm ci:local` does not run every hosted job.
