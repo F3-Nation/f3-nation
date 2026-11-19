@@ -73,7 +73,7 @@ sequence `USAGE` default, so a `f` says what to fix:
 -- Expect: migrator_defaults_ok = t and missing_logins = {}.
 WITH logins AS (
   SELECT n AS name, to_regrole(n) AS role, required
-  FROM (VALUES ('map', true), ('f3slackbot', true), ('app_slackbot', false)) v(n, required)),
+  FROM (VALUES ('map', true), ('app_auth', true), ('f3slackbot', true), ('app_slackbot', false)) v(n, required)),
 d AS (
   SELECT a.grantee, d.defaclobjtype AS kind, a.privilege_type AS priv
   FROM pg_default_acl d, aclexplode(d.defaclacl) a
@@ -95,8 +95,8 @@ migration login itself, with the migration step's proxy running:
 operator's role, so granting that membership back is refused as circular.
 Interactive, when the check already printed `f`, write the login it named;
 otherwise write one block per login in `logins` and say to run only those in
-`missing_logins`. Never a placeholder. A Staging plan reads
-`MIGRATE_DATABASE_URL_STAGING`:
+`missing_logins`. Never a placeholder. The block below is a Production
+plan's; a Staging plan reads `MIGRATE_DATABASE_URL_STAGING` instead:
 
 ```bash
 psql "$(gcloud secrets versions access latest --secret=MIGRATE_DATABASE_URL_PROD --project=f3data)" -X -v ON_ERROR_STOP=1 <<'SQL'
@@ -140,7 +140,9 @@ group that's approved together. It watches only the runs it approved, and a
 run someone already approved on the Actions page counts as approved. While it
 watches, it also approves a job of the same run that reaches approval later
 (Slackbot's two deploy jobs can arrive at different times), so the watch
-never waits on an approval nobody sees:
+never waits on an approval nobody sees. Each run's watch ends after an hour,
+or as soon as a read or a later approval fails, and a run that didn't finish
+prints `green: false`:
 
 ```bash
 APPROVED=""
@@ -156,12 +158,17 @@ for RUN in 111 222; do
     && { echo "approved $RUN: true"; APPROVED="$APPROVED $RUN"; } || echo "approved $RUN: false"
 done
 for RUN in $APPROVED; do
-  while STATUS=$(gh run view "$RUN" -R <owner>/<repo> --json status --jq .status) && [ "$STATUS" != completed ]; do
-    ENV_ID=$(gh api repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments --jq '.[0].environment.id // empty')
+  STATUS=""; DEADLINE=$((SECONDS + 3600))
+  while [ "$SECONDS" -lt "$DEADLINE" ] \
+    && STATUS=$(gh run view "$RUN" -R <owner>/<repo> --json status --jq .status) && [ "$STATUS" != completed ]; do
+    PENDING=$(gh api repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments) \
+      || { echo "approved $RUN (later job): false (read failed)"; break; }
+    ENV_ID=$(printf '%s' "$PENDING" | jq -r '.[0].environment.id // empty')
     if [ -n "$ENV_ID" ]; then
       gh api -X POST repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments \
         -F "environment_ids[]=$ENV_ID" -f state=approved -f comment="Release #<number>" --silent \
-        && echo "approved $RUN (later job): true" || echo "approved $RUN (later job): false"
+        && echo "approved $RUN (later job): true" \
+        || { echo "approved $RUN (later job): false"; break; }
     fi
     sleep 30
   done

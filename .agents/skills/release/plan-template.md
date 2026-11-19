@@ -217,7 +217,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 <!-- Keep exactly one of the two rebuild items: the first when the plan has the re-grant item, else the second. -->
 
-- [ ] **Rebuild the Staging refresh image once more,** after the re-grant above: the re-grant deploys an image built from its own checkout, so this rebuild from `main` must come last, even though the migration already started one. Anyone with write access to the repo can run it. Owner: Release lead
+- [ ] **Rebuild the Staging refresh image once more,** after the re-grant above: the re-grant deploys an image built from its own checkout, so this rebuild from `main` must come last, even though the migration already started one. This run replaces the one the migration started, which needs no check. Anyone with write access to the repo can run it. Owner: Release lead
 
   ```bash
   OUT=$(gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main 2>&1) && STARTED=true || STARTED=false
