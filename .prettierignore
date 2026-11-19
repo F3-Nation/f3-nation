@@ -5,3 +5,6 @@ CHANGELOG.md
 # compares this file verbatim, and Prettier's JSON formatter (e.g. collapsing
 # short nested arrays) does not match that serializer's output.
 apps/api/characterization/__snapshots__/*.golden.json
+# Vendored from upstream with the `skills` CLI; skills-lock.json records a hash
+# of these files, so reformatting them reads as a local modification.
+.agents/skills/tdd/
