@@ -118,7 +118,7 @@ may hold real credentials. List the examples first:
 
 ```bash
 cd "$WT" && pnpm install --frozen-lockfile
-cd "$WT" && git ls-files '*.env.example'
+git -C "$WT" ls-files '*.env.example'
 ```
 
 Then copy each one, writing the paths it printed into the loop:
@@ -286,10 +286,28 @@ shared quota and nobody else sees it.
    about any finding you chose not to fix, and why.
 3. Show the user the fix diff, and the new PR body if the fixes changed what it says, and wait
    for a go-ahead before pushing or editing the PR: the Gate 3 approval covered only what they
-   saw then. If the push is rejected as not a fast-forward, someone updated the branch on
-   GitHub (often with its **Update branch** button). Fetch the branch from the repository you
-   push to, merge it in (`git merge --no-edit`), re-run the checks the merge touches and push
-   again. Never force-push: it would drop their commits. Stop and ask if the merge conflicts.
+   saw then.
+
+   If the push is rejected as not a fast-forward, someone updated the branch on GitHub (often
+   with its **Update branch** button). Never force-push: it would drop their commits. Fetch
+   the branch from the repository you push to, and list what it brings in:
+
+   ```bash
+   git fetch "https://github.com/<owner>/<name>.git" <branch>
+   git log --oneline HEAD..FETCH_HEAD
+   ```
+
+   Show the user that list and wait for their go-ahead. Then merge it, stopping to ask if it
+   conflicts, re-run the checks the merge touches and push again:
+
+   ```bash
+   git merge --no-edit FETCH_HEAD
+   ```
+
+   If the list holds commits that aren't on the base branch, someone pushed new work to the
+   PR branch: run item 1's review again on the merged head before pushing. A merge of the
+   base branch alone brings in only reviewed, merged work and needs no second review.
+
 4. After the last push, wait for the hosted checks (`gh pr checks <pr-number> --repo <ISSUE_REPO> --watch`) and
    handle a failure the same way. `pnpm ci:local` does not run every hosted job.
 
