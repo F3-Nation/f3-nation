@@ -265,6 +265,7 @@ wait for an explicit go-ahead before pushing or posting.
    [Writing to GitHub](../../../AGENTS.md#writing-to-github).
 4. Push the branch and open the PR with `gh pr create --draft --repo <ISSUE_REPO>`. From a
    fork, add `--head <fork-owner>:<branch>` so the PR targets upstream from your fork's branch.
+   Note the PR URL it prints; Step 8 needs it.
 5. Post any issue comment approved above with
    `gh issue comment <number> --repo <ISSUE_REPO> --body-file <file>`,
    ending with the same signature line.
@@ -274,12 +275,13 @@ wait for an explicit go-ahead before pushing or posting.
 A draft PR is not picked up by the hosted review bots, so this pass costs none of their
 shared quota and nobody else sees it.
 
-1. Run [`pr-review-inline`](../pr-review-inline/SKILL.md) on the new PR with `--dry-run`. It
-   drafts its findings and posts nothing. With subagents, run it in one with a fresh context,
-   giving it the PR number but not your reasoning, so it isn't anchored on your solution. It
-   checks the PR out in a worktree of its own, which an agent that confines the session to `WT`
-   refuses to create: first leave `WT` (in Claude Code, `ExitWorktree` with `action: "keep"`),
-   then return to it for the fixes.
+1. Run [`pr-review-inline`](../pr-review-inline/SKILL.md) on the new PR with `--dry-run`, giving
+   it the PR URL from Step 7, not the number: a bare number resolves against the checkout's
+   repository, which from a fork is the fork. It drafts its findings and posts nothing. With
+   subagents, run it in one with a fresh context, giving it the PR URL but not your reasoning,
+   so it isn't anchored on your solution. It checks the PR out in a worktree of its own, which
+   an agent that confines the session to `WT` refuses to create: first leave `WT` (in Claude
+   Code, `ExitWorktree` with `action: "keep"`), then return to it for the fixes.
 2. Fix what it found, in a new commit, and re-run the checks the fix touches. Tell the user
    about any finding you chose not to fix, and why.
 3. Show the user the fix diff, and the new PR body if the fixes changed what it says, and wait
