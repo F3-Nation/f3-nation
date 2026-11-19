@@ -82,7 +82,10 @@ between.
 
 Approve from the terminal with the run IDs in `pending_deploys`, one block per
 group that's approved together. It watches only the runs it approved, and a
-run someone already approved on the Actions page counts as approved:
+run someone already approved on the Actions page counts as approved. While it
+watches, it also approves a job of the same run that reaches approval later
+(Slackbot's two deploy jobs can arrive at different times), so the watch
+never waits on an approval nobody sees:
 
 ```bash
 APPROVED=""
@@ -98,7 +101,17 @@ for RUN in 111 222; do
     && { echo "approved $RUN: true"; APPROVED="$APPROVED $RUN"; } || echo "approved $RUN: false"
 done
 for RUN in $APPROVED; do
-  gh run watch "$RUN" -R <owner>/<repo> --exit-status >/dev/null 2>&1 \
+  while STATUS=$(gh run view "$RUN" -R <owner>/<repo> --json status --jq .status) && [ "$STATUS" != completed ]; do
+    ENV_ID=$(gh api repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments --jq '.[0].environment.id // empty')
+    if [ -n "$ENV_ID" ]; then
+      gh api -X POST repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments \
+        -F "environment_ids[]=$ENV_ID" -f state=approved -f comment="Release #<number>" --silent \
+        && echo "approved $RUN (later job): true" || echo "approved $RUN (later job): false"
+    fi
+    sleep 30
+  done
+  [ "$STATUS" = completed ] \
+    && [ "$(gh run view "$RUN" -R <owner>/<repo> --json conclusion --jq .conclusion)" = success ] \
     && echo "run $RUN green: true" || echo "run $RUN green: false"
 done
 ```

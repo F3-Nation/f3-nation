@@ -130,7 +130,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   Only if that printed `true`:
 
   ```bash
-  git fetch origin main && git switch --detach {{RELEASE_SHA}} && pnpm install --frozen-lockfile
+  git fetch origin main && git switch --detach {{RELEASE_SHA}} && pnpm install --frozen-lockfile && echo "checkout and install: true" || echo "checkout and install: false"
   test "$(git rev-parse HEAD)" = {{RELEASE_SHA}} && echo "right commit: true" || echo "right commit: false"
   test "$(ls packages/db/drizzle/*.sql | tail -n 1)" = packages/db/drizzle/{{NEWEST_MIGRATION_FILE}} && echo "newest migration: true" || echo "newest migration: false"
   ```
@@ -157,7 +157,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   pnpm db:migrate:{{staging or prod}}
   ```
 
-  - **Expected:** it lists {{EACH_MIGRATION_IN_THIS_RELEASE}} as pending, nothing else; lines starting `note:` are informational. Type `{{DATABASE_NAME}}` and it ends with `Done: {{DATABASE_NAME}} is at <that migration>.` If nothing is pending, the migration already ran: go on to the check.
+  - **Expected:** it lists {{EACH_MIGRATION_IN_THIS_RELEASE}} as pending, nothing else; lines starting `note:` are informational. Type `{{DATABASE_NAME}}` and it prints `Done: {{DATABASE_NAME}} is at <that migration>.` On Production it then says whether it started the Staging refresh image rebuild (Step 5 uses that). If nothing is pending, the migration already ran: go on to the check.
   - **Stop if:** it prints `REFUSED`, or lists a migration this release doesn't include. Don't work around a refusal: post it in `#monorepo` and pause.
 
 - [ ] **Check the migration** in `psql` connected read-only to `{{DATABASE_NAME}}`. Owner: Monitor
@@ -188,7 +188,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 ### Step 5: Staging refresh follow-up
 
-{{WHY: with a needs_refresh_setup migration, "<those migrations> change what the Staging refresh's login can read, so the refresh needs its login re-granted, then its image rebuilt."; otherwise "The Staging refresh image must be rebuilt so it knows this release's migrations."}} These items are outside the Stop rule and don't hold up the release; if one fails, post it in `#monorepo` so the next Staging refresh waits until it's fixed.
+{{WHY: with a needs_refresh_setup migration, "<those migrations> change what the Staging refresh's login can read, so the refresh needs its login re-granted, then its image rebuilt once more after the re-grant."; otherwise "The Staging refresh image must be rebuilt so it knows this release's migrations; the migration command started that rebuild, so this checks it finished."}} These items are outside the Stop rule and don't hold up the release; if one fails, post it in `#monorepo` so the next Staging refresh waits until it's fixed.
 
 - [ ] **Re-grant the Staging refresh login.** First stop any database proxy still running from the migration (Ctrl-C in its terminal): the setup starts its own on the same ports. The runner list isn't in the repo; the Refresh admin has it. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
 
@@ -200,7 +200,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
   ```bash
   if git fetch origin main && git switch --detach {{RELEASE_SHA}}; then
-    RUNNERS=paste-the-runner-list-here
+    RUNNERS="paste-the-runner-list-here"
     STAGING_REFRESH_RUNNERS="$RUNNERS" bash tooling/scripts/staging-refresh/setup.sh && OK=true || OK=false
     git switch -
     echo "setup ok: $OK"
@@ -211,12 +211,16 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
   - **Expected:** the setup ends with `Done. Image …` and no errors, then `setup ok: true`. The notes it prints every time (the GitHub environment and the slackbot restart) are informational once they're set up.
 
-- [ ] **Rebuild the Staging refresh image** from `main` and wait for it, after any re-grant above: the re-grant deploys an image built from the release commit. Anyone with write access to the repo can run it. Owner: Release lead
+<!-- Keep exactly one of the two rebuild items: the first when the plan has the re-grant item, else the second. -->
+
+- [ ] **Rebuild the Staging refresh image once more,** after the re-grant above: the re-grant deploys an image built from its own checkout, so this rebuild from `main` must come last, even though the migration already started one. Anyone with write access to the repo can run it. Owner: Release lead
 
   ```bash
-  RUN=$(gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main 2>&1 \
-    | grep -oE 'actions/runs/[0-9]+' | head -n 1 | cut -d/ -f3)
-  if [ -n "$RUN" ]; then
+  OUT=$(gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main 2>&1) && STARTED=true || STARTED=false
+  RUN=$(printf '%s' "$OUT" | grep -oE 'actions/runs/[0-9]+' | head -n 1 | cut -d/ -f3)
+  if [ "$STARTED" = false ]; then
+    echo "rebuild started: false"; printf '%s\n' "$OUT"
+  elif [ -n "$RUN" ]; then
     gh run watch "$RUN" -R F3-Nation/f3-nation --exit-status >/dev/null 2>&1 \
       && echo "rebuild green: true" || echo "rebuild green: false"
   else
@@ -224,7 +228,26 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   fi
   ```
 
-  - **If it prints `run found: false`:** `gh` didn't print the new run's link (older `gh` versions don't). Find the run on the [workflow's Actions page](https://github.com/F3-Nation/f3-nation/actions/workflows/rebuild-staging-refresh.yml) and confirm it went green; don't start a second one.
+  - **If it prints `rebuild started: false`:** the run wasn't created; the line after it says why. Fix that and run the block again.
+  - **If it prints `run found: false`:** the run was started, but `gh` didn't print its link (older `gh` versions don't). Find it on the [workflow's Actions page](https://github.com/F3-Nation/f3-nation/actions/workflows/rebuild-staging-refresh.yml) and confirm it went green; don't start another.
+
+- [ ] **Check the Staging refresh image rebuild** that `pnpm db:migrate:prod` started after the migration. Open the [workflow's Actions page](https://github.com/F3-Nation/f3-nation/actions/workflows/rebuild-staging-refresh.yml): the newest run, started by the Release lead after the migration, must finish green. Owner: Release lead
+  - **If the migration printed `Couldn't start the Staging refresh image rebuild`,** or no run started after the migration: start one and watch it with the block below. Anyone with write access to the repo can run it.
+
+    ```bash
+    OUT=$(gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main 2>&1) && STARTED=true || STARTED=false
+    RUN=$(printf '%s' "$OUT" | grep -oE 'actions/runs/[0-9]+' | head -n 1 | cut -d/ -f3)
+    if [ "$STARTED" = false ]; then
+      echo "rebuild started: false"; printf '%s\n' "$OUT"
+    elif [ -n "$RUN" ]; then
+      gh run watch "$RUN" -R F3-Nation/f3-nation --exit-status >/dev/null 2>&1 \
+        && echo "rebuild green: true" || echo "rebuild green: false"
+    else
+      echo "run found: false"
+    fi
+    ```
+
+    `rebuild started: false` means no run was created (the line after it says why); `run found: false` means it started but `gh` printed no link, so check the Actions page instead of starting another.
 
 ### Step 6: Let it run, then decide
 

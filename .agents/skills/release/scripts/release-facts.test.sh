@@ -106,7 +106,7 @@ commit() {
 }
 echo one >README.md
 mkdir -p .github/workflows
-for app in api homepage me slackbot; do echo "name: Deploy $app" >".github/workflows/deploy-$app.yml"; done
+for app in admin analytics api homepage me slackbot; do echo "name: Deploy $app" >".github/workflows/deploy-$app.yml"; done
 echo 'name: CI' >.github/workflows/ci.yml
 first_release="$(commit "chore: release main (#1)")"
 mkdir -p apps/api packages/db/drizzle
@@ -128,9 +128,16 @@ echo 'UPDATE things SET id = 1;' >packages/db/drizzle/0002_backfill.sql
   echo 'CREATE TABLE big (id int);'
   printf -- '-- %s\n' "$(head -c 1100000 /dev/zero | tr '\0' x)"
 } >packages/db/drizzle/0003_big.sql
+# One per remaining part of the refresh-setup pattern, in mixed case.
+echo 'create schema audit2;' >packages/db/drizzle/0004_schema.sql
+echo 'ALTER TABLE things Owner To app;' >packages/db/drizzle/0005_owner.sql
+echo 'revoke SELECT ON things FROM ro;' >packages/db/drizzle/0006_revoke.sql
+echo "SELECT Audit.Enable_Tracking('things');" >packages/db/drizzle/0007_audit.sql
 commit "feat(db): add things (#3)" >/dev/null
 echo two >README.md
 release="$(commit "chore: release main (#4)")"
+git tag admin@1.0.0 "$release"
+git tag analytics@1.0.0 "$release"
 git tag api@1.0.0 "$release"
 git tag homepage@1.0.0 "$release"
 git tag me@1.0.0 "$release"
@@ -139,11 +146,17 @@ git tag slackbot@1.0.0 "$release"
 git tag tailwind-config@1.0.0 "$release"
 git tag api@0.9.0 "$first_release"
 git push -q origin main --tags
+# A release commit that exists in the checkout but was never pushed.
+git switch -q -c local-only
+echo three >README.md
+unpushed="$(commit "chore: release main (#8)")"
+git switch -q main
 
 echo '[]' >"$FAKE_DIR/pulls-$advisory.json"
 echo '[{"merged_at":null}]' >"$FAKE_DIR/pulls-$closed_pr.json"
+# Newest first, as gh returns them.
 cat >"$FAKE_DIR/pr-list.json" <<JSON
-[{"number":1,"mergedAt":"2026-01-01T00:00:00Z"},{"number":4,"mergedAt":"2026-02-01T00:00:00Z"}]
+[{"number":4,"mergedAt":"2026-02-01T00:00:00Z"},{"number":1,"mergedAt":"2026-01-01T00:00:00Z"}]
 JSON
 cat >"$FAKE_DIR/pr-4.json" <<JSON
 {"number":4,"title":"chore: release main","state":"MERGED","mergedAt":"2026-02-01T00:00:00Z",
@@ -163,23 +176,34 @@ cat >"$FAKE_DIR/pr-7.json" <<JSON
 JSON
 cat >"$FAKE_DIR/pr-8.json" <<JSON
 {"number":8,"title":"chore: release main","state":"MERGED","mergedAt":"2026-03-01T00:00:00Z",
- "mergeCommit":{"oid":"0000000000000000000000000000000000000000"},"body":""}
+ "mergeCommit":{"oid":"$unpushed"},"body":""}
+JSON
+cat >"$FAKE_DIR/pr-10.json" <<JSON
+{"number":10,"title":"chore: release main","state":"MERGED","mergedAt":"2026-02-01T00:00:00Z",
+ "mergeCommit":{"oid":"$release"},
+ "body":"<details><summary>api: 1.0.0</summary>x</details>\n<details><summary>map: 1.0.0</summary>y</details>"}
 JSON
 cat >"$FAKE_DIR/pr-9.json" <<JSON
 {"number":9,"title":"chore: release main","state":"MERGED","mergedAt":"2026-02-02T00:00:00Z",
  "mergeCommit":{"oid":"$closed_pr"},"body":"<details><summary>api: 1.0.1</summary>x</details>"}
 JSON
+# Run 15 is a dispatch from a branch named like the API tag, on another
+# commit; run 16 re-deploys Admin by a dispatch from its tag.
 cat >"$FAKE_DIR/waiting-runs.json" <<JSON
-[{"databaseId":11,"workflowName":"Deploy API","headBranch":"api@1.0.0"},
- {"databaseId":12,"workflowName":"Deploy API","headBranch":"api@0.9.0"}]
+[{"databaseId":11,"workflowName":"Deploy API","headBranch":"api@1.0.0","headSha":"$release"},
+ {"databaseId":12,"workflowName":"Deploy API","headBranch":"api@0.9.0","headSha":"$first_release"},
+ {"databaseId":15,"workflowName":"Deploy API","headBranch":"api@1.0.0","headSha":"$feature"},
+ {"databaseId":16,"workflowName":"Deploy Admin","headBranch":"admin@1.0.0","headSha":"$release"}]
 JSON
 # Slackbot's run is in_progress while one of its two deploy jobs waits; Me's
 # is still deploying to Staging, with nothing waiting yet.
 cat >"$FAKE_DIR/in-progress-runs.json" <<JSON
-[{"databaseId":13,"workflowName":"Deploy Slackbot","headBranch":"slackbot@1.0.0"},
- {"databaseId":14,"workflowName":"Deploy Me","headBranch":"me@1.0.0"}]
+[{"databaseId":13,"workflowName":"Deploy Slackbot","headBranch":"slackbot@1.0.0","headSha":"$release"},
+ {"databaseId":14,"workflowName":"Deploy Me","headBranch":"me@1.0.0","headSha":"$release"}]
 JSON
 echo '[{"environment":{"name":"api-production"}}]' >"$FAKE_DIR/pending-11.json"
+echo '[{"environment":{"name":"api-production"}}]' >"$FAKE_DIR/pending-15.json"
+echo '[{"environment":{"name":"admin-production"}}]' >"$FAKE_DIR/pending-16.json"
 echo '[{"environment":{"name":"slackbot-production"}}]' >"$FAKE_DIR/pending-13.json"
 echo '[]' >"$FAKE_DIR/pending-14.json"
 echo '[{"status":"completed","conclusion":"success"}]' >"$FAKE_DIR/homepage-runs.json"
@@ -196,27 +220,34 @@ assert_eq "release commit" "$release" "$(jq -r '.release_sha' <<<"$out")"
 assert_eq "previous release is the last release commit before it" "$first_release" "$(jq -r '.previous_release_sha' <<<"$out")"
 assert_eq "components come from the changelog headings" '["api","homepage"]' "$(jq -c '.components' <<<"$out")"
 assert_eq "tags on the release commit only" \
-  '["api@1.0.0","homepage@1.0.0","me@1.0.0","pkg-db@1.0.0","slackbot@1.0.0","tailwind-config@1.0.0"]' \
+  '["admin@1.0.0","analytics@1.0.0","api@1.0.0","homepage@1.0.0","me@1.0.0","pkg-db@1.0.0","slackbot@1.0.0","tailwind-config@1.0.0"]' \
   "$(jq -c '.tags' <<<"$out")"
-assert_eq "migrations in order, CREATE TABLE needs the refresh setup" \
-  '[{"file":"packages/db/drizzle/0001_things.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0002_backfill.sql","needs_refresh_setup":false},{"file":"packages/db/drizzle/0003_big.sql","needs_refresh_setup":true}]' \
+assert_eq "migrations in order; each refresh-setup pattern matches in any case, a backfill doesn't" \
+  '[{"file":"packages/db/drizzle/0001_things.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0002_backfill.sql","needs_refresh_setup":false},{"file":"packages/db/drizzle/0003_big.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0004_schema.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0005_owner.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0006_revoke.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0007_audit.sql","needs_refresh_setup":true}]' \
   "$(jq -c '.migrations' <<<"$out")"
+root_migrations="$(jq -c '.migrations' <<<"$out")"
 assert_eq "env-var files that changed" '["apps/api/.env.example"]' "$(jq -c '.env_files_changed' <<<"$out")"
 assert_eq "commits without a merged PR, advisory merge flagged" \
   "[{\"sha\":\"$closed_pr\",\"advisory_merge\":false},{\"sha\":\"$advisory\",\"advisory_merge\":true}]" \
   "$(jq -c '[.commits_without_pr[] | {sha, advisory_merge}]' <<<"$out")"
 assert_eq "an unlisted commit lists its files" '["apps/api/handler.ts"]' \
   "$(jq -c --arg s "$advisory" '.commits_without_pr[] | select(.sha == $s) | .files' <<<"$out")"
-assert_eq "this release's runs with a deployment waiting, in_progress ones included" \
-  '[{"run_id":11,"workflow":"Deploy API","tag":"api@1.0.0","environments":["api-production"]},{"run_id":13,"workflow":"Deploy Slackbot","tag":"slackbot@1.0.0","environments":["slackbot-production"]}]' \
+assert_eq "runs of the release commit with a deployment waiting: in_progress and tag dispatches included, other commits not" \
+  '[{"run_id":11,"workflow":"Deploy API","tag":"api@1.0.0","environments":["api-production"]},{"run_id":13,"workflow":"Deploy Slackbot","tag":"slackbot@1.0.0","environments":["slackbot-production"]},{"run_id":16,"workflow":"Deploy Admin","tag":"admin@1.0.0","environments":["admin-production"]}]' \
   "$(jq -c '.pending_deploys' <<<"$out")"
-assert_eq "an app tag with no deployment waiting is reported; packages, tailwind-config and Homepage aren't" \
+assert_eq "an app tag with no deployment waiting is reported; packages, tailwind-config, Homepage and Analytics aren't" \
   '["me@1.0.0"]' "$(jq -c '.tags_without_waiting_run' <<<"$out")"
 assert_eq "Homepage deploy state" "success" "$(jq -r '.homepage_deploy' <<<"$out")"
 assert_eq "never writes to GitHub" "0" "$(grep -cE -- '-X|--method|(POST|PATCH|PUT|DELETE)|issue create|pr (edit|create|merge)' "$CALL_LOG")"
 
 run_facts --no-fetch
 assert_eq "without --pr, the latest merged release PR is used" "4" "$(jq -r '.pr' <<<"$out")"
+
+out="$(cd apps && GH_REPO=Org/repo bash "$facts" --pr 4 --no-fetch 2>"$tmp_dir/err")"
+status=$?
+assert_eq "run from a subdirectory succeeds" "0" "$status"
+assert_eq "and finds the same migrations" "$root_migrations" "$(jq -c '.migrations' <<<"$out")"
+assert_eq "and the same tags without a waiting run" '["me@1.0.0"]' "$(jq -c '.tags_without_waiting_run' <<<"$out")"
 
 echo '[]' >"$FAKE_DIR/homepage-runs.json"
 run_facts --pr 4 --no-fetch
@@ -238,9 +269,15 @@ assert_eq "that refusal says why" "1" "$(grep -c 'no earlier release commit' "$t
 
 run_facts --pr 8 --no-fetch
 assert_eq "a release commit missing from origin/main is refused" "1" "$status"
+assert_eq "that refusal says why" "1" "$(grep -c "isn't on origin/main" "$tmp_dir/err")"
 
 run_facts --pr abc
 assert_eq "a non-numeric --pr is refused" "1" "$status"
+assert_eq "that refusal says why" "1" "$(grep -c 'must be a number' "$tmp_dir/err")"
+
+run_facts --pr 10 --no-fetch
+assert_eq "a changelog component with no tag on the release commit is refused" "1" "$status"
+assert_eq "that refusal names it" "1" "$(grep -c 'no release tag .* for: map' "$tmp_dir/err")"
 
 run_facts --pr 9 --no-fetch
 assert_eq "a release with no tags at origin is refused" "1" "$status"

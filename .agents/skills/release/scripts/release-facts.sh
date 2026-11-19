@@ -52,6 +52,11 @@ for tool in git gh jq; do
   command -v "$tool" >/dev/null 2>&1 || die "$tool is required"
 done
 
+# git pathspecs below are relative to the current directory, so run from the
+# checkout's root.
+top="$(git rev-parse --show-toplevel)" || die "run this from inside a checkout of the repo"
+cd "$top" || die "can't cd to $top"
+
 repo="${GH_REPO:-}"
 if [ -z "$repo" ]; then
   repo="$(gh repo view --json nameWithOwner | jq -r '.nameWithOwner')" || die "can't tell which repo this is; set GH_REPO"
@@ -142,22 +147,30 @@ done <<<"$candidates"
 if [ "$(jq 'length' <<<"$tags_json")" -eq 0 ] && [ "$(jq 'length' <<<"$components_json")" -gt 0 ]; then
   die "no release tags on $release_sha at origin; check that origin is $repo and that the release is tagged"
 fi
+# Each changelog component's tag is "<component>@<version>"; a missing one
+# would drop that component's deploy from the plans unreported.
+untagged="$(jq -r --argjson tags "$tags_json" \
+  '.[] | . as $c | select($tags | map(sub("@[^@]*$"; "")) | index($c) | not)' <<<"$components_json")"
+[ -z "$untagged" ] || die "no release tag on $release_sha at origin for: $(tr '\n' ' ' <<<"$untagged")"
 
 pending_json='[]'
 homepage_deploy="not_in_release"
 if [ "$(jq 'length' <<<"$tags_json")" -gt 0 ]; then
   # A run with parallel deploy jobs (Slackbot's service and scripts) stays
   # in_progress while one job waits for approval, so both states are read and
-  # a run counts only when it has a deployment waiting.
+  # a run counts only when it has a deployment waiting. A run must also be of
+  # the release commit: a branch can share a tag's name, and its run uses that
+  # branch's own workflow file.
   waiting_runs="$(gh run list --repo "$repo" --status waiting --limit 100 \
-    --json databaseId,workflowName,headBranch)" \
+    --json databaseId,workflowName,headBranch,headSha)" \
     || die "can't list the deploy runs waiting for approval"
   running_runs="$(gh run list --repo "$repo" --status in_progress --limit 100 \
-    --json databaseId,workflowName,headBranch)" \
+    --json databaseId,workflowName,headBranch,headSha)" \
     || die "can't list the deploy runs in progress"
   runs_tsv="$(printf '%s\n%s\n' "$waiting_runs" "$running_runs" \
-    | jq -r -s --argjson tags "$tags_json" \
+    | jq -r -s --argjson tags "$tags_json" --arg sha "$release_sha" \
       'add | unique_by(.databaseId)[]
+        | select(.headSha == $sha)
         | select(.headBranch as $b | $tags | index($b))
         | [.databaseId, .workflowName, .headBranch] | @tsv')" \
     || die "can't read the deploy run lists"
