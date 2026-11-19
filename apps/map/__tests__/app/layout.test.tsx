@@ -33,10 +33,8 @@ vi.mock("geist/font/mono", () => ({
   },
 }));
 
-vi.mock("geist/font/sans", () => ({
-  GeistSans: {
-    variable: vi.fn(),
-  },
+vi.mock("next/font/google", () => ({
+  Montserrat: () => ({ variable: "montserrat-variable" }),
 }));
 
 // Mock the geolocation API
@@ -169,6 +167,8 @@ describe("layout app router", () => {
       expect(document.querySelector("body")).toHaveClass(
         "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
       );
+      // Montserrat's CSS variable is what `font-sans` resolves to.
+      expect(document.querySelector("body")).toHaveClass("montserrat-variable");
       await waitFor(() =>
         expect(runtimeConfigFetchMock).toHaveBeenCalledWith(
           "/api/runtime-config",

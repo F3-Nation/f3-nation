@@ -43,6 +43,8 @@ export const initialFilterState = {
   dayTh: false,
   dayF: false,
   daySa: false,
+  /** "This weekend" quick pick: adds Saturday and Sunday to the day filter. */
+  weekend: false,
   /** National event type IDs; empty means no type filter (show all). */
   nationalEventTypeIds: [] as number[],
   beforeAfterDirection: "before" as "before" | "after",
@@ -75,6 +77,28 @@ export const isAnyFilterActive = (filters: FiltersType) => {
     Object.values(otherFilters).some((value) => value === true) ||
     beforeAfterTime !== TimeSelection.none
   );
+};
+
+/**
+ * How many filter groups are narrowing the map — days (including a quick
+ * pick), time of day, and type — for the count on the Filters button.
+ */
+export const activeFilterCount = (filters: FiltersType) => {
+  const days =
+    filters.weekend ||
+    [
+      filters.daySu,
+      filters.dayM,
+      filters.dayTu,
+      filters.dayW,
+      filters.dayTh,
+      filters.dayF,
+      filters.daySa,
+    ].some(Boolean);
+  const time =
+    filters.am || filters.pm || filters.beforeAfterTime !== TimeSelection.none;
+  const type = filters.nationalEventTypeIds.length > 0;
+  return [days, time, type].filter(Boolean).length;
 };
 
 const NUMBER_TO_DAY_KEY = [

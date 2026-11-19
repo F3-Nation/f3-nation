@@ -1,9 +1,7 @@
 import { CLOSE_ZOOM } from "@acme/shared/app/constants";
 import { isDevelopment } from "@acme/shared/common/constants";
 
-import { isTouchDevice } from "./is-touch-device";
 import { mapStore } from "./store/map";
-import { modalStore, ModalType } from "./store/modal";
 
 export const setView = (params: {
   lat: number;
@@ -39,17 +37,10 @@ export const setView = (params: {
     return;
   }
 
-  const touchDevice = isTouchDevice();
-  const [openModal] = modalStore.get("modals").slice(-1);
-  const type = openModal?.type;
-  const workoutModalOpen = openModal && type === ModalType.WORKOUT_DETAILS;
-  let center = { lat: params.lat, lng: params.lng };
+  // Workout details open in the left panel, beside the map rather than over
+  // it, so the location is centered as-is.
+  const center = { lat: params.lat, lng: params.lng };
   const newZoom = params.zoom ?? Math.max(mapStore.get("zoom"), CLOSE_ZOOM);
-
-  if (!touchDevice && workoutModalOpen && map) {
-    // 0.008 corresponds to about 100px at this zoom level
-    center = { lat: params.lat, lng: params.lng - 0.008 };
-  }
 
   mapStore.setState({
     hasMovedMap: true,

@@ -4,7 +4,7 @@ import { isDevelopment } from "@acme/shared/common/constants";
 import type { RouterOutputs } from "~/orpc/types";
 import { getQueryData, orpc } from "~/orpc/react";
 import { appStore } from "./app";
-import { ModalType, openModal } from "./modal";
+import { closeModal, modalStore, ModalType, openModal } from "./modal";
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 export type SelectedItemStore = {
@@ -131,11 +131,20 @@ export const setSelectedItem = (item: {
 };
 
 export const closePanel = () => {
-  console.log("closePanel");
   selectedItemStore.setState({
     panelLocationId: null,
     panelEventId: null,
   });
+  // setSelectedItem also opens the details modal for the mobile layout, where
+  // the panel doesn't exist. Drop it with the panel so resizing below the
+  // panel breakpoint can't bring back a workout the visitor already closed.
+  if (
+    modalStore
+      .get("modals")
+      .some((modal) => modal.type === ModalType.WORKOUT_DETAILS)
+  ) {
+    closeModal(undefined, ModalType.WORKOUT_DETAILS);
+  }
 };
 
 export const delayedDeselect = () => {

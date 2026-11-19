@@ -4,7 +4,6 @@ import "~/orpc/client.server";
 
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
 import { SessionProvider } from "next-auth/react";
 
 import { MAP_DEFAULT_THEME } from "@acme/shared/app/constants";
@@ -27,6 +26,7 @@ import { OrpcReactProvider } from "~/orpc/react";
 import { RuntimeConfigProvider } from "~/utils/runtime-config";
 import { KeyPressProvider } from "~/utils/key-press/provider";
 import { RouteChangeTracker } from "./_components/route-change-tracker";
+import { montserrat } from "./fonts";
 import { mapMetadata } from "./map-metadata";
 
 export const metadata: Metadata = mapMetadata;
@@ -44,7 +44,7 @@ export default function RootLayout(props: { children: React.ReactNode }) {
       <body
         className={cn(
           "min-h-dvh w-screen overflow-hidden bg-background font-sans text-foreground antialiased",
-          GeistSans.variable,
+          montserrat.variable,
           GeistMono.variable,
         )}
       >

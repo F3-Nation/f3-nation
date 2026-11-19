@@ -9,8 +9,6 @@ import { Z_INDEX } from "@acme/shared/app/constants";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { mapStore } from "~/utils/store/map";
 import { DebugInfo } from "./map/debug-info";
-import { DesktopFilterButtons } from "./map/desktop-filter-buttons";
-import { DesktopLocationPanelContent } from "./map/desktop-location-panel-content";
 import DesktopSelectedItem from "./map/desktop-selected-item";
 import { GeoJsonPane } from "./map/geo-json-pane";
 import { GeolocationMarker } from "./map/geolocation-marker";
@@ -20,7 +18,7 @@ import { LayoutEditButton } from "./map/layout-edit-button";
 import { MapProvider } from "./map/map-provider";
 import { MapSearchBoxMobile } from "./map/map-searchbox-mobile";
 import { MobileAllFilters } from "./map/mobile-all-filters";
-import { MobileFilterButtons } from "./map/mobile-filter-buttons";
+import { FiltersButton } from "./map/filters-button";
 import { MobileSearchResultsAndNearbyLocations } from "./map/mobile-search-results-and-nearby-locations";
 import { MobileSelectedItem } from "./map/mobile-selected-item";
 import { NearbyLocationUpdateButton } from "./map/nearby-location-update-button";
@@ -47,9 +45,6 @@ export const MapLayoutItems = () => {
       <Projection />
       <MapProvider />
       <GeolocationMarker />
-      <DesktopLocationPanelContainer>
-        <DesktopLocationPanelContent />
-      </DesktopLocationPanelContainer>
       <DesktopSelectedItem />
 
       <MapControl
@@ -76,10 +71,7 @@ export const MapLayoutItems = () => {
           <MapControl position={ControlPosition.RIGHT_BOTTOM}>
             <LayoutEditButton className="mb-1" />
           </MapControl>
-          <MapControl position={ControlPosition.TOP_LEFT}>
-            <DesktopFilterButtons />
-          </MapControl>
-          <MapControl position={ControlPosition.TOP_LEFT}>
+          <MapControl position={ControlPosition.TOP_RIGHT}>
             <HelpButton />
           </MapControl>
         </>
@@ -102,9 +94,9 @@ export const MapLayoutItems = () => {
       <NearbyLocationUpdateButton />
 
       <MobileAboveSearchBox>
-        <div className="mb-[0px] flex flex-row items-center justify-start gap-2 overflow-auto px-2">
-          <HelpButton />
-          <MobileFilterButtons />
+        <div className="flex flex-row items-center justify-start gap-2 px-2">
+          <FiltersButton />
+          <HelpButton className="m-0" />
         </div>
         <MobileSelectedItem />
       </MobileAboveSearchBox>
@@ -116,20 +108,11 @@ export const MapLayoutItems = () => {
   );
 };
 
-const DesktopLocationPanelContainer = (props: ComponentProps<"div">) => (
-  <div
-    style={{ zIndex: Z_INDEX.LOCATION_PANEL }}
-    // max-w-md must match to MAX_DESKTOP_WORKOUT_PANEL_WIDTH
-    className="scrollbar-hide pointer-events-none absolute top-0 bottom-0 left-2 hidden w-1/2 max-w-md overflow-y-auto pt-12 pb-2 lg:block"
-    {...props}
-  />
-);
-
 const MobileAboveSearchBox = (props: ComponentProps<"div">) => (
   <div
     style={{ zIndex: Z_INDEX.OVERLAY_BUTTONS }}
     // 46px and 6px to keep the slider in the middle between them
-    className="absolute right-0 bottom-[44px] left-0 block lg:hidden"
+    className="absolute right-0 bottom-[44px] left-0 block md:hidden"
     {...props}
   />
 );

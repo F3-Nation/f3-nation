@@ -5,7 +5,7 @@ import { BreakPoints } from "@acme/shared/app/constants";
 export const useIsMobileWidth = () => {
   const [width] = useWindowSize();
   return {
-    isMobileWidth: width < Number(BreakPoints.LG),
-    isDesktopWidth: width >= Number(BreakPoints.LG),
+    isMobileWidth: width < Number(BreakPoints.PANEL),
+    isDesktopWidth: width >= Number(BreakPoints.PANEL),
   };
 };

@@ -12,7 +12,7 @@ export const PlaceResultIconPane = () => {
     <div style={{ zIndex: Z_INDEX.PLACE_RESULTS_ICON_PANE }}>
       {placeResultLocation ? (
         <AdvancedMarker position={placeResultLocation}>
-          <MapPinIcon className="size-8 fill-red-600 text-foreground" />
+          <MapPinIcon className="size-8 fill-primary text-foreground" />
         </AdvancedMarker>
       ) : null}
     </div>

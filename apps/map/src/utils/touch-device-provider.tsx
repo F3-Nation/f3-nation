@@ -39,7 +39,7 @@ export function TouchDeviceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     appStore.setState({
-      isMobileDeviceWidth: width < Number(BreakPoints.LG),
+      isMobileDeviceWidth: width < Number(BreakPoints.PANEL),
     });
   }, [width]);
 

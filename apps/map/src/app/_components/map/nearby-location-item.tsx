@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback } from "react";
-import Link from "next/link";
-import isNumber from "lodash/isNumber";
+import { useCallback, useMemo } from "react";
 
-import { isProduction, RERENDER_LOGS } from "@acme/shared/common/constants";
+import { RERENDER_LOGS } from "@acme/shared/common/constants";
 import { cn } from "@acme/ui";
+import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 
 import type { LocationMarkerWithDistance } from "./filtered-map-results-provider";
+import { summarizeAoSchedule } from "~/utils/ao-schedule-summary";
 import { setView } from "~/utils/set-view";
 import { appStore } from "~/utils/store/app";
 import { searchStore } from "~/utils/store/search";
@@ -15,91 +15,69 @@ import {
   selectedItemStore,
   setSelectedItem,
 } from "~/utils/store/selected-item";
-import { ImageWithFallback } from "@acme/ui/image-with-fallback";
-import { EventChip } from "./event-chip";
+import { rowStatusTag } from "~/utils/status-tag";
+import { DayStrip } from "./day-strip";
+import { StatusTagBadge } from "./status-tag-badge";
 
-const SHOW_ID = false as boolean;
-
+/**
+ * One nearby-list row: an AO at one location, with its weekly days on an
+ * S M T W T F S strip, the usual start time, one line for anything that
+ * differs, and a tag for the most urgent upcoming change.
+ */
 export const NearbyLocationItem = (props: {
   item: LocationMarkerWithDistance;
 }) => {
-  RERENDER_LOGS && console.log("SelectedItem rerender");
+  RERENDER_LOGS && console.log("NearbyLocationItem rerender");
   const searchBarRef = searchStore.use.searchBarRef();
 
-  const eventId = selectedItemStore.use.eventId();
   const locationId = selectedItemStore.use.locationId();
   const ignoreNextNearbyItemMouseEnter =
     appStore.use.ignoreNextNearbyItemMouseEnter();
   const { item } = props;
   const isLocationSelected = item.id === locationId;
 
-  const handleClick = useCallback(
-    ({
-      locationId,
-      eventId,
-      clearSearch,
-    }: {
-      locationId: number;
-      eventId: number | null;
-      clearSearch: boolean;
-    }) => {
-      // Open panel first so that the centering to the marker is offset if needed
-      setTimeout(() => {
-        setSelectedItem({
-          locationId,
-          eventId,
-          showPanel: true,
-        });
-      }, 250);
-      if (item.lat !== null && item.lon !== null) {
-        setView({ lat: item.lat, lng: item.lon });
-        // prevent the next mouse enter from triggering a change
-        appStore.setState({ ignoreNextNearbyItemMouseEnter: true });
-      }
-      if (clearSearch) {
-        searchStore.setState({ shouldShowResults: false });
-        searchBarRef.current?.blur();
-      }
-    },
-    [item, searchBarRef],
+  const summary = useMemo(
+    () => summarizeAoSchedule(item.events),
+    [item.events],
+  );
+  const tag = useMemo(() => rowStatusTag(item.events), [item.events]);
+  const types = useMemo(
+    () => [
+      ...new Set(
+        item.events.flatMap((event) => event.eventTypes.map((t) => t.name)),
+      ),
+    ],
+    [item.events],
   );
 
-  const handleHover = useCallback(
-    ({
-      locationId,
-      eventId,
-    }: {
-      locationId: number;
-      eventId: number | null;
-    }) => {
-      setSelectedItem({
-        locationId,
-        eventId,
-        showPanel: false,
-      });
-    },
-    [],
-  );
+  const firstEventId = item.events[0]?.id ?? null;
 
-  const name = item.aoName;
+  const handleClick = useCallback(() => {
+    setSelectedItem({
+      locationId: item.id,
+      eventId: firstEventId,
+      showPanel: true,
+    });
+    if (item.lat !== null && item.lon !== null) {
+      setView({ lat: item.lat, lng: item.lon });
+      // prevent the next mouse enter from triggering a change
+      appStore.setState({ ignoreNextNearbyItemMouseEnter: true });
+    }
+    searchStore.setState({ shouldShowResults: false });
+    searchBarRef.current?.blur();
+  }, [item, firstEventId, searchBarRef]);
+
   return (
     <button
       className={cn(
-        "text-left text-sm text-foreground",
-        // pl-1 balances the image on left and right
-        "relative w-full cursor-pointer py-2 pr-2 pl-1",
-        "bg-background",
-        { "bg-gray-100 dark:bg-gray-800": isLocationSelected },
+        "relative flex w-full cursor-pointer flex-row gap-3 px-4 py-3 text-left text-foreground transition-colors hover:bg-muted/60",
+        { "bg-muted": isLocationSelected },
       )}
       // @RollOver (SoCo - St. Louis) & @Mr. Roboto (New Bern, NC) had issues with the mouse events we were using here
       // Likely everything needs to be condensed to onClick and onMouseEnter for handleClick and handleHover
       // Dell Precision Notebook
       onClick={(e) => {
-        handleClick({
-          locationId: item.id,
-          eventId: item.events[0]?.id ?? null,
-          clearSearch: true,
-        });
+        handleClick();
         e.stopPropagation();
       }}
       onMouseEnter={(e) => {
@@ -107,74 +85,58 @@ export const NearbyLocationItem = (props: {
           appStore.setState({ ignoreNextNearbyItemMouseEnter: false });
           return;
         }
-        handleHover({
+        setSelectedItem({
           locationId: item.id,
-          eventId: item.events[0]?.id ?? null,
+          eventId: firstEventId,
+          showPanel: false,
         });
         e.stopPropagation();
       }}
     >
-      <div className="flex flex-row items-stretch gap-1">
-        <div className="flex shrink-0 flex-col items-center justify-center">
-          <ImageWithFallback
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-            src={item.logo ? item.logo : "/f3_logo.png"}
-            fallbackSrc="/f3_logo.png"
-            loading="lazy"
-            width={48}
-            height={48}
-            alt={item.logo ?? "F3 logo"}
-            className="rounded-md bg-black" // many are white png
-          />
+      <ImageWithFallback
+        // An empty logo is missing; the API already falls back to the region's.
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        src={item.logo || "/f3_logo.png"}
+        fallbackSrc="/f3_logo.png"
+        loading="lazy"
+        width={40}
+        height={40}
+        alt={`Logo for ${item.aoName ?? "F3"}`}
+        // Many logos are white PNGs, so they sit on black in both themes.
+        className="size-10 shrink-0 rounded-md border border-border bg-black object-contain"
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-row items-baseline gap-1.5">
+          <span className="truncate text-sm leading-5 font-extrabold uppercase">
+            {item.aoName}
+          </span>
+          {types.length ? (
+            <span className="truncate text-[9px] font-bold tracking-wider text-muted-foreground uppercase">
+              {types.join(" · ")}
+            </span>
+          ) : null}
         </div>
-        {/* Use flex-col to stack items vertically */}
-        <div className="flex w-full flex-col items-stretch justify-start overflow-hidden">
-          <div className="flex w-full flex-1 flex-row items-center justify-between">
-            <div className="-mt-[4px] line-clamp-1 pt-0 text-base leading-6 font-bold">
-              {name}
-            </div>
-            {isNumber(item.distance) ? (
-              <div className="text-xs">
-                <span className="text-foreground/40">
-                  {!isProduction && SHOW_ID ? <div>({item.id})</div> : null}
-                </span>
-                <span className="font-bold">{item.distance.toFixed(1)}mi</span>
-              </div>
-            ) : null}
-          </div>
-          <div className="flex flex-row flex-wrap gap-x-2 gap-y-1">
-            {item.events.map((event) => {
-              return (
-                <EventChip
-                  event={event}
-                  key={event.id}
-                  location={item}
-                  size="small"
-                  hideName
-                  mapStatus={event.mapStatus}
-                  selected={event.id === eventId && item.id === locationId}
-                  onClick={(e) => {
-                    handleClick({
-                      locationId: item.id,
-                      eventId: event.id,
-                      clearSearch: false,
-                    });
-                    e?.stopPropagation();
-                  }}
-                />
-              );
+        {item.fullAddress ? (
+          <span className="truncate text-xs text-muted-foreground">
+            {item.fullAddress}
+          </span>
+        ) : null}
+        <div className="mt-1.5 flex flex-row items-center gap-2">
+          <DayStrip days={summary.days} />
+          <span
+            className={cn("text-xs font-extrabold whitespace-nowrap", {
+              "text-muted-foreground line-through": summary.allClosed,
             })}
-          </div>
-          <Link
-            href={`https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lon}`}
-            target="_blank"
-            className="mt-[2px] w-fit underline"
           >
-            <p className="line-clamp-1 text-xs">
-              {item.fullAddress ?? "Directions"}
-            </p>
-          </Link>
+            {summary.timesVary ? "Times vary" : summary.time}
+          </span>
         </div>
+        {summary.detail ? (
+          <span className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+            {summary.detail}
+          </span>
+        ) : null}
+        {tag ? <StatusTagBadge tag={tag} className="mt-1.5" /> : null}
       </div>
     </button>
   );

@@ -1,7 +1,7 @@
 import type { Options } from "supercluster";
 import { useCallback, useMemo } from "react";
 import { useMap } from "@vis.gl/react-google-maps";
-import { CLOSE_ZOOM } from "@acme/shared/app/constants";
+import { DAY_LABEL_ZOOM } from "@acme/shared/app/constants";
 
 import type {
   F3ClusterProperties,
@@ -11,8 +11,10 @@ import type {
 import { getClusterFeatureKey } from "~/utils/get-cluster-feature-key";
 import { getGeojson } from "~/utils/get-geojson";
 import { getMapPosForLeaves } from "~/utils/get-map-pos-for-leaves";
+import { labeledPinIds } from "~/utils/label-collisions";
 import { useSupercluster } from "~/utils/hooks/use-supercluster";
 import { mapStore } from "~/utils/store/map";
+import { selectedItemStore } from "~/utils/store/selected-item";
 import { useFilteredMapResults } from "../map/filtered-map-results-provider";
 import { FeatureMarker } from "../map/group-marker";
 import { FeaturesClusterMarker } from "./features-cluster-marker";
@@ -20,7 +22,9 @@ import { FeaturesClusterMarker } from "./features-cluster-marker";
 const superclusterOptions: Options<MarkerProperties, F3ClusterProperties> = {
   extent: 256, // smaller means more in a cluster
   radius: 64, // Adjust this. smaller means more smaller clusters
-  maxZoom: 12,
+  // Stop clustering a zoom before day labels appear, so every location shows
+  // as its own plain pin first.
+  maxZoom: DAY_LABEL_ZOOM - 1,
 };
 
 export const ClusteredMarkers = () => {
@@ -39,10 +43,34 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
 
   const map = useMap();
   const zoom = mapStore.use.zoom();
-  const isClose = useMemo(() => {
-    return zoom >= CLOSE_ZOOM;
+  const showDayLabels = useMemo(() => {
+    return zoom >= DAY_LABEL_ZOOM;
   }, [zoom]);
   const { clusters, getLeaves } = useSupercluster(geojson, superclusterOptions);
+  const { filteredLocationMarkers } = useFilteredMapResults();
+  const selectedLocationId = selectedItemStore.use.locationId();
+  const panelLocationId = selectedItemStore.use.panelLocationId();
+
+  // Pins whose day label fits without covering another label. The rest stay
+  // plain pins until the map is zoomed in far enough.
+  const labeledPins = useMemo(() => {
+    if (!showDayLabels) return new Set<number>();
+    return labeledPinIds({
+      clusters,
+      modifiedLocationMarkers,
+      locationMarkers: filteredLocationMarkers ?? [],
+      pinnedIds: [selectedLocationId, panelLocationId],
+      zoom,
+    });
+  }, [
+    showDayLabels,
+    clusters,
+    modifiedLocationMarkers,
+    filteredLocationMarkers,
+    selectedLocationId,
+    panelLocationId,
+    zoom,
+  ]);
   const handleClusterClick = useCallback(
     (marker: google.maps.marker.AdvancedMarkerElement, clusterId: number) => {
       const leaves = getLeaves(clusterId);
@@ -98,7 +126,7 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
             key={key}
             featureId={featureId}
             position={{ lat, lng }}
-            isClose={isClose}
+            showDayLabels={labeledPins.has(Number(featureId))}
           />
         );
       })}
@@ -108,7 +136,7 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
             key={id}
             featureId={id}
             position={marker}
-            isClose={isClose}
+            showDayLabels={labeledPins.has(Number(id))}
           />
         );
       })}

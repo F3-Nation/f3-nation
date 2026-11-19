@@ -34,7 +34,7 @@ export const LayoutEditButton = ({
           }
         }}
       >
-        <div className={"flex flex-col lg:mx-2.5"}>
+        <div className={"flex flex-col md:mx-2.5"}>
           <div
             aria-label="Edit map"
             title="Edit map"
