@@ -52,7 +52,10 @@ Reusable agent skills (procedural runbooks in the
 Code doesn't read `.agents/`, so a `SessionStart` hook in
 `.claude/settings.json` runs `.claude/scripts/sync-agent-skills.mjs` to copy
 them into `.claude/skills/`, which is generated and gitignored — never commit
-anything under it.
+anything under it. Quote any skill frontmatter value that contains ` #` or
+`: `: YAML drops everything after an unquoted ` #` as a comment, and an
+unquoted `: ` makes YAML reject the whole frontmatter. `pnpm lint` runs
+`scripts/check-skill-frontmatter.mjs` to catch both.
 
 To implement a GitHub issue — from the issue number through to a draft pull
 request — follow
@@ -91,16 +94,16 @@ or
 [`.agents/skills/pr-local-test/SKILL.md`](.agents/skills/pr-local-test/SKILL.md).
 Who runs each of them, and when, is set by
 [`docs/PR_REVIEW_PROCESS.md`](docs/PR_REVIEW_PROCESS.md).
-The review uses the [Superpowers](https://github.com/obra/superpowers)
-`requesting-code-review` skill when it is installed (optional; a bundled brief
-covers it otherwise).
+`pr-review-inline`'s reviewer prompts are bundled with it, so every assistant
+runs the same prompts, and its `--dry-run` option reviews your own draft PR
+without posting anything.
 
 To set an issue's Type, Priority, Effort and App — one issue, or every open
 issue missing them — follow
 [`.agents/skills/issue-triage/SKILL.md`](.agents/skills/issue-triage/SKILL.md).
 
 To post the report of open security advisories and their fix PRs to the
-private #codeowners Slack channel, follow
+private #security-managers Slack channel, follow
 [`.agents/skills/security-advisory-report/SKILL.md`](.agents/skills/security-advisory-report/SKILL.md).
 
 To address, respond to, or work through review feedback on a pull request,
