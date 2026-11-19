@@ -432,9 +432,11 @@ classify='
       | (($open | length) > 0 and ($moreThreads | not)
           and all($openThreads[]; (.lastComment.nodes[0].author.login // "") == $author))
         as $allReplied
-      # On a fork, the test the main branch ruleset applies: an owner of every path other than
-      # the author approved the head commit, and no latest opinion requests changes. A cut-off
-      # list may hide a change request, so it never counts as approved.
+      # On a fork, a conservative stand-in for the main branch ruleset, which needs owners of the
+      # changed files only: without those files, it needs a head-commit approval from a
+      # non-author listed on every ownership line, no latest opinion requesting changes, and a
+      # complete opinion list, since a cut-off one may hide a change request. An owner of only
+      # the touched paths can approve on GitHub without counting here.
       | (if $pr | has("latestOpinionatedReviews") then
            ($pr.latestOpinionatedReviews.nodes // []) as $opinions
            | ($pr.latestOpinionatedReviews.pageInfo.hasNextPage != true)

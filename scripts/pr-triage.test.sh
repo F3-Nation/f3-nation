@@ -770,9 +770,15 @@ assert_eq "advisories: a cut-off fork isn't listed as without a fix PR" \
 assert_eq "advisories: a cut-off fork is noted" "1 security advisory fork has more open PRs: only the oldest are shown." \
   "$(jq -r '.advisoryNotes[1]' <<<"$cut_board")"
 
-# A fork PR's approval comes from its latest opinionated reviews, the way main's ruleset reads
-# them: an approval of the head commit by an owner of every path, and no outstanding change
-# request. Only luis is on every CODEOWNERS line; andy owns only the `*` rule.
+# A fork PR's approval is a conservative stand-in for main's ruleset: without the PR's changed
+# files it needs a head-commit approval from a non-author listed on every ownership line, no
+# outstanding change request, and a complete opinion list. An owner of only the touched paths
+# can approve on GitHub without counting here. In this fixture only luis is on every line, in
+# two cases; andy is listed twice but only on the `*` line.
+cat >"$tmp_dir/FORK_CODEOWNERS" <<'OWNERS'
+*        @Andy @Luis @andy
+/apps/   @luis
+OWNERS
 jq --arg url "https://github.com/acme/repo-ghsa-hhhh-jjjj-kkkk/pull/" '
   def opinion($by; $state; $oid): {state: $state, author: {login: $by}, commit: {oid: $oid}};
   .data.repository.pullRequests.nodes |= ([.[] | select(.number == 8)][0] as $done
@@ -792,7 +798,8 @@ jq --arg url "https://github.com/acme/repo-ghsa-hhhh-jjjj-kkkk/pull/" '
     | map(del(.reviewDecision) | .url = $url + (.number | tostring)))' \
   "$tmp_dir/fixture.json" >"$adv_dir/fork-f.json"
 no_decision "$adv_dir/fork-f.json" >"$adv_dir/fork-f-no-decision.json"
-fork_only=$(ADV_MODE=list ADV_DIR="$adv_dir" PATH="$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
+fork_only=$(PR_TRIAGE_CODEOWNERS="$tmp_dir/FORK_CODEOWNERS" ADV_MODE=list ADV_DIR="$adv_dir" \
+  PATH="$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
   PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" bash "$triage" -R acme/repo-ghsa-hhhh-jjjj-kkkk --json 2>&1)
 assert_eq "a fork read on its own never asks for reviewDecision" "41,42,43,44,45,46,47,48,49" \
   "$(jq -r '[.prs[].number] | join(",")' <<<"$fork_only" 2>/dev/null)"
@@ -808,7 +815,8 @@ assert_eq "fork: a cut-off review list doesn't count as approved" "MANUAL" "$(fo
 assert_eq "fork: no head commit can't match an approval without one" "MANUAL" "$(fork_bucket 49)"
 
 # A fork read that only succeeds without approvals shows its approved PR as needing approval.
-fork_fallback=$(ADV_FORK_F_NO_DECISION=1 ADV_MODE=list ADV_DIR="$adv_dir" \
+fork_fallback=$(PR_TRIAGE_CODEOWNERS="$tmp_dir/FORK_CODEOWNERS" ADV_FORK_F_NO_DECISION=1 \
+  ADV_MODE=list ADV_DIR="$adv_dir" \
   PATH="$decision_stub/sleep-only:$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
   PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" bash "$triage" -R acme/repo-ghsa-hhhh-jjjj-kkkk --json 2>/dev/null)
 assert_eq "fork: the fallback board is marked" "true" "$(jq -r .reviewDecisionsMissing <<<"$fork_fallback")"
