@@ -107,15 +107,24 @@ continue in it, or create `issue-<number>-2`. Never pass `--force` or delete it.
 
 Then work only inside it. If your agent has a tool that moves the session into a worktree, use
 it; otherwise `cd` there, use absolute paths under `WT` for every read and edit, and give `WT`
-to every subagent. Never read or edit files under `MAIN_ROOT` itself.
+to every subagent. Never read or edit files under `MAIN_ROOT` itself. Run each `git` command on
+its own, not inside a pipe, loop or chain with other commands: an agent that confines the
+session to the worktree (Claude Code does, once the session moves there) refuses a `git` call
+it can't check stays inside it.
 
 Make the worktree runnable. Commit hooks need the dependencies, and each `.env` is created from
 the worktree's own tracked `.env.example`. Never copy the main checkout's `.env` files, which
-may hold real credentials:
+may hold real credentials. List the examples first:
 
 ```bash
 cd "$WT" && pnpm install --frozen-lockfile
-cd "$WT" && git ls-files '*.env.example' | while read -r ex; do f="${ex%.example}"; if [ -e "$f" ] || [ -L "$f" ]; then echo "skip $f (exists)"; else cp "$ex" "$f" && echo "created $f"; fi; done
+cd "$WT" && git ls-files '*.env.example'
+```
+
+Then copy each one, writing the paths it printed into the loop:
+
+```bash
+cd "$WT" && for ex in <path> <path>; do f="${ex%.example}"; if [ -e "$f" ] || [ -L "$f" ]; then echo "skip $f (exists)"; else cp "$ex" "$f" && echo "created $f"; fi; done
 ```
 
 Those files hold the stock local-dev values, which point at the default local services. The
@@ -267,12 +276,18 @@ shared quota and nobody else sees it.
 
 1. Run [`pr-review-inline`](../pr-review-inline/SKILL.md) on the new PR with `--dry-run`. It
    drafts its findings and posts nothing. With subagents, run it in one with a fresh context,
-   giving it the PR number but not your reasoning, so it isn't anchored on your solution.
+   giving it the PR number but not your reasoning, so it isn't anchored on your solution. It
+   checks the PR out in a worktree of its own, which an agent that confines the session to `WT`
+   refuses to create: first leave `WT` (in Claude Code, `ExitWorktree` with `action: "keep"`),
+   then return to it for the fixes.
 2. Fix what it found, in a new commit, and re-run the checks the fix touches. Tell the user
    about any finding you chose not to fix, and why.
 3. Show the user the fix diff, and the new PR body if the fixes changed what it says, and wait
    for a go-ahead before pushing or editing the PR: the Gate 3 approval covered only what they
-   saw then.
+   saw then. If the push is rejected as not a fast-forward, someone updated the branch on
+   GitHub (often with its **Update branch** button). Fetch the branch from the repository you
+   push to, merge it in (`git merge --no-edit`), re-run the checks the merge touches and push
+   again. Never force-push: it would drop their commits. Stop and ask if the merge conflicts.
 4. After the last push, wait for the hosted checks (`gh pr checks <pr-number> --repo <ISSUE_REPO> --watch`) and
    handle a failure the same way. `pnpm ci:local` does not run every hosted job.
 
