@@ -1,21 +1,17 @@
 SET LOCAL lock_timeout = '3s';--> statement-breakpoint
 
--- attendance.attendance_type is derived from the attendance_x_attendance_types
--- link rows while both exist (ADR 0007). Writers still write only link rows,
--- and the trigger below keeps the column in step with them. A record holding
--- several types takes the highest by the precedence Q, then Co-Q, then PAX;
--- a record with no link rows is pax.
+-- The sync_attendance_type trigger derives attendance.attendance_type from the
+-- record's attendance_x_attendance_types link rows (ADR 0007). A record holding
+-- several types takes the highest by the precedence Q, then Co-Q, then PAX; a
+-- record with no link rows is pax.
 --
--- Types are matched by attendance_types.type, the same lookup the API uses,
--- because test databases don't guarantee production's fixed ids (1 PAX, 2 Q,
--- 3 Co-Q). Any other type name counts as pax.
---
--- The trigger, both functions and the backfill procedure are dropped together
--- with the link tables once every writer sets the column itself.
+-- Types are matched by attendance_types.type because test databases don't
+-- guarantee production's fixed ids (1 PAX, 2 Q, 3 Co-Q). Any other type name
+-- counts as pax.
 
--- VOLATILE, not STABLE: each call takes a fresh snapshot, so when an UPDATE
--- below waits on a row lock held by a concurrent link-row writer, the value is
--- recomputed from that writer's committed link rows rather than a stale view.
+-- VOLATILE, not STABLE: each call takes a fresh snapshot, so after the trigger
+-- below waits on a concurrent writer's lock it sees that writer's committed
+-- link rows.
 CREATE OR REPLACE FUNCTION public.attendance_type_from_links(target_attendance_id integer)
 RETURNS public.attendance_type
 LANGUAGE sql
@@ -39,8 +35,15 @@ REVOKE EXECUTE ON FUNCTION public.attendance_type_from_links(integer) FROM PUBLI
 -- the attendance_type of the records whose link rows changed, and only when
 -- the value differs, so unchanged records get no audit-history entry.
 --
+-- It first locks the affected attendance rows. Writing a link row locks its
+-- parent only in FOR KEY SHARE mode, so without this two transactions could
+-- change one record's link rows at once, each computing the type without the
+-- other's uncommitted rows, and the later one would skip the UPDATE because
+-- the value it computed matched the row it could see. With the lock, the second
+-- waits for the first to commit, and its UPDATE then runs on a fresh snapshot.
+--
 -- On a link row removed by the cascade from a deleted attendance record, the
--- parent is already gone and the UPDATE matches nothing.
+-- parent is already gone, so the lock and the UPDATE match nothing.
 CREATE OR REPLACE FUNCTION public.sync_attendance_type()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -61,6 +64,12 @@ BEGIN
     END IF;
     affected := ARRAY[NEW.attendance_id, OLD.attendance_id];
   END IF;
+
+  PERFORM 1
+  FROM public.attendance a
+  WHERE a.id = ANY (affected)
+  ORDER BY a.id
+  FOR NO KEY UPDATE;
 
   UPDATE public.attendance a
   SET attendance_type = public.attendance_type_from_links(a.id)
@@ -102,6 +111,13 @@ DECLARE
 BEGIN
   IF batch_size IS NULL OR batch_size < 1 THEN
     RAISE EXCEPTION 'batch_size must be a positive integer, got %', batch_size;
+  END IF;
+
+  -- With either name missing every record would stay pax and the run would
+  -- report success.
+  IF NOT EXISTS (SELECT 1 FROM public.attendance_types WHERE type = 'Q')
+     OR NOT EXISTS (SELECT 1 FROM public.attendance_types WHERE type = 'Co-Q') THEN
+    RAISE EXCEPTION 'attendance_types needs rows named Q and Co-Q';
   END IF;
 
   SELECT max(x.attendance_id) INTO max_id

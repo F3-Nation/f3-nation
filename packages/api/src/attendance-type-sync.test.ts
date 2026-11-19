@@ -137,11 +137,12 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
     return must(row).attendanceType;
   };
 
-  const historyCount = async (attendanceId: number) => {
-    const rows = await db.execute<{ n: number }>(sql`
-      SELECT count(*)::int AS n FROM public_history.attendance
-      WHERE row_id = ${String(attendanceId)} AND op = 'U'`);
-    return Number(must(rows[0]).n);
+  // xmin changes on every UPDATE of the row, including one that writes the
+  // value it already holds, so an unchanged xmin means the row wasn't written.
+  const rowVersion = async (attendanceId: number) => {
+    const rows = await db.execute<{ v: string }>(sql`
+      SELECT xmin::text AS v FROM attendance WHERE id = ${attendanceId}`);
+    return must(rows[0]).v;
   };
 
   it("is pax for a record with no link rows", async () => {
@@ -217,23 +218,55 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
     const changed = await newAttendance();
     const bystander = await newAttendance();
     await link(bystander, "Co-Q");
+    const before = await rowVersion(bystander);
 
     await link(changed, "Q");
     await unlink(changed, "Q");
 
     expect(await typeOf(bystander)).toBe("co_q");
+    expect(await rowVersion(bystander)).toBe(before);
   });
 
-  it("writes no attendance history when the type does not change", async () => {
+  it("does not write the record when the type does not change", async () => {
     const id = await newAttendance();
     await link(id, "Q");
-    const before = await historyCount(id);
+    const before = await rowVersion(id);
 
     await link(id, "PAX");
     await unlink(id, "PAX");
 
     expect(await typeOf(id)).toBe("q");
-    expect(await historyCount(id)).toBe(before);
+    expect(await rowVersion(id)).toBe(before);
+  });
+
+  it("ends correct when two transactions change one record's link rows at once", async () => {
+    const id = await newAttendance();
+    await link(id, "Q");
+    const { default: postgres } = await import("postgres");
+    const { env } = await import("@acme/env");
+    const url = must(env.TEST_DATABASE_URL);
+    const first = postgres(url, { max: 1, prepare: false });
+    const second = postgres(url, { max: 1, prepare: false });
+    try {
+      // The first transaction removes Q and stays open. The second adds Co-Q
+      // while the first's change is still invisible to it; it must wait for
+      // the first to commit rather than keep the `q` it would compute alone.
+      await first`BEGIN`;
+      await first`
+        DELETE FROM attendance_x_attendance_types
+        WHERE attendance_id = ${id} AND attendance_type_id = ${typeIds.Q}`;
+      const insert = second`
+        INSERT INTO attendance_x_attendance_types (attendance_id, attendance_type_id)
+        VALUES (${id}, ${typeIds["Co-Q"]})`.execute();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await first`COMMIT`;
+      await insert;
+    } finally {
+      await first.end();
+      await second.end();
+    }
+
+    expect(await typeOf(id)).toBe("co_q");
   });
 
   it("deletes an attendance record whose link rows cascade", async () => {
@@ -311,12 +344,12 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
     it("leaves records that are already correct unwritten", async () => {
       const id = await newAttendance();
       await link(id, "Q");
-      const before = await historyCount(id);
+      const before = await rowVersion(id);
 
       await db.execute(sql`CALL public.backfill_attendance_type()`);
 
       expect(await typeOf(id)).toBe("q");
-      expect(await historyCount(id)).toBe(before);
+      expect(await rowVersion(id)).toBe(before);
     });
   });
 });

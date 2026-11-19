@@ -1175,8 +1175,9 @@ class Attendance(Base):
         event_instance_id (int): The ID of the associated event instance.
         user_id (Optional[int]): The ID of the associated user.
         is_planned (bool): Whether this is planned attendance (True) vs actual attendance (False).
-        attendance_type (Attendance_Type): The record's single type. Kept in step with the attendance types
-            by a database trigger; set the attendance types, not this column, until every writer sets it.
+        attendance_type (Attendance_Type): The record's single type. While the attendance types link table
+            exists, a database trigger derives it from the link rows and overwrites it whenever they change,
+            so a writer that sets this column must also write the matching link rows.
         meta (Optional[Dict[str, Any]]): Additional metadata for the attendance.
         created (datetime): The timestamp when the record was created.
         updated (datetime): The timestamp when the record was last updated.
