@@ -28,6 +28,11 @@ step's **Expected** and **Stop if** lines name the output.
   `some-command && echo "label: true" || echo "label: false"`.
 - Comparing a value, such as a commit hash or a file name:
   `test "$(some-command)" = expected-value && echo "label: true" || echo "label: false"`.
+- Finding text in a download or other output: capture it first, then match,
+  `OUT=$(curl -fsS https://…) && grep -q 'pattern' <<<"$OUT" && echo "label: true" || echo "label: false"`.
+  Never pipe it into `grep -q`: grep exits at the first match, the writer
+  then fails on the closed pipe (`curl: (23)`), and under `pipefail` the
+  check prints `false` for a page that matched.
 - A Cloud Run, GitHub or other JSON setting: pipe the read-only `describe`
   or `api` call to `jq '<boolean expression>'`, comparing against the exact
   expected value.
