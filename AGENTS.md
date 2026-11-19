@@ -57,6 +57,22 @@ anything under it. Quote any skill frontmatter value that contains ` #` or
 unquoted `: ` makes YAML reject the whole frontmatter. `pnpm lint` runs
 `scripts/check-skill-frontmatter.mjs` to catch both.
 
+To implement a GitHub issue — from the issue number through to a draft pull
+request — follow
+[`.agents/skills/implement-issue/SKILL.md`](.agents/skills/implement-issue/SKILL.md).
+
+A skill listed in [`skills-lock.json`](skills-lock.json) is vendored from an
+upstream repository with the [`skills`](https://github.com/vercel-labs/skills)
+CLI. Never edit its files: put repo-specific guidance in the skill that calls
+it. Where a vendored skill conflicts with this file or `docs/`, the repo's
+rule wins. Where it names a skill or file this repo doesn't have, or a skill
+whose name matches a repo skill that does something else, skip that pointer and work from the repo's own sources: the feature spec, ADRs and the
+surrounding code. `pnpm skills:update` updates every vendored skill; review the diff
+like any other dependency bump. It does not undo a local edit: revert that
+commit instead. Add a newly vendored skill's directory to `.prettierignore`.
+The `vendored-skills` workflow opens an issue when upstream has moved or a
+vendored file was edited.
+
 When asked for a **release plan** or a **Staging test plan** for a merged
 release-please PR, follow
 [`.agents/skills/release/SKILL.md`](.agents/skills/release/SKILL.md)
