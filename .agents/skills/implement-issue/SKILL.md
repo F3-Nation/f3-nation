@@ -197,9 +197,9 @@ don't ask for them again unless the design has changed. One failing test, the le
 passes it, then the next.
 
 `tdd` is vendored and written for any repo, so three of its pointers don't apply here. It
-leaves refactoring to a review stage and points to a `code-review` skill for it. This repo's
-`code-review` is a defect review, not a refactor step, so don't run it here: tidy up once the
-last slice is green and before Step 6, with the tests still passing; Step 8 is the review. It
+leaves refactoring to a review stage and points to a `code-review` skill for it, which this repo
+doesn't have: tidy up once the last slice is green and before Step 6, with the tests still
+passing; Step 8 is the review. It
 names a `codebase-design` skill and a `GLOSSARY.md` that this repo doesn't have: the approach
 agreed at Gate 2 settles the interface, and terms come from the spec.
 
