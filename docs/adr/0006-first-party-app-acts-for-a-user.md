@@ -34,8 +34,9 @@ So the bot must tell the API which F3 user is acting, and the API must decide
 how far to trust that.
 
 Two other decisions bound this one. [ADR 0002](0002-permission-based-authorization.md)
-owns what a principal may do: roles granted per org, checked up the org tree,
-moving to permission checks. The service-principals work owns how an app gets
+owns what a principal may do: code checks permissions, people and keys are
+granted roles per org, each role is a bundle of permissions, and grants are
+checked up the org tree. The service-principals work owns how an app gets
 a key of its own rather than a person's. This ADR adds only the missing piece
 between them: an app acting for a person.
 
@@ -65,12 +66,13 @@ and records the user as the actor.**
 - The right to act for users is a role granted to the API key in
   `roles_x_api_keys_x_org`, like every other key grant. Granting or removing
   that row turns delegation on or off for that key with no deploy.
-- It is a dedicated role that exists only for this, and it is matched
-  exactly: the rule that `admin` satisfies any requested role does not apply
-  to it, neither when a call is checked nor when the role is granted. Only a
-  nation admin can grant it to a key, and every path that grants roles to
-  people rejects it. An admin key cannot act for users unless it also holds
-  this grant.
+- It is a dedicated role that exists only for this. It maps to one
+  permission, acting for users, that no other role includes, so `admin`
+  never implies it. The same exact match applies when the role is granted:
+  the rule that `admin` satisfies any requested role does not let an admin
+  grant it. Only a nation admin can grant it to a key, and every path that
+  grants roles to people rejects it. An admin key cannot act for users unless
+  it also holds this grant.
 - The org the role is granted on is the delegation's scope. A delegated call
   can touch only resources at or beneath that org.
 - If the acting-user header arrives with any other credential (a cookie
@@ -90,7 +92,8 @@ Every delegated call must pass all of these:
    it should be. Managing API keys and nation-admin-only procedures never opt
    in.
 4. The acting user passes the procedure's normal authorization, using that
-   user's own role grants read from the database for this request.
+   user's own permissions, resolved from the database for this request the
+   same way as for any other caller.
 5. The resource is inside the delegation's scope. A procedure that acts on
    the acting user's own record, with no org to check, requires the
    delegation grant to be on the root of the org tree.
@@ -100,18 +103,32 @@ The result is the intersection: a delegated call can do what the user may do
 refused. The app's own role grants (for example, `admin` on the nation for
 its scheduled jobs) add nothing to a delegated call.
 
-On a delegated call the session is the acting user's: its id and role
-grants are that user's, so procedure tiers and `checkHasRoleOnOrg` see only
-the acting user's grants. The session still records the calling key, so
-every check that refuses API keys (key management first) keeps refusing
+On a delegated call the session is the acting user's: its id and grants are
+that user's, so every authorization check, whether `permissionProcedure` and
+`checkHasPermissionsOnOrg` or a role check not yet replaced by one, sees
+only the acting user's grants. The session still records the calling key,
+so every check that refuses API keys (key management first) keeps refusing
 it, and each check that treats a key as never "self" states whether a
 delegated call counts as the acting user acting on their own record.
 
-Authorization uses the role checks that exist when this is built: the
-session's role list read by procedure tiers and `checkHasRoleOnOrg`. When
-ADR 0002's permission checks replace them, the delegated path changes with
-every other caller, and the delegation role becomes the one role mapped to
-an "act for a user" permission.
+### Rules the app enforces that the API does not
+
+An app that decides who may act can hold rules the API has no way to
+express. The Slackbot has two:
+
+- A user who holds the Site Q position on any AO in a region may do what a
+  region admin does to that region's calendar, preblasts and backblasts:
+  assign a Q, close or reopen an event, and edit someone else's preblast or
+  backblast.
+- The Q of an event may edit that event's preblast.
+
+A delegated call carries only what the API knows about the acting user, so
+it would refuse these people. Each such rule moves into the API, as
+permissions that a position grants or as a check on the procedure, before
+the action it governs moves to a delegated call. Until then the action stays
+under the app's own grant and the app keeps enforcing the rule. Whether a
+rule keeps its current reach when it moves (a Site Q of one AO acting across
+the whole region) is decided with the rule, not here.
 
 ### Audit history
 
@@ -154,12 +171,13 @@ giving the bot's key the right to do them for anyone:
 
 Changes the bot already makes through the API under its own grant (such as
 attendance and event changes) keep working without it. They should move to
-delegated calls afterwards so audit history names the person.
+delegated calls afterwards so audit history names the person, each one once
+the API can express every rule that governs it.
 
 ### Dependencies
 
-- **ADR 0002** defines roles, org scoping and the move to permissions. This
-  ADR adds one role and reuses the rest.
+- **ADR 0002** defines permissions, roles and org scoping. This ADR adds one
+  role and the one permission it maps to, and reuses the rest.
 - **Service principals** make the bot's key belong to the app instead of a
   volunteer, and give `changed_via` a name that can be trusted. Delegation
   can be built on today's person-owned key; it does not wait for that work,
@@ -199,8 +217,9 @@ delegated calls afterwards so audit history names the person.
 
 **Better:**
 
-- One copy of each permission rule. The Slackbot's own admin checks can be
-  deleted as each change moves.
+- One copy of each permission rule. Each of the Slackbot's own admin checks
+  can be deleted once the change it guards moves and the API expresses the
+  rule it enforces.
 - Audit history names the person who acted and the app they used.
 - Turning delegation off for an app is one row, with no deploy.
 - A new endpoint cannot be reached through delegation by accident.
