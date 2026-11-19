@@ -26,8 +26,8 @@ Ground rules:
 - **The repo's rules outrank this skill.** Root [`AGENTS.md`](../../../AGENTS.md) and the
   `AGENTS.md` above each file you touch decide how code is written here.
 
-Shell variables do not persist between commands. When a step sets `MAIN_ROOT` or `WT`, note
-the literal value and write it into later commands.
+Shell variables do not persist between commands. When a step sets `ISSUE_REPO`, `MAIN_ROOT`
+or `WT`, note the literal value and write it into later commands.
 
 ## Step 1: Pre-flight
 
@@ -36,19 +36,26 @@ the literal value and write it into later commands.
    install hint: `brew install jq` (macOS) or `sudo apt install jq` (WSL/Linux).
 2. Fetch the issue. Accept only a number (`42` or `#42`) or an issue URL of the form
    `https://github.com/<owner>/<repo>/issues/<number>`. Stop on anything else, before running a
-   command: a quote in the argument would end the shell string. Pass the number or URL, and
-   nothing else, inside single quotes:
+   command: a quote in the argument would end the shell string. First find the repository the
+   issue belongs to:
 
    ```bash
-   gh issue view '<ref>' --comments
-   gh issue view '<ref>' --json number,title,body,labels,state,assignees,url
-   gh repo view --json nameWithOwner --jq .nameWithOwner
-   gh api "repos/{owner}/{repo}/issues/<number>" --jq '{type: .type.name, sub_issues: .sub_issues_summary.total}'
+   gh repo view --json nameWithOwner,parent --jq 'if .parent then "\(.parent.owner.login)/\(.parent.name)" else .nameWithOwner end'
+   ```
+
+   It prints the upstream repository when the checkout is a fork, and the checkout's own
+   repository otherwise. That is `ISSUE_REPO` (`<owner>/<name>`); every `gh` command below
+   passes it, so a bare number never resolves against the fork. Stop if a URL argument is not
+   in `ISSUE_REPO`. Pass the number or URL, and nothing else, inside single quotes:
+
+   ```bash
+   gh issue view '<ref>' --repo <ISSUE_REPO> --comments
+   gh issue view '<ref>' --repo <ISSUE_REPO> --json number,title,body,labels,state,assignees,url
+   gh api "repos/<ISSUE_REPO>/issues/<number>" --jq '{type: .type.name, sub_issues: .sub_issues_summary.total}'
    ```
 
    Take the issue number from the JSON, never from the raw argument, and state the title back
-   to the user so a wrong number is caught here. Stop if `url` is not in the repository
-   `gh repo view` printed: this skill builds an issue in the checkout's own repository.
+   to the user so a wrong number is caught here.
 
 3. Stop and ask before continuing if the issue is **closed**, is **assigned to someone else**,
    or is a parent issue: its `type` is `Epic` or `sub_issues` is above `0` (implement one of
@@ -56,16 +63,16 @@ the literal value and write it into later commands.
 4. Look for work already under way:
 
    ```bash
-   gh issue develop --list <number>
-   gh pr list --search "<number> in:title,body" --state all --limit 100
+   gh issue develop --list <number> --repo <ISSUE_REPO>
+   gh pr list --repo <ISSUE_REPO> --search "<number> in:title,body" --state all --limit 100
    ```
 
    If a branch or PR exists, report it and ask how to proceed. If `gh pr list` returns 100 rows,
    treat the list as incomplete and ask the user.
 
 5. `git fetch origin`. Everything below starts from `origin/main`; the main checkout's own
-   branch and state don't matter. When `origin` is your fork, fetch the issue's repository
-   instead (`git fetch "https://github.com/<owner>/<name>.git" "+main:refs/remotes/issue-base/main"`)
+   branch and state don't matter. When `origin` is not `ISSUE_REPO` (it is your fork), fetch
+   `ISSUE_REPO` instead (`git fetch "https://github.com/<ISSUE_REPO>.git" "+main:refs/remotes/issue-base/main"`)
    and use `issue-base/main` wherever a later step says `origin/main`.
 
 ## Step 2: Workspace
@@ -247,8 +254,10 @@ wait for an explicit go-ahead before pushing or posting.
    `Closes #<number>`, and remove its placeholders. Title in Conventional Commits form.
 3. End the body with the signature line from
    [Writing to GitHub](../../../AGENTS.md#writing-to-github).
-4. Push the branch and open the PR with `gh pr create --draft`.
-5. Post any issue comment approved above with `gh issue comment <number> --body-file <file>`,
+4. Push the branch and open the PR with `gh pr create --draft --repo <ISSUE_REPO>`. From a
+   fork, add `--head <fork-owner>:<branch>` so the PR targets upstream from your fork's branch.
+5. Post any issue comment approved above with
+   `gh issue comment <number> --repo <ISSUE_REPO> --body-file <file>`,
    ending with the same signature line.
 
 ## Step 8: Review the draft
@@ -264,7 +273,7 @@ shared quota and nobody else sees it.
 3. Show the user the fix diff, and the new PR body if the fixes changed what it says, and wait
    for a go-ahead before pushing or editing the PR: the Gate 3 approval covered only what they
    saw then.
-4. After the last push, wait for the hosted checks (`gh pr checks <pr-number> --watch`) and
+4. After the last push, wait for the hosted checks (`gh pr checks <pr-number> --repo <ISSUE_REPO> --watch`) and
    handle a failure the same way. `pnpm ci:local` does not run every hosted job.
 
 The user marks the PR ready for review once those checks pass; never do that for them.
