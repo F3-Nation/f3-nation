@@ -813,6 +813,57 @@ test("assembleReport refuses a board that lists security advisories", async () =
   );
 });
 
+test("assembleReport warns when triage couldn't read approvals, and still lists the PRs", async () => {
+  const github = {
+    paginate: async () => [],
+    graphql: async () => ({
+      repository: {
+        pullRequests: {
+          pageInfo: { hasNextPage: false },
+          nodes: [
+            {
+              number: 1,
+              url: pr(1).url,
+              title: "t",
+              isDraft: false,
+              createdAt: ago(2),
+              authorAssociation: "MEMBER",
+              author: { login: "amy", __typename: "User" },
+              timelineItems: { nodes: [] },
+              reviewThreads: { nodes: [] },
+              commits: { nodes: [] },
+            },
+          ],
+        },
+      },
+    }),
+  };
+  const assemble = (board) =>
+    assembleReport({
+      github,
+      sources: [{ owner: "F3-Nation", repo: "f3-nation", board }],
+      slackIdsRaw: "{}",
+      now: NOW,
+    });
+  const warningsOf = (report) =>
+    report.blocks
+      .filter((b) => b.type === "section" && b.text.text.startsWith("⚠️"))
+      .map((b) => b.text.text);
+  const board = { codeowners: ["andy"], fetched: 1, prs: [pr(1)] };
+
+  const marked = await assemble({ ...board, reviewDecisionsMissing: true });
+  const warning =
+    "GitHub couldn't read approvals for some PRs, so approved ones show as needing approval.";
+  assert.deepEqual(marked.notes, [warning]);
+  assert.deepEqual(warningsOf(marked.report), [`⚠️ ${warning}`]);
+  assert.equal(marked.report.counts.listed, 1);
+
+  const unmarked = await assemble(board);
+  assert.deepEqual(unmarked.notes, []);
+  assert.deepEqual(warningsOf(unmarked.report), []);
+  assert.equal(unmarked.report.counts.listed, 1);
+});
+
 test("extra lists follow the PR lists, and their header notes end the header", () => {
   const result = buildReport(
     { codeowners: [], prs: [pr(1)] },

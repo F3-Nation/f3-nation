@@ -364,6 +364,7 @@ async function buildAdvisoryReport({
       repo: fork.split("/")[1],
       board: { ...board, prs },
       base: REPO,
+      approvalsFor: `${ghsa}'s fix PRs`,
     };
   });
 
