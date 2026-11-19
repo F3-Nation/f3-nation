@@ -73,11 +73,9 @@ commit instead. Add a newly vendored skill's directory to `.prettierignore`.
 The `vendored-skills` workflow opens an issue when upstream has moved or a
 vendored file was edited.
 
-When asked for a **release plan** or a **Staging test plan** for the most
-recently merged release-please PR, follow
-[`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
-or
-[`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
+When asked for a **release plan** or a **Staging test plan** for a merged
+release-please PR, follow
+[`.agents/skills/release/SKILL.md`](.agents/skills/release/SKILL.md)
 — even if your tool does not load skills automatically. Likewise, follow
 [`.agents/skills/db-migration/SKILL.md`](.agents/skills/db-migration/SKILL.md)
 for any change to the database schema or migrations.

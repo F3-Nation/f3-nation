@@ -460,7 +460,13 @@ async function assembleReport({
   for (const { owner, repo, board } of sources)
     assertOwnPrs(owner, repo, board);
   for (const { owner, repo, board, base, approvalsFor } of sources) {
-    const collected = await collectFacts({ github, owner, repo, base });
+    const collected = await collectFacts({
+      github,
+      owner,
+      repo,
+      base,
+      codeowners: board.codeowners ?? [],
+    });
     notes.push(...collected.notes);
     // pr-triage re-read at least one page of these PRs without their review
     // decisions, so it placed each approved PR on that page as still needing

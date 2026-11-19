@@ -33,6 +33,9 @@
  *   node .github/scripts/pr-author-nudge.cjs [owner/repo]
  */
 
+const fs = require("node:fs");
+const path = require("node:path");
+
 const MARKER = "<!-- pr-author-nudge";
 const STALE_LABEL = "stale";
 const KEEP_OPEN_LABEL = "keep-open";
@@ -43,7 +46,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // a nudge posted at least (close - nudge) days earlier in the same stretch, so
 // nobody is closed without that much warning.
 const DAYS = {
-  team: { nudge: 5, close: 10 }, // owners, members and collaborators
+  team: { nudge: 5, close: 10 }, // owners, members, collaborators and codeowners
   outside: { nudge: 3, close: 7 }, // everyone else, including forks
 };
 // The codeowners' Slack heads-up goes out when the close is this close, and
@@ -107,13 +110,15 @@ function parseMarker(body) {
  * needs. `requiredContexts` is the list of required check names on the base.
  * `nudge` is `{ id, nudgedAt, warnedAt?, pausedAt?, body? }` for the bot's
  * newest reminder, or null. `writers` is an optional Set of logins with push
- * access, counted as team even when GitHub reports a private org member as
- * a CONTRIBUTOR.
+ * access or in CODEOWNERS, compared case-insensitively and counted as team
+ * even when GitHub reports a private org member as a CONTRIBUTOR.
  */
 function summarize(pr, requiredContexts, nudge, writers = new Set()) {
   const author = pr.author?.login ?? null;
+  const team = new Set([...writers].map((login) => login.toLowerCase()));
   const isTeam = (login, association) =>
-    TEAM_ASSOCIATIONS.has(association) || writers.has(login);
+    TEAM_ASSOCIATIONS.has(association) ||
+    team.has(String(login ?? "").toLowerCase());
   const isBotAuthor = pr.author?.__typename === "Bot";
   const created = ts(pr.createdAt);
   const timeline = pr.timelineItems?.nodes ?? [];
@@ -534,17 +539,54 @@ const PR_FIELDS = `
   }`;
 
 /**
+ * The @handles in `file` (default this repo's .github/CODEOWNERS), each once
+ * and lowercased; comments and @org/team entries are skipped. Null when the
+ * file can't be read. The Codeowners PR Report takes its list from
+ * scripts/pr-triage.sh instead, so a change to which entries count goes in
+ * both, or the report and the nudge disagree on who is team.
+ */
+function readCodeowners(file = path.join(__dirname, "..", "CODEOWNERS")) {
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  const handles = new Set();
+  for (const line of text.split("\n")) {
+    for (const word of line.trim().split(/\s+/)) {
+      if (word.startsWith("#")) break;
+      if (word.startsWith("@") && !word.includes("/"))
+        handles.add(word.slice(1).toLowerCase());
+    }
+  }
+  return [...handles];
+}
+
+/**
  * Reads what `summarize()` needs for every open PR: the PR nodes, the required
- * checks on the default branch, and who has push access. Writes nothing.
- * Returns `{ prs, factsFor(pr, nudge = null), writersKnown, notes }`, where
+ * checks on the default branch, who has push access, and who the codeowners
+ * are. Writes nothing. Returns `{ prs, factsFor(pr, nudge = null), teamKnown,
+ * notes }`, where `teamKnown` is false when either list couldn't be read and
  * `notes` are warnings for the workflow log. Exported so every report that
  * asks whose turn a PR is answers it with the same rules as the nudge.
  *
  * `base` (`{ owner, repo }`, default the PR repo) is where the branch rules and
  * the team are read. A security advisory's temporary private fork has neither
  * of its own: its PRs merge into the advisory's repo, under that repo's rules.
+ *
+ * `codeowners` is the lowercased @handles counted as team alongside push
+ * access (default `readCodeowners()`). Null means the list couldn't be read:
+ * the run adds a note, judges those authors by their association, and
+ * `teamKnown` is false.
  */
-async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
+async function collectFacts({
+  github,
+  owner,
+  repo,
+  base = { owner, repo },
+  codeowners = readCodeowners(),
+}) {
   const rules = await github.paginate(
     "GET /repos/{owner}/{repo}/rules/branches/{branch}",
     {
@@ -559,10 +601,17 @@ async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
     .flatMap((r) => r.parameters?.required_status_checks ?? [])
     .map((c) => c.context);
 
-  // Everyone with push access counts as team. GitHub can report a private
-  // org member as a CONTRIBUTOR to the workflow's token, so the association
-  // alone would give them the outside timings.
+  // Everyone with push access, and every codeowner, counts as team. GitHub
+  // can report a private org member as a CONTRIBUTOR to the workflow's token,
+  // and the token's collaborator list leaves out org owners, so neither alone
+  // would give them the team timings.
   const notes = [];
+  if (codeowners == null)
+    notes.push(
+      "Couldn't read .github/CODEOWNERS; codeowners GitHub doesn't list as " +
+        "collaborators are judged by their association, and their " +
+        "outside-timing heads-ups and closes are held.",
+    );
   let writers = new Set();
   let writersKnown = true;
   try {
@@ -605,6 +654,7 @@ async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
     cursor = connection.pageInfo.endCursor;
   }
 
+  const team = new Set([...writers, ...(codeowners ?? [])]);
   const factsFor = (pr, nudge = null) =>
     summarize(
       pr,
@@ -612,9 +662,14 @@ async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
         ? requiredContexts
         : [],
       nudge,
-      writers,
+      team,
     );
-  return { prs, factsFor, writersKnown, notes };
+  return {
+    prs,
+    factsFor,
+    teamKnown: writersKnown && codeowners != null,
+    notes,
+  };
 }
 
 /**
@@ -625,7 +680,8 @@ async function collectFacts({ github, owner, repo, base = { owner, repo } }) {
  * rows fail. `limits` caps the nudges, heads-ups and closes in one run
  * (MAX_PER_RUN by default); dry runs count against it too, so their report
  * matches what a live run would do; an action left out of `limits` keeps its
- * default. Returns `{ rows, slackNote, slackSent, notes }`: the job summary
+ * default. `codeowners` goes to `collectFacts()` (default `readCodeowners()`).
+ * Returns `{ rows, slackNote, slackSent, notes }`: the job summary
  * rows, the heads-up text, whether it reached Slack, and warnings for the
  * workflow log.
  */
@@ -639,15 +695,17 @@ async function run({
   log = console.log,
   notify = null,
   limits = MAX_PER_RUN,
+  codeowners = readCodeowners(),
 }) {
-  const { prs, factsFor, writersKnown, notes } = await collectFacts({
+  const { prs, factsFor, teamKnown, notes } = await collectFacts({
     github,
     owner,
     repo,
+    codeowners,
   });
-  if (!writersKnown)
+  if (!teamKnown)
     notes.push(
-      "No heads-ups or closes for authors who might be team until collaborators can be listed.",
+      "No heads-ups or closes for authors who might be team until collaborators and codeowners can be read.",
     );
 
   // First read and decide every PR, so the per-run limits go to the PRs that
@@ -715,10 +773,10 @@ async function run({
     }
   }
 
-  // Outside-tier heads-ups and closes are held anyway while collaborators are
+  // Outside-tier heads-ups and closes are held anyway while the team is
   // unknown, so they don't take a slot.
   const heldUnknown = (e) =>
-    !writersKnown &&
+    !teamKnown &&
     e.facts.tier === "outside" &&
     (e.decision.action === "warn" || e.decision.action === "close");
   for (const action of Object.keys(MAX_PER_RUN)) {
@@ -767,7 +825,7 @@ async function run({
       } else if (heldUnknown({ facts, decision })) {
         // The author may be a private org member with team timings, so the
         // shorter outside deadline can't be trusted. Held, retried next run.
-        row.outcome = `FAILED: ${decision.action} held, collaborators unknown`;
+        row.outcome = `FAILED: ${decision.action} held, team unknown`;
         row.failed = true;
       } else if (overLimit != null) {
         // Not a failure: the next run picks it up, oldest first.
@@ -884,6 +942,7 @@ module.exports = {
   parseMarker,
   slackEscape,
   collectFacts,
+  readCodeowners,
   summarize,
   decide,
   describeReasons,

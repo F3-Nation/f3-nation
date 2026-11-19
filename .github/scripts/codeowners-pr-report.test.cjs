@@ -630,6 +630,52 @@ test("assembleReport reads facts per repo and merges the boards", async () => {
   assert.ok(calls.every((c) => c.startsWith("f3-nation ")));
 });
 
+test("assembleReport counts a codeowner as team when GitHub calls them a contributor", async () => {
+  // The workflow's token sees a private org member as a CONTRIBUTOR, and its
+  // collaborator list leaves out org owners.
+  const github = {
+    paginate: async () => [],
+    graphql: async () => ({
+      repository: {
+        pullRequests: {
+          pageInfo: { hasNextPage: false },
+          nodes: [
+            {
+              number: 1,
+              url: "https://github.com/F3-Nation/f3-nation/pull/1",
+              title: "t",
+              isDraft: false,
+              createdAt: ago(4),
+              authorAssociation: "CONTRIBUTOR",
+              author: { login: "Andy", __typename: "User" },
+              timelineItems: { nodes: [] },
+              reviewThreads: { nodes: [] },
+              commits: { nodes: [] },
+            },
+          ],
+        },
+      },
+    }),
+  };
+  const { report: built } = await assembleReport({
+    github,
+    sources: [
+      {
+        owner: "F3-Nation",
+        repo: "f3-nation",
+        board: {
+          codeowners: ["andy"],
+          prs: [pr(1, { author: "Andy" })],
+        },
+      },
+    ],
+    now: NOW,
+  });
+  const line = lineFor(list(built, "🙋"), 1);
+  assert.match(line, /by @Andy/);
+  assert.doesNotMatch(line, /outside contributor/);
+});
+
 test("assembleReport refuses a board PR from another repo without naming it", async () => {
   const forkUrl =
     "https://github.com/F3-Nation/f3-nation-ghsa-aaaa-bbbb-cccc/pull/1";
