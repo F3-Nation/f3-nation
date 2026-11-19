@@ -11,12 +11,20 @@ import {
   ilike,
   inArray,
   isNotNull,
+  ne,
   schema,
   sql,
 } from "@acme/db";
 import { OrgType } from "@acme/shared/app/enums";
 
+import {
+  ancestorOrgsAreActive,
+  orgAndAncestorsAreActive,
+} from "../../org-activity";
 import { protectedProcedure } from "../../shared";
+
+/** Roles the Table lists: who to contact, not access grants. */
+const LEADERSHIP_ROLE_NAMES = ["admin", "editor"] as const;
 
 interface OrgRow {
   id: number;
@@ -419,6 +427,172 @@ export const orgChartRouter = {
           f3Name: role.f3Name,
           avatarUrl: role.avatarUrl,
         })),
+      };
+    }),
+
+  leadership: protectedProcedure
+    .route({
+      method: "GET",
+      path: "/leadership",
+      tags: ["Org Chart"],
+      summary: "List org chart leadership",
+      description:
+        "Return every active non-AO org whose ancestors are all active, with every position holder and admin/editor role holder at those orgs, in one response, for the directory's Table view. Unlike the org chart, orgs are listed whether or not they have active locations.",
+    })
+    .output(
+      z.object({
+        orgs: z.array(
+          z.object({
+            id: z.number().describe("Organization ID"),
+            name: z.string().nullable().describe("Organization name"),
+            orgType: z.enum(OrgType).describe("Organization type"),
+            parentId: z.number().nullable().describe("Parent organization ID"),
+          }),
+        ),
+        leaders: z.array(
+          z.object({
+            orgId: z.number().describe("Organization ID"),
+            kind: z
+              .enum(["position", "role"])
+              .describe("Whether this is a leadership position or a role"),
+            id: z.number().describe("Position or role ID"),
+            title: z.string().describe("Position or role title"),
+            userId: z.number().describe("User ID"),
+            f3Name: z.string().nullable().describe("User F3 name"),
+            avatarUrl: z.string().nullable().describe("User avatar URL"),
+            homeRegionName: z
+              .string()
+              .nullable()
+              .describe("Name of the user's home region, when active"),
+          }),
+        ),
+      }),
+    )
+    .handler(async ({ context: ctx }) => {
+      const orgFilter = and(
+        eq(schema.orgs.isActive, true),
+        ne(schema.orgs.orgType, "ao"),
+        ancestorOrgsAreActive(schema.orgs.id),
+      );
+
+      const orgs = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+          orgType: schema.orgs.orgType,
+          parentId: schema.orgs.parentId,
+        })
+        .from(schema.orgs)
+        .where(
+          and(
+            ne(schema.orgs.orgType, "ao"),
+            orgAndAncestorsAreActive(schema.orgs.id),
+          ),
+        );
+
+      const positionRows = await ctx.db
+        .select({
+          orgId: schema.positionsXOrgsXUsers.orgId,
+          id: schema.positions.id,
+          title: schema.positions.name,
+          userId: schema.users.id,
+          f3Name: schema.users.f3Name,
+          avatarUrl: schema.users.avatarUrl,
+          homeRegionId: schema.users.homeRegionId,
+        })
+        .from(schema.positionsXOrgsXUsers)
+        .innerJoin(
+          schema.orgs,
+          and(eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId), orgFilter),
+        )
+        .innerJoin(
+          schema.positions,
+          and(
+            eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
+            eq(schema.positions.isActive, true),
+          ),
+        )
+        .innerJoin(
+          schema.users,
+          and(
+            eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+            eq(schema.users.status, "active"),
+          ),
+        );
+
+      const roleRows = await ctx.db
+        .select({
+          orgId: schema.rolesXUsersXOrg.orgId,
+          id: schema.roles.id,
+          title: schema.roles.name,
+          userId: schema.users.id,
+          f3Name: schema.users.f3Name,
+          avatarUrl: schema.users.avatarUrl,
+          homeRegionId: schema.users.homeRegionId,
+        })
+        .from(schema.rolesXUsersXOrg)
+        .innerJoin(
+          schema.orgs,
+          and(eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId), orgFilter),
+        )
+        .innerJoin(
+          schema.roles,
+          and(
+            eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+            // Only the contact roles the directory shows; other roles are
+            // access grants and stay out of this bulk listing.
+            inArray(schema.roles.name, LEADERSHIP_ROLE_NAMES),
+          ),
+        )
+        .innerJoin(
+          schema.users,
+          and(
+            eq(schema.users.id, schema.rolesXUsersXOrg.userId),
+            eq(schema.users.status, "active"),
+          ),
+        );
+
+      const homeRegionIds = [
+        ...new Set(
+          [...positionRows, ...roleRows].flatMap((row) =>
+            row.homeRegionId == null ? [] : [row.homeRegionId],
+          ),
+        ),
+      ];
+      const homeRegions = homeRegionIds.length
+        ? await ctx.db
+            .select({ id: schema.orgs.id, name: schema.orgs.name })
+            .from(schema.orgs)
+            .where(
+              and(
+                inArray(schema.orgs.id, homeRegionIds),
+                eq(schema.orgs.isActive, true),
+                ancestorOrgsAreActive(schema.orgs.id),
+              ),
+            )
+        : [];
+      const regionName = new Map(homeRegions.map((r) => [r.id, r.name]));
+      const withRegion = <T extends { homeRegionId: number | null }>({
+        homeRegionId,
+        ...row
+      }: T) => ({
+        ...row,
+        homeRegionName:
+          homeRegionId == null ? null : (regionName.get(homeRegionId) ?? null),
+      });
+
+      return {
+        orgs,
+        leaders: [
+          ...positionRows.map((row) => ({
+            ...withRegion(row),
+            kind: "position" as const,
+          })),
+          ...roleRows.map((row) => ({
+            ...withRegion(row),
+            kind: "role" as const,
+          })),
+        ],
       };
     }),
 
