@@ -110,6 +110,9 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
      its check a prerequisite of testing.
    - Write the pre-checks (data the migration would refuse) and the check
      query (proof it applied) from the SQL, following [`commands.md`](commands.md).
+     When a migration creates a table or sequence, the pre-checks include
+     [the migration login's default-privileges check](commands.md#the-migration-logins-default-privileges)
+     and its fix.
    - Fill `{{NEWEST_MIGRATION_FILE}}` with the file name alone (no
      directory) of the last entry in `migrations`, and
      `{{EACH_MIGRATION_IN_THIS_RELEASE}}` with each entry's file name

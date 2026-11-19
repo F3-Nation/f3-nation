@@ -54,6 +54,56 @@ step's **Expected** and **Stop if** lines name the output.
   that says the database and migration, followed by a shell check that the
   file starts with the table's header and a `chmod 600`.
 
+### The migration login's default privileges
+
+When a migration creates a table or sequence, the pre-checks include this
+check: the apps reach what `db_migrator` creates only through its default
+privileges ([`docs/db-migrations.md`](../../../docs/db-migrations.md),
+"New objects"). `logins` lists the app logins that use the schema, with
+`required` false for one that may not exist on that database; the ones below
+are `public`'s. `missing_logins` names each login that lacks the table DML or
+sequence `USAGE` default, so a `f` says what to fix:
+
+```sql
+-- Expect: migrator_defaults_ok = t and missing_logins = {}.
+WITH logins AS (
+  SELECT n AS name, to_regrole(n) AS role, required
+  FROM (VALUES ('map', true), ('f3slackbot', true), ('app_slackbot', false)) v(n, required)),
+d AS (
+  SELECT a.grantee, d.defaclobjtype AS kind, a.privilege_type AS priv
+  FROM pg_default_acl d, aclexplode(d.defaclacl) a
+  WHERE d.defaclnamespace = 'public'::regnamespace AND d.defaclrole = 'db_migrator'::regrole),
+missing AS (
+  SELECT name FROM logins
+  WHERE CASE WHEN role IS NULL THEN required ELSE NOT (
+    (SELECT count(DISTINCT priv) FROM d WHERE grantee = role AND kind = 'r'
+       AND priv IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')) = 4
+    AND EXISTS (SELECT 1 FROM d WHERE grantee = role AND kind = 'S' AND priv = 'USAGE')) END)
+SELECT NOT EXISTS (SELECT 1 FROM missing) AS migrator_defaults_ok,
+  ARRAY(SELECT name FROM missing ORDER BY name) AS missing_logins;
+```
+
+Beside the check, give the fix for a login it reports. It runs as the
+migration login itself, with the migration step's proxy running:
+`ALTER DEFAULT PRIVILEGES FOR ROLE db_migrator` needs membership in
+`db_migrator`, and on Production `db_migrator` is already a member of the
+operator's role, so granting that membership back is refused as circular.
+Interactive, when the check already printed `f`, write the login it named;
+otherwise write one block per login in `logins` and say to run only those in
+`missing_logins`. Never a placeholder. A Staging plan reads
+`MIGRATE_DATABASE_URL_STAGING`:
+
+```bash
+psql "$(gcloud secrets versions access latest --secret=MIGRATE_DATABASE_URL_PROD --project=f3data)" -X -v ON_ERROR_STOP=1 <<'SQL'
+ALTER DEFAULT PRIVILEGES FOR ROLE db_migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLES TO f3slackbot;
+ALTER DEFAULT PRIVILEGES FOR ROLE db_migrator IN SCHEMA public
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO f3slackbot;
+SQL
+```
+
+Then run the check again; it must print `t` before the migration.
+
 ## Cloud and repository changes
 
 Every manual change the release needs gets three blocks:

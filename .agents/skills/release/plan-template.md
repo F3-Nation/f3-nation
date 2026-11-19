@@ -190,17 +190,21 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 {{WHY: with a needs_refresh_setup migration, "<those migrations> change what the Staging refresh's login can read, so the refresh needs its login re-granted, then its image rebuilt once more after the re-grant."; otherwise "The Staging refresh image must be rebuilt so it knows this release's migrations; the migration command started that rebuild, so this checks it finished."}} These items are outside the Stop rule and don't hold up the release; if one fails, post it in `#monorepo` so the next Staging refresh waits until it's fixed.
 
-- [ ] **Re-grant the Staging refresh login.** First stop any database proxy still running from the migration (Ctrl-C in its terminal): the setup starts its own on the same ports. The runner list isn't in the repo; the Refresh admin has it. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
+- [ ] **Re-grant the Staging refresh login.** First stop any database proxy still running from the migration (Ctrl-C in its terminal): the setup starts its own on the same ports. The setup grants its runners again, so the list is read from the job's current runners (the members of the role the setup grants them). No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
 
   ```bash
   test -z "$(git status --porcelain)" && echo "clean tree: true" || echo "clean tree: false"
+  RUNNERS=$(gcloud run jobs get-iam-policy f3-staging-refresh --project f3data --region us-central1 --format=json \
+    | jq -r '[(.bindings // [])[] | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]] | join(" ")')
+  test -n "$RUNNERS" && echo "runners found: true" || echo "runners found: false"
   ```
 
-  Only if that printed `true`:
+  - **Stop if:** either line prints `false`. With no runners found, post in `#monorepo` rather than typing a list in: the setup grants exactly what it's given.
+
+  Only if both printed `true`, in the same terminal:
 
   ```bash
   if git fetch origin main && git switch --detach {{RELEASE_SHA}}; then
-    RUNNERS="paste-the-runner-list-here"
     STAGING_REFRESH_RUNNERS="$RUNNERS" bash tooling/scripts/staging-refresh/setup.sh && OK=true || OK=false
     git switch -
     echo "setup ok: $OK"
