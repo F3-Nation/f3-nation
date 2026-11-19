@@ -63,6 +63,13 @@
  *   (dry run by default — prints what would be inserted and which existing rows would get referenceId)
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth --confirm
  *   (actually writes)
+ *
+ * Staging and prod are reached through a local cloud-sql-proxy (see
+ * docs/db-migrations.md), e.g. for staging
+ *   cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5482
+ * with DATABASE_HOST=127.0.0.1 and DATABASE_PORT=5482 in .env.staging.
+ * The script connects without SSL to a loopback host, since the proxy port
+ * doesn't speak it, and requires SSL for any other host.
  */
 import path from "path";
 import readline from "readline";
@@ -245,6 +252,25 @@ export function planMigration({
   return { newRows, toStamp, needsReview, toLink };
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/**
+ * SSL is required for any staging or prod host, except a loopback one: that
+ * is a cloud-sql-proxy, whose local port doesn't speak SSL (the proxy already
+ * encrypts its connection to Cloud SQL). --env local never uses SSL.
+ */
+export function sslFor(
+  targetEnv: string,
+  databaseHost: string,
+): false | "require" {
+  if (targetEnv === "local") return false;
+  // DATABASE_HOST may carry a port ("127.0.0.1:5482"), which postgres accepts.
+  const host = databaseHost.trim().toLowerCase();
+  const isLoopback =
+    LOOPBACK_HOSTS.has(host) || LOOPBACK_HOSTS.has(host.replace(/:\d+$/, ""));
+  return isLoopback ? false : "require";
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const envIndex = args.indexOf("--env");
@@ -321,9 +347,7 @@ async function main() {
     user: databaseUser,
     password: databasePassword,
     database: databaseName,
-    // Matches packages/db/src/utils/functions.ts's existing ssl convention —
-    // required for any non-local target.
-    ssl: targetEnv === "local" ? false : "require",
+    ssl: sslFor(targetEnv, databaseHost),
   });
   const db = drizzle(sql);
 

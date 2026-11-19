@@ -4,6 +4,7 @@ import {
   assertSupportedScopes,
   buildClientRow,
   planMigration,
+  sslFor,
 } from "../../scripts/migrate-oauth-clients-to-better-auth";
 import { F3_NATION_CLIENT_REFERENCE_ID } from "../../src/lib/oauth-client-reference";
 
@@ -174,5 +175,32 @@ describe("planMigration", () => {
       linkedClientIds: new Set(["linked"]),
     });
     expect(plan.toLink.map((r) => r.clientId)).toEqual(["fresh"]);
+  });
+});
+
+describe("sslFor", () => {
+  it("never uses SSL for --env local", () => {
+    expect(sslFor("local", "db.example.com")).toBe(false);
+  });
+
+  it.each([
+    "127.0.0.1",
+    "localhost",
+    "LOCALHOST",
+    "::1",
+    "[::1]",
+    "127.0.0.1:5482",
+    "localhost:5482",
+    "[::1]:5482",
+  ])("skips SSL for a cloud-sql-proxy on %s", (host) => {
+    expect(sslFor("staging", host)).toBe(false);
+    expect(sslFor("prod", host)).toBe(false);
+  });
+
+  it("requires SSL for any other staging or prod host", () => {
+    expect(sslFor("staging", "10.0.0.5")).toBe("require");
+    expect(sslFor("prod", "db.example.com")).toBe("require");
+    expect(sslFor("prod", "127.0.0.2")).toBe("require");
+    expect(sslFor("prod", "db.example.com:5432")).toBe("require");
   });
 });
