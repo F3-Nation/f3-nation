@@ -594,12 +594,17 @@ assert_eq "a mark from before the blocked report doesn't clear it" "LOCAL" \
 adv_dir="$tmp_dir/adv"
 mkdir -p "$adv_dir/bin"
 fork_a="acme/repo-ghsa-aaaa-bbbb-cccc" fork_b="acme/repo-ghsa-dddd-eeee-ffff"
+# A fork's PRs carry latestOpinionatedReviews in place of reviewDecision, as the fork query asks.
 fork_board() {
   jq --arg url "https://github.com/$1/pull/" --argjson numbers "$2" \
     '.data.repository.pullRequests.nodes |= [.[] | select(.number | IN($numbers[]))
+      | del(.reviewDecision) | .latestOpinionatedReviews = {nodes: []}
       | .url = $url + (.number | tostring)]' "$tmp_dir/fixture.json"
 }
 fork_board "$fork_a" '[5, 8]' >"$adv_dir/fork-a.json"
+# What a fork read without review decisions returns: neither approval field.
+no_decision() { jq '.data.repository.pullRequests.nodes |= map(del(.reviewDecision, .latestOpinionatedReviews))' "$1"; }
+no_decision "$adv_dir/fork-a.json" >"$adv_dir/fork-a-no-decision.json"
 fork_board "$fork_b" '[5]' >"$adv_dir/fork-b.json"
 echo '{"data":null,"errors":[{"message":"Could not resolve to a Repository"}]}' >"$adv_dir/fork-c.json"
 fork_board acme/repo-ghsa-vvvv-wwww-xxxx '[]' >"$adv_dir/fork-d.json"
@@ -634,6 +639,11 @@ advisory() { jq -nc --arg id "$1" --arg severity "$2" --arg fork "$3" --arg at "
 cat >"$adv_dir/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 [[ "$*" == "auth status" ]] && exit 0
+# GitHub can fail the whole query when it computes reviewDecision on an advisory fork's PR.
+if [[ "$*" == *name=repo-ghsa-* && "$*" == *reviewDecision* ]]; then
+  echo "gh: Something went wrong while executing your query." >&2
+  exit 1
+fi
 if [[ "$1 $2" == "api --paginate" ]]; then
   case "$ADV_MODE" in
     notfound) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
@@ -650,14 +660,18 @@ if [[ "$1 $2" == "api --paginate" ]]; then
   exit 0
 fi
 case "$*" in
-  *reviewDecision*name=repo-ghsa-aaaa-bbbb-cccc*)
+  *latestOpinionatedReviews*name=repo-ghsa-aaaa-bbbb-cccc*)
     if [[ -n "${ADV_FORK_A_NO_DECISION:-}" ]]; then exit 1; fi
     cat "$ADV_DIR/fork-a.json" ;;
-  *name=repo-ghsa-aaaa-bbbb-cccc*) cat "$ADV_DIR/fork-a.json" ;;
+  *name=repo-ghsa-aaaa-bbbb-cccc*) cat "$ADV_DIR/fork-a-no-decision.json" ;;
   *name=repo-ghsa-dddd-eeee-ffff*) cat "$ADV_DIR/fork-b.json" ;;
   *name=repo-ghsa-gggg-hhhh-jjjj*) cat "$ADV_DIR/fork-c.json" ;;
   *name=repo-ghsa-vvvv-wwww-xxxx*) cat "$ADV_DIR/fork-d.json" ;;
   *name=repo-ghsa-yyyy-zzzz-2222*) cat "$ADV_DIR/fork-e.json" ;;
+  *latestOpinionatedReviews*name=repo-ghsa-hhhh-jjjj-kkkk*)
+    if [[ -n "${ADV_FORK_F_NO_DECISION:-}" ]]; then exit 1; fi
+    cat "$ADV_DIR/fork-f.json" ;;
+  *name=repo-ghsa-hhhh-jjjj-kkkk*) cat "$ADV_DIR/fork-f-no-decision.json" ;;
   *) echo "gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 STUB
@@ -755,6 +769,59 @@ assert_eq "advisories: a cut-off fork isn't listed as without a fix PR" \
   '["GHSA-ssss-tttt-uuuu","GHSA-vvvv-wwww-xxxx"]' "$(jq -c '[.advisoriesWithoutPr[].ghsa]' <<<"$cut_board")"
 assert_eq "advisories: a cut-off fork is noted" "1 security advisory fork has more open PRs: only the oldest are shown." \
   "$(jq -r '.advisoryNotes[1]' <<<"$cut_board")"
+
+# A fork PR's approval is a conservative stand-in for main's ruleset: without the PR's changed
+# files it needs a head-commit approval from a non-author listed on every ownership line, no
+# outstanding change request, and a complete opinion list. An owner of only the touched paths
+# can approve on GitHub without counting here. In this fixture only luis is on every line, in
+# two cases; andy is listed twice but only on the `*` line.
+cat >"$tmp_dir/FORK_CODEOWNERS" <<'OWNERS'
+*        @Andy @Luis @andy
+/apps/   @luis
+OWNERS
+jq --arg url "https://github.com/acme/repo-ghsa-hhhh-jjjj-kkkk/pull/" '
+  def opinion($by; $state; $oid): {state: $state, author: {login: $by}, commit: {oid: $oid}};
+  .data.repository.pullRequests.nodes |= ([.[] | select(.number == 8)][0] as $done
+    | [($done | .number = 41 | .latestOpinionatedReviews.nodes = [opinion("Luis"; "APPROVED"; "first")]),
+       ($done | .number = 42 | .latestOpinionatedReviews.nodes =
+         [opinion("luis"; "APPROVED"; "first"), opinion("andy"; "CHANGES_REQUESTED"; "first")]),
+       ($done | .number = 43 | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; "older")]),
+       ($done | .number = 44 | .latestOpinionatedReviews.nodes = [opinion("not-an-owner"; "APPROVED"; "first")]),
+       ($done | .number = 45 | .latestOpinionatedReviews.nodes = []),
+       ($done | .number = 46 | .author.login = "luis"
+         | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; "first")]),
+       ($done | .number = 47 | .latestOpinionatedReviews.nodes = [opinion("andy"; "APPROVED"; "first")]),
+       ($done | .number = 48 | .latestOpinionatedReviews =
+         {pageInfo: {hasNextPage: true}, nodes: [opinion("luis"; "APPROVED"; "first")]}),
+       ($done | .number = 49 | .commits.nodes = []
+         | .latestOpinionatedReviews.nodes = [opinion("luis"; "APPROVED"; null)])]
+    | map(del(.reviewDecision) | .url = $url + (.number | tostring)))' \
+  "$tmp_dir/fixture.json" >"$adv_dir/fork-f.json"
+no_decision "$adv_dir/fork-f.json" >"$adv_dir/fork-f-no-decision.json"
+fork_only=$(PR_TRIAGE_CODEOWNERS="$tmp_dir/FORK_CODEOWNERS" ADV_MODE=list ADV_DIR="$adv_dir" \
+  PATH="$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
+  PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" bash "$triage" -R acme/repo-ghsa-hhhh-jjjj-kkkk --json 2>&1)
+assert_eq "a fork read on its own never asks for reviewDecision" "41,42,43,44,45,46,47,48,49" \
+  "$(jq -r '[.prs[].number] | join(",")' <<<"$fork_only" 2>/dev/null)"
+fork_bucket() { jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .bucket' <<<"$fork_only" 2>/dev/null; }
+assert_eq "fork: a codeowner's approval of the head waits to merge" "MERGE" "$(fork_bucket 41)"
+assert_eq "fork: an outstanding change request outweighs an approval" "MANUAL" "$(fork_bucket 42)"
+assert_eq "fork: an approval of an older commit doesn't count" "MANUAL" "$(fork_bucket 43)"
+assert_eq "fork: a non-codeowner's approval doesn't count" "MANUAL" "$(fork_bucket 44)"
+assert_eq "fork: no opinionated review needs approval" "MANUAL" "$(fork_bucket 45)"
+assert_eq "fork: the author's own approval doesn't count" "MANUAL" "$(fork_bucket 46)"
+assert_eq "fork: an approval from an owner of only some paths doesn't count" "MANUAL" "$(fork_bucket 47)"
+assert_eq "fork: a cut-off review list doesn't count as approved" "MANUAL" "$(fork_bucket 48)"
+assert_eq "fork: no head commit can't match an approval without one" "MANUAL" "$(fork_bucket 49)"
+
+# A fork read that only succeeds without approvals shows its approved PR as needing approval.
+fork_fallback=$(PR_TRIAGE_CODEOWNERS="$tmp_dir/FORK_CODEOWNERS" ADV_FORK_F_NO_DECISION=1 \
+  ADV_MODE=list ADV_DIR="$adv_dir" \
+  PATH="$decision_stub/sleep-only:$adv_dir/bin:$PATH" PR_TRIAGE_NOW="$now" \
+  PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" bash "$triage" -R acme/repo-ghsa-hhhh-jjjj-kkkk --json 2>/dev/null)
+assert_eq "fork: the fallback board is marked" "true" "$(jq -r .reviewDecisionsMissing <<<"$fork_fallback")"
+assert_eq "fork: an approved PR needs approval on the fallback" "MANUAL" \
+  "$(jq -r '.prs[] | select(.number == 41) | .bucket' <<<"$fork_fallback")"
 
 # An early exit waits for a slow fork read instead of leaving it writing into a removed work_dir.
 slow_dir="$tmp_dir/adv-slow"

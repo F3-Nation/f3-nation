@@ -242,6 +242,10 @@ That applies when a new `.sql` file:
 - revokes privileges (`REVOKE`), or
 - calls `audit.enable_tracking`.
 
+The same list is `FULL_SETUP_NOTE` in `packages/db/src/migrate-remote.ts` and
+`REFRESH_SETUP_PATTERN` in `.agents/skills/release/scripts/release-facts.sh`;
+change all three together.
+
 Then the Owner runs the full setup, and someone with write access starts the
 rebuild once more after it, even if `pnpm db:migrate:prod` already started
 one: the full setup also deploys an image from its own checkout, so the

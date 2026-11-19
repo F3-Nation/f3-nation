@@ -73,11 +73,9 @@ commit instead. Add a newly vendored skill's directory to `.prettierignore`.
 The `vendored-skills` workflow opens an issue when upstream has moved or a
 vendored file was edited.
 
-When asked for a **release plan** or a **Staging test plan** for the most
-recently merged release-please PR, follow
-[`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
-or
-[`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
+When asked for a **release plan** or a **Staging test plan** for a merged
+release-please PR, follow
+[`.agents/skills/release/SKILL.md`](.agents/skills/release/SKILL.md)
 — even if your tool does not load skills automatically. Likewise, follow
 [`.agents/skills/db-migration/SKILL.md`](.agents/skills/db-migration/SKILL.md)
 for any change to the database schema or migrations.
@@ -98,9 +96,10 @@ Who runs each of them, and when, is set by
 runs the same prompts, and its `--dry-run` option reviews your own draft PR
 without posting anything.
 
-To set an issue's Type, Priority, Effort and App — one issue, or every open
-issue missing them — follow
-[`.agents/skills/issue-triage/SKILL.md`](.agents/skills/issue-triage/SKILL.md).
+To set an issue's Type, Priority, Effort and App, or decide whether it gets
+the `good first issue` label — one issue, or the open backlog — follow
+[`.agents/skills/issue-triage/SKILL.md`](.agents/skills/issue-triage/SKILL.md),
+even if your tool does not load skills automatically.
 
 To post the report of open security advisories and their fix PRs to the
 private #security-managers Slack channel, follow
@@ -271,7 +270,7 @@ These apply to every issue an agent opens, for any reason. The full rule and its
 - One objective per issue, as small as is reasonable. A task list holds only requirements for that objective, never a batch of independent findings.
 - An audit or review that finds several problems files one issue per problem; being related doesn't make them an Epic. A parent issue of type **Epic** is only for a large, cohesive effort whose issues together deliver one outcome. To set one up through the REST API: `PATCH .../issues/<n>` with `type` set to `Epic`, and `POST .../issues/<n>/sub_issues` with `sub_issue_id` set to the child's numeric `id` (not its issue number).
 - Before filing, search open and closed issues for a duplicate; then use an issue template and lead with the plain-language impact before the root cause and fix.
-- Right after filing, propose any Type, Priority, Effort and App the issue lacks, using the [`issue-triage`](.agents/skills/issue-triage/SKILL.md) skill, and set them once the user approves.
+- Right after filing, in the same reply, propose any Type, Priority, Effort and App the issue lacks and whether it should get the `good first issue` label, using the [`issue-triage`](.agents/skills/issue-triage/SKILL.md) skill, and set them once the user approves. This applies even when the user only asked for the issue.
 
 ## Pull Request Guidelines
 
