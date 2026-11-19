@@ -57,11 +57,9 @@ anything under it. Quote any skill frontmatter value that contains ` #` or
 unquoted `: ` makes YAML reject the whole frontmatter. `pnpm lint` runs
 `scripts/check-skill-frontmatter.mjs` to catch both.
 
-When asked for a **release plan** or a **Staging test plan** for the most
-recently merged release-please PR, follow
-[`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
-or
-[`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
+When asked for a **release plan** or a **Staging test plan** for a merged
+release-please PR, follow
+[`.agents/skills/release/SKILL.md`](.agents/skills/release/SKILL.md)
 — even if your tool does not load skills automatically. Likewise, follow
 [`.agents/skills/db-migration/SKILL.md`](.agents/skills/db-migration/SKILL.md)
 for any change to the database schema or migrations.
