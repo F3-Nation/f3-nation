@@ -1,0 +1,133 @@
+name: Vendored skills
+
+# Agent skills listed in skills-lock.json are copied from an upstream
+# repository. This opens one tracking issue when upstream has moved or a
+# vendored file was edited locally, so the update arrives as a reviewed diff
+# (`pnpm skills:update`) rather than silently.
+
+on:
+  schedule:
+    # Mondays, off the hour to dodge the scheduler's peak.
+    - cron: "23 12 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  check:
+    # Forks inherit the schedule trigger, and a manual run on another branch
+    # would execute that branch's code.
+    if: github.repository_owner == 'F3-Nation' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # check out skills-lock.json and the vendored files
+    outputs:
+      state: ${{ steps.check.outputs.state }}
+      report: ${{ steps.check.outputs.report }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Installs the `skills` CLI at the version pnpm-lock.yaml pins.
+      - uses: ./.github/actions/setup
+
+      # The CLI is third-party code, so this job holds no write token; the
+      # `report` job, on its own runner, opens the issue.
+      - name: Compare vendored skills with upstream
+        id: check
+        shell: bash
+        env:
+          DO_NOT_TRACK: "1"
+        run: |
+          set -o pipefail
+          status=0
+          pnpm skills:check 2>&1 | tee "$RUNNER_TEMP/skills-check.txt" || status=$?
+          # Fail closed: only the CLI's all-clear line counts as current, and
+          # only its own drift lines open an issue. Anything else (a network
+          # or CLI failure, a skill deleted upstream) fails this job.
+          state="$(node .github/scripts/vendored-skills-check.cjs "$RUNNER_TEMP/skills-check.txt" "$status")"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          delimiter="report-$(openssl rand -hex 16)"
+          {
+            echo "report<<$delimiter"
+            # Strip terminal colour codes from the CLI output.
+            sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' "$RUNNER_TEMP/skills-check.txt" | tail -n 40
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$state" = error ]; then
+            echo "::error::skills check neither passed nor reported drift; see the output above."
+            exit 1
+          fi
+
+  report:
+    needs: check
+    # Also runs when `check` fails, so a check that cannot reach a verdict
+    # opens an issue instead of failing unseen. A skipped `check` (non-main
+    # ref) still skips this job.
+    if: always() && (needs.check.outputs.state == 'drift' || needs.check.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # open or comment on the tracking issue
+    steps:
+      - name: Open a tracking issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT: ${{ needs.check.outputs.report }}
+          CHECK_RESULT: ${{ needs.check.result }}
+        run: |
+          set -o pipefail
+          report="${REPORT:-(no output captured)}"
+          # Identifies this report, so an unchanged state isn't posted twice.
+          marker="<!-- vendored-skills-report: $(printf '%s\n%s' "$CHECK_RESULT" "$report" | sha256sum | cut -d ' ' -f 1) -->"
+          if [ "$CHECK_RESULT" = failure ]; then
+            title="Vendored skills check is failing"
+          else
+            title="Vendored agent skills are out of date"
+          fi
+          {
+            if [ "$CHECK_RESULT" = failure ]; then
+              echo "The weekly check could neither confirm that the vendored skills in \`skills-lock.json\` are current nor report drift. A network failure, a skill deleted upstream or a change in the \`skills\` CLI's output can cause this. Until a run passes, drift goes unreported."
+              echo
+              echo "Read the output below and the run log, fix the cause, and close this issue once a run passes."
+            else
+              echo "A skill listed in \`skills-lock.json\` no longer matches its upstream source, or one of its files was edited in this repo. The check output below says which."
+              echo
+              echo "- **\"has an update\":** run \`pnpm skills:update\` on a new branch, read the diff (these files instruct coding agents), and open a PR."
+              echo "- **\"has local changes\":** move that guidance into the skill that calls the vendored one, then revert the commit that edited the vendored files. \`pnpm skills:update\` does not undo local edits."
+            fi
+            echo
+            echo "Check output: $RUN_URL"
+            echo
+            echo '```'
+            printf '%s\n' "$report"
+            echo '```'
+            echo
+            echo "$marker"
+          } > "$RUNNER_TEMP/issue-body.md"
+          # The filter runs once per page, so take the first match across all
+          # pages. awk reads every line, so gh never writes to a closed pipe.
+          existing="$(TITLE="$title" gh api --paginate -X GET "repos/$GH_REPO/issues" -f state=open -F per_page=100 \
+            --jq '.[] | select(.pull_request | not) | select(.title == env.TITLE) | .number' | awk 'NR == 1')"
+          if [ -z "$existing" ]; then
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue-body.md"
+            exit 0
+          fi
+          # Comment on the open issue, unless its latest report is this one.
+          gh issue view "$existing" --json body --jq .body > "$RUNNER_TEMP/posts.txt"
+          gh api --paginate "repos/$GH_REPO/issues/$existing/comments" --jq '.[].body' >> "$RUNNER_TEMP/posts.txt"
+          latest="$(grep -o '<!-- vendored-skills-report: [0-9a-f]* -->' "$RUNNER_TEMP/posts.txt" | tail -n 1 || true)"
+          if [ "$latest" = "$marker" ]; then
+            echo "Issue #$existing already holds this report."
+            exit 0
+          fi
+          gh issue comment "$existing" --body-file "$RUNNER_TEMP/issue-body.md"
