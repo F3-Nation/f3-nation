@@ -181,8 +181,6 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 ### Step 4: Test
 
-<!-- Production: "Repeat the "Quick checks by app" from the Staging test plan (#…) against the production URLs, skipping Homepage." -->
-
 - [ ] **Work through the Staging test plan, #{{TEST_PLAN_ISSUE}}.** Owner: Monitor
   - **Watch** (Monitor): keep the app error logs streaming. Post any new error not on the [known-noise list](#known-noise-ignore-these) in `#monorepo` with the time and what you were doing. {{ANYTHING_ELSE_TO_WATCH}}
 
@@ -190,9 +188,9 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 ### Step 5: Staging refresh follow-up
 
-{{WHICH_MIGRATIONS}} change what the Staging refresh's login can read, so the refresh needs its login re-granted and its image rebuilt, in this order. These items are outside the Stop rule and don't hold up the release; if one fails, post it in `#monorepo` so the next Staging refresh waits until it's fixed.
+{{WHY: with a needs_refresh_setup migration, "<those migrations> change what the Staging refresh's login can read, so the refresh needs its login re-granted, then its image rebuilt."; otherwise "The Staging refresh image must be rebuilt so it knows this release's migrations."}} These items are outside the Stop rule and don't hold up the release; if one fails, post it in `#monorepo` so the next Staging refresh waits until it's fixed.
 
-- [ ] **Re-grant the Staging refresh login.** The runner list isn't in the repo; the Refresh admin has it. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
+- [ ] **Re-grant the Staging refresh login.** First stop any database proxy still running from the migration (Ctrl-C in its terminal): the setup starts its own on the same ports. The runner list isn't in the repo; the Refresh admin has it. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
 
   ```bash
   test -z "$(git status --porcelain)" && echo "clean tree: true" || echo "clean tree: false"
@@ -209,16 +207,19 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
   - **Expected:** it ends with `Done. Image …` and no errors. The notes it prints every time (the GitHub environment and the slackbot restart) are informational once they're set up.
 
-- [ ] **Rebuild the Staging refresh image** from `main`. `pnpm db:migrate:prod` starts one; run it again after the re-grant, whose image comes from the release commit. Anyone with write access to the repo can run it. Owner: Release lead
+- [ ] **Rebuild the Staging refresh image** from `main` and wait for it, after any re-grant above: the re-grant deploys an image built from the release commit. Anyone with write access to the repo can run it. Owner: Release lead
 
   ```bash
+  BEFORE=$(gh run list -R F3-Nation/f3-nation --workflow rebuild-staging-refresh.yml --limit 1 --json databaseId --jq '.[0].databaseId // 0')
   gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
-  sleep 10
-  RUN=$(gh run list -R F3-Nation/f3-nation --workflow rebuild-staging-refresh.yml --limit 1 --json databaseId --jq '.[0].databaseId')
-  gh run watch "$RUN" -R F3-Nation/f3-nation --exit-status >/dev/null 2>&1 && echo "rebuild green: true" || echo "rebuild green: false"
+  RUN=""
+  for i in $(seq 1 12); do
+    sleep 5
+    RUN=$(gh run list -R F3-Nation/f3-nation --workflow rebuild-staging-refresh.yml --event workflow_dispatch --limit 1 --json databaseId --jq ".[0].databaseId | select(. > $BEFORE)")
+    [ -n "$RUN" ] && break
+  done
+  test -n "$RUN" && gh run watch "$RUN" -R F3-Nation/f3-nation --exit-status >/dev/null 2>&1 && echo "rebuild green: true" || echo "rebuild green: false"
   ```
-
-<!-- Production: replace Step 6 with one item: "Announce done in `#monorepo`." Owner: Release lead -->
 
 ### Step 6: Let it run, then decide
 

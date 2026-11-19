@@ -19,7 +19,12 @@ const target = join(repoRoot, ".claude", "skills");
 
 // Skills deleted from .agents/skills/. Their old mirrors would keep loading
 // with instructions that point at files which no longer exist.
-const RETIRED_SKILLS = ["github", "code-review"];
+const RETIRED_SKILLS = [
+  "github",
+  "code-review",
+  "release-plan",
+  "staging-test-plan",
+];
 
 for (const name of RETIRED_SKILLS) {
   rmSync(join(target, name), { recursive: true, force: true });

@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
-# Regression tests for release-facts.sh against a throwaway git repo and a
-# fake `gh` that answers from fixtures and logs every call: picking the latest
-# release PR, refusing an open or non-release PR, finding the previous release,
-# flagging migrations that need the refresh setup, listing changed env-var
-# files, reporting commits with no merged PR (advisory merges among them),
-# keeping only this release's waiting deploy runs, the Homepage deploy state,
-# failing rather than guessing when GitHub can't be read, and never writing.
+# Regression tests for release-facts.sh, run against a throwaway git repo and a
+# fake `gh` that answers from fixtures and logs every call, so the tests can
+# assert the script never writes to GitHub.
 # Run directly: bash .agents/skills/release/scripts/release-facts.test.sh
 set -uo pipefail
 
@@ -55,7 +51,10 @@ case "$1 $2" in
   "run list")
     case "$*" in
       *deploy-homepage.yml*) cat "$FAKE_DIR/homepage-runs.json" ;;
-      *) cat "$FAKE_DIR/waiting-runs.json" ;;
+      *)
+        [ -z "${FAIL_WAITING:-}" ] || exit 1
+        cat "$FAKE_DIR/waiting-runs.json"
+        ;;
     esac
     ;;
   api\ *)
@@ -104,11 +103,18 @@ echo 'closed' >apps/api/other.ts
 closed_pr="$(commit "fix(api): tidy (#5)")"
 echo 'CREATE TABLE things (id int);' >packages/db/drizzle/0001_things.sql
 echo 'UPDATE things SET id = 1;' >packages/db/drizzle/0002_backfill.sql
+# Larger than a pipe buffer, with the match on its first line.
+{
+  echo 'CREATE TABLE big (id int);'
+  printf -- '-- %s\n' "$(head -c 1100000 /dev/zero | tr '\0' x)"
+} >packages/db/drizzle/0003_big.sql
 commit "feat(db): add things (#3)" >/dev/null
 echo two >README.md
 release="$(commit "chore: release main (#4)")"
 git tag api@1.0.0 "$release"
 git tag homepage@1.0.0 "$release"
+git tag me@1.0.0 "$release"
+git tag pkg-db@1.0.0 "$release"
 git tag api@0.9.0 "$first_release"
 git push -q origin main --tags
 
@@ -137,6 +143,10 @@ cat >"$FAKE_DIR/pr-8.json" <<JSON
 {"number":8,"title":"chore: release main","state":"MERGED","mergedAt":"2026-03-01T00:00:00Z",
  "mergeCommit":{"oid":"0000000000000000000000000000000000000000"},"body":""}
 JSON
+cat >"$FAKE_DIR/pr-9.json" <<JSON
+{"number":9,"title":"chore: release main","state":"MERGED","mergedAt":"2026-02-02T00:00:00Z",
+ "mergeCommit":{"oid":"$closed_pr"},"body":"<details><summary>api: 1.0.1</summary>x</details>"}
+JSON
 cat >"$FAKE_DIR/waiting-runs.json" <<JSON
 [{"databaseId":11,"workflowName":"Deploy API","headBranch":"api@1.0.0"},
  {"databaseId":12,"workflowName":"Deploy API","headBranch":"api@0.9.0"}]
@@ -154,10 +164,10 @@ run_facts --pr 4 --no-fetch
 assert_eq "a merged release PR succeeds" "0" "$status"
 assert_eq "release commit" "$release" "$(jq -r '.release_sha' <<<"$out")"
 assert_eq "previous release is the last release commit before it" "$first_release" "$(jq -r '.previous_release_sha' <<<"$out")"
-assert_eq "apps come from the changelog headings" '["api","homepage"]' "$(jq -c '.apps' <<<"$out")"
-assert_eq "tags on the release commit only" '["api@1.0.0","homepage@1.0.0"]' "$(jq -c '.tags' <<<"$out")"
+assert_eq "components come from the changelog headings" '["api","homepage"]' "$(jq -c '.components' <<<"$out")"
+assert_eq "tags on the release commit only" '["api@1.0.0","homepage@1.0.0","me@1.0.0","pkg-db@1.0.0"]' "$(jq -c '.tags' <<<"$out")"
 assert_eq "migrations in order, CREATE TABLE needs the refresh setup" \
-  '[{"file":"packages/db/drizzle/0001_things.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0002_backfill.sql","needs_refresh_setup":false}]' \
+  '[{"file":"packages/db/drizzle/0001_things.sql","needs_refresh_setup":true},{"file":"packages/db/drizzle/0002_backfill.sql","needs_refresh_setup":false},{"file":"packages/db/drizzle/0003_big.sql","needs_refresh_setup":true}]' \
   "$(jq -c '.migrations' <<<"$out")"
 assert_eq "env-var files that changed" '["apps/api/.env.example"]' "$(jq -c '.env_files_changed' <<<"$out")"
 assert_eq "commits without a merged PR, advisory merge flagged" \
@@ -168,6 +178,7 @@ assert_eq "an unlisted commit lists its files" '["apps/api/handler.ts"]' \
 assert_eq "only this release's waiting runs, with their environments" \
   '[{"run_id":11,"workflow":"Deploy API","tag":"api@1.0.0","environments":["api-production"]}]' \
   "$(jq -c '.pending_deploys' <<<"$out")"
+assert_eq "an app tag with no waiting run is reported; packages and Homepage aren't" '["me@1.0.0"]' "$(jq -c '.tags_without_waiting_run' <<<"$out")"
 assert_eq "Homepage deploy state" "success" "$(jq -r '.homepage_deploy' <<<"$out")"
 assert_eq "never writes to GitHub" "0" "$(grep -cE -- '-X|--method|(POST|PATCH|PUT|DELETE)|issue create|pr (edit|create|merge)' "$CALL_LOG")"
 
@@ -197,6 +208,13 @@ assert_eq "a release commit missing from origin/main is refused" "1" "$status"
 
 run_facts --pr abc
 assert_eq "a non-numeric --pr is refused" "1" "$status"
+
+run_facts --pr 9 --no-fetch
+assert_eq "a release with no tags at origin is refused" "1" "$status"
+assert_eq "that refusal says why" "1" "$(grep -c 'no release tags' "$tmp_dir/err")"
+
+FAIL_WAITING=1 run_facts --pr 4 --no-fetch
+assert_eq "an unreadable list of waiting runs fails the run" "1" "$status"
 
 FAIL_PULLS=1 run_facts --pr 4 --no-fetch
 assert_eq "an unreadable commit fails the run instead of being guessed" "1" "$status"

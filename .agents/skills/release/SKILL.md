@@ -1,6 +1,6 @@
 ---
 name: release
-description: "Draft and file the GitHub issues a merged release-please release needs: for Staging, the volunteer test plan and the release plan (migration, checks, soak, go/no-go); for Production, the release plan (settings, approval and migration order, checks, follow-ups). Use when someone asks for a release plan, a Staging test plan or a test plan, or when a workflow runs it after a release PR merges."
+description: "Draft and file the GitHub issues a merged release-please release needs: for Staging, the volunteer test plan and the release plan (migration, checks, soak, go/no-go); for Production, the release plan (settings, approval and migration order, checks, follow-ups). Use when someone asks for a release plan, a Staging test plan or a test plan, or when a prompt asks for an unattended run for a merged release PR."
 ---
 
 # Release issues
@@ -24,15 +24,15 @@ only a running changelog, so never plan from one.
 
 ## How it is run
 
-|                                          | Interactive (a person asked)                                   | Unattended (a workflow started it)                                                                              |
-| ---------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Target PR                                | The most recently merged release PR, confirmed with the person | The PR number the workflow passes; no confirmation                                                              |
-| Environment                              | Ask; Staging by default                                        | Staging only. Refuse Production: its plan follows a human go/no-go                                              |
-| Timezone for times shown                 | Ask for an IANA name if unknown                                | The one the workflow passes, else UTC                                                                           |
-| Live checks (`gcloud`, `psql`)           | Run the read-only ones the steps below ask for                 | Skip them; keep each step's own check so the person running it verifies                                         |
-| Before filing                            | Show the drafts and wait for approval                          | File without asking                                                                                             |
-| An issue for this release already exists | Ask whether to update it or stop                               | Leave it untouched and report it                                                                                |
-| Final output                             | A summary in the conversation                                  | A summary as the final message. It ends up in a public workflow log, so it follows the same rules as the issues |
+|                                          | Interactive (a person asked)                                   | Unattended (the prompt says so)                                                                                              |
+| ---------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Target PR                                | The most recently merged release PR, confirmed with the person | The PR number the prompt gives; no confirmation                                                                              |
+| Environment                              | Ask; Staging by default                                        | Staging only. Refuse Production: its plan follows a human go/no-go                                                           |
+| Timezone for times shown                 | Ask for an IANA name if unknown                                | The one the prompt gives, else UTC                                                                                           |
+| Live checks (`gcloud`, `psql`)           | Run the read-only ones the steps below ask for                 | Skip them; keep each step's own check so the person running it verifies                                                      |
+| Before filing                            | Show the drafts and wait for approval                          | File without asking                                                                                                          |
+| An issue for this release already exists | Ask whether to update it or stop                               | Leave it untouched and report it                                                                                             |
+| Final output                             | A summary in the conversation                                  | A summary as the final message. It may end up somewhere public, such as a CI log, so it follows the same rules as the issues |
 
 The prompt says when a run is unattended. Otherwise treat it as interactive.
 
@@ -64,15 +64,13 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
    bash .agents/skills/release/scripts/release-facts.sh --pr <number> >"$FACTS"
    ```
 
-   It refuses an open or non-release PR and prints, as JSON, the release and
-   previous-release commits, the releasing apps, the release tags, new
-   migrations (and which need the Staging refresh setup), changed env-var
-   files, commits that reached `main` without a merged PR, the deploy runs
-   waiting for approval with their environments, and the Homepage deploy
-   state. If it fails, stop and report its message. Read the PR body (the
-   changelog) yourself:
-   `gh pr view <number> --json body --jq .body`. Leave out version numbers and
-   Analytics, which ships separately.
+   It refuses an open or non-release PR and prints one JSON object; the steps
+   below use its fields by name. If it fails, stop and report its message.
+   Read the PR body (the changelog) yourself:
+   `gh pr view <number> --json body --jq .body`. Leave out version numbers.
+   Leave Analytics out of both plans, including its run in `pending_deploys`:
+   its Production releases follow
+   [`docs/ANALYTICS_ETL_OPERATIONS.md`](../../../docs/ANALYTICS_ETL_OPERATIONS.md).
 
 4. **Read what changed, only for risk.** For each changelog entry and each
    commit without a PR, read the title and, if needed, the start of its body
@@ -105,16 +103,20 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
      its check a prerequisite of testing.
    - Write the pre-checks (data the migration would refuse) and the check
      query (proof it applied) from the SQL, following [`commands.md`](commands.md).
+   - Fill `{{NEWEST_MIGRATION_FILE}}` with the file name alone (no
+     directory) of the last entry in `migrations`, and
+     `{{EACH_MIGRATION_IN_THIS_RELEASE}}` with each entry's file name
+     without `.sql`, as the migrate command lists them.
    - When a migration merges, moves or deletes rows, back them up first with
      a `\copy` of exactly those rows to a file kept in restricted storage.
    - Production, when a migration has `needs_refresh_setup`: keep the
      refresh re-grant item and the Refresh admin row. With any migration, keep
-     the refresh image rebuild check. Otherwise drop all of them.
+     the "Rebuild the Staging refresh image" item. Otherwise drop all of them.
 
 6. **Settings the release needs.** For each file in `env_files_changed`,
    diff it between the two release commits and list every variable added,
    removed or newly required, and which service reads it. For each one, and
-   each other setting found in step 4, write a step with the exact targeted
+   each other setting found while reading what changed, write a step with the exact targeted
    command, a check and a rollback (see [`commands.md`](commands.md)).
    Interactive: read the live value first (read-only) and drop the step if
    it's already right; say so in the summary. When the running app ignores
@@ -133,10 +135,13 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
 9. **Check the drafts.**
    - Run `bash -n` on every shell block.
    - Interactive, with read-only database access: run every SQL block
-     against the target database's nearest copy you can reach (Staging for
-     either plan) and confirm each check prints `t`; where practical, confirm
-     the check can print `f` (for example, swap in a login that lacks the
-     grant).
+     against the nearest copy of the target database you can reach (Staging
+     for either plan; for a Production plan, put `f3_staging` in
+     `right_database` for this test run only). Each pre-check must print
+     `t`. A post-migration check must print `f` on a database the migration
+     hasn't reached and `t` on one it has; never loosen a check so it passes
+     before the migration. Where practical, confirm a grant check can print
+     `f` (for example, swap in a login that lacks the grant).
    - Confirm every live value the plan names (project, service, run ID,
      client ID, environment) against the source you took it from.
    - Unattended: say in the summary which checks weren't run.
@@ -153,10 +158,16 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
     gh issue list --state all --search '"(#<number>)" in:title' --json number,title,url
     ```
 
-    If one exists, follow [How it is run](#how-it-is-run). Otherwise file the
-    test plan first, then the release plan with the test plan's number in its
-    test step, then add the release plan's number to the test plan's
-    reporting line:
+    The search also finds the other environment's issues for the same
+    release; only an issue whose title matches one this run files counts.
+    When one does, follow [How it is run](#how-it-is-run), with one
+    exception in both modes: when the Staging test plan exists but the
+    Staging release plan doesn't, file the release plan and link the two.
+    Otherwise file the test plan first, with its reporting line ending at
+    "…what you did." (no release plan number yet), then the release plan
+    with the test plan's number in its test step, then edit the test plan to
+    add the release plan's clause, so no filed issue ever holds a
+    `{{PLACEHOLDER}}`:
 
     ```bash
     gh issue create --title "Staging test plan: <short release name> (#<number>)" --body-file <test plan file>
@@ -166,15 +177,17 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
 
     No labels or assignees.
 
-12. **Report** the issue links, anything left unverified, and anything the
-    Release lead must handle outside the issues (for example, steps for
-    unpublished advisories).
+12. **Report** the issue links and anything left unverified. Interactive:
+    also tell the Release lead what they must handle outside the issues,
+    including which steps come from unpublished advisories. Unattended: the
+    summary is public, so it never names, counts or hints at security fixes
+    or at steps left out on purpose.
 
 ## Security fixes
 
-GitHub merges a security advisory's fix from its private fork as a commit
-named `Merge commit from fork`, with no pull request, so it never appears in
-the changelog. `commits_without_pr` lists these (`advisory_merge: true`) and
+GitHub lands a security advisory's fix from its private fork as one commit
+named `Merge commit from fork`, with no pull request and no conventional-commit
+type, so release-please leaves it out of the changelog. `commits_without_pr` lists these (`advisory_merge: true`) and
 any other commit with no merged PR. Read each one's message and diff like a
 changelog entry: it can need a setting, a migration order or a test.
 
@@ -199,20 +212,20 @@ The advisory may still be unpublished, and the issues are public:
 [`plan-template.md`](plan-template.md) is written for Staging; for
 Production use the Production column.
 
-|                               | Staging                                                         | Production                                                                                     |
-| ----------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Prerequisite                  | None                                                            | The Staging release plan has a Go comment; any rollout gate the release names is closed        |
-| Settings                      | Change them where the steps say; apps are already running       | Before the approvals when the running apps ignore them                                         |
-| Deploy step                   | None; already deployed                                          | Approve each paused run from `pending_deploys`, in the order the migration needs, and watch it |
-| Migration order               | First step after the pre-checks                                 | Between the approvals, per the Overview                                                        |
-| Homepage                      | Already live: say so in the Overview, from `homepage_deploy`    | Nothing to do                                                                                  |
-| Database                      | Cloud SQL `f3data-nonprod`, database `f3_staging`               | Cloud SQL `f3data`, database `f3_prod`                                                         |
-| Proxy (`{{PROXY_COMMAND}}`)   | `cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5482` | `cloud-sql-proxy f3data:us-central1:f3data --port 5481`                                        |
-| Proxy port (`{{PROXY_PORT}}`) | `5482`                                                          | `5481`                                                                                         |
-| Cloud Run and log links       | As in the template                                              | Drop `-staging` from each project ID                                                           |
-| Test step                     | Work through the Staging test plan filed with it                | Repeat the Staging test plan's "Quick checks by app" against the production URLs               |
-| Refresh follow-up             | None                                                            | Per step 5                                                                                     |
-| Last step                     | Let it run 24–48 h, then go/no-go for Production                | Announce done in `#monorepo`                                                                   |
+|                               | Staging                                                                                                                      | Production                                                                                                                                                                                                      |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prerequisite                  | None                                                                                                                         | The Staging release plan has a Go comment; any rollout gate the release names is closed                                                                                                                         |
+| Settings                      | Change them where the steps say; apps are already running                                                                    | Before the approvals when the running apps ignore them                                                                                                                                                          |
+| Deploy step                   | None; already deployed                                                                                                       | Approve each paused run from `pending_deploys`, in the order the migration needs, and watch it. Before filing, resolve every tag in `tags_without_waiting_run`: find its run or have it started again           |
+| Migration order               | First step after the pre-checks                                                                                              | Between the approvals, per the Overview                                                                                                                                                                         |
+| Homepage                      | Already live: say so in the Overview, from `homepage_deploy`                                                                 | Nothing to do                                                                                                                                                                                                   |
+| Database                      | Cloud SQL `f3data-nonprod`, database `f3_staging`                                                                            | Cloud SQL `f3data`, database `f3_prod`                                                                                                                                                                          |
+| Proxy (`{{PROXY_COMMAND}}`)   | The proxy [`docs/db-migrations.md`](../../../docs/db-migrations.md#deploying-migrations) lists for `pnpm db:migrate:staging` | The one it lists for `pnpm db:migrate:prod`                                                                                                                                                                     |
+| Proxy port (`{{PROXY_PORT}}`) | The `--port` from that command                                                                                               | The `--port` from that command                                                                                                                                                                                  |
+| Cloud Run and log links       | As in the template                                                                                                           | Drop `-staging` from each project ID                                                                                                                                                                            |
+| Test step                     | Work through the Staging test plan filed with it                                                                             | Repeat the smoke checks ([`smoke-checks.md`](smoke-checks.md) lines) from the Staging test plan's "Quick checks by app" against the production URLs, skipping Homepage, plus any app check that changes no data |
+| Refresh follow-up             | None                                                                                                                         | Per the Migrations step                                                                                                                                                                                         |
+| Last step                     | Let it run 24–48 h, then go/no-go for Production                                                                             | Announce done in `#monorepo`                                                                                                                                                                                    |
 
 `homepage_deploy` reports the Homepage deploy run for the release tag. When it
 isn't `success`, the Overview says what it is instead of "live". CI's `build`

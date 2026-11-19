@@ -58,13 +58,19 @@ step's **Expected** and **Stop if** lines name the output.
 
 Every manual change the release needs gets three blocks:
 
-1. **The change,** as a targeted command for just that setting (for an env
-   var, `gcloud run services update … --update-env-vars` or
-   `--remove-env-vars`; values with commas use gcloud's `^DELIM^` syntax).
-   Never a helper that pushes every setting from a local file.
-2. **A check** that reads the setting back and prints true or false, and
-   also checks the service serves its latest revision when the change makes
-   a new one.
+1. **The change,** as a targeted command for just that setting. An env var:
+   `gcloud run services update … --update-env-vars` or `--remove-env-vars`
+   (values with commas use gcloud's `^DELIM^` syntax). A secret: a new
+   Secret Manager version read from a hidden prompt
+   (`read -rs VALUE; printf %s "$VALUE" | gcloud secrets versions add NAME --project … --data-file=-`),
+   mounted with `--update-secrets KEY=NAME:latest` the way that app's
+   `scripts/cloud-run-env.sh` mounts it; never pass a secret through
+   `--update-env-vars` or write its value in the issue. Never a helper that
+   pushes every setting from a local file.
+2. **A check** that reads the setting back and prints true or false (for a
+   secret, its mount: `.valueFrom.secretKeyRef`, never the value), and also
+   checks the service serves its latest revision when the change makes a new
+   one.
 3. **A rollback** in "If something goes wrong", or beside the change when
    it's in the optional "Later" step.
 
@@ -74,17 +80,22 @@ between.
 
 ## Deploy approvals
 
-Approve from the terminal with the run IDs in `pending_deploys`, one loop per
-group that's approved together, then wait on the same runs:
+Approve from the terminal with the run IDs in `pending_deploys`, one block per
+group that's approved together. It watches only the runs it approved, and a
+run someone already approved on the Actions page counts as approved:
 
 ```bash
+APPROVED=""
 for RUN in 111 222; do
-  ENV_ID=$(gh api repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments --jq '.[0].environment.id')
+  ENV_ID=$(gh api repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments --jq '.[0].environment.id // empty')
+  if [ -z "$ENV_ID" ]; then
+    echo "approved $RUN: true (nothing waiting)"; APPROVED="$APPROVED $RUN"; continue
+  fi
   gh api -X POST repos/<owner>/<repo>/actions/runs/$RUN/pending_deployments \
     -F "environment_ids[]=$ENV_ID" -f state=approved -f comment="Release #<number>" --silent \
-    && echo "approved $RUN: true" || echo "approved $RUN: false"
+    && { echo "approved $RUN: true"; APPROVED="$APPROVED $RUN"; } || echo "approved $RUN: false"
 done
-for RUN in 111 222; do
+for RUN in $APPROVED; do
   gh run watch "$RUN" -R <owner>/<repo> --exit-status >/dev/null 2>&1 \
     && echo "run $RUN green: true" || echo "run $RUN green: false"
 done
@@ -97,15 +108,6 @@ page for anyone who'd rather click.
 
 ## Rollback
 
-Rolling an app back sends traffic to the revision before the release:
-
-```bash
-SERVICE=service-name PROJECT=project-id
-gcloud run revisions list --service "$SERVICE" --project "$PROJECT" --region us-central1 --limit 3 \
-  --format='table(metadata.name,metadata.creationTimestamp)'
-REV=paste-the-revision-before-this-release
-gcloud run services update-traffic "$SERVICE" --project "$PROJECT" --region us-central1 --to-revisions "$REV=100"
-```
-
-Traffic then stays on that revision until `--to-latest` sends it back. Say
-which apps must not be rolled back once a migration has run, and why.
+The rollback command is in the template's "If something goes wrong" section
+([`plan-template.md`](plan-template.md)). Add after it which apps must not be
+rolled back once a migration has run, and why.
