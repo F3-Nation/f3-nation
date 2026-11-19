@@ -178,6 +178,13 @@ Recommend only adding the label. If an issue already has it but fails a
 condition above, say which one in the proposal, and remove the label only
 when the user agrees.
 
+An approved addition can stop qualifying before it is written: someone
+assigns the issue, or the reread under "Fill gaps" drops a proposed Low
+Effort. So right before adding the label, re-read the issue with `get`, re-run
+the free-to-take query, and check every condition again against the issue's
+Type and Effort as they are after the field write. If it no longer qualifies,
+skip the label and report the condition it failed.
+
 ## One issue
 
 1. `bash $S options`, then `bash $S get <n>`, and, for a possible
@@ -188,8 +195,9 @@ when the user agrees.
 3. On approval (or straight away if asked to set them), run `bash $S set`
    with the approved values, skipping it when no Type or field value was
    approved (it exits with `nothing to set`). Only after `set` succeeds,
-   change an approved label with `gh issue edit`. Then run `bash $S get <n>`
-   to confirm.
+   change an approved label with `gh issue edit`, first re-checking an
+   addition as [Good first issue](#good-first-issue) describes. Then run
+   `bash $S get <n>` to confirm.
 
 ## The backlog
 
@@ -219,12 +227,15 @@ A run without an issue number follows these steps over the issues
 4. Apply the approved rows with `bash $S apply`, leaving out rows whose four
    values are all empty (a label-only row is an error there); skip `apply`
    when no rows remain, since it exits with `no rows in` on an empty file.
-   Once it succeeds, re-run the free-to-take query for each approved `yes`
-   issue, skip and report any that is no longer free, and add the label to
-   the rest with `gh issue edit --add-label`. Remove it from each approved
-   `remove` issue with `gh issue edit --remove-label`.
+   Once it succeeds, re-check each approved `yes` issue as
+   [Good first issue](#good-first-issue) describes, skip any that no longer
+   qualifies, and add the label to the rest with
+   `gh issue edit --add-label`. Remove it from each approved `remove` issue
+   with `gh issue edit --remove-label`.
 5. Then confirm: for field rows, re-run `untriaged` with the same filter as
    step 1 and check that only the issues the user held back remain; for
-   labels, run `bash $S get` on the approved `gfi` numbers and check that
-   each one's `labels` includes `good first issue` (or no longer does, for
-   `remove`).
+   labels, run `bash $S get` on the issues whose label step 4 added or
+   removed and check that each one's `labels` includes `good first issue`
+   (or no longer does, for a removal). List the additions step 4 skipped
+   separately, each with the condition it failed; a skip is not a failed
+   write.
