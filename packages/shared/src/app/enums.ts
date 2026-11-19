@@ -66,6 +66,14 @@ export type EventCadence = (typeof EventCadence)[number];
 export const EventCategory = ["first_f", "second_f", "third_f"] as const;
 export type EventCategory = (typeof EventCategory)[number];
 
+// The capacity in which a user attends an event instance: a regular attendee
+// (`pax`, the Slack bot's "HC"), the leader (`q`) or a co-leader (`co_q`). One
+// value per attendance record. Where a record carries several types in the
+// attendance_x_attendance_types link table, the column holds the highest by
+// the precedence q, then co_q, then pax (ADR 0007).
+export const AttendanceType = ["pax", "q", "co_q"] as const;
+export type AttendanceType = (typeof AttendanceType)[number];
+
 // The request types that can actually be submitted, reviewed, and handled —
 // every discriminated-union schema (packages/validators/src/request-schemas.ts)
 // and handler (packages/api/src/lib/update-request-handlers.ts) is keyed by
