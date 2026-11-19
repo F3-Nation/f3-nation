@@ -16,10 +16,15 @@ name: Preview Environment
 # - Nothing is lost on teardown: previews are fully derived state. Remove and
 #   re-add the `preview` label (or push a commit) to recreate one at the same
 #   URLs; exact old builds stay in Artifact Registry tagged pr-<n>-<sha>.
+# - Real-shaped data (opt-in): add the `preview-snapshot` label too and the DB
+#   is built from the sanitized dev snapshot (`pnpm db:load:snapshot`), trimmed
+#   to the map's tables by .github/preview/trim-snapshot.sql, with the local
+#   seed added on top. The blocking E2E tier assumes seed-only data, so it fails
+#   on purpose while the label is on: remove it to run the tier before merge.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, closed]
+    types: [opened, synchronize, reopened, labeled, unlabeled, closed]
   schedule:
     - cron: "17 7 * * *" # daily TTL reaper
   workflow_dispatch: # manual reaper run
@@ -46,7 +51,8 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       github.event.action != 'closed' &&
-      (github.event.action != 'labeled' || github.event.label.name == 'preview') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'preview' || github.event.label.name == 'preview-snapshot') &&
+      (github.event.action != 'unlabeled' || github.event.label.name == 'preview-snapshot') &&
       contains(github.event.pull_request.labels.*.name, 'preview') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -104,18 +110,33 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build seeded database dump
+        env:
+          USE_SNAPSHOT: ${{ contains(github.event.pull_request.labels.*.name, 'preview-snapshot') }}
         run: |
-          docker run -d --name seed-pg \
+          docker run -d --name seed-postgres \
             -e POSTGRES_USER=f3local -e POSTGRES_PASSWORD=f3local -e POSTGRES_DB=f3nation \
             -p 5433:5432 postgres:18.0
-          until docker exec seed-pg pg_isready -U f3local -d f3nation >/dev/null 2>&1; do sleep 1; done
+          until docker exec seed-postgres pg_isready -U f3local -d f3nation >/dev/null 2>&1; do sleep 1; done
           # db scripts (pnpm db:migrate:local / db:seed:local) load env via dotenv
           # from packages/db/.env
           echo 'DATABASE_URL=postgresql://f3local:f3local@localhost:5433/f3nation' > packages/db/.env
           # CI= lets migrate.ts run (it refuses when CI is set); the database is
-          # the throwaway seed-pg container above, so the local-only guard passes.
+          # the throwaway seed-postgres container above, so the local-only guard passes.
           # SKIP_ENV_VALIDATION keeps @acme/env from demanding the full var set.
           CI= SKIP_ENV_VALIDATION=1 pnpm db:migrate:local
+          if [ "${USE_SNAPSHOT}" = "true" ]; then
+            # Sanitized dev snapshot (docs/LOCAL_DEV_DOCKER.md), trimmed to the
+            # map's tables; the seed below then adds the E2E fixtures back.
+            # seed-postgres is a fresh throwaway container: mark it disposable the
+            # way pnpm local:setup does, so the loader's local-only guard passes.
+            docker exec seed-postgres psql -U f3local -d f3nation -q \
+              -c "COMMENT ON DATABASE f3nation IS 'f3-disposable-local-v1'"
+            # The loader also checks the container itself, named
+            # <F3_CONTAINER_PREFIX>-postgres.
+            CI= F3_CONTAINER_PREFIX=seed SKIP_ENV_VALIDATION=1 pnpm db:load:snapshot --yes
+            docker exec -i seed-postgres psql -U f3local -d f3nation -v ON_ERROR_STOP=1 -q \
+              < .github/preview/trim-snapshot.sql
+          fi
           CI= SKIP_ENV_VALIDATION=1 pnpm db:seed:local
           # Preview-only E2E auth fixtures (docs/PREVIEW_AUTH.md). Previews
           # have no SMTP, so the auth app's email-MFA send path can't work;
@@ -125,7 +146,7 @@ jobs:
           # doesn't bounce them to /onboarding. Codes are consume-once, so
           # seed a stack of 40 per user; the in-memory DB restores all of
           # them on every cold start.
-          docker exec -i seed-pg psql -U f3local -d f3nation -v ON_ERROR_STOP=1 <<'SQL'
+          docker exec -i seed-postgres psql -U f3local -d f3nation -v ON_ERROR_STOP=1 <<'SQL'
             UPDATE users
             SET meta = (coalesce(meta::jsonb, '{}'::jsonb)
                         || '{"onboarding_completed": true}'::jsonb)::json
@@ -139,9 +160,9 @@ jobs:
             FROM users u, generate_series(1, 40)
             WHERE u.email LIKE 'dev-%@f3local.dev';
           SQL
-          docker exec seed-pg pg_dump -U f3local --no-owner --no-privileges f3nation \
+          docker exec seed-postgres pg_dump -U f3local --no-owner --no-privileges f3nation \
             > .github/preview/seed.sql
-          docker rm -f seed-pg
+          docker rm -f seed-postgres
           wc -l .github/preview/seed.sql
 
       - name: Build and push images
@@ -326,10 +347,14 @@ jobs:
           URL_MAP: ${{ steps.meta.outputs.url_map }}
           URL_API: ${{ steps.meta.outputs.url_api }}
           URL_AUTH: ${{ steps.meta.outputs.url_auth }}
+          USE_SNAPSHOT: ${{ contains(github.event.pull_request.labels.*.name, 'preview-snapshot') }}
         with:
           script: |
             const marker = '<!-- preview-env -->';
-            const body = `${marker}\n### 🚀 Preview environment\n\n| App | URL |\n| --- | --- |\n| map | ${process.env.URL_MAP} |\n| api | ${process.env.URL_API} |\n| auth | ${process.env.URL_AUTH} |\n\nDeployed from ${context.payload.pull_request.head.sha.slice(0, 7)} with a seeded ephemeral database (deterministic; resets on cold start). Scale-to-zero; torn down on close or after 7 days. Signed-in/RBAC E2E: see \`docs/PREVIEW_AUTH.md\`.\n\n> Torn down and need it back? Remove and re-add the \`preview\` label (or push a commit) — previews are fully derived state and rebuild identically at the same URLs.`;
+            const dataset = process.env.USE_SNAPSHOT === 'true'
+              ? 'the sanitized dev snapshot (map data only) plus the local seed, from the `preview-snapshot` label (resets on cold start; the blocking E2E tier fails until the label is removed)'
+              : 'a seeded ephemeral database (deterministic; resets on cold start)';
+            const body = `${marker}\n### 🚀 Preview environment\n\n| App | URL |\n| --- | --- |\n| map | ${process.env.URL_MAP} |\n| api | ${process.env.URL_API} |\n| auth | ${process.env.URL_AUTH} |\n\nDeployed from ${context.payload.pull_request.head.sha.slice(0, 7)} with ${dataset}. Scale-to-zero; torn down on close or after 7 days. Signed-in/RBAC E2E: see \`docs/PREVIEW_AUTH.md\`.\n\n> Torn down and need it back? Remove and re-add the \`preview\` label (or push a commit) — previews are fully derived state and rebuild identically at the same URLs.`;
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -379,6 +404,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Refuse snapshot data
+        if: contains(github.event.pull_request.labels.*.name, 'preview-snapshot')
+        run: |
+          echo "::error::This preview runs on the dev snapshot (preview-snapshot label). The blocking tier needs the deterministic seed: remove the label to redeploy and run it before merge."
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -423,6 +453,7 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.action != 'closed' &&
       contains(github.event.pull_request.labels.*.name, 'preview') &&
+      !contains(github.event.pull_request.labels.*.name, 'preview-snapshot') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     continue-on-error: true
