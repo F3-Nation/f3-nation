@@ -1,12 +1,1 @@
-{
-  "src/app/org/_components/search-box.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/app/org/_lib/use-ao-search.ts": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  }
-}
+{}
