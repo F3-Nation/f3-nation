@@ -108,7 +108,8 @@ const REBUILD_RUNS_URL =
 /**
  * Migrations the rebuild alone doesn't cover: they need the full setup too.
  * The same list as docs/STAGING_REFRESH.md ("Migrations that need the full
- * setup"); change both together.
+ * setup") and REFRESH_SETUP_PATTERN in
+ * .agents/skills/release/scripts/release-facts.sh; change all three together.
  */
 const FULL_SETUP_NOTE = [
   "If a migration you just applied creates a table or schema, changes an owner,",

@@ -24,7 +24,7 @@
       "name": "F3 Nation",
       "url": "https://f3nation.com"
     },
-    "description": "# Authentication\n\nAll API endpoints require authentication via a Bearer token passed in the Authorization header.\n\n## Required Headers\n\nEvery request must include the following headers:\n\n### 1. Authorization Header (Required)\n```\nAuthorization: Bearer YOUR_API_KEY\n```\n\nThe Bearer token is an API key that represents programmatic access to the F3 Nation API. This key must be a valid, non-revoked API key that has not expired.\n\n### 2. Client Header (Required)\n```\nClient: your-app-identifier\n```\n\nThe `Client` header must be present and contain a string that identifies your application or service. This helps us track API usage and troubleshoot issues. Examples: `https://f3milwaukee.com/locations`, `gloom-scheduler`, `Tackles Postman`, etc.\n\n## Getting Started\n\n### Step 1: Generate an API Key\nNavigate to **https://admin.f3nation.com/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:\n- Create new API keys\n- Set expiration dates for security\n- View and revoke keys\n\n### Step 2: Configure Your Client\nUse the generated API key and a descriptive client identifier in your application:\n\n```bash\ncurl -X GET \"https://api.f3nation.com/v1/ping\" \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -H \"Client: my-app\"\n```\n\n### Step 3: Make API Calls\nInclude both headers in every request to the F3 Nation API.\n\n## Role-Based Access\n\nAPI keys inherit the roles and permissions of their owner. Access levels include:\n\n- **Editor**: Can view and modify data within assigned organizations\n- **Admin**: Same permissions as Editor, plus the ability to add/remove other Admins and Editors\n\nAs of February 1, 2026, regional admins can only create read-only API keys. If you want an API Key edit access to your region, you will need to contact an F3 Nation admin. Right now, regional edit access is highly restrcited. This is because the API is still new and there are almost certainly gaps in security - meaning that a region has the potential to mess up data for other regions.\n\n## Best Practices\n\n1. **Keep Keys Secure**: Never commit API keys to version control. Use environment variables instead.\n    a. Read-Only keys are an exception. We realize many regions use systems that require storing the key in a config file or in plain text on the front-end. Read-Only keys are much less risky to expose.\n2. **Use Expiration Dates**: Set expiration dates on keys to limit exposure window in case of compromise.\n\n## Error Handling\n\n- **401 Unauthorized**: Missing, invalid, revoked, or expired API key\n- **403 Forbidden**: Valid API key but insufficient permissions for the requested resource\n- **429 Too Many Requests**: Rate limit exceeded (500 requests per 60 seconds)",
+    "description": "# Authentication\n\nAll API endpoints require authentication via a Bearer token passed in the Authorization header.\n\n## Required Headers\n\nEvery request must include the following headers:\n\n### 1. Authorization Header (Required)\n```\nAuthorization: Bearer YOUR_API_KEY\n```\n\nThe Bearer token is an API key that represents programmatic access to the F3 Nation API. This key must be a valid, non-revoked API key that has not expired.\n\n### 2. Client Header (Required)\n```\nClient: your-app-identifier\n```\n\nThe `Client` header must be present and contain a string that identifies your application or service. This helps us track API usage and troubleshoot issues. Examples: `https://f3milwaukee.com/locations`, `gloom-scheduler`, `Tackles Postman`, etc.\n\n## Getting Started\n\n### Step 1: Generate an API Key\nNavigate to **https://admin.f3nation.com/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:\n- Create new API keys\n- Set expiration dates for security\n- View and revoke keys\n\n### Step 2: Configure Your Client\nUse the generated API key and a descriptive client identifier in your application:\n\n```bash\ncurl -X GET \"https://api.f3nation.com/v1/ping\" \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -H \"Client: my-app\"\n```\n\n### Step 3: Make API Calls\nInclude both headers in every request to the F3 Nation API.\n\n## Role-Based Access\n\nPeople and API keys are given roles on orgs. A role on an org also applies to every org below it. Each role includes the permissions below:\n\n| Permission | What it allows | user | editor | admin | password_manager | password_reader |\n| --- | --- | :---: | :---: | :---: | :---: | :---: |\n| Manage entities (`entities.manage`) | Create, edit and delete orgs, locations, events and other records. | — | ✅ | ✅ | — | — |\n| Manage security (`security.manage`) | Give and remove roles, and manage API keys. | — | — | ✅ | — | — |\n| Send messages (`messages.send`) | Send and edit Slack messages through the API. | — | — | ✅ | — | — |\n| Read personal information (`pii.read`) | See people's personal information, such as email addresses. | — | ✅ | ✅ | — | — |\n\nA permission is checked only by endpoints that list it in a **Required permission(s)** line in their description.\n\nAs of February 1, 2026, regional admins can only create read-only API keys. If you want an API Key edit access to your region, you will need to contact an F3 Nation admin. Right now, regional edit access is highly restrcited. This is because the API is still new and there are almost certainly gaps in security - meaning that a region has the potential to mess up data for other regions.\n\n## Best Practices\n\n1. **Keep Keys Secure**: Never commit API keys to version control. Use environment variables instead.\n    a. Read-Only keys are an exception. We realize many regions use systems that require storing the key in a config file or in plain text on the front-end. Read-Only keys are much less risky to expose.\n2. **Use Expiration Dates**: Set expiration dates on keys to limit exposure window in case of compromise.\n\n## Error Handling\n\n- **401 Unauthorized**: Missing, invalid, revoked, or expired API key\n- **403 Forbidden**: Valid API key but insufficient permissions for the requested resource\n- **429 Too Many Requests**: Rate limit exceeded (500 requests per 60 seconds)",
     "title": "F3 Nation API",
     "version": "0.0.0-characterization"
   },
@@ -13368,6 +13368,166 @@
         ]
       }
     },
+    "/v1/org-chart/leadership": {
+      "get": {
+        "description": "Return every active non-AO org whose ancestors are all active, with every position holder and admin/editor role holder at those orgs, in one response, for the directory's Table view. Unlike the org chart, orgs are listed whether or not they have active locations.",
+        "operationId": "orgChart.leadership",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "leaders": {
+                      "items": {
+                        "properties": {
+                          "avatarUrl": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "User avatar URL"
+                          },
+                          "f3Name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "User F3 name"
+                          },
+                          "homeRegionName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of the user's home region, when active"
+                          },
+                          "id": {
+                            "description": "Position or role ID",
+                            "type": "number"
+                          },
+                          "kind": {
+                            "description": "Whether this is a leadership position or a role",
+                            "enum": [
+                              "position",
+                              "role"
+                            ],
+                            "type": "string"
+                          },
+                          "orgId": {
+                            "description": "Organization ID",
+                            "type": "number"
+                          },
+                          "title": {
+                            "description": "Position or role title",
+                            "type": "string"
+                          },
+                          "userId": {
+                            "description": "User ID",
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "orgId",
+                          "kind",
+                          "id",
+                          "title",
+                          "userId",
+                          "f3Name",
+                          "avatarUrl",
+                          "homeRegionName"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "orgs": {
+                      "items": {
+                        "properties": {
+                          "id": {
+                            "description": "Organization ID",
+                            "type": "number"
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Organization name"
+                          },
+                          "orgType": {
+                            "description": "Organization type",
+                            "enum": [
+                              "ao",
+                              "region",
+                              "area",
+                              "territory",
+                              "sector",
+                              "nation"
+                            ],
+                            "type": "string"
+                          },
+                          "parentId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Parent organization ID"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "orgType",
+                          "parentId"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "orgs",
+                    "leaders"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List org chart leadership",
+        "tags": [
+          "Org Chart"
+        ]
+      }
+    },
     "/v1/org-chart/location/{locationId}": {
       "get": {
         "description": "Return all AOs with active events at the given location, along with their leadership positions.",
@@ -20430,7 +20590,7 @@
     },
     "/v1/slack/message": {
       "post": {
-        "description": "Post a Slack message to a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
+        "description": "Post a Slack message to a channel, user, or group. Requires an active F3 Nation Slack app installation.\n\n**Required permission:** Send messages (`messages.send`) on the org the request acts on.",
         "operationId": "slack.postMessage",
         "parameters": [
           {
@@ -20722,12 +20882,15 @@
         "summary": "Post a Slack message",
         "tags": [
           "slack"
+        ],
+        "x-required-permissions": [
+          "messages.send"
         ]
       }
     },
     "/v1/slack/message/{ts}": {
       "patch": {
-        "description": "Update a Slack message in a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
+        "description": "Update a Slack message in a channel, user, or group. Requires an active F3 Nation Slack app installation.\n\n**Required permission:** Send messages (`messages.send`) on the org the request acts on.",
         "operationId": "slack.updateMessage",
         "parameters": [
           {
@@ -21008,6 +21171,9 @@
         "summary": "Update a Slack message",
         "tags": [
           "slack"
+        ],
+        "x-required-permissions": [
+          "messages.send"
         ]
       }
     },

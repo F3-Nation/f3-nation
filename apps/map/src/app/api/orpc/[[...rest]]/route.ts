@@ -10,8 +10,8 @@ import { logWarn } from "~/lib/logging";
 
 const PROXY_PREFIX = "/api/orpc";
 
-// How long to wait for the API to start answering before treating it as down.
-// Only the wait for response headers is bounded; the body streams afterwards.
+// How long the API may take to send its response headers, and then each next
+// chunk of the body, before it is treated as down.
 const UPSTREAM_TIMEOUT_MS = 20_000;
 
 // Anonymous-reachable paths the map calls — see docs/specs/map-browse-and-search.md
@@ -71,6 +71,59 @@ function getApiBaseUrl(): string {
     : normalized;
 }
 
+/**
+ * Passes `body` through, failing it if the API goes quiet for `timeoutMs`
+ * mid-body. The timer runs only while waiting on the API, not while the
+ * browser is slow to take the next chunk. Reads go through our own reader
+ * because Next's patched fetch can hand back a copied body that aborting the
+ * request never reaches. Cancelling that copy can likewise wait on another
+ * branch, so `onCancel` lets the caller also abort the request.
+ */
+export function withStallTimeout<T>(
+  body: ReadableStream<T>,
+  timeoutMs: number,
+  onFailure: (err: unknown) => void,
+  onCancel?: () => void,
+): ReadableStream<T> {
+  const reader = body.getReader();
+  // Set when the browser goes away. Cancelling ends a pending read with
+  // `done`, and closing our already-cancelled stream would then throw and be
+  // logged as an API failure.
+  let cancelled = false;
+  return new ReadableStream<T>({
+    async pull(controller) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stalled = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new DOMException("API stopped sending", "TimeoutError")),
+          timeoutMs,
+        );
+      });
+      try {
+        const { done, value } = await Promise.race([reader.read(), stalled]);
+        if (cancelled) return;
+        if (done) controller.close();
+        else controller.enqueue(value);
+      } catch (err) {
+        if (cancelled) return;
+        // Not awaited: cancelling one branch of a copied body settles only
+        // once the other branch is cancelled too.
+        void reader.cancel(err).catch(() => undefined);
+        onFailure(err);
+        controller.error(err);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    cancel(reason) {
+      cancelled = true;
+      onCancel?.();
+      // Not awaited, for the same reason as in `pull`.
+      void reader.cancel(reason).catch(() => undefined);
+    },
+  });
+}
+
 function getProxiedPath(request: NextRequest): string {
   const sourceUrl = new URL(request.url);
   return sourceUrl.pathname.slice(PROXY_PREFIX.length) || API_PREFIX_V1;
@@ -120,8 +173,9 @@ async function proxyRequest(request: NextRequest) {
   const targetUrl = getTargetUrl(request, proxiedPath);
   const forwardedHeaders = getForwardedHeaders(request);
 
-  // Cleared once headers arrive, so a large body can still stream afterwards.
+  // Bounds the wait for headers; withStallTimeout below bounds the body.
   const upstreamTimeout = new AbortController();
+  const startedAt = Date.now();
   const upstreamTimer = setTimeout(() => {
     upstreamTimeout.abort(
       new DOMException("API did not respond", "TimeoutError"),
@@ -161,6 +215,26 @@ async function proxyRequest(request: NextRequest) {
   // not just SIGNED_IN_ONLY_PATHS — must stay uncached.
   headers.set("Cache-Control", "no-store");
 
+  const responseBody =
+    upstreamResponse.body &&
+    withStallTimeout(
+      upstreamResponse.body,
+      UPSTREAM_TIMEOUT_MS,
+      (err) => {
+        // Fail the downstream body and record why the upstream read failed.
+        // Next sends the headers only with the first body chunk, so on a
+        // first-chunk stall the browser's own timeout (started earlier) fires
+        // first and cancels instead; that stall is reported by the client alone.
+        upstreamTimeout.abort();
+        logWarn("map.orpc_proxy.upstream_body_failed", {
+          path: proxiedPath,
+          durationMs: Date.now() - startedAt,
+          err,
+        });
+      },
+      () => upstreamTimeout.abort(),
+    );
+
   // Compression is left to Next.js's server, which gzips or deflates by the
   // caller's Accept-Encoding (and adds Vary). The API doesn't compress (see
   // apps/api/src/app.ts), and eventsAndLocations is about 1.5 MB, so this
@@ -171,7 +245,9 @@ async function proxyRequest(request: NextRequest) {
   // `no-transform` tells Next.js not to compress. SIGNED_IN_ONLY_PATHS carry
   // the caller's own data, and leaving them uncompressed rules out
   // BREACH-style length leaks for the price of a few small responses.
-  // Non-JSON bodies (e.g. text/event-stream) must stream as sent.
+  // Non-JSON bodies (e.g. text/event-stream) must stream as sent, though
+  // withStallTimeout still ends any body that goes quiet for
+  // UPSTREAM_TIMEOUT_MS, streams included.
   const isJson = (headers.get("content-type") ?? "").includes(
     "application/json",
   );
@@ -179,7 +255,7 @@ async function proxyRequest(request: NextRequest) {
     headers.set("Cache-Control", "no-store, no-transform");
   }
 
-  return new Response(upstreamResponse.body, {
+  return new Response(responseBody, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,
     headers,

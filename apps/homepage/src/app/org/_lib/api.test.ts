@@ -3,6 +3,7 @@ import {
   fetchOrgChart,
   fetchOrgById,
   fetchLocationById,
+  fetchLeadership,
   searchAos,
 } from "./api";
 
@@ -240,5 +241,65 @@ describe("auth headers", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBeUndefined();
     expect(headers.client).toBe("https://apps.f3nation.com");
+  });
+});
+
+describe("fetchLeadership", () => {
+  it("links orgs past an unknown tier to their nearest known ancestor", async () => {
+    mockFetch(200, {
+      orgs: [
+        { id: 2, name: "Southeast", orgType: "sector", parentId: 1 },
+        { id: 50, name: "New Tier", orgType: "galaxy", parentId: 2 },
+        { id: 51, name: "Newer Tier", orgType: "galaxy", parentId: 50 },
+        { id: 5, name: "Western NC", orgType: "area", parentId: 51 },
+        { id: 7, name: "Boone", orgType: "region", parentId: 5 },
+        // A cycle of unknown tiers, and a parent missing from the list.
+        { id: 60, name: "Loop A", orgType: "galaxy", parentId: 61 },
+        { id: 61, name: "Loop B", orgType: "galaxy", parentId: 60 },
+        { id: 8, name: "Looped", orgType: "region", parentId: 60 },
+        { id: 9, name: "Stray", orgType: "region", parentId: 404 },
+      ],
+      leaders: [],
+    });
+    const { orgs } = await fetchLeadership();
+    expect(orgs.map((o) => [o.id, o.parentId])).toEqual([
+      [2, 1],
+      [5, 2],
+      [7, 5],
+      [8, 60],
+      [9, 404],
+    ]);
+  });
+
+  it("returns the orgs and keeps positions and only the visible roles", async () => {
+    const base = {
+      orgId: 7,
+      id: 1,
+      userId: 2,
+      f3Name: "Gator",
+      avatarUrl: null,
+    };
+    mockFetch(200, {
+      orgs: [
+        { id: 7, name: "Boone", orgType: "region", parentId: 5 },
+        { id: 9, name: null, orgType: "area", parentId: null },
+        { id: 10, name: "Odd", orgType: "galaxy", parentId: null },
+      ],
+      leaders: [
+        { ...base, kind: "position", title: "Nant'an" },
+        { ...base, kind: "role", title: "admin" },
+        { ...base, kind: "role", title: "password_manager" },
+      ],
+    });
+    const result = await fetchLeadership();
+    expect(result.leaders.map((l) => l.title)).toEqual(["Nant'an", "admin"]);
+    // Unknown org types are dropped; a missing name gets a placeholder.
+    expect(result.orgs).toEqual([
+      { id: 7, name: "Boone", orgType: "region", parentId: 5 },
+      { id: 9, name: "Org 9", orgType: "area", parentId: null },
+    ]);
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toContain(
+      "/v1/org-chart/leadership",
+    );
   });
 });

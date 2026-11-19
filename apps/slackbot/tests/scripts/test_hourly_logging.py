@@ -1,6 +1,10 @@
 import io
 import json
 import logging
+import sys
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from google.cloud.logging_v2.handlers import StructuredLogHandler
@@ -63,15 +67,17 @@ JOBS = [
     ("f3versary_announcements", "send_f3versary_announcements", "f3versary_announcements.send_f3versary_announcements"),
     ("monthly_reporting", "cycle_all_orgs", "monthly_reporting.cycle_all_orgs"),
     ("kotter_reports", "send_kotter_reports", "kotter_reports.send_kotter_reports"),
-    ("award_achievements", "main", "award_achievements.main"),
+    ("award_achievements", "run", "award_achievements.run"),
     ("requests", "post", "hourly_runner.notify_completion"),
 ]
 SENSITIVE = "member@example.invalid xoxb-synthetic-token SELECT private_data U_SYNTHETIC_MEMBER"
 
 
-def stub_jobs(monkeypatch, failing_job=None, error=None, arguments=None):
+def stub_jobs(monkeypatch, failing_job=None, error=None, arguments=None, real_achievements=False):
     attempted = []
     for module, function, job in JOBS:
+        if real_achievements and module == "award_achievements":
+            continue
 
         def run(*args, _job=job, **kwargs):
             attempted.append(_job)
@@ -217,7 +223,7 @@ def test_hourly_runner_preserves_job_arguments(monkeypatch, failure):
         ("f3versary_announcements.send_f3versary_announcements", (), {"force": True}),
         ("monthly_reporting.cycle_all_orgs", (), {"run_org_id": 123}),
         ("kotter_reports.send_kotter_reports", (), {"force": True, "run_org_id": 123}),
-        ("award_achievements.main", (), {}),
+        ("award_achievements.run", (), {}),
         ("hourly_runner.notify_completion", (f"{hourly_runner.APP_URL}/hourly-runner-complete",), {}),
     ]
 
@@ -285,3 +291,51 @@ def test_hourly_failure_copies_module_text_without_custom_string_formatting(capl
     assert "error_module=safe.module" in stream.getvalue()
     assert type(record.json_fields["error_module"]) is str
     assert SENSITIVE not in stream.getvalue() + repr(record.__dict__)
+
+
+@pytest.mark.parametrize(
+    "argv,kwargs",
+    [
+        ([], {}),
+        (["--force"], {"force": True}),
+        (["--skip-reporting"], {"run_reporting": False}),
+        (["--reporting-org-id", "123"], {"reporting_org_id": 123}),
+    ],
+)
+def test_hourly_arguments_do_not_abort_achievements_or_completion(monkeypatch, caplog, argv, kwargs):
+    attempted = stub_jobs(monkeypatch, real_achievements=True)
+    monkeypatch.setattr(sys, "argv", ["hourly_runner.py", *argv])
+    achievements = hourly_runner.award_achievements
+
+    class AwardTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2099, 1, 1, 18, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(achievements, "datetime", AwardTime)
+    monkeypatch.setattr(achievements.constants, "ACHIEVEMENT_AWARD_HOUR_CST", 12)
+    session = MagicMock()
+    achievement = SimpleNamespace(id=42)
+    session.scalars.return_value.all.return_value = [achievement]
+    session_context = MagicMock()
+    session_context.__enter__.return_value = session
+    monkeypatch.setattr(achievements, "get_session", lambda: session_context)
+    processed = []
+
+    def process(session_arg, achievement_arg, today):
+        processed.append((session_arg, achievement_arg, today.isoformat()))
+        return []
+
+    monkeypatch.setattr(achievements, "process_achievement", process)
+    monkeypatch.setattr(achievements, "award_candidates", lambda *args: None)
+    hourly_runner.run_all_hourly_scripts(**kwargs)
+
+    assert processed == [(session, achievement, "2099-01-01")]
+    run_reporting = kwargs.get("run_reporting", True)
+    expected = [
+        job
+        for module, _, job in JOBS
+        if module != "award_achievements" and (run_reporting or module not in {"monthly_reporting", "kotter_reports"})
+    ]
+    assert attempted == expected
+    assert not [record for record in caplog.records if record.name == "scripts.hourly_runner"]

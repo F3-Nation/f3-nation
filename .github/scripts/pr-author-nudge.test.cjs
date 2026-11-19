@@ -6,6 +6,8 @@ const assert = require("node:assert/strict");
 const {
   parseMarker,
   summarize,
+  collectFacts,
+  readCodeowners,
   decide,
   nudgeBody,
   warnMessage,
@@ -882,6 +884,43 @@ test("anyone with push access gets the team timings, whatever GitHub's associati
   assert.deepEqual(notes, []);
 });
 
+test("a codeowner gets the team timings even when collaborators leave them out", async () => {
+  // GitHub reports a private org owner as a CONTRIBUTOR to the workflow's
+  // token and leaves them out of its collaborator list.
+  const github = fakeGithub(null, {
+    authorAssociation: "CONTRIBUTOR",
+    author: { login: "Pax", __typename: "User" },
+  });
+  const facts = async (codeowners) => {
+    const collected = await collectFacts({
+      github,
+      owner: "F3-Nation",
+      repo: "f3-nation",
+      codeowners,
+    });
+    return collected.factsFor(collected.prs[0]);
+  };
+  assert.equal((await facts([])).tier, "outside");
+  assert.equal((await facts(["pax"])).tier, "team");
+});
+
+test("readCodeowners lists each @handle once, lowercased, without teams or comments", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codeowners-"));
+  const file = path.join(dir, "CODEOWNERS");
+  fs.writeFileSync(
+    file,
+    "# @nobody\n* @Amy @dan # @later\n/apps/ @amy @F3-Nation/core\n",
+  );
+  assert.deepEqual(readCodeowners(file), ["amy", "dan"]);
+  assert.equal(readCodeowners(path.join(dir, "missing")), null);
+  fs.rmSync(dir, { recursive: true });
+  // The repo's own file names at least one codeowner.
+  assert.ok(readCodeowners().length > 0);
+});
+
 test("if collaborators can't be listed, the run notes it and uses the association", async () => {
   const github = fakeGithub(
     null,
@@ -947,10 +986,7 @@ test("without the collaborator list, outside-timing heads-ups and closes are hel
     const github = fakeGithub(state, outside, unknown);
     const { rows } = await liveRun(github, nowDays);
     assert.ok(rows[0].failed);
-    assert.equal(
-      rows[0].outcome,
-      `FAILED: ${action} held, collaborators unknown`,
-    );
+    assert.equal(rows[0].outcome, `FAILED: ${action} held, team unknown`);
     assert.equal(github.writes.length, 0);
   }
   // A known member's PR isn't held: its association already says team.
@@ -960,6 +996,31 @@ test("without the collaborator list, outside-timing heads-ups and closes are hel
     unknown,
   );
   const { rows } = await liveRun(member, 10.1);
+  assert.equal(rows[0].outcome, "closed");
+});
+
+test("without the codeowner list, outside-timing heads-ups and closes are held", async () => {
+  const outside = { authorAssociation: "CONTRIBUTOR" };
+  for (const [state, nowDays, action] of [
+    [{ nudgedAt: at(3) }, 6.1, "warn"],
+    [{ nudgedAt: at(3), warnedAt: at(6.1) }, 7.1, "close"],
+  ]) {
+    const github = fakeGithub(state, outside, []);
+    const { rows, notes } = await liveRun(github, nowDays, {
+      codeowners: null,
+    });
+    assert.ok(rows[0].failed);
+    assert.equal(rows[0].outcome, `FAILED: ${action} held, team unknown`);
+    assert.equal(github.writes.length, 0);
+    assert.match(notes[0], /Couldn't read \.github\/CODEOWNERS/);
+  }
+  // With the list read, the same PR closes on the outside timings.
+  const github = fakeGithub(
+    { nudgedAt: at(3), warnedAt: at(6.1) },
+    outside,
+    [],
+  );
+  const { rows } = await liveRun(github, 7.1, { codeowners: [] });
   assert.equal(rows[0].outcome, "closed");
 });
 
@@ -1236,8 +1297,8 @@ test("PRs held for unknown collaborators don't take the run's slots", async () =
   assert.deepEqual(
     rows.map((r) => r.outcome),
     [
-      "FAILED: close held, collaborators unknown",
-      "FAILED: close held, collaborators unknown",
+      "FAILED: close held, team unknown",
+      "FAILED: close held, team unknown",
       "closed",
     ],
   );

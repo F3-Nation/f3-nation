@@ -85,7 +85,7 @@ load_catalog() {
 }
 
 # Projects an issue node into the flat shape `get` and `untriaged` print.
-ISSUE_SELECTION='number title url author{ login } labels(first:20){ nodes{ name } } parent{ number title } subIssuesSummary{ total } body issueType{ name } issueFieldValues(first:20){ nodes{ ... on IssueFieldSingleSelectValue{ name field{ ... on IssueFieldSingleSelect{ name } } } ... on IssueFieldMultiSelectValue{ options{ name } field{ ... on IssueFieldMultiSelect{ name } } } } }'
+ISSUE_SELECTION='number title url author{ login } labels(first:100){ nodes{ name } } parent{ number title } subIssuesSummary{ total } body issueType{ name } issueFieldValues(first:20){ nodes{ ... on IssueFieldSingleSelectValue{ name field{ ... on IssueFieldSingleSelect{ name } } } ... on IssueFieldMultiSelectValue{ options{ name } field{ ... on IssueFieldMultiSelect{ name } } } } }'
 # shellcheck disable=SC2016 # jq program, expanded by jq not the shell
 ISSUE_PROJECTION='{
   number, title, url,

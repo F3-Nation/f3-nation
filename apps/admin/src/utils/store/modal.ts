@@ -167,6 +167,8 @@ export const closeModal = (
     });
   }
   setTimeout(() => {
+    // The page or test environment can be gone by the time this fires.
+    if (typeof document === "undefined") return;
     const body = document.querySelector("body");
     if (body) {
       body.style.pointerEvents = "auto";

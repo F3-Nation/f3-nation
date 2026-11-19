@@ -3,15 +3,23 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const logWarn = vi.hoisted(() => vi.fn());
+vi.mock("~/lib/logging", () => ({ logWarn }));
+
 const fetchSpy = vi
   .fn<(url: URL, init: RequestInit) => Promise<Response>>()
-  .mockResolvedValue(new Response("ok"));
+  // A fresh Response per call: the proxy takes its own reader on every body,
+  // which locks it, so a shared Response would fail on the next request.
+  .mockImplementation(() => Promise.resolve(new Response("ok")));
 vi.stubGlobal("fetch", fetchSpy);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("oRPC proxy route", () => {
   beforeEach(() => {
     vi.resetModules();
     fetchSpy.mockClear();
+    logWarn.mockClear();
     vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
     // CI exports a mock secret; each test sets the one it needs.
     vi.stubEnv("PROXY_CLIENT_IP_SECRET", undefined);
@@ -302,7 +310,7 @@ describe("oRPC proxy route", () => {
     }
   });
 
-  it("does not time out a slow body once the headers have arrived", async () => {
+  it("keeps a slow body that sends each chunk within the timeout", async () => {
     vi.useFakeTimers();
     try {
       let controller!: ReadableStreamDefaultController<Uint8Array>;
@@ -323,13 +331,84 @@ describe("oRPC proxy route", () => {
       const response = await GET(
         new NextRequest("http://localhost:3000/api/orpc/v1/ping"),
       );
-      // The body only starts arriving after the header timeout has elapsed.
-      await vi.advanceTimersByTimeAsync(60_000);
-      controller.enqueue(new TextEncoder().encode("late but whole"));
+      const text = response.text();
+      // 60s in all, but never 20s without a chunk.
+      for (const chunk of ["slow ", "but ", "whole"]) {
+        await vi.advanceTimersByTimeAsync(19_999);
+        controller.enqueue(new TextEncoder().encode(chunk));
+      }
       controller.close();
 
       expect(response.status).toBe(200);
-      expect(await response.text()).toBe("late but whole");
+      expect(await text).toBe("slow but whole");
+      expect(logWarn).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts the API request when the browser goes away mid-body, without logging a failure", async () => {
+    let upstreamSignal: AbortSignal | undefined;
+    fetchSpy.mockImplementationOnce((_url, init) => {
+      upstreamSignal = init.signal ?? undefined;
+      return Promise.resolve(
+        new Response(new ReadableStream<Uint8Array>(), {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+    });
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const response = await GET(
+      new NextRequest("http://localhost:3000/api/orpc/v1/ping"),
+    );
+    const reader = response.body!.getReader();
+    const pending = reader.read();
+    await sleep(10); // let the proxy start waiting on the API
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    expect(upstreamSignal?.aborted).toBe(true);
+    await sleep(10);
+    expect(logWarn).not.toHaveBeenCalled();
+  });
+
+  it("fails a body that stops arriving after the headers", async () => {
+    vi.useFakeTimers();
+    try {
+      let upstreamSignal: AbortSignal | undefined;
+      fetchSpy.mockImplementationOnce((_url, init) => {
+        upstreamSignal = init.signal ?? undefined;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"json":'));
+          },
+        });
+        return Promise.resolve(
+          new Response(body, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      });
+      const { GET } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      const response = await GET(
+        new NextRequest("http://localhost:3000/api/orpc/v1/ping"),
+      );
+      const text = response.text().catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(response.status).toBe(200);
+      expect(await text).toMatchObject({ name: "TimeoutError" });
+      expect(upstreamSignal?.aborted).toBe(true);
+      expect(logWarn).toHaveBeenCalledTimes(1);
+      expect(logWarn.mock.lastCall).toMatchObject([
+        "map.orpc_proxy.upstream_body_failed",
+        { path: "/v1/ping", err: { name: "TimeoutError" } },
+      ]);
     } finally {
       vi.useRealTimers();
     }
@@ -509,5 +588,275 @@ describe("oRPC proxy route", () => {
       expect(res.headers.get("content-encoding")).toBeNull();
       expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     });
+
+    it("fails a body that stalls mid-body", async () => {
+      vi.useFakeTimers();
+      try {
+        let upstreamSignal: AbortSignal | undefined;
+        fetchSpy.mockImplementationOnce((_url, init) => {
+          upstreamSignal = init.signal ?? undefined;
+          const body = new ReadableStream<Uint8Array>({
+            start(c) {
+              c.enqueue(new TextEncoder().encode('{"json":'));
+            },
+          });
+          return Promise.resolve(
+            new Response(body, {
+              headers: { "content-type": "application/json" },
+            }),
+          );
+        });
+        const res = await call("/v1/map/location/eventsAndLocations");
+        const read = res.arrayBuffer().catch((err: unknown) => err);
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(await read).toMatchObject({ name: "TimeoutError" });
+        expect(upstreamSignal?.aborted).toBe(true);
+        expect(logWarn).toHaveBeenCalledWith(
+          "map.orpc_proxy.upstream_body_failed",
+          expect.objectContaining({
+            path: "/v1/map/location/eventsAndLocations",
+          }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("aborts the API request when the browser leaves the body", async () => {
+      let upstreamSignal: AbortSignal | undefined;
+      fetchSpy.mockImplementationOnce((_url, init) => {
+        upstreamSignal = init.signal ?? undefined;
+        return Promise.resolve(
+          new Response(new ReadableStream<Uint8Array>(), {
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      });
+      const res = await call("/v1/map/location/eventsAndLocations");
+      await res.body!.cancel("gone");
+      await vi.waitFor(() => expect(upstreamSignal?.aborted).toBe(true));
+      expect(logWarn).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("withStallTimeout", () => {
+  async function importWithStallTimeout() {
+    vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+    const { withStallTimeout } =
+      await import("../../../src/app/api/orpc/[[...rest]]/route");
+    return withStallTimeout;
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("doesn't count time spent waiting on a slow reader", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const chunks = ["a", "b", "c"].map((c) => new TextEncoder().encode(c));
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks.shift();
+        if (next) controller.enqueue(next);
+        else controller.close();
+      },
+    });
+    const onFailure = vi.fn();
+
+    const reader = withStallTimeout(source, 20, onFailure).getReader();
+    let text = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += new TextDecoder().decode(value);
+      await sleep(40);
+    }
+
+    expect(text).toBe("abc");
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("passes on an upstream read error", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new TypeError("terminated"));
+      },
+    });
+    const onFailure = vi.fn();
+
+    const reader = withStallTimeout(source, 1_000, onFailure).getReader();
+
+    await expect(reader.read()).rejects.toThrow("terminated");
+    expect(onFailure).toHaveBeenCalledWith(new TypeError("terminated"));
+  });
+
+  it("cancels the upstream body when the browser goes away", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const cancel = vi.fn();
+    const source = new ReadableStream<Uint8Array>({ cancel });
+
+    await withStallTimeout(source, 1_000, vi.fn()).cancel("gone");
+
+    expect(cancel).toHaveBeenCalledWith("gone");
+  });
+
+  it("doesn't report a failure when the browser goes away mid-read", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    // Never sends anything, so a read is still pending when the cancel lands.
+    const source = new ReadableStream<Uint8Array>();
+    const onFailure = vi.fn();
+    const reader = withStallTimeout(source, 1_000, onFailure).getReader();
+
+    const pending = reader.read();
+    await sleep(10); // let the pull start waiting on the API
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    await sleep(10);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("doesn't report a failure when cancelling makes the pending read reject", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    let rejectRead!: (err: unknown) => void;
+    const body = {
+      getReader: () => ({
+        read: () =>
+          new Promise((_, reject) => {
+            rejectRead = reject;
+          }),
+        cancel: () => {
+          rejectRead(new TypeError("aborted"));
+          return Promise.resolve();
+        },
+      }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const onFailure = vi.fn();
+    const reader = withStallTimeout(body, 60_000, onFailure).getReader();
+
+    const pending = reader.read();
+    await sleep(0);
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    await sleep(0);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("cancels the upstream body when it stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const cancel = vi.fn();
+      const source = new ReadableStream<Uint8Array>({ cancel });
+      const onFailure = vi.fn();
+      const read = withStallTimeout(source, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+      expect(cancel).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails a stalled tee branch without waiting for the other branch", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const [branch] = new ReadableStream<Uint8Array>().tee();
+      const onFailure = vi.fn();
+      const read = withStallTimeout(branch, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles cancel on a tee branch without waiting for the other branch", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const [branch] = new ReadableStream<Uint8Array>().tee();
+    const onCancel = vi.fn();
+    const cancelled = withStallTimeout(branch, 1_000, vi.fn(), onCancel).cancel(
+      "gone",
+    );
+
+    await expect(
+      Promise.race([cancelled.then(() => "settled"), sleep(50)]),
+    ).resolves.toBe("settled");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles a browser cancel even when the upstream cancel rejects", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const source = new ReadableStream<Uint8Array>({
+      cancel() {
+        throw new TypeError("cancel failed");
+      },
+    });
+
+    await expect(
+      withStallTimeout(source, 1_000, vi.fn()).cancel("gone"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("reports the stall, not a rejected upstream cancel", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const source = new ReadableStream<Uint8Array>({
+        cancel() {
+          throw new TypeError("cancel failed");
+        },
+      });
+      const onFailure = vi.fn();
+      const read = withStallTimeout(source, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves no timer behind once a chunk arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const chunks = ["a", "b", "c"].map((c) => new TextEncoder().encode(c));
+      const source = new ReadableStream<Uint8Array>({
+        pull(c) {
+          const next = chunks.shift();
+          if (next) c.enqueue(next);
+          else c.close();
+        },
+      });
+      expect(
+        await new Response(withStallTimeout(source, 20_000, vi.fn())).text(),
+      ).toBe("abc");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
