@@ -98,6 +98,8 @@ case "$*" in
   *security-advisories?state=triage*) cat "$FAKE_ADVISORIES" ;;
   *security-advisories?state=draft*) echo "[]" ;;
   *"api graphql"*"assignee:@me"*) cat "$FAKE_ISSUES" ;;
+  *"api graphql"*name=repo-ghsa-dddd-eeee-ffff*) cat "$FAKE_FORKS/fork-d.json" ;;
+  *"api graphql"*name=repo-ghsa-kkkk-mmmm-nnnn*) cat "$FAKE_FORKS/fork-k.json" ;;
   *) echo "fake gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 GH
@@ -109,6 +111,7 @@ run() {
   PATH="$tmp_dir/bin:$PATH" PR_TRIAGE_FIXTURE="$tmp_dir/prs.json" PR_TRIAGE_NOW="$now" \
     PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" PR_TRIAGE_CODEOWNERS="${OWNERS:-$tmp_dir/CODEOWNERS}" \
     FAKE_ISSUES="${ISSUES:-$tmp_dir/issues.json}" FAKE_ADVISORIES="${ADVISORIES:-$tmp_dir/advisory.json}" \
+    FAKE_FORKS="$tmp_dir" \
     NO_COLOR=1 bash "$my_work" -R acme/repo "$@"
 }
 
@@ -177,6 +180,49 @@ assert_eq "the HTML embeds the report" "acme/repo" "$(jq -r .repo <<<"$embedded"
 
 run --json --html >/dev/null 2>&1
 assert_eq "--json with --html is a usage error" "1" "$?"
+
+# Advisory forks: their PRs carry latestOpinionatedReviews in place of reviewDecision, as the
+# fork query asks, and go through the same sections as the repo's own.
+fork_prs() {
+  jq --arg url "https://github.com/$1/pull/" --argjson numbers "$2" \
+    '.data.repository.pullRequests.nodes |= [.[] | select(.number | IN($numbers[]))
+      | del(.reviewDecision) | .latestOpinionatedReviews = {nodes: []}
+      | .url = $url + (.number | tostring)
+      | if .number == 10 then .latestOpinionatedReviews.nodes =
+          [{state: "APPROVED", author: {login: "andy"}, commit: {oid: "head"}}] else . end]' \
+    "$tmp_dir/prs.json"
+}
+fork_prs acme/repo-ghsa-dddd-eeee-ffff '[1, 10, 11, 13]' >"$tmp_dir/fork-d.json"
+fork_prs acme/repo-ghsa-kkkk-mmmm-nnnn '[3]' >"$tmp_dir/fork-k.json"
+jq -n '[{ghsa_id: "GHSA-dddd-eeee-ffff", severity: "high",
+    private_fork: {full_name: "acme/repo-ghsa-dddd-eeee-ffff"}, summary: "Fixing", created_at: "2026-10-18T00:00:00Z"},
+  {ghsa_id: "GHSA-kkkk-mmmm-nnnn", severity: "low",
+    private_fork: {full_name: "acme/repo-ghsa-kkkk-mmmm-nnnn"}, summary: "Drafting", created_at: "2026-10-19T00:00:00Z"}]' \
+  >"$tmp_dir/fork-advisories.json"
+
+forks=$(ADVISORIES="$tmp_dir/fork-advisories.json" run --json)
+assert_eq "--json with advisory forks exits 0" "0" "$?"
+fork_refs() { jq -r --arg k "$1" '.sections[] | select(.key == $k) | [.items[].ref] | join(" ")' <<<"$forks"; }
+assert_eq "fork: your fix PR with failing checks comes before the repo's own PRs" \
+  "GHSA-dddd-eeee-ffff #1 #1" "$(fork_refs MY_CI)"
+assert_eq "fork: its card carries the advisory's ID and severity" "GHSA-dddd-eeee-ffff high" \
+  "$(jq -r '.sections[].items[] | select(.ref == "GHSA-dddd-eeee-ffff #1") | "\(.advisory.ghsa) \(.advisory.severity)"' <<<"$forks")"
+assert_eq "fork: its card links to the PR in the fork" \
+  "https://github.com/acme/repo-ghsa-dddd-eeee-ffff/pull/1" \
+  "$(jq -r '.sections[].items[] | select(.ref == "GHSA-dddd-eeee-ffff #1") | .url' <<<"$forks")"
+assert_eq "fork: a codeowner's approval of the head makes an assigned fix PR ready to merge" \
+  "GHSA-dddd-eeee-ffff #10 #10" "$(fork_refs ASSIGNED_MERGE)"
+assert_eq "fork: an unassigned fix PR needs /pr-review-inline" \
+  "GHSA-dddd-eeee-ffff #11 #11 #18" "$(fork_refs PICKUP_INLINE)"
+assert_eq "fork: a fix PR assigned to someone else is left out" "" \
+  "$(jq -r '.sections[].items[] | select(.ref == "GHSA-dddd-eeee-ffff #13") | .ref' <<<"$forks")"
+assert_eq "fork: an advisory with only a draft fix PR has no fix PR" "GHSA-kkkk-mmmm-nnnn" "$(fork_refs ADVISORIES)"
+assert_eq "fork: that advisory notes its draft" "draft fix PR open" \
+  "$(jq -r '.sections[].items[] | select(.ref == "GHSA-kkkk-mmmm-nnnn") | .note' <<<"$forks")"
+assert_eq "fork: your draft fix PR is listed with your drafts" "GHSA-kkkk-mmmm-nnnn #3 #3" "$(fork_refs MY_DRAFTS)"
+fork_text=$(ADVISORIES="$tmp_dir/fork-advisories.json" run)
+assert_eq "fork: text shows a fix PR's severity" "1" \
+  "$(grep -c 'GHSA-dddd-eeee-ffff #1 \[high\] PR 1 (viewer)' <<<"$fork_text")"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "$failures my-work test(s) failed"
