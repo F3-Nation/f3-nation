@@ -79,11 +79,12 @@ hard-deleting or regenerating instances.
   are kept together when either differs, so the date can't end before it
   starts.
 - **AC-12** — GIVEN the same edit THEN an instance without a series exception
-  takes the series' new values for every field, as before, even where it had
-  drifted from the series.
-- **AC-13** — GIVEN the same edit THEN `isPrivate`, `orgId`, `highlight` and
-  `meta` are written to every instance dated today or later, whatever the
-  instance held; a series made private hides every date.
+  takes the series' value for each field the edit writes, as before, even where
+  it had drifted from the series. An in-place edit writes every detail field;
+  a status change writes only the fields that changed on the series.
+- **AC-13** — GIVEN the same edit THEN whichever of `isPrivate`, `orgId`,
+  `highlight` and `meta` it writes go to every instance dated today or later,
+  exception or not; a series made private hides every date.
 
 ## 5. Roles & authorization (RBAC)
 

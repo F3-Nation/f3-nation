@@ -1688,12 +1688,10 @@ describe("Event Router", () => {
         "2020-01-13",
         `Past instance ${uniqueId()}`,
       );
-      // Carries the series name, as a generated instance does: a differing
-      // name would be a per-date override the cascade keeps.
       const futureInstance = await insertInstance(
         series.id,
         nextFutureMonday(2),
-        series.name,
+        `Future instance ${uniqueId()}`,
       );
       await db.insert(schema.eventInstancesXEventTypes).values({
         eventInstanceId: futureInstance.id,
@@ -1933,8 +1931,9 @@ describe("Event Router", () => {
         const [instance] = await db
           .insert(schema.eventInstances)
           .values({
-            // Generated instances carry the series name; a differing name
-            // would be a per-date override the cascade keeps.
+            // Generated instances carry the series name. On the closed
+            // instance a differing name would count as that date's own and
+            // be kept, so the fixture matches the series.
             name: series.name,
             orgId: ao.id,
             locationId: null,
@@ -4724,12 +4723,11 @@ describe("Event Router", () => {
 
         if (!seriesEvent) return;
         createdEventIds.push(seriesEvent.id);
-        // Create some instances, carrying the series' values as generated
-        // instances do (a differing value would be a per-date override).
+        // Create some instances
         const [instance1] = await db
           .insert(schema.eventInstances)
           .values({
-            name: seriesEvent.name,
+            name: `Original Series ${uniqueId()}`,
             orgId: ao.id,
             locationId: location.id,
             startTime: "0530",
