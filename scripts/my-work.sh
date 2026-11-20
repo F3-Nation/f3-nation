@@ -12,19 +12,21 @@
 # Needs gh (signed in with `gh auth login`) and jq. Runs on macOS, Linux and WSL.
 #
 # The PRs come from `scripts/pr-triage.sh --with-advisories --json`, so whose turn a PR is follows
-# the same rules as the team board. Each PR lands in the first section that fits it:
+# the same rules as the team board. The report's sections, in order; each PR lands in the first
+# one that fits it:
 #
 #   Your PRs        checks failing, merge conflicts, feedback to address (unresolved threads, a
 #                   local test asking for changes, or a change request), approved and waiting to
 #                   merge; then, for reference, your drafts and the PRs waiting on someone else
+#   Your issues     open issues assigned to you with no open PR linked to them (a draft counts)
 #   Reviewing       the author replied in a thread that is yours to answer; or, assigned to you,
 #                   a skill to run, a review and approval, or a merge
 #   Unassigned      codeowners only: PRs nobody but their author is assigned to, needing
 #                   /pr-review-inline, or past it and needing /pr-local-test, approval or a merge
+#   Security        the security advisories you can see that have no fix PR
 #
-# Before the PRs come the open issues assigned to you with no open PR linked to them (a draft
-# counts), and after them the security advisories you can see that have no fix PR. A PR that
-# isn't your turn, such as one assigned to someone else or waiting on its author, is left out.
+# Your drafts and your PRs waiting on someone else come last, for reference. A PR that isn't
+# your turn, such as one assigned to someone else or waiting on its author, is left out.
 # Advisory data is private to people with advisory access: never post or log this output
 # publicly. The HTML file is readable only by you.
 
@@ -160,11 +162,11 @@ report=$(jq -n --argjson board "$board" --argjson issues "$issues" '
         (if $issues.data.search.issueCount > ($issues.data.search.nodes | length)
          then "You have more than \($issues.data.search.nodes | length) open issues: only the oldest were read." else empty end)]),
       sections: [
-        ["ISSUES", "Your issues", "Assigned issues with no open PR", "Open issues assigned to you with no open PR linked to them (Closes #N, or linked from the issue)."],
         ["MY_CI", "Your PRs", "Checks failing", "A check on the latest commit failed."],
         ["MY_CONFLICTS", "Your PRs", "Merge conflicts", "Merge main into the branch and resolve the conflicts."],
         ["MY_FEEDBACK", "Your PRs", "Feedback to address", "Unresolved review threads, a local test that asked for changes, or a change request."],
         ["MY_APPROVED", "Your PRs", "Approved: waiting to merge", "Anyone with write access can add these to the merge queue."],
+        ["ISSUES", "Your issues", "Assigned issues with no open PR", "Open issues assigned to you with no open PR linked to them (Closes #N, or linked from the issue)."],
         ["REPLY", "Reviewing", "The author replied: your turn in the threads", "Answer or resolve the threads the author replied to."],
         ["ASSIGNED_SKILL", "Reviewing", "Assigned to you: run a review skill", "Run the skill named on each card."],
         ["ASSIGNED_APPROVE", "Reviewing", "Assigned to you: review and approve", "Both skills are done."],

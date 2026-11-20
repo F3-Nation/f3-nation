@@ -158,7 +158,7 @@ assert_eq "a non-codeowner still gets their own PRs" "#1" \
 text=$(run)
 assert_eq "text output exits 0" "0" "$?"
 assert_eq "text lists the sections in order" \
-  "Your issues|Your PRs|Reviewing|Unassigned PRs|Security advisories|For reference" \
+  "Your PRs|Your issues|Reviewing|Unassigned PRs|Security advisories|For reference" \
   "$(grep -E '^[A-Z]' <<<"$text" | grep -v '^My work' | paste -sd '|' -)"
 assert_eq "text shows an advisory fix's severity" "1" "$(grep -c 'GHSA-aaaa-bbbb-cccc \[high\] Leak' <<<"$text")"
 
