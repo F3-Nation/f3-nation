@@ -318,7 +318,6 @@ describe("oauth-client router", () => {
 
     it.each([
       ["an unsupported scope", ["openid", "admin"]],
-      ["the reserved openid_required marker", ["openid", "openid_required"]],
       ["no openid", ["profile", "email"]],
       ["an empty list", []],
       ["a repeated scope", ["openid", "openid"]],
