@@ -44,7 +44,7 @@ Granting sector-level **admin** so someone could **send a message** is the
 canonical over-grant: the role vocabulary (admin/editor) is coarser than the
 capabilities the org actually delegates.
 
-### What exists today (verified November 2026)
+### What existed when this was accepted (November 2026)
 
 **The planned permission model is already in the database — dormant.**
 `packages/db/drizzle/schema.ts` defines `permissions` and
@@ -68,10 +68,6 @@ vestigial `Permissions` enums (`packages/shared/src/app/constants.ts`,
    has; a grant farther up than that does not match, so the check denies.
    `"admin"` is hard-coded as a superset of any requested role.
 
-The endpoints behind the triggering incident still show the problem: sending
-or updating a Slack message through the API (`packages/api/src/router/slack.ts`)
-requires the `admin` role on the target org, because no narrower role exists.
-
 **Load-bearing facts that constrain any redesign:**
 
 - Role grants live in `roles_x_users_x_org` (role × user × org). How fresh a
@@ -92,9 +88,11 @@ requires the `admin` role on the target org, because no narrower role exists.
 - API keys authenticate through the same role tables
   (`roles_x_api_keys_x_org`, resolved in `packages/api/src/shared.ts`), so a
   permission layer must cover both principal types.
-- `nationAdminProcedure` relies on a fragile string match —
-  `orgName.toLowerCase().includes("f3 nation")` in
-  `packages/shared/src/app/role-checks.ts`.
+- `nationAdminProcedure` requires `admin` on the org whose id is
+  `F3_NATION_ORG_ID` **and** whose name contains "f3 nation"
+  (`isNationAdminFromSession` in `packages/shared/src/app/role-checks.ts`).
+  The name match is fragile: renaming that org would lock every nation
+  admin out.
 - The org-hierarchy walk is the genuinely hard part of the system's
   authorization, and it already exists and works.
 
@@ -232,10 +230,9 @@ the org-hierarchy scoping stays as-is.
 - The `permissions` / `roles_x_permissions` tables remain dormant (kept as
   the escape hatch for a future data-driven mapping, at the cost of schema
   readers wondering why they are empty).
-- Grant staleness for cookie sessions is unchanged (pre-existing): new grants
-  require re-login or session update. If "grant and it works immediately"
-  becomes a requirement, a session-refresh trigger after grant changes is a
-  follow-up.
+- JWT grant staleness is unchanged (pre-existing): new grants require
+  re-login or session update. If "grant and it works immediately" becomes a
+  requirement, a session-refresh trigger after grant changes is a follow-up.
 - The incremental migration window has two authorization vocabularies in the
   codebase at once; each migrated endpoint must preserve its org-scoped
   check.
