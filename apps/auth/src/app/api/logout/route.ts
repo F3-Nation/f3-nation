@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 import { getCurrentSession } from "~/lib/current-session";
 import { logError } from "~/lib/logging";
 import { revokeUserOAuthTokens } from "~/lib/revoke-user-oauth-tokens";
+import { rejectCrossSiteWrite } from "~/lib/same-origin";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const rejected = rejectCrossSiteWrite(request);
+  if (rejected) return rejected;
+
   const session = await getCurrentSession();
   if (!session?.user.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

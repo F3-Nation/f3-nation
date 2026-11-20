@@ -269,6 +269,8 @@ def materialize(
     if materialization.partition_by:
         partitions = ", ".join(f'"{identifier}"' for identifier in materialization.partition_by)
         options += f", PARTITION_BY ({partitions}), WRITE_PARTITION_COLUMNS"
+    if materialization.row_group_size is not None:
+        options += f", ROW_GROUP_SIZE {int(materialization.row_group_size)}"
     destination = root if materialization.partition_by else output_path
     try:
         connection.execute(

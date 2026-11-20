@@ -14,10 +14,14 @@ pr_triage_status=0
 github_scripts_status=0
 prt_status=0
 issue_fields_status=0
+release_facts_status=0
 lint_fix_status=0
 local_ports_status=0
 review_links_status=0
+skill_frontmatter_status=0
 gh_check_status=0
+release_protections_status=0
+dockerfile_installs_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
 pnpm run lint:ws || ws_status=$?
@@ -33,11 +37,17 @@ bash scripts/pr-triage.test.sh || pr_triage_status=$?
 node --test .github/scripts/ || github_scripts_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
 bash .agents/skills/issue-triage/scripts/issue-fields.test.sh || issue_fields_status=$?
+bash .agents/skills/release/scripts/release-facts.test.sh || release_facts_status=$?
 bash scripts/lint-fix.test.sh || lint_fix_status=$?
 bash scripts/local-ports.test.sh || local_ports_status=$?
 node scripts/check-review-links.mjs || review_links_status=$?
 bash scripts/check-review-links.test.sh || review_links_status=$?
+node scripts/check-skill-frontmatter.mjs || skill_frontmatter_status=$?
+bash scripts/check-skill-frontmatter.test.sh || skill_frontmatter_status=$?
 bash scripts/gh-check.test.sh || gh_check_status=$?
+bash scripts/release-protections.test.sh || release_protections_status=$?
+node scripts/check-dockerfile-global-installs.mjs || dockerfile_installs_status=$?
+bash scripts/check-dockerfile-global-installs.test.sh || dockerfile_installs_status=$?
 
 if [ "$turbo_status" -ne 0 ]; then
   exit "$turbo_status"
@@ -83,6 +93,10 @@ if [ "$issue_fields_status" -ne 0 ]; then
   exit "$issue_fields_status"
 fi
 
+if [ "$release_facts_status" -ne 0 ]; then
+  exit "$release_facts_status"
+fi
+
 if [ "$lint_fix_status" -ne 0 ]; then
   exit "$lint_fix_status"
 fi
@@ -95,8 +109,20 @@ if [ "$review_links_status" -ne 0 ]; then
   exit "$review_links_status"
 fi
 
+if [ "$skill_frontmatter_status" -ne 0 ]; then
+  exit "$skill_frontmatter_status"
+fi
+
 if [ "$gh_check_status" -ne 0 ]; then
   exit "$gh_check_status"
+fi
+
+if [ "$release_protections_status" -ne 0 ]; then
+  exit "$release_protections_status"
+fi
+
+if [ "$dockerfile_installs_status" -ne 0 ]; then
+  exit "$dockerfile_installs_status"
 fi
 
 if [ "$github_scripts_status" -ne 0 ]; then

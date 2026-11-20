@@ -69,16 +69,16 @@ All variables are `NEXT_PUBLIC_*`, so they are **inlined into the static bundle
 at build time** (there is no server to read them at runtime) and are visible in
 the browser. See [`.env.example`](.env.example).
 
-| Variable                      | Purpose                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_API_URL`         | Base URL of the API the `/org` route fetches from. Defaults to `https://api.f3nation.com`.             |
-| `NEXT_PUBLIC_ORG_MAP_API_KEY` | Read-only Bearer key for the public org-chart endpoints. Grants nothing beyond public directory reads. |
-| `NEXT_PUBLIC_LOCAL_DEV`       | `"true"` redirects app cards to localhost ports and enables `localHref` links.                         |
+| Variable                      | Purpose                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL`         | Base URL of the API the `/org` route fetches from. Defaults to `https://api.f3nation.com`.                          |
+| `NEXT_PUBLIC_LOCAL_DEV`       | `"true"` redirects app cards to localhost ports and enables `localHref` links.                                      |
+| `NEXT_PUBLIC_ORG_MAP_API_KEY` | Optional role-less Bearer key for an API that still requires one on the org-chart reads. Unset sends no credential. |
 
-In CI, `NEXT_PUBLIC_ORG_MAP_API_KEY` is set on the `github-pages` environment
-and passed to the build step in [`.github/workflows/deploy-homepage.yml`](../../.github/workflows/deploy-homepage.yml).
-Because `NEXT_PUBLIC_ORG_MAP_API_KEY` ships in the client bundle, only ever use
-a key scoped to public org-chart reads — never a privileged token.
+The `/org` route calls public read endpoints and sends no API key unless
+`NEXT_PUBLIC_ORG_MAP_API_KEY` is set. In CI that variable comes from the
+`github-pages` environment. Anything the bundle carries is visible in devtools,
+so only ever set it to a key with no roles.
 
 ## Deployment
 

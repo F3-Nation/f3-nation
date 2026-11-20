@@ -50,6 +50,7 @@ import {
   cleanup,
   createAdminSession,
   createEditorSession,
+  createNationAdminSession,
   getOrCreateF3NationOrg,
   mockAuthWithSession,
   uniqueId,
@@ -730,7 +731,7 @@ describe("User Router", () => {
       }
     });
 
-    it("should include PII when requester is an admin of an org the user has a role on outside their home region", async () => {
+    it("should not include PII when requester is an admin of an org the user has a role on outside their home region", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const [homeRegion, roleRegion] = await db
         .insert(schema.orgs)
@@ -785,8 +786,9 @@ describe("User Router", () => {
           includePii: true,
         });
 
-        expect(result.includePii).toBe(true);
-        expect(result.user?.email).toBe(testUser.email);
+        expect(result.includePii).toBe(false);
+        expect(result.user?.id).toBe(testUser.id);
+        expect(result.user?.email).toBeUndefined();
       } finally {
         await cleanup.user(testUser.id);
         await cleanup.org(homeRegion.id);
@@ -1507,7 +1509,7 @@ describe("User Router", () => {
         .where(eq(schema.orgs.id, regionB.id));
     });
 
-    it("should allow update when user has null home region but a role in the caller's region", async () => {
+    it("should reject update when user has null home region and only a role in the caller's region", async () => {
       const dbInstance = db;
 
       let [f3Nation] = await dbInstance
@@ -1586,19 +1588,22 @@ describe("User Router", () => {
 
       const client = createTestClient();
 
-      const result = await client.user.crupdate({
-        id: testUser.id,
-        f3Name: "Updated",
-        roles: [],
-      });
+      await expect(
+        client.user.crupdate({
+          id: testUser.id,
+          f3Name: "Updated",
+          roles: [],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
-      expect(result.id).toBe(testUser.id);
-      expect(result.f3Name).toBe("Updated");
+      const [after] = await dbInstance
+        .select({ f3Name: schema.users.f3Name })
+        .from(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      expect(after?.f3Name).toBe("NullHomeRegion");
 
       // Clean up
-      await dbInstance
-        .delete(schema.users)
-        .where(eq(schema.users.id, testUser.id));
+      await cleanup.user(testUser.id);
       await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
     });
 
@@ -1686,7 +1691,7 @@ describe("User Router", () => {
       await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
     });
 
-    it("should let an editor of the user's home region update the email of a user with no roles", async () => {
+    it("should reject an editor of the user's home region changing the email of a user with no roles", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const [region] = await db
         .insert(schema.orgs)
@@ -1715,18 +1720,23 @@ describe("User Router", () => {
         );
         const client = createTestClient();
 
-        await client.user.crupdate({
-          id: testUser.id,
-          f3Name: "HomeEditorCrupdate",
-          email: newEmail,
-          roles: [],
+        await expect(
+          client.user.crupdate({
+            id: testUser.id,
+            f3Name: "HomeEditorCrupdate",
+            email: newEmail,
+            roles: [],
+          }),
+        ).rejects.toMatchObject({
+          code: "UNAUTHORIZED",
+          message: ERRORS.MUST_BE_NATION_ADMIN_TO_CHANGE_EMAIL,
         });
 
         const [dbUser] = await db
           .select({ email: schema.users.email })
           .from(schema.users)
           .where(eq(schema.users.id, testUser.id));
-        expect(dbUser?.email).toBe(newEmail);
+        expect(dbUser?.email).toBe(testUser.email);
       } finally {
         await cleanup.user(testUser.id);
         await cleanup.org(region.id);
@@ -1745,7 +1755,7 @@ describe("User Router", () => {
       const newEmail = `crupdate-no-roles-new-${uniqueId()}@example.com`;
 
       try {
-        await mockAuthWithSession(await createAdminSession());
+        await mockAuthWithSession(await createNationAdminSession());
         const client = createTestClient();
 
         await client.user.crupdate({
@@ -1766,7 +1776,6 @@ describe("User Router", () => {
     });
 
     it.each([
-      ["email", `crupdate-denied-new-${uniqueId()}@example.com`],
       ["phone", "555-0100"],
       ["phone", null],
       ["emergencyContact", "New Contact"],

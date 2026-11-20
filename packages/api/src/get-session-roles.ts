@@ -9,10 +9,10 @@ export interface SessionRole {
 }
 
 /**
- * The role assignments that scope what the caller may see. An API key's
- * `session.id` is its owner, so keys use `session.roles`, which holds only the
- * roles granted to the key. User sessions read their current roles from the
- * database rather than roles captured at sign-in.
+ * The role assignments that scope what the caller may see. An API key is
+ * not a user, so keys use `session.roles`, which holds only the roles granted
+ * to the key. User sessions read their current roles from the database rather
+ * than roles captured at sign-in.
  */
 export const getSessionRoles = async (ctx: Context): Promise<SessionRole[]> => {
   const session = ctx.session;

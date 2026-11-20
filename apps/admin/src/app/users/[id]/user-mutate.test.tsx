@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   crupdate: vi.fn<(input: unknown) => Promise<unknown>>(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  isNationAdmin: true,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -21,6 +22,9 @@ vi.mock("~/utils/hooks/use-fetch-all-pages", () => ({
   useFetchAllPages: () => ({ data: [] }),
 }));
 vi.mock("~/orpc/client", () => ({ client: {} }));
+vi.mock("~/utils/hooks/use-auth", () => ({
+  useAuth: () => ({ isNationAdmin: mocks.isNationAdmin }),
+}));
 
 // Keep real React Query; replace only the API boundary.
 vi.mock("~/orpc/react", async () => ({
@@ -59,6 +63,7 @@ function renderForm() {
 describe("UserMutate navigation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isNationAdmin = true;
   });
 
   afterEach(cleanup);
@@ -101,5 +106,37 @@ describe("UserMutate navigation", () => {
     expect(mocks.push).toHaveBeenCalledTimes(1);
     expect(mocks.push).toHaveBeenCalledWith("/users");
     expect(mocks.crupdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("UserMutate email field", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(cleanup);
+
+  it("locks the email and links to the change request form for a non-nation admin", () => {
+    mocks.isNationAdmin = false;
+    renderForm();
+
+    expect(
+      screen.getByPlaceholderText<HTMLInputElement>("Email").disabled,
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("link", { name: "Request a change" })
+        .getAttribute("href"),
+    ).toBe("https://forms.gle/XYcE4bwh55Qzvj5T6");
+  });
+
+  it("lets a nation admin edit the email", () => {
+    mocks.isNationAdmin = true;
+    renderForm();
+
+    expect(
+      screen.getByPlaceholderText<HTMLInputElement>("Email").disabled,
+    ).toBe(false);
+    expect(screen.queryByRole("link", { name: "Request a change" })).toBeNull();
   });
 });
