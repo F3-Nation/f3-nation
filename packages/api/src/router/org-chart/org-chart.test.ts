@@ -298,9 +298,116 @@ describe("Org Chart Router", () => {
         client.orgChart.byId({ orgId: 999999999 }),
       ).rejects.toThrow();
     });
+
+    it("serves an active org to an anonymous caller", async () => {
+      await mockAuthWithSession(null);
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+
+      const result = await createTestClient().orgChart.byId({
+        orgId: region!.id,
+      });
+
+      expect(result).toMatchObject({ id: region!.id, name: region!.name });
+    });
+
+    it("lists only admin and editor role holders to an anonymous caller", async () => {
+      await mockAuthWithSession(null);
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const [adminRole] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+      let [userRole] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "user"));
+      let insertedUserRoleId: number | undefined;
+      if (!userRole) {
+        [userRole] = await db
+          .insert(schema.roles)
+          .values({ name: "user", description: "user role" })
+          .returning();
+        insertedUserRoleId = userRole!.id;
+      }
+      const [admin, member] = await db
+        .insert(schema.users)
+        .values([
+          { email: `test-${uniqueId()}@example.com`, f3Name: "Admin" },
+          { email: `test-${uniqueId()}@example.com`, f3Name: "Member" },
+        ])
+        .returning();
+      await db.insert(schema.rolesXUsersXOrg).values([
+        { roleId: adminRole!.id, userId: admin!.id, orgId: region!.id },
+        { roleId: userRole!.id, userId: member!.id, orgId: region!.id },
+      ]);
+
+      try {
+        const result = await createTestClient().orgChart.byId({
+          orgId: region!.id,
+        });
+
+        expect(result.roles).toEqual([
+          expect.objectContaining({ title: "admin", userId: admin!.id }),
+        ]);
+      } finally {
+        await db
+          .delete(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.orgId, region!.id));
+        await cleanup.user(admin!.id);
+        await cleanup.user(member!.id);
+        if (insertedUserRoleId)
+          await db
+            .delete(schema.roles)
+            .where(eq(schema.roles.id, insertedUserRoleId));
+      }
+    });
+
+    it("hides an inactive org, or one under an inactive parent, from every caller", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const ao = await createOrg({ orgType: "ao", parentId: region!.id });
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, region!.id));
+
+      for (const session of [null, await createAdminSession()]) {
+        await mockAuthWithSession(session);
+        const client = createTestClient();
+        for (const orgId of [region!.id, ao!.id]) {
+          await expect(client.orgChart.byId({ orgId })).rejects.toMatchObject({
+            code: "NOT_FOUND",
+          });
+        }
+      }
+    });
   });
 
   describe("leadership", () => {
+    it("serves an anonymous caller", async () => {
+      await mockAuthWithSession(null);
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+
+      const result = await createTestClient().orgChart.leadership();
+
+      expect(result.orgs.map((org) => org.id)).toContain(region!.id);
+    });
+
     it("lists position and role holders at active non-AO orgs only", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -683,7 +790,7 @@ describe("Org Chart Router", () => {
       ).rejects.toThrow();
     });
 
-    it("returns an empty aos array for a location with no active AO events", async () => {
+    it("returns an empty aos array for a location whose only public event is not an AO's", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -699,6 +806,7 @@ describe("Org Chart Router", () => {
       if (!location) {
         return;
       }
+      await createEvent({ orgId: region.id, locationId: location.id });
 
       const client = createTestClient();
       const result = await client.orgChart.byLocation({

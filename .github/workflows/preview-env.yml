@@ -57,6 +57,7 @@ jobs:
     outputs:
       url_map: ${{ steps.meta.outputs.url_map }}
       url_api: ${{ steps.meta.outputs.url_api }}
+      url_auth: ${{ steps.meta.outputs.url_auth }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -391,9 +392,11 @@ jobs:
       - name: Run blocking-tier E2E suite
         env:
           E2E_BASE_URL: ${{ needs.deploy.outputs.url_map }}
-          # Direct-api RBAC suite (rbac.spec.ts) — seeded API-key bearer auth,
-          # recipe 1 in docs/PREVIEW_AUTH.md.
+          # Direct-api RBAC suite (rbac.spec.ts) — seeded dev users' access
+          # tokens from the auth app (Recipe 3 in docs/PREVIEW_AUTH.md) plus
+          # seeded API keys (Recipe 1).
           E2E_API_URL: ${{ needs.deploy.outputs.url_api }}
+          E2E_AUTH_URL: ${{ needs.deploy.outputs.url_auth }}
         run: pnpm -F f3-map... test:e2e
 
       - name: Upload Playwright report on failure

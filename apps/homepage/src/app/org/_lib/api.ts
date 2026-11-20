@@ -16,10 +16,10 @@ function getApiBase(): string {
   return "https://api.f3nation.com";
 }
 
-// The org-chart endpoints are protectedProcedure, so requests carry a
-// read-only API key sourced from an env var (like apps/map). Because this is a
-// static export the key is a NEXT_PUBLIC var baked into the bundle and visible
-// in devtools — it grants nothing beyond the public org-chart directory reads.
+// The org-chart endpoints are public reads, so requests normally carry no
+// credential. NEXT_PUBLIC_ORG_MAP_API_KEY, when set at build time, is sent as a
+// Bearer key for an API that still requires one on these reads; it is baked
+// into the static bundle and visible in devtools, so it must be a role-less key.
 const ORG_MAP_CLIENT = "https://apps.f3nation.com";
 
 async function orgMapFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -54,8 +54,8 @@ export async function fetchOrgChart(): Promise<OrgChartItem[]> {
 
 // The chart shows who to contact, so it lists only the roles allowed here. Any
 // other role is an access grant and stays hidden, including roles added later.
-// This hides roles from the page only: the public org-chart endpoint still
-// returns every role to anyone holding the public API key.
+// The org-chart endpoint already returns only admin and editor roles; this
+// filter keeps the page to that list even if the endpoint's list widens.
 const VISIBLE_ROLES: ReadonlySet<string> = new Set(["admin", "editor"]);
 
 export async function fetchOrgById(id: number): Promise<OrgDetail> {

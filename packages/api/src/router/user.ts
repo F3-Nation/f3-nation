@@ -392,7 +392,7 @@ export const userRouter = {
             .where(eq(schema.rolesXUsersXOrg.userId, input.id))
         : [];
 
-      // An API key's session.id is its owner, so keys never edit "themselves".
+      // An API key is not a person, so it never edits "itself".
       const isSelf =
         !ctx.session.apiKey &&
         input.id !== undefined &&
