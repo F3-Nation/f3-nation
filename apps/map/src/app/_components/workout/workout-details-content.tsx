@@ -21,6 +21,7 @@ import {
 } from "~/utils/event-status-map";
 import { getEndDateLabel } from "~/utils/get-end-date-label";
 import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
+import { instanceNotes } from "~/utils/instance-notes";
 import { reportQueryError } from "~/utils/report-query-error";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { ModalType, openModal } from "~/utils/store/modal";
@@ -74,9 +75,7 @@ export function createWorkoutEventFromInstance(
   return {
     id: -instance.id,
     name: instance.name,
-    // A series date's own note shows in the updates callout instead, beside
-    // the change it explains.
-    description: instance.seriesId == null ? instance.description : null,
+    description: instanceNotes(instance),
     dayOfWeek: dateToDayOfWeek(instance.startDate),
     startTime: instance.startTime,
     endTime: instance.endTime,

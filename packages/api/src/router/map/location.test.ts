@@ -1120,10 +1120,15 @@ describe("Map Location Router", () => {
       const startDate = await getDbTomorrow();
       const editedNote = `No beatdown today, meet at the park ${uniqueId()}`;
 
-      const [edited, copied, blank] = await db
+      const [edited, copied, blank, reformatted] = await db
         .insert(schema.eventInstances)
         .values(
-          [editedNote, seriesDescription, "   "].map((description) => ({
+          [
+            editedNote,
+            seriesDescription,
+            " \n ",
+            `${seriesDescription}\r\n`,
+          ].map((description) => ({
             name: `Closed Instance ${uniqueId()}`,
             orgId: ao.id,
             seriesId: event.id,
@@ -1138,9 +1143,14 @@ describe("Map Location Router", () => {
           })),
         )
         .returning({ id: schema.eventInstances.id });
-      if (!edited || !copied || !blank)
+      if (!edited || !copied || !blank || !reformatted)
         throw new Error("Failed to create instances");
-      createdEventInstanceIds.push(edited.id, copied.id, blank.id);
+      createdEventInstanceIds.push(
+        edited.id,
+        copied.id,
+        blank.id,
+        reformatted.id,
+      );
 
       const [oneOff] = await db
         .insert(schema.eventInstances)
@@ -1168,6 +1178,7 @@ describe("Map Location Router", () => {
       expect(descriptionOf(edited.id)).toBe(editedNote);
       expect(descriptionOf(copied.id)).toBeNull();
       expect(descriptionOf(blank.id)).toBeNull();
+      expect(descriptionOf(reformatted.id)).toBeNull();
       expect(descriptionOf(oneOff.id)).toBe("Annual Turkey Bowl");
     });
 

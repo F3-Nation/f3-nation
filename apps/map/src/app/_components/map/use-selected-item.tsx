@@ -9,6 +9,7 @@ import { orpc, useQuery } from "~/orpc/react";
 import { dateToDayOfWeek } from "~/utils/date";
 import { findNextExceptionNotice } from "~/utils/event-status-map";
 import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
+import { instanceNotes } from "~/utils/instance-notes";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 
@@ -95,7 +96,7 @@ export const useSelectedItem = () => {
           dayOfWeek: dateToDayOfWeek(instance.startDate),
           startTime: instance.startTime,
           endTime: instance.endTime,
-          description: null,
+          description: instanceNotes(instance),
           eventTypes: instance.eventTypes,
           startDate: null,
           endDate: null,

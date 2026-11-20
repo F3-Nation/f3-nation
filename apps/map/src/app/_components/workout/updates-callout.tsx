@@ -10,6 +10,7 @@ import { cn } from "@acme/ui";
 import { dayjs } from "~/utils/frontendDayjs";
 import { instanceMapStatus, statusLabel } from "~/utils/event-status-map";
 import { getStatusSolidBg } from "~/utils/map-status-colors";
+import { calloutNote } from "~/utils/instance-notes";
 import textLink from "~/utils/text-link";
 
 /** The instance fields a row reads. */
@@ -21,15 +22,6 @@ export interface UpdateInstance {
   seriesException: SeriesException | null;
   /** Null unless someone wrote this date its own description. */
   description: string | null;
-}
-
-/**
- * A series date's own note, such as where to go instead. A one-off has no
- * series description to differ from: its description is already the panel's
- * Notes, so repeating it here would print it twice.
- */
-function rowNote(instance: UpdateInstance): string | null {
-  return instance.seriesId != null ? instance.description : null;
 }
 
 function formatUpdateRow(instance: UpdateInstance) {
@@ -83,7 +75,7 @@ export function UpdatesCallout({
           <div className="mt-2 flex flex-col gap-1">
             {instances.map((instance) => {
               const status = instanceMapStatus(instance.seriesException);
-              const note = rowNote(instance);
+              const note = calloutNote(instance);
               return (
                 <div key={instance.id} className="text-sm">
                   <div className="flex items-center gap-2">

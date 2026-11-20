@@ -449,9 +449,12 @@ export const mapLocationRouter = os.router({
           name: schema.eventInstances.name,
           // Generated instances carry a copy of the series description, so only
           // a description someone changed for this date is worth sending.
+          // Compared trimmed and with CRLF folded, so a copy that differs only
+          // in whitespace still counts as the copy.
           description: sql<string | null>`CASE
-            WHEN NULLIF(BTRIM(${schema.eventInstances.description}), '') IS NULL THEN NULL
-            WHEN ${schema.eventInstances.description} IS NOT DISTINCT FROM ${seriesEvent.description} THEN NULL
+            WHEN NULLIF(BTRIM(${schema.eventInstances.description}, E' \t\r\n'), '') IS NULL THEN NULL
+            WHEN BTRIM(REPLACE(${schema.eventInstances.description}, E'\r\n', E'\n'), E' \t\r\n')
+              IS NOT DISTINCT FROM BTRIM(REPLACE(${seriesEvent.description}, E'\r\n', E'\n'), E' \t\r\n') THEN NULL
             ELSE ${schema.eventInstances.description}
           END`,
           lat: schema.locations.latitude,
