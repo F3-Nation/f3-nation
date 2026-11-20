@@ -147,25 +147,21 @@ jobs:
 
       - name: Build and push images
         run: |
-          TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
           docker build --platform=linux/amd64 \
             --file .github/preview/preview-db.Dockerfile \
             --tag "${{ steps.meta.outputs.image_db }}" \
             .github/preview
           docker build --platform=linux/amd64 \
             --file apps/api/Dockerfile \
-            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
             --build-arg NEXT_PUBLIC_POSTHOG_KEY="${{ secrets.PREVIEW_POSTHOG_KEY }}" \
             --tag "${{ steps.meta.outputs.image_api }}" \
             .
           docker build --platform=linux/amd64 \
             --file apps/auth/Dockerfile \
-            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
             --tag "${{ steps.meta.outputs.image_auth }}" \
             .
           docker build --platform=linux/amd64 \
             --file apps/map/Dockerfile \
-            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
             --build-arg NEXT_PUBLIC_POSTHOG_KEY="${{ secrets.PREVIEW_POSTHOG_KEY }}" \
             --tag "${{ steps.meta.outputs.image_map }}" \
             .

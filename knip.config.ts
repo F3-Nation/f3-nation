@@ -49,6 +49,7 @@ const config: KnipConfig = {
         "scripts/check-eslint-suppressions.mjs",
         "scripts/check-review-links.mjs",
         "scripts/check-skill-frontmatter.mjs",
+        "scripts/check-dockerfile-global-installs.mjs",
         "scripts/check-security-headers-coverage.mjs",
       ],
     },
