@@ -1316,6 +1316,18 @@ describe("Cascade Service", () => {
         description: null,
       });
       await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+      const [marked, unmarked] = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id))
+        .orderBy(schema.eventInstances.startDate);
+      if (!marked || !unmarked) throw new Error("Expected two instances");
+      // Marked, with the same null description as the series: only the
+      // null-safe comparison lets it take the new description.
+      await db
+        .update(schema.eventInstances)
+        .set({ seriesException: "different-time" })
+        .where(eq(schema.eventInstances.id, marked.id));
 
       await updateFutureInstances(
         db,
@@ -1325,13 +1337,16 @@ describe("Cascade Service", () => {
       );
 
       const rows = await db
-        .select({ description: schema.eventInstances.description })
+        .select({
+          id: schema.eventInstances.id,
+          description: schema.eventInstances.description,
+        })
         .from(schema.eventInstances)
         .where(eq(schema.eventInstances.seriesId, series.id));
-      expect(rows.length).toBeGreaterThan(0);
-      expect(
-        rows.every((row) => row.description === "Now with directions"),
-      ).toBe(true);
+      const descriptionOf = (id: number) =>
+        rows.find((row) => row.id === id)?.description;
+      expect(descriptionOf(marked.id)).toBe("Now with directions");
+      expect(descriptionOf(unmarked.id)).toBe("Now with directions");
     });
 
     it("should return 0 when there are no future instances", async () => {
