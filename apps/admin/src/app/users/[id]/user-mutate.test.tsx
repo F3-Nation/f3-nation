@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   isNationAdmin: true,
+  orgsFailed: false,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -20,6 +21,68 @@ vi.mock("@acme/ui/toast", () => ({
 }));
 vi.mock("~/utils/hooks/use-fetch-all-pages", () => ({
   useFetchAllPages: () => ({ data: [] }),
+}));
+vi.mock("~/utils/hooks/use-role-grant-orgs", () => ({
+  useRoleGrantOrgs: () => ({
+    orgs: [{ id: 8, name: "Boone", orgType: "region", roles: ["admin"] }],
+    isLoading: false,
+    isError: mocks.orgsFailed,
+  }),
+}));
+// Native stand-ins for the role editor's pickers, which need layout.
+vi.mock("@acme/ui/virtualized-combobox", () => ({
+  VirtualizedCombobox: ({
+    value,
+    options,
+    onSelect,
+  }: {
+    value?: string;
+    options: { value: string; label: string }[];
+    onSelect: (value: string) => void;
+  }) => (
+    <select
+      aria-label="Organization"
+      value={value ?? ""}
+      onChange={(event) => onSelect(event.target.value)}
+    >
+      <option value="">None</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
+}));
+vi.mock("@acme/ui/multi-select", () => ({
+  MultiSelect: ({
+    options,
+    defaultValue,
+    onValueChange,
+  }: {
+    options: { value: string; label: string }[];
+    defaultValue: string[];
+    onValueChange: (value: string[]) => void;
+  }) => (
+    <fieldset aria-label="Roles">
+      {options.map((option) => (
+        <label key={option.value}>
+          <input
+            type="checkbox"
+            checked={defaultValue.includes(option.value)}
+            onChange={(event) =>
+              onValueChange(
+                event.target.checked
+                  ? [...defaultValue, option.value]
+                  : defaultValue.filter((v) => v !== option.value),
+              )
+            }
+          />
+          {option.label}
+        </label>
+      ))}
+    </fieldset>
+  ),
 }));
 vi.mock("~/orpc/client", () => ({ client: {} }));
 vi.mock("~/utils/hooks/use-auth", () => ({
@@ -64,6 +127,7 @@ describe("UserMutate navigation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isNationAdmin = true;
+    mocks.orgsFailed = false;
   });
 
   afterEach(cleanup);
@@ -107,6 +171,52 @@ describe("UserMutate navigation", () => {
       { orgId: 8, roleName: "password_manager" },
       { orgId: 1, roleName: "admin" },
     ]);
+  });
+
+  it("refuses to save a role with no organization chosen", () => {
+    renderForm();
+
+    fireEvent.click(screen.getByRole("button", { name: /Add organization/ }));
+    fireEvent.click(screen.getByLabelText("Editor"));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    return vi.waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Please select an organization for all roles before saving",
+      );
+      expect(mocks.crupdate).not.toHaveBeenCalled();
+    });
+  });
+
+  it("refuses to save an added organization with no role", () => {
+    renderForm();
+
+    fireEvent.click(screen.getByRole("button", { name: /Add organization/ }));
+    fireEvent.change(screen.getByLabelText("Organization"), {
+      target: { value: "8" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    return vi.waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Choose at least one role for each organization you added",
+      );
+      expect(mocks.crupdate).not.toHaveBeenCalled();
+    });
+  });
+
+  it("says when the organizations can't be loaded and blocks adding one", () => {
+    mocks.orgsFailed = true;
+    renderForm();
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Could not load the organizations you manage",
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: /Add organization/,
+      }).disabled,
+    ).toBe(true);
   });
 
   it("stays on the form when the save fails", async () => {

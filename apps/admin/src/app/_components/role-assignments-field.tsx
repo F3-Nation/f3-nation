@@ -78,6 +78,7 @@ export function RoleAssignmentsField({
   orgOptions,
   orgNames,
   isLoadingOrgs = false,
+  orgsFailed = false,
   orgPlaceholder = "Select an organization",
   onIncompleteChange,
 }: {
@@ -87,6 +88,11 @@ export function RoleAssignmentsField({
   /** Names for orgs not in `orgOptions`, for their read-only rows. */
   orgNames?: ReadonlyMap<number, string>;
   isLoadingOrgs?: boolean;
+  /**
+   * The org list failed to load. Every row then shows read-only and no org
+   * can be added, so the field says why rather than looking empty.
+   */
+  orgsFailed?: boolean;
   orgPlaceholder?: string;
   /**
    * Told whether an added org has no role chosen yet. Such a row adds nothing
@@ -238,6 +244,11 @@ export function RoleAssignmentsField({
         );
       })}
 
+      {orgsFailed && (
+        <p role="alert" className="text-sm text-destructive">
+          Could not load the organizations you manage. Reload and try again.
+        </p>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col">
           {ROLES_IN_DISPLAY_ORDER.filter(
@@ -253,6 +264,7 @@ export function RoleAssignmentsField({
           variant="outline"
           size="sm"
           className="mt-2 shrink-0"
+          disabled={orgsFailed}
           onClick={() => {
             // No org preselected, so a save can't land on the wrong one.
             setRows([

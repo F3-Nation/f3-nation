@@ -35,7 +35,11 @@ export default function UserMutate({
   const { isNationAdmin } = useAuth();
   // The API lets only nation admins change an existing user's email.
   const canChangeEmail = !user?.id || isNationAdmin;
-  const { orgs: grantOrgs, isLoading: isLoadingOrgs } = useRoleGrantOrgs();
+  const {
+    orgs: grantOrgs,
+    isLoading: isLoadingOrgs,
+    isError: orgsFailed,
+  } = useRoleGrantOrgs();
   const [hasIncompleteRoles, setHasIncompleteRoles] = useState(false);
   // Names for the read-only rows of orgs this admin can't manage.
   const roleOrgNames = useMemo(
@@ -221,6 +225,7 @@ export default function UserMutate({
                       orgOptions={grantOrgs}
                       orgNames={roleOrgNames}
                       isLoadingOrgs={isLoadingOrgs}
+                      orgsFailed={orgsFailed}
                       onIncompleteChange={setHasIncompleteRoles}
                     />
                     <FormMessage />
