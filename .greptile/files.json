@@ -294,6 +294,16 @@
       "path": "docs/specs/user-profile-access.md",
       "description": "Feature spec: User profile and PII access. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["apps/admin/**", "packages/api/**"]
+    },
+    {
+      "path": "docs/specs/admin-region-password-vault.md",
+      "description": "Feature spec: Region password vault opt-in and multi-role access. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/shared/**",
+        "packages/validators/**"
+      ]
     }
   ]
 }

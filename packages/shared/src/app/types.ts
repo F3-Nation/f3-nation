@@ -330,6 +330,12 @@ export type OrgMeta = {
   mapSeed?: boolean;
   firstEventNotificationSent?: boolean;
   region_location_short_description?: string;
+  /**
+   * Region opt-in for the password vault. The vault's sync job (a separate
+   * repository) reads this key by name and treats only `true` as enabled, so
+   * renaming it or storing another truthy value turns the vault off.
+   */
+  password_vault_enabled?: boolean;
 } & Record<string, unknown>;
 
 // The original/new id fields an update request carries as `meta` when it

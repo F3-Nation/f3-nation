@@ -125,6 +125,12 @@ Organizations are hierarchical: `nation → sector → territory → area → re
 active. Omitted or `false` preserves signed-in status filtering; anonymous
 listing always requires active ancestors.
 
+`POST /v1/org` replaces a region's `meta` with the one sent, except for two
+keys: the server keeps `firstEventNotificationSent`, and
+`password_vault_enabled` keeps its stored value unless the request includes
+it. When included it must be `true` or `false` (anything else is a 400); `false`
+turns the region's password vault off.
+
 **`orgType` values:** `"ao"` | `"region"` | `"area"` | `"territory"` | `"sector"` | `"nation"`
 
 ---
