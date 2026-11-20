@@ -1203,6 +1203,112 @@ describe("Cascade Service", () => {
       expect(rows.map((row) => row.eventTagId)).toEqual([overrideTag.id]);
     });
 
+    it("should keep a date's own time, location and note when the series changes", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const seriesLocation = await createTestLocation(region.id);
+      const awayLocation = await createTestLocation(region.id);
+      const newLocation = await createTestLocation(region.id);
+      const series = await createTestSeries(ao.id, seriesLocation.id, {
+        dayOfWeek: "thursday",
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+        description: "Meet at the track",
+      });
+
+      await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+      const instances = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id))
+        .orderBy(schema.eventInstances.startDate);
+      const [changed, plain] = instances;
+      if (!changed || !plain) throw new Error("Expected two instances");
+
+      // An admin moves one date: new time and place, its own note and name.
+      await db
+        .update(schema.eventInstances)
+        .set({
+          seriesException: "different-time",
+          startTime: "0630",
+          endTime: "0715",
+          locationId: awayLocation.id,
+          description: "Turkey Bowl at the park",
+          name: "Turkey Bowl",
+        })
+        .where(eq(schema.eventInstances.id, changed.id));
+
+      await updateFutureInstances(
+        db,
+        {
+          ...series,
+          startTime: "0545",
+          endTime: "0630",
+          locationId: newLocation.id,
+          description: "Meet at the new track",
+          name: "Renamed Series",
+          isPrivate: true,
+        },
+        "2026-04-01",
+        { previous: series },
+      );
+
+      const byId = new Map(
+        (
+          await db
+            .select()
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.seriesId, series.id))
+        ).map((row) => [row.id, row]),
+      );
+
+      expect(byId.get(plain.id)).toMatchObject({
+        startTime: "0545",
+        endTime: "0630",
+        locationId: newLocation.id,
+        description: "Meet at the new track",
+        name: "Renamed Series",
+        isPrivate: true,
+      });
+      expect(byId.get(changed.id)).toMatchObject({
+        seriesException: "different-time",
+        startTime: "0630",
+        endTime: "0715",
+        locationId: awayLocation.id,
+        description: "Turkey Bowl at the park",
+        name: "Turkey Bowl",
+        // Privacy always follows the series.
+        isPrivate: true,
+      });
+    });
+
+    it("should carry a series change to a date whose old value was null", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const series = await createTestSeries(ao.id, null, {
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+        description: null,
+      });
+      await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+
+      await updateFutureInstances(
+        db,
+        { ...series, description: "Now with directions" },
+        "2026-04-01",
+        { previous: series },
+      );
+
+      const rows = await db
+        .select({ description: schema.eventInstances.description })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      expect(rows.length).toBeGreaterThan(0);
+      expect(
+        rows.every((row) => row.description === "Now with directions"),
+      ).toBe(true);
+    });
+
     it("should return 0 when there are no future instances", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);

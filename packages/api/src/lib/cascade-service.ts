@@ -6,7 +6,7 @@
  * and soft-deleting them when series or orgs are deleted.
  */
 
-import { and, eq, gte, inArray, isNotNull, or, schema } from "@acme/db";
+import { and, eq, gte, inArray, isNotNull, isNull, or, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 
@@ -399,6 +399,25 @@ async function createEventInstancesForSeriesInTransaction(
 }
 
 /**
+ * Fields an admin can change on one date of a series. A series edit only
+ * carries these to dates that still hold the series' previous value, so a
+ * date someone moved, retimed, renamed or wrote a note on keeps that change.
+ * The rest (privacy, org, highlight, meta) always follow the series: a series
+ * made private must hide every date.
+ */
+const OVERRIDABLE_INSTANCE_FIELDS = [
+  "locationId",
+  "startTime",
+  "endTime",
+  "description",
+  "name",
+] as const;
+type OverridableInstanceField = (typeof OVERRIDABLE_INSTANCE_FIELDS)[number];
+
+const isOverridableField = (field: string): field is OverridableInstanceField =>
+  (OVERRIDABLE_INSTANCE_FIELDS as readonly string[]).includes(field);
+
+/**
  * Update future event instances with non-structural changes from series
  */
 export async function updateFutureInstances(
@@ -406,7 +425,12 @@ export async function updateFutureInstances(
   series: SeriesData,
   startDate?: string,
   options?: {
-    fields: (
+    /**
+     * The series' values before this edit. When given, an overridable field
+     * is only written to instances still holding the previous value.
+     */
+    previous?: Pick<SeriesData, OverridableInstanceField>;
+    fields?: (
       | "locationId"
       | "startTime"
       | "endTime"
@@ -458,7 +482,7 @@ async function updateFutureInstancesInTransaction(
   }
 
   const instanceIds = futureInstances.map((i) => i.id);
-  const associationInstanceIds = options
+  const associationInstanceIds = options?.fields
     ? futureInstances
         .filter(({ seriesException }) => seriesException !== "closed")
         .map(({ id }) => id)
@@ -482,10 +506,36 @@ async function updateFutureInstancesInTransaction(
     ...(shouldUpdate("name") ? { name: series.name } : {}),
     ...(shouldUpdate("orgId") ? { orgId: series.orgId } : {}),
   };
-  if (Object.keys(instanceUpdate).length > 0) {
+
+  const previous = options?.previous;
+  const sharedUpdate: Partial<typeof instanceUpdate> = {};
+  for (const [field, value] of Object.entries(instanceUpdate) as [
+    keyof typeof instanceUpdate,
+    unknown,
+  ][]) {
+    if (!previous || !isOverridableField(field)) {
+      Object.assign(sharedUpdate, { [field]: value });
+      continue;
+    }
+    const before = previous[field];
+    // Unchanged on the series: a date that differs is an override, and one
+    // that matches already holds the value.
+    if (before === series[field]) continue;
+    const column = schema.eventInstances[field];
     await db
       .update(schema.eventInstances)
-      .set(instanceUpdate)
+      .set({ [field]: series[field] })
+      .where(
+        and(
+          inArray(schema.eventInstances.id, instanceIds),
+          before === null ? isNull(column) : eq(column, before),
+        ),
+      );
+  }
+  if (Object.keys(sharedUpdate).length > 0) {
+    await db
+      .update(schema.eventInstances)
+      .set(sharedUpdate)
       .where(inArray(schema.eventInstances.id, instanceIds));
   }
 

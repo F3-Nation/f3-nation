@@ -1688,10 +1688,12 @@ describe("Event Router", () => {
         "2020-01-13",
         `Past instance ${uniqueId()}`,
       );
+      // Carries the series name, as a generated instance does: a differing
+      // name would be a per-date override the cascade keeps.
       const futureInstance = await insertInstance(
         series.id,
         nextFutureMonday(2),
-        `Future instance ${uniqueId()}`,
+        series.name,
       );
       await db.insert(schema.eventInstancesXEventTypes).values({
         eventInstanceId: futureInstance.id,
@@ -1931,7 +1933,9 @@ describe("Event Router", () => {
         const [instance] = await db
           .insert(schema.eventInstances)
           .values({
-            name: `Reactivation Instance ${uniqueId()}`,
+            // Generated instances carry the series name; a differing name
+            // would be a per-date override the cascade keeps.
+            name: series.name,
             orgId: ao.id,
             locationId: null,
             startTime: "0530",
@@ -4720,11 +4724,12 @@ describe("Event Router", () => {
 
         if (!seriesEvent) return;
         createdEventIds.push(seriesEvent.id);
-        // Create some instances
+        // Create some instances, carrying the series' values as generated
+        // instances do (a differing value would be a per-date override).
         const [instance1] = await db
           .insert(schema.eventInstances)
           .values({
-            name: `Original Series ${uniqueId()}`,
+            name: seriesEvent.name,
             orgId: ao.id,
             locationId: location.id,
             startTime: "0530",
@@ -4781,6 +4786,109 @@ describe("Event Router", () => {
           expect(updatedInstance?.startTime).toBe("0600");
           expect(updatedInstance?.seriesId).toBe(seriesEvent.id);
         }
+      });
+
+      it("should keep a different-time date's time and note when only the series description changes", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create test region");
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+        const location = await createTestLocation(region.id);
+        if (!location) throw new Error("Failed to create test location");
+        const eventType = await createTestEventType();
+        if (!eventType) throw new Error("Failed to create test event type");
+
+        const [seriesEvent] = await db
+          .insert(schema.events)
+          .values({
+            name: `Thursday Series ${uniqueId()}`,
+            description: "Meet at the track",
+            orgId: ao.id,
+            locationId: location.id,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2026-01-01",
+            recurrencePattern: "weekly",
+            recurrenceInterval: 1,
+            indexWithinInterval: null,
+            isActive: true,
+            highlight: false,
+          })
+          .returning();
+        if (!seriesEvent) throw new Error("Failed to create series");
+        createdEventIds.push(seriesEvent.id);
+
+        const instanceBase = {
+          name: seriesEvent.name,
+          orgId: ao.id,
+          locationId: location.id,
+          isActive: true,
+          highlight: false,
+          seriesId: seriesEvent.id,
+          isPrivate: false,
+        };
+        const [plain, moved] = await db
+          .insert(schema.eventInstances)
+          .values([
+            {
+              ...instanceBase,
+              description: "Meet at the track",
+              startTime: "0530",
+              endTime: "0615",
+              startDate: nextFutureMonday(2),
+            },
+            {
+              ...instanceBase,
+              description: "Turkey Bowl at the park",
+              seriesException: "different-time",
+              startTime: "0630",
+              endTime: "0715",
+              startDate: nextFutureMonday(3),
+            },
+          ])
+          .returning();
+        if (!plain || !moved) throw new Error("Failed to create instances");
+
+        await mockAuthWithSession(
+          createEditorSession({ orgId: ao.id, orgName: ao.name }),
+        );
+        await createTestClient().event.crupdate({
+          id: seriesEvent.id,
+          name: seriesEvent.name,
+          description: "Meet at the new track",
+          aoId: ao.id,
+          regionId: region.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2026-01-01",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          indexWithinInterval: null,
+          highlight: false,
+          isActive: true,
+          eventTypeIds: [eventType.id],
+          email: null,
+        });
+
+        const rows = await db
+          .select()
+          .from(schema.eventInstances)
+          .where(inArray(schema.eventInstances.id, [plain.id, moved.id]));
+        const byId = new Map(rows.map((row) => [row.id, row]));
+
+        expect(byId.get(plain.id)?.description).toBe("Meet at the new track");
+        expect(byId.get(moved.id)).toMatchObject({
+          seriesException: "different-time",
+          startTime: "0630",
+          endTime: "0715",
+          description: "Turkey Bowl at the park",
+        });
       });
 
       it("should recreate future instances for structural changes", async () => {
