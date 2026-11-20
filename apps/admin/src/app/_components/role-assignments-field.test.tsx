@@ -5,6 +5,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RoleAssignment } from "./role-assignments-field";
@@ -225,6 +226,52 @@ describe("RoleAssignmentsField", () => {
     fireEvent.click(screen.getByLabelText("Admin"));
 
     expect(onIncompleteChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("keeps every role when the current org is chosen again", () => {
+    const { onChange } = renderField([
+      { orgId: 81, roleName: "editor" },
+      { orgId: 81, roleName: "password_reader" },
+    ]);
+
+    fireEvent.change(screen.getByLabelText("Organization"), {
+      target: { value: "81" },
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByLabelText<HTMLInputElement>("Password Reader").checked,
+    ).toBe(true);
+  });
+
+  it("needs a role again after a loaded row moves to an org that drops its only role", () => {
+    const onIncompleteChange = vi.fn<(incomplete: boolean) => void>();
+    const onChange = vi.fn();
+    // Holds the value like a form does, so the field sees its own output.
+    function Form() {
+      const [value, setValue] = useState<RoleAssignment[]>([
+        { orgId: 8, roleName: "password_reader" },
+      ]);
+      return (
+        <RoleAssignmentsField
+          value={value}
+          onChange={(roles) => {
+            onChange(roles);
+            setValue(roles);
+          }}
+          orgOptions={[BOONE, BOONE_AO]}
+          onIncompleteChange={onIncompleteChange}
+        />
+      );
+    }
+    render(<Form />);
+
+    fireEvent.change(screen.getByLabelText("Organization"), {
+      target: { value: "81" },
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith([]);
+    expect(onIncompleteChange).toHaveBeenLastCalledWith(true);
   });
 
   it("rebuilds its rows when the value changes from outside", () => {

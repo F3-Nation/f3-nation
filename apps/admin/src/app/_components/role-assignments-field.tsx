@@ -34,8 +34,11 @@ interface Row {
   key: number;
   orgId: number;
   roleNames: UserRole[];
-  /** Added with "Add organization" rather than loaded with the user. */
-  added?: boolean;
+  /**
+   * Added with "Add organization", or moved to another org: either way it
+   * must have a role before saving, or the save would grant nothing there.
+   */
+  needsRole?: boolean;
 }
 
 const NO_ORG = -1;
@@ -95,7 +98,7 @@ export function RoleAssignmentsField({
   orgsFailed?: boolean;
   orgPlaceholder?: string;
   /**
-   * Told whether an added org has no role chosen yet. Such a row adds nothing
+   * Told whether an added or moved org has no role chosen yet. Such a row adds nothing
    * to the value, so a form that saved it would silently grant nothing.
    */
   onIncompleteChange?: (incomplete: boolean) => void;
@@ -115,7 +118,8 @@ export function RoleAssignmentsField({
   }
 
   const incomplete = rows.some(
-    (row) => row.added && row.orgId !== NO_ORG && row.roleNames.length === 0,
+    (row) =>
+      row.needsRole && row.orgId !== NO_ORG && row.roleNames.length === 0,
   );
   useEffect(() => {
     onIncompleteChange?.(incomplete);
@@ -186,6 +190,8 @@ export function RoleAssignmentsField({
                     toast.error("Invalid orgId");
                     return;
                   }
+                  // The picker reports a reselection of the current org too.
+                  if (orgId === row.orgId) return;
                   // Drop roles the new org's type doesn't offer.
                   const allowed = assignableRoles(
                     optionById.get(orgId)?.orgType,
@@ -199,6 +205,7 @@ export function RoleAssignmentsField({
                             roleNames: row.roleNames.filter((role) =>
                               allowed.includes(role),
                             ),
+                            needsRole: true,
                           }
                         : other,
                     ),
@@ -269,7 +276,7 @@ export function RoleAssignmentsField({
             // No org preselected, so a save can't land on the wrong one.
             setRows([
               ...rows,
-              { key: nextKey, orgId: NO_ORG, roleNames: [], added: true },
+              { key: nextKey, orgId: NO_ORG, roleNames: [], needsRole: true },
             ]);
             setNextKey(nextKey + 1);
           }}
