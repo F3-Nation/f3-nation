@@ -72,12 +72,12 @@ hard-deleting or regenerating instances.
   request fails with `BAD_REQUEST` and does not hard-delete or regenerate
   instances.
 - **AC-11** — GIVEN a series instance dated today or later that has a series
-  exception (closed, different time) and whose location, description or name
-  differs from the series' value before the edit WHEN the series is edited
-  through `event.crupdate` without a structural change (in place or as a
-  status change) THEN that field keeps the instance's value. Start and end time
-  are kept together when either differs, so the date can't end before it
-  starts.
+  exception (closed, different time) and whose start time, end time, location,
+  description or name differs from the series' value before the edit WHEN the
+  series is edited through `event.crupdate` without a structural change (in
+  place or as a status change) THEN that field keeps the instance's value.
+  Start and end time are judged together: when either differs, both are kept,
+  so the date can't end before it starts.
 - **AC-12** — GIVEN the same edit THEN an instance without a series exception
   takes the series' value for each field the edit writes, as before, even where
   it had drifted from the series. An in-place edit writes every detail field;
