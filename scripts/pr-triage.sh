@@ -67,6 +67,8 @@ SEP=$'\x1f'
 NOT_NEEDED_LABEL="local test: not needed"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CODEOWNERS_FILE="${PR_TRIAGE_CODEOWNERS:-$script_dir/../.github/CODEOWNERS}"
+# shellcheck source=scripts/lib/open-file.sh
+. "$script_dir/lib/open-file.sh"
 
 usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "pr-triage: $*" >&2; exit 1; }
@@ -157,7 +159,7 @@ query($owner: String!, $name: String!, $cursor: String) {
           nodes { ... on ReopenedEvent { createdAt } }
         }
         commits(last: 1) {
-          nodes { commit { oid committedDate } }
+          nodes { commit { oid committedDate statusCheckRollup { state } } }
         }
         # Both ends of each list: a skill marker may be among the oldest or the newest.
         comments(last: 100) { ...comments }
@@ -518,6 +520,14 @@ classify='
           unresolvedThreads: ($open | length),
           threadOpeners: ($open | unique),
           approved: $approved,
+          conflicts: $conflicts,
+          # The head commit'"'"'s combined check state: SUCCESS, PENDING, FAILURE, ERROR, EXPECTED,
+          # or null when nothing reports on it.
+          ciState: ($head.statusCheckRollup.state // null),
+          changesRequested: (if $pr | has("latestOpinionatedReviews")
+            then any($pr.latestOpinionatedReviews.nodes[]?; .state == "CHANGES_REQUESTED")
+            else $pr.reviewDecision == "CHANGES_REQUESTED" end),
+          awaitingFixes: $awaitingFixes,
           turnSince: ($turnSince | todate),
           url: $pr.url,
           mine: ($author == $me),
@@ -623,24 +633,6 @@ if $json; then
   printf '%s\n' "$board"
   exit 0
 fi
-
-open_file() {
-  local file="$1"
-  if grep -qi microsoft /proc/version 2>/dev/null; then
-    if command -v wslview >/dev/null 2>&1; then
-      wslview "$file"
-    else
-      # explorer.exe exits non-zero even when it opens the file.
-      explorer.exe "$(wslpath -w "$file")" || true
-    fi
-  elif [[ "$(uname -s)" == "Darwin" ]]; then
-    open "$file"
-  elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$file" >/dev/null 2>&1
-  else
-    return 1
-  fi
-}
 
 if $html; then
   [[ -n "$out" ]] || out="${TMPDIR:-/tmp}"

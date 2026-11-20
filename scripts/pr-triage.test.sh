@@ -103,7 +103,8 @@ jq -n '
     (pr(20; "conflicts with open thread"; "someone") | .mergeable = "CONFLICTING"
       | .reviews.nodes = [inline_review, local_review] | .reviewThreads.nodes = [thread(false; "andy")]),
     (pr(21; "conflicts, ready for approval"; "someone") | .mergeable = "CONFLICTING"
-      | .reviews.nodes = [inline_review, local_review]),
+      | .reviews.nodes = [inline_review, local_review]
+      | .commits.nodes[0].commit.statusCheckRollup = {state: "FAILURE"} | .reviewDecision = "CHANGES_REQUESTED"),
     (pr(22; "conflicting draft"; "someone") | .isDraft = true | .mergeable = "CONFLICTING"),
     (pr(26; "marked ready minutes ago"; "someone")
       | .timelineItems.nodes = [{createdAt: "2026-10-22T11:45:00Z"}]),
@@ -278,6 +279,11 @@ assert_eq "conflicts are noted beside open threads and finished skills" \
   "1 unresolved (andy 1); both skills done; merge conflicts" "$(note_of 20)"
 assert_eq "a conflicting PR still awaits approval" "MANUAL" "$(bucket_of 21)"
 assert_eq "conflicts are noted on a PR awaiting approval" "merge conflicts" "$(note_of 21)"
+field_of() { board_json | jq -r --argjson n "$1" --arg f "$2" '.prs[] | select(.number == $n) | .[$f]'; }
+assert_eq "conflicts are a field of their own" "true false" "$(field_of 21 conflicts) $(field_of 9 conflicts)"
+assert_eq "the head commit's check state is reported" "FAILURE" "$(field_of 21 ciState)"
+assert_eq "a commit no check reports on has no check state" "null" "$(field_of 9 ciState)"
+assert_eq "a change request is reported" "true false" "$(field_of 21 changesRequested) $(field_of 9 changesRequested)"
 assert_eq "a conflicting draft gets no note" "" "$(note_of 22)"
 assert_eq "a PR marked ready minutes ago goes straight to /pr-review-inline" "INLINE" "$(bucket_of 26)"
 assert_eq "skill markers among the oldest reviews still count" "MANUAL" "$(bucket_of 27)"
@@ -813,6 +819,9 @@ assert_eq "fork: the author's own approval doesn't count" "MANUAL" "$(fork_bucke
 assert_eq "fork: an approval from an owner of only some paths doesn't count" "MANUAL" "$(fork_bucket 47)"
 assert_eq "fork: a cut-off review list doesn't count as approved" "MANUAL" "$(fork_bucket 48)"
 assert_eq "fork: no head commit can't match an approval without one" "MANUAL" "$(fork_bucket 49)"
+fork_changes() { jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .changesRequested' <<<"$fork_only" 2>/dev/null; }
+assert_eq "fork: a change request among the opinions is reported" "true" "$(fork_changes 42)"
+assert_eq "fork: approvals alone report no change request" "false" "$(fork_changes 41)"
 
 # A fork read that only succeeds without approvals shows its approved PR as needing approval.
 fork_fallback=$(PR_TRIAGE_CODEOWNERS="$tmp_dir/FORK_CODEOWNERS" ADV_FORK_F_NO_DECISION=1 \
