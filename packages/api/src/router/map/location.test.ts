@@ -1084,6 +1084,93 @@ describe("Map Location Router", () => {
   });
 
   describe("upcomingInstances", () => {
+    it("should return an instance's description only when it differs from its series' description", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const seriesDescription = "Meet at the track";
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Described Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          description: seriesDescription,
+          dayOfWeek: "thursday",
+          startTime: "0545",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!event) throw new Error("Failed to create series event");
+      createdEventIds.push(event.id);
+
+      const startDate = await getDbTomorrow();
+      const editedNote = `No beatdown today, meet at the park ${uniqueId()}`;
+
+      const [edited, copied, blank] = await db
+        .insert(schema.eventInstances)
+        .values(
+          [editedNote, seriesDescription, "   "].map((description) => ({
+            name: `Closed Instance ${uniqueId()}`,
+            orgId: ao.id,
+            seriesId: event.id,
+            locationId: location.id,
+            description,
+            startDate,
+            startTime: "0545",
+            isActive: true,
+            highlight: false,
+            isPrivate: false,
+            seriesException: "closed" as const,
+          })),
+        )
+        .returning({ id: schema.eventInstances.id });
+      if (!edited || !copied || !blank)
+        throw new Error("Failed to create instances");
+      createdEventInstanceIds.push(edited.id, copied.id, blank.id);
+
+      const [oneOff] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `One-off ${uniqueId()}`,
+          orgId: ao.id,
+          seriesId: null,
+          locationId: location.id,
+          description: "Annual Turkey Bowl",
+          startDate,
+          startTime: "0700",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning({ id: schema.eventInstances.id });
+      if (!oneOff) throw new Error("Failed to create one-off instance");
+      createdEventInstanceIds.push(oneOff.id);
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+      const descriptionOf = (id: number) =>
+        result.find((instance) => instance.id === id)?.description;
+
+      expect(descriptionOf(edited.id)).toBe(editedNote);
+      expect(descriptionOf(copied.id)).toBeNull();
+      expect(descriptionOf(blank.id)).toBeNull();
+      expect(descriptionOf(oneOff.id)).toBe("Annual Turkey Bowl");
+    });
+
     it("should include a series-linked instance when the parent event has no location", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);

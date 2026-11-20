@@ -394,6 +394,12 @@ export const mapLocationRouter = os.router({
               .boolean()
               .describe("Whether the instance is highlighted"),
             name: z.string().describe("Instance name"),
+            description: z
+              .string()
+              .nullable()
+              .describe(
+                "The instance's own description: null when it is empty or the same as its series' description",
+              ),
             // Location and AO columns come from LEFT JOINs, so every one of
             // them is null for a locationless instance.
             lat: z.number().nullable().describe("Location latitude"),
@@ -441,6 +447,13 @@ export const mapLocationRouter = os.router({
           seriesException: schema.eventInstances.seriesException,
           highlight: schema.eventInstances.highlight,
           name: schema.eventInstances.name,
+          // Generated instances carry a copy of the series description, so only
+          // a description someone changed for this date is worth sending.
+          description: sql<string | null>`CASE
+            WHEN NULLIF(BTRIM(${schema.eventInstances.description}), '') IS NULL THEN NULL
+            WHEN ${schema.eventInstances.description} IS NOT DISTINCT FROM ${seriesEvent.description} THEN NULL
+            ELSE ${schema.eventInstances.description}
+          END`,
           lat: schema.locations.latitude,
           lon: schema.locations.longitude,
           aoName: aoOrg.name,
@@ -504,6 +517,7 @@ export const mapLocationRouter = os.router({
           aoOrg.id,
           aoOrg.name,
           aoOrg.logoUrl,
+          seriesEvent.id,
         );
 
       return instances.map((instance) => ({

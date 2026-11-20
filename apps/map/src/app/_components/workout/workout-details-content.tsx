@@ -74,7 +74,9 @@ export function createWorkoutEventFromInstance(
   return {
     id: -instance.id,
     name: instance.name,
-    description: null,
+    // A series date's own note shows in the updates callout instead, beside
+    // the change it explains.
+    description: instance.seriesId == null ? instance.description : null,
     dayOfWeek: dateToDayOfWeek(instance.startDate),
     startTime: instance.startTime,
     endTime: instance.endTime,

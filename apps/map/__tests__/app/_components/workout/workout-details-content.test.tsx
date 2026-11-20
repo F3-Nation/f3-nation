@@ -241,6 +241,7 @@ describe("WorkoutDetailsContent event resolution", () => {
       endTime: "0615",
       seriesException: null,
       highlight: false,
+      description: null,
       name: "Monday Bootcamp",
       lat: 35.5,
       lon: -80.5,
@@ -381,6 +382,7 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
     endTime: "0100",
     seriesException: null,
     highlight: false,
+    description: null,
     name: "Third F Gathering",
     lat: 35.5,
     lon: -80.5,
@@ -866,6 +868,7 @@ describe("createWorkoutEventFromInstance", () => {
       endTime: "0730",
       seriesException: null,
       highlight: true,
+      description: null,
       name: "Roving Saturday Beatdown",
       lat: 35.5,
       lon: -80.5,
@@ -892,5 +895,39 @@ describe("createWorkoutEventFromInstance", () => {
         eventTypes: [{ id: 1, name: "Bootcamp" }],
       }),
     );
+  });
+
+  it("uses a one-off's description as its Notes, but not a series date's", () => {
+    const base: UpcomingInstance = {
+      id: 43,
+      seriesId: null,
+      locationId: 10,
+      startDate: "2026-11-26",
+      startTime: "0700",
+      endTime: "0800",
+      seriesException: null,
+      highlight: false,
+      name: "Thanksgiving Turkey Bowl",
+      description: "Annual Turkey Bowl",
+      lat: 35.5,
+      lon: -80.5,
+      aoName: "Alpha AO",
+      aoLogo: null,
+      locationAddress: null,
+      locationAddress2: null,
+      locationCity: null,
+      locationState: null,
+      locationCountry: null,
+      fullAddress: null,
+      eventTypes: [],
+    };
+
+    expect(createWorkoutEventFromInstance(base).description).toBe(
+      "Annual Turkey Bowl",
+    );
+    // A series date's note belongs beside its change in the updates callout.
+    expect(
+      createWorkoutEventFromInstance({ ...base, seriesId: 9 }).description,
+    ).toBeNull();
   });
 });
