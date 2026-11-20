@@ -297,17 +297,12 @@
     },
     {
       "path": "docs/specs/admin-region-password-vault.md",
-      "description": "Region password vault opt-in (meta.password_vault_enabled) with enable/disable confirmations; several roles per org; password roles region-only via ROLE_ORG_TYPES; admin-only grants.",
+      "description": "Feature spec: Region password vault opt-in and multi-role access. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": [
-        "apps/admin/src/app/_components/modal/password-vault-field.tsx",
-        "apps/admin/src/app/_components/modal/admin-org-edit-modal.tsx",
-        "apps/admin/src/app/_components/modal/org-editor-config.ts",
-        "apps/admin/src/app/_components/role-assignments-field.tsx",
-        "apps/admin/src/app/_components/role-badges.tsx",
-        "apps/admin/src/lib/roles.ts",
-        "packages/shared/src/app/permissions.ts",
-        "packages/validators/src/index.ts",
-        "packages/api/src/router/user*"
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/shared/**",
+        "packages/validators/**"
       ]
     }
   ]

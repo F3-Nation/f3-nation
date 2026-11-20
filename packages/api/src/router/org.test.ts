@@ -1063,6 +1063,63 @@ describe("Org Router", () => {
       ).not.toBe(true);
     });
 
+    it("keeps the region password vault opt-in unless the request names it", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Vault region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+          meta: { password_vault_enabled: true, keepMe: "present" },
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create region");
+      createdOrgIds.push(region.id);
+
+      const update = (meta: Record<string, unknown> | null) =>
+        client.org.crupdate({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+          meta,
+        });
+      const storedMeta = async () =>
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta;
+
+      // Left out (an editor that didn't touch the box): the vault stays on.
+      await update({ keepMe: "changed" });
+      expect(await storedMeta()).toEqual({
+        keepMe: "changed",
+        password_vault_enabled: true,
+      });
+      await update(null);
+      expect(await storedMeta()).toEqual({ password_vault_enabled: true });
+
+      // Named: the request decides.
+      await update({ password_vault_enabled: false });
+      expect(await storedMeta()).toEqual({ password_vault_enabled: false });
+      await update({});
+      expect(await storedMeta()).toEqual({ password_vault_enabled: false });
+      await update({ password_vault_enabled: true });
+      expect(await storedMeta()).toEqual({ password_vault_enabled: true });
+    });
     it("rejects an update when the org hierarchy changes before its row lock", async () => {
       const nation = await getOrCreateF3NationOrg();
       await mockAuthWithSession(await createAdminSession());

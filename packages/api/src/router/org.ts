@@ -779,7 +779,7 @@ export const orgRouter = {
         .map((t) => orgTypeDisplay[t].label.toLowerCase())
         .join(
           " → ",
-        )}). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances.`,
+        )}). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances. Updating a region's \`meta\` replaces it, except that \`firstEventNotificationSent\` is kept by the server and \`password_vault_enabled\` keeps its stored value when the submitted \`meta\` leaves it out.`,
     })
     .output(
       z.object({
@@ -974,7 +974,11 @@ export const orgRouter = {
 
       // This marker is server-owned. Merge incoming metadata against the
       // current row inside the upsert so a concurrent notification claim is
-      // not lost to the earlier `existingOrg` read.
+      // not lost to the earlier `existingOrg` read. The password vault opt-in
+      // keeps its stored value unless the request names it: an editor form
+      // loaded before someone else changed it would otherwise turn the vault
+      // back on or off unseen, and turning it off removes every member's
+      // vault access.
       if (input.orgType === "region" && input.meta !== undefined) {
         const inputMetaJson =
           input.meta === null ? null : JSON.stringify(input.meta);
@@ -988,6 +992,11 @@ export const orgRouter = {
               ELSE ${inputMetaJson}::jsonb END - 'firstEventNotificationSent')
             || (CASE WHEN ${schema.orgs.meta}->'firstEventNotificationSent' = 'true'::jsonb
               THEN '{"firstEventNotificationSent":true}'::jsonb ELSE '{}'::jsonb END)
+            || (CASE WHEN ${inputMetaJson}::jsonb ? 'password_vault_enabled'
+              THEN '{}'::jsonb
+              WHEN ${schema.orgs.meta} ? 'password_vault_enabled'
+              THEN jsonb_build_object('password_vault_enabled', ${schema.orgs.meta}->'password_vault_enabled')
+              ELSE '{}'::jsonb END)
           )`,
         };
       }

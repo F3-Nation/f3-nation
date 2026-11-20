@@ -464,6 +464,9 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                     const payload = {
                       ...data,
                       ...(!hasParent ? { parentId: undefined } : {}),
+                      ...(config.passwordVault
+                        ? { meta: vaultChangeOnly(data.meta, org?.meta) }
+                        : {}),
                       orgType,
                     };
                     if (config.logoPosition) {
@@ -1027,4 +1030,20 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Leaves the password vault opt-in out of the submitted metadata unless the
+ * editor changed it, so the API keeps the stored value. A form loaded before
+ * someone else turned the vault on or off then can't silently undo that.
+ */
+function vaultChangeOnly(
+  meta: Record<string, unknown> | null | undefined,
+  savedMeta: Record<string, unknown> | null | undefined,
+) {
+  if (!meta) return meta;
+  const { password_vault_enabled: enabled, ...rest } = meta;
+  const changed =
+    (enabled === true) !== (savedMeta?.password_vault_enabled === true);
+  return changed ? { ...rest, password_vault_enabled: enabled === true } : rest;
 }

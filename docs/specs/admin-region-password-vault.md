@@ -22,6 +22,7 @@ only what the F3 apps store and show.
   - `apps/admin/src/app/_components/role-assignments-field.tsx`
   - `apps/admin/src/lib/roles.ts`
   - `packages/api/src/router/user.ts` (`user.crupdate`)
+  - `packages/api/src/router/org.ts` (`org.crupdate`, region `meta` merge)
   - `packages/validators/src/index.ts` (`CrupdateUserSchema`)
   - `packages/shared/src/app/types.ts` (`OrgMeta`)
   - `packages/shared/src/app/permissions.ts` (`ROLE_ORG_TYPES`)
@@ -61,6 +62,11 @@ Vault opt-in (region editor):
   (unchecked), and every other `meta` key is saved unchanged.
 - **AC-6** — GIVEN an unsaved change to the box WHEN the editor changes it
   back to the saved value THEN no confirmation is shown.
+- **AC-15** — GIVEN the editor loaded the region before someone else turned
+  the vault on or off WHEN they save without touching the box THEN the vault
+  keeps the value the other person saved. `org.crupdate` keeps the stored
+  `meta.password_vault_enabled` whenever the submitted `meta` leaves it out,
+  and the region editor sends it only when the box changed.
 
 Roles (Manage Access and the user edit page):
 
@@ -72,8 +78,8 @@ Roles (Manage Access and the user edit page):
   other org type offers Admin and Editor only. The admin site reads this from
   `ROLE_ORG_TYPES`, the same rule the API enforces (AC-14).
 - **AC-9** — GIVEN an org the signed-in admin can't manage WHEN Manage Access
-  shows the user's roles there THEN that row is read-only and a save keeps
-  those roles.
+  or the user edit page shows the user's roles there THEN that row is
+  read-only and a save keeps those roles.
 - **AC-10** — GIVEN `user.crupdate` WHEN the submitted roles list one org
   with several roles THEN each is saved; WHEN it lists the same org and role
   twice THEN the request fails with `BAD_REQUEST` and nothing changes.

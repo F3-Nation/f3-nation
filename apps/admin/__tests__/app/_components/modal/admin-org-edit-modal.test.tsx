@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import {
@@ -777,6 +778,16 @@ describe("Region Area or Territory parent selection", () => {
 
       fireEvent.click(checkbox);
       expect(await screen.findByText(title)).toBeTruthy();
+      if (enabled) {
+        expect(screen.getByText(/within the next hour/)).toBeTruthy();
+        expect(
+          within(screen.getByRole("alertdialog")).getByRole("link", {
+            name: "help.passwords.f3nation.com",
+          }),
+        ).toBeTruthy();
+      } else {
+        expect(screen.getByText(/Passwords will not be deleted/)).toBeTruthy();
+      }
       fireEvent.click(screen.getByRole("button", { name: action }));
       await waitFor(() =>
         expect(checkbox.getAttribute("aria-checked")).toBe(String(enabled)),
@@ -827,12 +838,37 @@ describe("Region Area or Territory parent selection", () => {
     expect(screen.queryByText("Turn off the password vault?")).toBeNull();
   });
 
-  it("offers the password vault only on the region editor", async () => {
-    mount("area");
-    await waitFor(() => expect(field("Name")).toBeTruthy());
+  it.each(["nation", "sector", "territory", "area", "ao"] as const)(
+    "offers no password vault on the %s editor",
+    async (type) => {
+      mount(type);
+      await waitFor(() => expect(field("Name")).toBeTruthy());
+      expect(
+        screen.queryByRole("checkbox", { name: "Password vault" }),
+      ).toBeNull();
+    },
+  );
+
+  it("leaves an untouched password vault out of the save, so the API keeps it", async () => {
+    mocks.byId.mockResolvedValue({
+      org: {
+        ...record,
+        parentId: 2,
+        meta: { ...record.meta, password_vault_enabled: true },
+      },
+    });
+    mount("region", record.id);
+    await waitFor(() => expect(parentSelect().value).toBe("2"));
     expect(
-      screen.queryByRole("checkbox", { name: "Password vault" }),
-    ).toBeNull();
+      screen
+        .getByRole("checkbox", { name: "Password vault" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]![0].meta).toEqual(record.meta);
   });
 
   it.each(["area", "territory"])(
