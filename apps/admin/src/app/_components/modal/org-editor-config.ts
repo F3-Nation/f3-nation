@@ -13,6 +13,8 @@ interface OrgEditorConfig {
   retainLogo: boolean;
   logoPosition?: "afterParent" | "afterStatus";
   locationDescription?: boolean;
+  /** Show the password vault opt-in (`meta.password_vault_enabled`). */
+  passwordVault?: boolean;
   compactLayout?: boolean;
   validationToast?: boolean;
   submitErrorToast?: boolean;
@@ -65,6 +67,7 @@ export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
     retainLogo: true,
     logoPosition: "afterParent",
     locationDescription: true,
+    passwordVault: true,
     validationToast: true,
     deactivate: "existing",
     awaitInvalidation: true,
