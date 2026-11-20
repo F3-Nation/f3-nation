@@ -18,9 +18,9 @@
 #   Your PRs        checks failing, merge conflicts, feedback to address (unresolved threads, a
 #                   local test asking for changes, or a change request), approved and waiting to
 #                   merge; then, for reference, your drafts and the PRs waiting on someone else
-#   Your issues     open issues assigned to you with no open PR linked to them (a draft counts)
 #   Reviewing       the author replied in a thread that is yours to answer; or, assigned to you,
 #                   a skill to run, a review and approval, or a merge
+#   Your issues     open issues assigned to you with no open PR linked to them (a draft counts)
 #   Unassigned      codeowners only: PRs nobody but their author is assigned to, needing
 #                   /pr-review-inline, or past it and needing /pr-local-test, approval or a merge
 #   Security        the security advisories you can see that have no fix PR
@@ -176,11 +176,11 @@ report=$(printf '%s\n%s\n' "$board" "$issues" | jq -n 'input as $board | input a
         ["MY_CONFLICTS", "Your PRs", "Merge conflicts", "Merge main into the branch and resolve the conflicts."],
         ["MY_FEEDBACK", "Your PRs", "Feedback to address", "Unresolved review threads, a local test that asked for changes, or a change request."],
         ["MY_APPROVED", "Your PRs", "Approved: waiting to merge", "Anyone with write access can add these to the merge queue."],
-        ["ISSUES", "Your issues", "Assigned issues with no open PR", "Open issues assigned to you with no open PR linked to them (Closes #N, or linked from the issue)."],
         ["REPLY", "Reviewing", "The author replied: your turn in the threads", "Answer or resolve the threads the author replied to."],
         ["ASSIGNED_SKILL", "Reviewing", "Assigned to you: run a review skill", "Run the skill named on each card."],
         ["ASSIGNED_APPROVE", "Reviewing", "Assigned to you: review and approve", "Both skills are done."],
         ["ASSIGNED_MERGE", "Reviewing", "Assigned to you: ready to merge", "Approved; add these to the merge queue."],
+        ["ISSUES", "Your issues", "Assigned issues with no open PR", "Open issues assigned to you with no open PR linked to them (Closes #N, or linked from the issue)."],
         ["PICKUP_INLINE", "Unassigned PRs", "Needs /pr-review-inline", "Nobody but the author is assigned. Assign yourself and run the skill."],
         ["PICKUP_LATER", "Unassigned PRs", "Needs /pr-local-test, approval or a merge", "Nobody but the author is assigned. The card says what is next."],
         ["ADVISORIES", "Security advisories", "Advisories with no fix PR", "Open security advisories with no fix PR ready for review."],
