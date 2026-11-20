@@ -169,6 +169,12 @@ describe("seedDevUsers", () => {
     });
     // roles, 4 users, and a role link for every user but the role-less one.
     expect(inserts).toHaveLength(1 + 4 + 3);
+    expect(inserts[0]).toEqual([
+      { name: "editor" },
+      { name: "admin" },
+      { name: "password_manager" },
+      { name: "password_reader" },
+    ]);
   });
 
   it("gives a region-scoped dev user no role when its region is missing", async () => {

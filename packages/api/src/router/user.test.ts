@@ -2745,6 +2745,33 @@ describe("User Router", () => {
         message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
       });
 
+      // Holding a password role there gives no right to grant roles either.
+      const vaultRoles = [
+        {
+          orgId: region.id,
+          orgName: region.name,
+          roleName: "password_manager" as const,
+        },
+        {
+          orgId: otherRegion.id,
+          orgName: otherRegion.name,
+          roleName: "editor" as const,
+        },
+      ];
+      const editorSession = createEditorSession({
+        orgId: otherRegion.id,
+        orgName: otherRegion.name,
+      });
+      await mockAuthWithSession({
+        ...editorSession,
+        user: { ...editorSession.user, roles: vaultRoles },
+        roles: vaultRoles,
+      });
+      await expect(grant()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
+      });
+
       // Neither may an admin of a different region.
       await mockAuthWithSession(
         createRegionAdminSession({
