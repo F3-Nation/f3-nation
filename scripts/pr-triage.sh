@@ -595,8 +595,11 @@ if [[ -s "$work_dir/advisories.json" ]]; then
     fi
   done < <(jq -r '.[] | [.ghsa, .severity, .fork] | join("\u001f")' "$work_dir/advisories.json")
   (( ${#fork_boards[@]} > 0 )) || fork_boards=(/dev/null)
+  # The board goes through a file in the private work_dir, not argv: it can hold advisory PR
+  # titles, and a large one would pass the per-argument size limit.
+  printf '%s\n' "$board" >"$work_dir/base.json"
   # shellcheck disable=SC2016
-  board=$(jq -s --argjson base "$board" --slurpfile advisories "$work_dir/advisories.json" \
+  board=$(jq -s --slurpfile base "$work_dir/base.json" --slurpfile advisories "$work_dir/advisories.json" \
     --arg statuses "$statuses" --arg repo "$repo" '
     def forks($n): "\($n) security advisory fork\(if $n == 1 then "" else "s" end)";
     . as $forks
@@ -610,7 +613,7 @@ if [[ -s "$work_dir/advisories.json" ]]; then
         if $status[$i] == "read" then {read: (.read + 1), fork: $forks[.read]}
         else {read, fork: null} end;
         {advisory: $all[$i], status: $status[$i], fork})] as $each
-    | $base
+    | $base[0]
     | .prs = ([$forks[].prs[]] + .prs)
     | .advisoryForks = ($forks | length)
     # A fork that could not be read, or whose PRs were cut off, is left out: whether it has a

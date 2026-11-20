@@ -128,6 +128,8 @@ report=$(printf '%s\n%s\n' "$board" "$issues" | jq -n 'input as $board | input a
         elif .bucket == "OWN" and .approved then "MY_APPROVED"
         else "MY_WAITING" end
       elif .bucket == "DRAFT" or (.viewersTurn | not) then null
+      # Before authorBlocked on purpose: the author is waiting on your answer in the threads,
+      # whatever their checks or conflicts.
       elif .bucket == "REPLY" then "REPLY"
       elif authorBlocked then null
       elif .assignedToMe then

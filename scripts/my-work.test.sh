@@ -77,7 +77,9 @@ jq -n '
     (pr(21; "viewer") | .reviewDecision = "APPROVED"),
     (pr(22; "viewer") | .reviewThreads.nodes = [thread("review-bot"; "review-bot")]),
     (pr(23; "someone") | both | assign(["viewer"]) | .mergeable = "CONFLICTING"),
-    (pr(24; "someone") | both | assign(["viewer"]) | ci("FAILURE"))
+    (pr(24; "someone") | both | assign(["viewer"]) | ci("FAILURE")),
+    (pr(25; "someone") | inline | assign(["andy"]) | .reviewThreads.nodes = [thread("viewer"; "someone")]
+      | .mergeable = "CONFLICTING" | ci("FAILURE"))
   ]}}}}' >"$tmp_dir/prs.json"
 
 jq -n '{data: {search: {issueCount: 3, nodes: [
@@ -132,7 +134,7 @@ assert_eq "your approved PR waits to merge" "#5" "$(refs MY_APPROVED)"
 assert_eq "your draft is listed for reference" "#3" "$(refs MY_DRAFTS)"
 assert_eq "your PRs waiting on reviewers, even if approved early, are listed for reference" \
   "#6 #19 #21" "$(refs MY_WAITING)"
-assert_eq "the author replied in your thread" "#7" "$(refs REPLY)"
+assert_eq "the author replied in your thread, even with failing checks and conflicts" "#7 #25" "$(refs REPLY)"
 assert_eq "assigned to you, a skill to run" "#8" "$(refs ASSIGNED_SKILL)"
 assert_eq "assigned to you, both skills done" "#9" "$(refs ASSIGNED_APPROVE)"
 assert_eq "assigned to you, approved" "#10" "$(refs ASSIGNED_MERGE)"
