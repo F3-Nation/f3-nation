@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminApiKeysModal from "~/app/_components/modal/admin-api-keys-modal";
@@ -29,9 +35,10 @@ interface Org {
   roles: string[];
 }
 
-const { authMock, fetchAllPagesMock } = vi.hoisted(() => ({
+const { authMock, fetchAllPagesMock, mutateAsyncMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   fetchAllPagesMock: vi.fn(),
+  mutateAsyncMock: vi.fn(),
 }));
 
 vi.mock("~/utils/hooks/use-auth", () => ({ useAuth: authMock }));
@@ -45,7 +52,7 @@ vi.mock("~/orpc/client", () => ({ client: {} }));
 vi.mock("~/orpc/react", () => ({
   invalidateQueries: vi.fn(),
   ORPCError: class extends Error {},
-  useMutation: () => ({ isPending: false, mutateAsync: vi.fn() }),
+  useMutation: () => ({ isPending: false, mutateAsync: mutateAsyncMock }),
   orpc: {
     apiKey: { create: { mutationOptions: (opts: unknown) => opts } },
   },
@@ -178,5 +185,48 @@ describe("AdminApiKeysModal org picker", () => {
     });
 
     expect(addRoleButton()).toHaveProperty("disabled", true);
+  });
+});
+
+describe("AdminApiKeysModal submit", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const fillName = () =>
+    fireEvent.change(screen.getByPlaceholderText("Integration name"), {
+      target: { value: "Region site" },
+    });
+  const submit = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+
+  it("refuses to create a key with no roles", async () => {
+    setup({
+      sessionRoles: [{ orgId: 8, roleName: "admin" }],
+      orgs: [{ ...BOONE, roles: ["admin"] }, BOONE_AO],
+    });
+    fillName();
+    submit();
+
+    expect(await screen.findByText("Add at least one role")).toBeTruthy();
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a key once it has a role", async () => {
+    setup({
+      sessionRoles: [{ orgId: 8, roleName: "admin" }],
+      orgs: [{ ...BOONE, roles: ["admin"] }, BOONE_AO],
+    });
+    fillName();
+    fireEvent.click(addRoleButton());
+    submit();
+
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    expect(mutateAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Region site",
+        roles: [{ orgId: 8, roleName: "editor" }],
+      }),
+    );
   });
 });

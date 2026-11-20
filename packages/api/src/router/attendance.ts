@@ -34,6 +34,50 @@ async function getAttendanceTypeIds(db: Pick<AppDb, "select">) {
 }
 
 /**
+ * Refuses a write that would give `userId` the Q type on an event instance
+ * where a different user already holds Q in the same (planned or actual)
+ * attendance set. A user who already holds Q there may keep it. Editors
+ * move planned Q with `assignQAndCoQs`; for actual attendance, remove Q from
+ * the current holder first.
+ */
+async function assertNoOtherQ(
+  db: Pick<AppDb, "select">,
+  {
+    eventInstanceId,
+    userId,
+    isPlanned,
+    qTypeId,
+  }: {
+    eventInstanceId: number;
+    userId: number;
+    isPlanned: boolean;
+    qTypeId: number;
+  },
+) {
+  const existingQ = await db
+    .select({ userId: schema.attendance.userId })
+    .from(schema.attendance)
+    .innerJoin(
+      schema.attendanceXAttendanceTypes,
+      eq(schema.attendanceXAttendanceTypes.attendanceId, schema.attendance.id),
+    )
+    .where(
+      and(
+        eq(schema.attendance.eventInstanceId, eventInstanceId),
+        eq(schema.attendance.isPlanned, isPlanned),
+        eq(schema.attendanceXAttendanceTypes.attendanceTypeId, qTypeId),
+      ),
+    );
+
+  if (existingQ.some((q) => q.userId === userId)) return;
+  if (existingQ.length > 0) {
+    throw new ORPCError("CONFLICT", {
+      message: "Event already has a Q assigned",
+    });
+  }
+}
+
+/**
  * Attendance Router
  * Manages attendance records for event instances.
  * Supports HC/Q/Co-Q operations for preblasts and backblasts.
@@ -153,6 +197,16 @@ export const attendanceRouter = {
         targetUserId: input.userId,
         message: "You are not authorized to create planned attendance",
       });
+
+      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
+      if (input.attendanceTypeIds.includes(ATTENDANCE_TYPE_IDS.Q)) {
+        await assertNoOtherQ(ctx.db, {
+          eventInstanceId: input.eventInstanceId,
+          userId: input.userId,
+          isPlanned: true,
+          qTypeId: ATTENDANCE_TYPE_IDS.Q,
+        });
+      }
 
       // Check if user already has attendance for this event
       const existingAttendance = await ctx.db
@@ -427,6 +481,7 @@ export const attendanceRouter = {
           id: schema.attendance.id,
           userId: schema.attendance.userId,
           eventInstanceId: schema.attendance.eventInstanceId,
+          isPlanned: schema.attendance.isPlanned,
         })
         .from(schema.attendance)
         .where(eq(schema.attendance.id, input.attendanceId));
@@ -443,6 +498,16 @@ export const attendanceRouter = {
         targetUserId: attendance.userId,
         message: "You are not authorized to update attendance types",
       });
+
+      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
+      if (input.attendanceTypeIds.includes(ATTENDANCE_TYPE_IDS.Q)) {
+        await assertNoOtherQ(ctx.db, {
+          eventInstanceId: attendance.eventInstanceId,
+          userId: attendance.userId,
+          isPlanned: attendance.isPlanned,
+          qTypeId: ATTENDANCE_TYPE_IDS.Q,
+        });
+      }
 
       // Delete existing type links
       await ctx.db
@@ -495,33 +560,12 @@ export const attendanceRouter = {
 
       const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
 
-      // Check if there's already a Q for this event
-      const existingQ = await ctx.db
-        .select({ id: schema.attendance.id, userId: schema.attendance.userId })
-        .from(schema.attendance)
-        .innerJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
-        )
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
-            eq(schema.attendance.isPlanned, true),
-            eq(
-              schema.attendanceXAttendanceTypes.attendanceTypeId,
-              ATTENDANCE_TYPE_IDS.Q,
-            ),
-          ),
-        );
-
-      if (existingQ.length > 0 && existingQ[0]?.userId !== input.userId) {
-        throw new ORPCError("CONFLICT", {
-          message: "Event already has a Q assigned",
-        });
-      }
+      await assertNoOtherQ(ctx.db, {
+        eventInstanceId: input.eventInstanceId,
+        userId: input.userId,
+        isPlanned: true,
+        qTypeId: ATTENDANCE_TYPE_IDS.Q,
+      });
 
       // Check if user already has attendance
       const existingAttendance = await ctx.db

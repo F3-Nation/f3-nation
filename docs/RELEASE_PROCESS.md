@@ -58,11 +58,11 @@ After a push to `main`, the `release-please.yml` workflow runs. It:
   - Bumps the version in `apps/me/package.json`
   - Generates/updates `apps/me/CHANGELOG.md`
 
-For Slackbot release PRs, `.github/workflows/release-please-uv-lock.yml` runs
-after Release Please updates `apps/slackbot/pyproject.toml`. It runs `uv lock`
-and pushes any resulting `uv.lock` change back to the release PR using the same
-GitHub App token. This keeps Docker's `uv sync --locked ...` build step aligned
-with Release Please's version bump.
+After Release Please opens or updates a release PR, the same workflow runs
+`uv lock` on the PR branch in a job without secrets, then a second job commits
+any `uv.lock` change to the PR with the GitHub App token. This keeps Docker's
+`uv sync --locked ...` build step aligned with Release Please's version bump
+to `apps/slackbot/pyproject.toml`.
 
 If multiple PRs are merged to `main` before the Release Please PR is merged, Release Please accumulates all of them — the PR is updated in place, never duplicated.
 
@@ -70,7 +70,7 @@ If multiple PRs are merged to `main` before the Release Please PR is merged, Rel
 
 The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `main`.
 
-After the release PR has merged and deployed to Staging, have an agent create a release-plan issue with the [`release-plan`](../.agents/skills/release-plan/SKILL.md) skill. That plan's test step creates the Staging test plan with the [`staging-test-plan`](../.agents/skills/staging-test-plan/SKILL.md) skill. Both skills target the most recently merged release PR and confirm its number with you first; they never plan from an open release PR, which is only a running changelog.
+After the release PR has merged and deployed to Staging, have an agent run the [`release`](../.agents/skills/release/SKILL.md) skill. For Staging it files the Staging test plan and the release plan that links it; after the Staging go/no-go, run it again for the Production release plan. It works only from a merged release PR, never an open one, which is only a running changelog.
 
 ### 4. Release Please creates the tag
 
@@ -124,8 +124,55 @@ What this does not guarantee:
   run shows as cancelled. A production job waiting for approval may hold its
   group until it is approved or rejected.
 
-The workflow-level `concurrency` in each `deploy-*.yml` is still keyed by tag;
-it only stops the same tag from building twice at once.
+The workflow-level `concurrency` in each Cloud Run `deploy-*.yml` caller is
+still keyed by tag; it only stops the same tag from building twice at once.
+
+The [Homepage workflow](../.github/workflows/deploy-homepage.yml) is the
+exception: it has no reusable deploy job, and its workflow-level group is the
+fixed name `deploy-homepage` rather than one keyed by tag. Every release tag
+publishes the same GitHub Pages site, so all Homepage runs, for any tag,
+queue in one group with `cancel-in-progress: false`. The two limits above
+apply to it as well.
+
+#### Who can release and approve
+
+A release tag is what ships code, so these protections keep a production
+deploy behind reviewed code and a second person:
+
+- **Release tags.** The `release-tags` tag ruleset limits who can create, move
+  or delete release tags to the release automation and org admins;
+  [`scripts/release-protections.sh`](../scripts/release-protections.sh) sets
+  the exact pattern and bypass list. A writer can't tag an unreviewed commit
+  and trigger a deploy workflow.
+- **Release PR branch.** The `release-branches` ruleset limits who can create,
+  push to or delete Release Please's `release-please--*` branches to the
+  release automation and org admins. The release workflow runs `uv lock` on
+  that branch, which can run the branch's build backends, so it must hold only
+  Release Please's own output. To change a release PR, change `main`; Release
+  Please rebuilds the PR on the next push.
+- **Release app key.** The Release Please app's private key is stored only in
+  the `release-please` environment, which accepts runs from `main` alone, so a
+  workflow on another branch can't read it and tag through the app.
+- **Tag on `main`.** Each deploy's CI gate fails unless the tag points at a
+  commit already on `main`, including a `workflow_dispatch` re-deploy. The
+  gate runs before staging, so a tag cut from an unmerged branch can't deploy,
+  even to staging.
+- **Production environments.** Each `*-production` environment accepts deploys
+  only from its app's release tags (`api@*` for `api-production`) or `main`,
+  where `workflow_dispatch` re-deploys run. Admins can't bypass it, and a
+  required reviewer can't approve a deploy they started, so give each one at
+  least two reviewers.
+
+The ruleset and environment settings live in GitHub.
+[`scripts/release-protections.sh`](../scripts/release-protections.sh) checks
+them and exits non-zero on drift; a repo admin runs it with `--apply` to set
+them, keeping each environment's reviewers. `--apply` can't move a secret, so
+an admin moves the app key into the `release-please` environment by hand. It
+also stops with an error, before touching the production environments, if the
+`release-please` environment has required reviewers or a wait timer; an admin
+removes them and re-runs it. When you add a production environment, add it to
+the script's `PROD_ENVIRONMENTS` list too; its test fails while the list and
+the deploy workflows' `prod_environment` inputs disagree.
 
 ---
 
@@ -196,14 +243,14 @@ During each workflow run, `actions/create-github-app-token@v1` exchanges the App
 
 ### Where the secrets are stored
 
-Two repository secrets are set at **Settings → Secrets and variables → Actions** on the `F3-Nation/f3-nation` repo:
+Two secrets are set in the `release-please` environment at **Settings → Environments → release-please** on the `F3-Nation/f3-nation` repo. The private key lives only there: repository and organization secrets can be read by a workflow on any branch, which could then tag an unreviewed commit through the app.
 
 | Secret name                      | Value                                                                 |
 | -------------------------------- | --------------------------------------------------------------------- |
 | `RELEASE_PLEASE_APP_ID`          | The numeric App ID shown on the GitHub App's settings page            |
 | `RELEASE_PLEASE_APP_PRIVATE_KEY` | The full PEM-encoded private key generated on the App's settings page |
 
-To rotate the private key: generate a new key on the GitHub App settings page, update the `RELEASE_PLEASE_APP_PRIVATE_KEY` secret, then delete the old key from the App. No code changes are needed.
+To rotate the private key: generate a new key on the GitHub App settings page, update the `RELEASE_PLEASE_APP_PRIVATE_KEY` secret in the `release-please` environment, then delete the old key from the App. No code changes are needed.
 
 To view or manage the App: any F3-Nation org admin can go to `github.com/organizations/F3-Nation/settings/apps`.
 

@@ -11,7 +11,8 @@
  */
 import { createTransport } from "nodemailer";
 
-import { recordEmailCode } from "~/lib/email-mfa";
+import { EmailCodeRateLimitedError, recordEmailCode } from "~/lib/email-mfa";
+import { logWarn } from "~/lib/logging";
 import { NO_TRACKING_HEADERS } from "~/lib/mail-headers";
 import { env } from "~/env";
 
@@ -44,9 +45,17 @@ export async function sendBetterAuthOtpEmail(
 }
 
 /**
- * Better Auth's sendVerificationOTP callback. Its own store burns a code on
- * any read, so sign-in codes are also recorded in email_mfa_codes, where
- * /api/register checks ownership without consuming them (checkEmailCode).
+ * Better Auth's sendVerificationOTP callback. Every code is recorded in
+ * email_mfa_codes first, filling in the send the hooks.before check in
+ * better-auth.ts reserved for it under the address's limit (the same one
+ * sendEmailCode enforces). Sign-in codes are recorded checkable: Better
+ * Auth's own store burns a code on any read, and /api/register checks
+ * ownership there without consuming it (checkEmailCode).
+ *
+ * The limit itself is settled in that reservation, before the code is
+ * generated. If a caller skipped it and the address is over the limit,
+ * nothing is sent; Better Auth runs this callback through
+ * runInBackgroundOrAwait, which catches anything it throws.
  */
 export async function deliverBetterAuthOtp({
   email,
@@ -57,6 +66,14 @@ export async function deliverBetterAuthOtp({
   otp: string;
   type: string;
 }): Promise<void> {
-  if (type === "sign-in") await recordEmailCode(email, otp);
+  try {
+    await recordEmailCode(email, otp, { checkable: type === "sign-in" });
+  } catch (err) {
+    if (err instanceof EmailCodeRateLimitedError) {
+      logWarn("auth.better_auth.otp_send_rate_limited", { type });
+      return;
+    }
+    throw err;
+  }
   await sendBetterAuthOtpEmail(email, otp);
 }

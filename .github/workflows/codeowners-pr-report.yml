@@ -14,6 +14,11 @@ name: Codeowners PR report
 # login to Slack member ID) turns PR authors, assignees and thread openers into
 # Slack mentions; unmapped logins show as plain text. A manual run is a dry run by default: the message goes to the
 # job summary only. Every run writes it there.
+#
+# The triage step must not pass pr-triage.sh's --with-advisories: security
+# advisory fix PRs must stay out of this public channel and the public run
+# log. Building the report fails on a board that lists advisories or holds
+# another repository's PRs.
 
 on:
   schedule:

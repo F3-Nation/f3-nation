@@ -434,11 +434,13 @@ function harness(over: Partial<LoadDeps> = {}) {
       regionIdsByName: rec("regionIds", () => Promise.resolve({ Boone: 9 })),
     },
     seeders: {
-      seedDevUsers: rec("seedUsers", () =>
-        Promise.resolve({
-          adminUserId: 1,
-          roleIds: { adminId: 1, editorId: 2 },
-        }),
+      seedDevUsers: vi.fn(
+        rec("seedUsers", () =>
+          Promise.resolve({
+            adminUserId: 1,
+            roleIds: { adminId: 1, editorId: 2 },
+          }),
+        ),
       ),
       seedApiKeys: vi.fn(
         rec("seedKeys", () => Promise.resolve(["local-boone-editor-key"])),
@@ -475,8 +477,8 @@ describe("runLoad", () => {
       "aoCounts",
       "sequences",
       "nationIds",
-      "seedUsers",
       "regionIds",
+      "seedUsers",
       "seedKeys",
       "seedOAuth",
       "rmTmp",
@@ -509,11 +511,12 @@ describe("runLoad", () => {
     expect(deps.confirm).not.toHaveBeenCalled();
   });
 
-  it("builds region ids from the dev keys' region names", async () => {
+  it("builds region ids from the dev users' and keys' region names", async () => {
     const { deps } = harness();
     const regionIdsByName = vi.spyOn(deps.db, "regionIdsByName");
     await runLoad({ ...ARGS, yes: true }, deps);
     expect(regionIdsByName).toHaveBeenCalledWith(["Boone"]);
+    expect(deps.seeders.seedDevUsers).toHaveBeenCalledWith(1, { Boone: 9 });
     expect(deps.seeders.seedApiKeys).toHaveBeenCalledWith(
       1,
       1,

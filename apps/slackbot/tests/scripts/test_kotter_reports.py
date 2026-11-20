@@ -777,7 +777,7 @@ def test_hourly_runner_calls_kotter_only_when_reporting(monkeypatch):
     monkeypatch.setattr(hourly_runner.update_slack_users, "update_home_regions", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.home_region_nudge, "send_home_region_nudges", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.monthly_reporting, "cycle_all_orgs", lambda *args, **kwargs: None)
-    monkeypatch.setattr(hourly_runner.award_achievements, "main", lambda *args, **kwargs: None)
+    monkeypatch.setattr(hourly_runner.award_achievements, "run", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.requests, "post", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         hourly_runner.kotter_reports,

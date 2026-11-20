@@ -187,14 +187,25 @@ export const EVENT_TYPES = [
 // Dev users (fictional, safe to commit)
 // ---------------------------------------------------------------------------
 
-export const DEV_USERS = [
+export interface DevUserSeed {
+  email: string;
+  f3Name: string;
+  firstName: string;
+  lastName: string;
+  emailVerified: string;
+  role: "admin" | "editor" | null;
+  /** Scope the role to this region instead of the nation. */
+  regionName?: string;
+}
+
+export const DEV_USERS: DevUserSeed[] = [
   {
     email: "dev-admin@f3local.dev",
     f3Name: "Mainframe",
     firstName: "Dev",
     lastName: "Admin",
     emailVerified: new Date().toISOString(),
-    role: "admin" as const,
+    role: "admin",
   },
   {
     email: "dev-editor@f3local.dev",
@@ -202,7 +213,7 @@ export const DEV_USERS = [
     firstName: "Dev",
     lastName: "Editor",
     emailVerified: new Date().toISOString(),
-    role: "editor" as const,
+    role: "editor",
   },
   {
     email: "dev-user@f3local.dev",
@@ -211,6 +222,16 @@ export const DEV_USERS = [
     lastName: "User",
     emailVerified: new Date().toISOString(),
     role: null,
+  },
+  {
+    // Lets e2e tests check that a region editor is denied outside the region.
+    email: "dev-boone-editor@f3local.dev",
+    f3Name: "Mountaineer",
+    firstName: "Dev",
+    lastName: "Boone Editor",
+    emailVerified: new Date().toISOString(),
+    role: "editor",
+    regionName: "Boone",
   },
 ];
 
@@ -247,7 +268,7 @@ export interface LocalApiKeySeed {
   key: string;
   name: string;
   description: string;
-  /** null = read-only (the system's read-only tier is the absence of a role). */
+  /** null = no role: the key grants nothing beyond an anonymous request. */
   role: "editor" | "admin" | null;
   /**
    * When set, the role attaches to this region org instead of the nation,
@@ -279,16 +300,9 @@ export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
   {
     key: "local-map-key",
     name: "Map App (local dev)",
-    description: "Used by apps/map for read-only API access",
-    // Read-only access is the absence of a role (defacto "user"); the system
-    // only assigns the editor/admin roles. See seedApiKeys.
-    role: null,
-  },
-  {
-    key: "local-org-map-key",
-    name: "Homepage org map (local dev)",
-    description:
-      "Used by apps/homepage org chart for read-only API access in local dev",
+    description: "Role-less key: grants nothing beyond an anonymous request",
+    // Kept so e2e tests can check that a role-less key is treated as no
+    // credential. See seedApiKeys.
     role: null,
   },
   {
@@ -299,10 +313,12 @@ export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
   },
 ];
 
-/** Region orgs the region-scoped dev API keys attach to. */
-export const LOCAL_API_KEY_REGION_NAMES = [
+/** Region orgs the region-scoped dev users and API keys attach to. */
+export const LOCAL_SEED_REGION_NAMES = [
   ...new Set(
-    LOCAL_API_KEYS.flatMap((k) => (k.regionName ? [k.regionName] : [])),
+    [...DEV_USERS, ...LOCAL_API_KEYS].flatMap((seed) =>
+      seed.regionName ? [seed.regionName] : [],
+    ),
   ),
 ];
 

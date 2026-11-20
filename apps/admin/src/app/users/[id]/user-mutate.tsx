@@ -33,7 +33,9 @@ import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { client } from "~/orpc/client";
 import { invalidateQueries, orpc, ORPCError, useMutation } from "~/orpc/react";
 import { toGrantableRoleEntries } from "~/lib/auth/session";
+import { useAuth } from "~/utils/hooks/use-auth";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
+import { EmailChangeHint } from "~/app/_components/email-change-hint";
 
 export default function UserMutate({
   user,
@@ -41,6 +43,9 @@ export default function UserMutate({
   user: RouterOutputs["user"]["byId"]["user"];
 }) {
   const router = useRouter();
+  const { isNationAdmin } = useAuth();
+  // The API lets only nation admins change an existing user's email.
+  const canChangeEmail = !user?.id || isNationAdmin;
   const { data: regions } = useFetchAllPages({
     path: ["org", "all"],
     queryKey: ["org.all.everyRegion"],
@@ -193,8 +198,14 @@ export default function UserMutate({
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input placeholder="Email" type="email" {...field} />
+                      <Input
+                        placeholder="Email"
+                        type="email"
+                        disabled={!canChangeEmail}
+                        {...field}
+                      />
                     </FormControl>
+                    {!canChangeEmail && <EmailChangeHint />}
                     <FormMessage />
                   </FormItem>
                 )}

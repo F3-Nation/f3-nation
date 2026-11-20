@@ -204,7 +204,7 @@ describe("ApiKeysTable", () => {
     expect(screen.getByText("Region 9 (Editor)")).toBeTruthy();
     expect(screen.getByText("for the bot")).toBeTruthy();
     expect(screen.getByText("Unassigned")).toBeTruthy();
-    expect(screen.getByText("Read only")).toBeTruthy();
+    expect(screen.getByText("No access")).toBeTruthy();
   });
 
   const roleLabels = {
@@ -229,7 +229,7 @@ describe("ApiKeysTable", () => {
       expect(
         screen.getByText(`Region Nine (${roleLabels[roleName]})`),
       ).toBeTruthy();
-      expect(screen.queryByText("Read only")).toBeNull();
+      expect(screen.queryByText("No access")).toBeNull();
       expect(screen.getByText("•••• abcd")).toBeTruthy();
       expect(screen.getByText("Revoke access")).toBeTruthy();
       expect(screen.queryByText("Delete key")).toBeNull();

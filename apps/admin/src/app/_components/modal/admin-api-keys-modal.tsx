@@ -52,7 +52,8 @@ const ApiKeyFormSchema = z.object({
       orgId: z.number(),
       roleName: z.enum(["editor", "admin"]),
     })
-    .array(),
+    .array()
+    .min(1, { error: "Add at least one role" }),
   expiresAt: z.string().optional(),
 });
 
@@ -252,7 +253,7 @@ export default function AdminApiKeysModal() {
                     <FormItem>
                       <FormLabel>Roles</FormLabel>
                       <FormDescription>
-                        Assign roles to orgs for this API key.
+                        A key needs at least one role. Public data needs no key.
                       </FormDescription>
                       <div className="space-y-2">
                         {(field.value as RoleEntry[]).map(

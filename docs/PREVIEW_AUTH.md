@@ -65,7 +65,7 @@ for every session hop:
 5. **The auth server's own session cookie is host-only by design** — no
    `domain` attribute at all (`apps/auth/src/lib/auth-options.ts:21-32`). In
    the preview image `NODE_ENV=production`, so the cookie is named
-   `__session` (`Secure`, `SameSite=None`).
+   `__session` (`Secure`, `SameSite=Lax`).
 
 Conclusion: previews use **bearer JWTs and server-side cookie forwarding**,
 never shared browser cookies. Browser SSO across preview apps (e.g. sign in
@@ -81,7 +81,8 @@ seed-dump time.
 
 ### Recipe 1 — Direct api RBAC via seeded API keys (no browser, no auth app)
 
-The seed provides role-bearing API keys (`data.ts:197-218`). Send them as a
+The seed provides API keys (`LOCAL_API_KEYS` in
+`packages/db/src/local-seed-lib/data.ts`). Send them as a
 bearer token with the `client` header (`getSession` in
 `packages/api/src/shared.ts`):
 
@@ -92,12 +93,14 @@ API=https://pr-7-api-<project>.us-central1.run.app
 curl -H 'Authorization: Bearer local-slackbot-key' -H 'client: e2e' "$API/v1/..."
 # editor
 curl -H 'Authorization: Bearer local-api-key'      -H 'client: e2e' "$API/v1/..."
-# no role (read-only)
+# no role (treated as anonymous)
 curl -H 'Authorization: Bearer local-map-key'      -H 'client: e2e' "$API/v1/..."
 ```
 
 In Playwright, use a `request` context with those headers. This covers most
-RBAC matrix testing (admin vs editor vs unauthenticated) without any UI.
+RBAC matrix testing (admin vs editor vs unauthenticated) without any UI. A key
+cannot submit, approve or reject a map change request, because a request must
+name a person; drive those as a seeded dev user with Recipe 3.
 
 ### Recipe 2 — Signed-in map UI via the dev-mode provider
 
@@ -245,7 +248,7 @@ tmpfs sidecar, never real data. That's the one load-bearing assumption:
   email (new-user MFA send, magic links for arbitrary addresses) fails in
   previews. Use the fixture code `424242` with the seeded dev users.
 - **`NODE_ENV=production` semantics** in the auth image: session cookie is
-  `__session` (Secure, SameSite=None), and the `/api/verify-email` rate limit
+  `__session` (Secure, SameSite=Lax), and the `/api/verify-email` rate limit
   (10/min/IP) is active — irrelevant when using the fixture-code recipe.
 - **MFA fixture codes are finite per warm instance** (40 per dev user,
   consume-once). Practically unlimited for E2E runs; a cold start (scale to

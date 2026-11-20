@@ -33,6 +33,18 @@ describe("modal store", () => {
     expect(document.body.style.pointerEvents).toBe("auto");
   });
 
+  it("skips restoring page clicks when the document is gone before the delay ends", () => {
+    openModal(ModalType.ADMIN_USERS, { id: 1 });
+    closeModal();
+
+    vi.stubGlobal("document", undefined);
+    try {
+      expect(() => vi.runOnlyPendingTimers()).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("opens a modal and returns the most recently opened one", () => {
     openModal(ModalType.ADMIN_USERS, { id: 1 });
     openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {

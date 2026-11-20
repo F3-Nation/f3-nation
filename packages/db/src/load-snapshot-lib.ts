@@ -17,7 +17,7 @@ import type { AppDb } from "./client";
 import type { LocalTargetAction } from "./migrate-guards";
 import { logInfo, logWarn } from "./lib/logging";
 import { LOCAL_PG_CONTAINER } from "./local-docker";
-import { LOCAL_API_KEY_REGION_NAMES } from "./local-seed-lib/data";
+import { LOCAL_SEED_REGION_NAMES } from "./local-seed-lib/data";
 import { resetAllSequences } from "./local-seed-lib/sequences";
 import { DISPOSABLE_MARKER, DISPOSABLE_REMEDY } from "./migrate-guards";
 
@@ -369,7 +369,10 @@ export interface LoadDb {
 }
 
 export interface Seeders {
-  seedDevUsers: (nationId: number) => Promise<{
+  seedDevUsers: (
+    nationId: number,
+    regionIds: Record<string, number>,
+  ) => Promise<{
     adminUserId: number;
     roleIds: { adminId: number; editorId: number };
   }>;
@@ -505,8 +508,11 @@ async function seedDevLogins(deps: LoadDeps): Promise<void> {
       `Expected exactly one nation org in the snapshot, found ${nations.length}.`,
     );
   }
-  const { adminUserId, roleIds } = await deps.seeders.seedDevUsers(nationId);
-  const regionIds = await deps.db.regionIdsByName(LOCAL_API_KEY_REGION_NAMES);
+  const regionIds = await deps.db.regionIdsByName(LOCAL_SEED_REGION_NAMES);
+  const { adminUserId, roleIds } = await deps.seeders.seedDevUsers(
+    nationId,
+    regionIds,
+  );
   const skipped = await deps.seeders.seedApiKeys(
     adminUserId,
     nationId,
