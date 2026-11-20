@@ -73,7 +73,11 @@ jq -n '
     (pr(17; "viewer") | both | .reviewDecision = "CHANGES_REQUESTED"),
     (pr(18; "someone") | assign(["someone"])),
     (pr(19; "viewer") | both | ci("PENDING")),
-    (pr(20; "someone") | inline | .reviewThreads.nodes = [thread("andy"; "someone")])
+    (pr(20; "someone") | inline | .reviewThreads.nodes = [thread("andy"; "someone")]),
+    (pr(21; "viewer") | .reviewDecision = "APPROVED"),
+    (pr(22; "viewer") | .reviewThreads.nodes = [thread("review-bot"; "review-bot")]),
+    (pr(23; "someone") | both | assign(["viewer"]) | .mergeable = "CONFLICTING"),
+    (pr(24; "someone") | both | assign(["viewer"]) | ci("FAILURE"))
   ]}}}}' >"$tmp_dir/prs.json"
 
 jq -n '{data: {search: {issueCount: 3, nodes: [
@@ -122,10 +126,12 @@ note() { jq -r --arg r "$1" '.sections[].items[] | select(.ref == $r) | .note' <
 
 assert_eq "failing checks come first, even with conflicts" "#1" "$(refs MY_CI)"
 assert_eq "merge conflicts on your PR" "#2" "$(refs MY_CONFLICTS)"
-assert_eq "unresolved threads and a change request are feedback" "#4 #17" "$(refs MY_FEEDBACK)"
+assert_eq "unresolved threads, even before the inline review, and a change request are feedback" \
+  "#4 #17 #22" "$(refs MY_FEEDBACK)"
 assert_eq "your approved PR waits to merge" "#5" "$(refs MY_APPROVED)"
 assert_eq "your draft is listed for reference" "#3" "$(refs MY_DRAFTS)"
-assert_eq "your PRs waiting on reviewers are listed for reference" "#6 #19" "$(refs MY_WAITING)"
+assert_eq "your PRs waiting on reviewers, even if approved early, are listed for reference" \
+  "#6 #19 #21" "$(refs MY_WAITING)"
 assert_eq "the author replied in your thread" "#7" "$(refs REPLY)"
 assert_eq "assigned to you, a skill to run" "#8" "$(refs ASSIGNED_SKILL)"
 assert_eq "assigned to you, both skills done" "#9" "$(refs ASSIGNED_APPROVE)"
@@ -134,7 +140,7 @@ assert_eq "unassigned, needs /pr-review-inline (author-only assignee counts as u
   "#11 #18" "$(refs PICKUP_INLINE)"
 assert_eq "unassigned, past the inline review" "#12" "$(refs PICKUP_LATER)"
 all_refs=$(jq -r '[.sections[].items[].ref] | join(" ")' <<<"$report")
-for left_out in "#13" "#14" "#15" "#16" "#20"; do
+for left_out in "#13" "#14" "#15" "#16" "#20" "#23" "#24"; do
   assert_eq "$left_out is not your turn and is left out" "" "$(grep -oE "(^| )$left_out( |$)" <<<"$all_refs")"
 done
 assert_eq "an issue with no open PR is listed" "#100" "$(refs ISSUES)"
@@ -177,6 +183,17 @@ assert_eq "--html exits 0" "0" "$?"
 assert_eq "the HTML is readable only by you" "600" "$(stat -c %a "$out" 2>/dev/null || stat -f %Lp "$out")"
 embedded=$(sed -n '/<script type="application\/json" id="data">/,/<\/script>/p' "$out" | sed '1d;$d')
 assert_eq "the HTML embeds the report" "acme/repo" "$(jq -r .repo <<<"$embedded")"
+
+mkdir -p "$tmp_dir/caller"
+(cd / && INIT_CWD="$tmp_dir/caller" run --out relative.html --no-open >/dev/null)
+assert_eq "a relative --out is written where pnpm was run" "yes" \
+  "$([[ -f "$tmp_dir/caller/relative.html" ]] && echo yes || echo no)"
+
+jq '.data.search.nodes[0].title = "Evil\u001b[2Ktitle\u009b"' "$tmp_dir/issues.json" >"$tmp_dir/escape-issues.json"
+escaped=$(ISSUES="$tmp_dir/escape-issues.json" run)
+assert_eq "a title's control characters never reach the terminal" "0" \
+  "$(LC_ALL=C grep -c $'[\x1b]\\|\xc2\x9b' <<<"$escaped")"
+assert_eq "a title's control characters become spaces" "1" "$(grep -c 'Evil \[2Ktitle' <<<"$escaped")"
 
 run --json --html >/dev/null 2>&1
 assert_eq "--json with --html is a usage error" "1" "$?"

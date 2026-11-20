@@ -7,8 +7,10 @@ open_file() {
     if command -v wslview >/dev/null 2>&1; then
       wslview "$file"
     else
+      local win_path
+      win_path=$(wslpath -w "$file") || return 1
       # explorer.exe exits non-zero even when it opens the file.
-      explorer.exe "$(wslpath -w "$file")" || true
+      explorer.exe "$win_path" || true
     fi
   elif [[ "$(uname -s)" == "Darwin" ]]; then
     open "$file"

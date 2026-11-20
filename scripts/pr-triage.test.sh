@@ -321,6 +321,8 @@ assert_eq "the label added after a blocked local test clears it" "MANUAL" "$(buc
 assert_eq "the label added before a failed local test doesn't clear it" "LOCAL" "$(bucket_of 42)"
 assert_eq "the label stands in for a local test that never ran" "MANUAL" "$(bucket_of 43)"
 assert_eq "every thread ending with the author's reply waits on a reviewer" "REPLY" "$(bucket_of 44)"
+assert_eq "threads awaiting the author count only those not ending with their reply" "1 0 0" \
+  "$(field_of 7 threadsAwaitingAuthor) $(field_of 44 threadsAwaitingAuthor) $(field_of 9 threadsAwaitingAuthor)"
 assert_eq "a reviewer-reply note names who opened the threads" \
   "2 unresolved, author replied (andy 1, coderabbitai 1)" "$(note_of 44)"
 assert_eq "a thread still waiting on the author keeps the PR in THREADS" "THREADS" "$(bucket_of 45)"

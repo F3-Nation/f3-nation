@@ -42,7 +42,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/open-file.sh
 . "$script_dir/lib/open-file.sh"
 
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "my-work: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 is required. $2"; }
 
@@ -94,9 +94,11 @@ issues=$(gh api graphql -f query="$issues_query" \
 jq -e '.data.search.nodes' >/dev/null 2>&1 <<<"$issues" \
   || die "GitHub response had no issue data for $repo: $(jq -c '.errors // .' <<<"$issues" | head -c 300)"
 
+# Both documents reach jq on stdin: printf is a builtin, so private advisory titles never appear
+# in a process's argv, and a large board can't hit the per-argument size limit.
 # shellcheck disable=SC2016
-report=$(jq -n --argjson board "$board" --argjson issues "$issues" '
-  def days_since($t): (try ($t | fromdateiso8601) catch null) as $s
+report=$(printf '%s\n%s\n' "$board" "$issues" | jq -n 'input as $board | input as $issues
+  | def days_since($t): (try ($t | fromdateiso8601) catch null) as $s
     | if $s == null then null
       else (($board.generatedAt | fromdateiso8601) - $s) / 86400 | floor | if . < 0 then 0 else . end end;
   def stage: {
@@ -108,6 +110,10 @@ report=$(jq -n --argjson board "$board" --argjson issues "$issues" '
   def checks: {FAILURE: "checks failing", ERROR: "checks failing",
     PENDING: "checks running", EXPECTED: "checks running"}[.ciState // ""] // "";
   def failing: .ciState | IN("FAILURE", "ERROR");
+  # Failing checks and merge conflicts are the author'"'"'s to fix, and clear once they push. A
+  # change request is not here: it stays on GitHub after the fix is pushed, until the reviewer
+  # looks again.
+  def authorBlocked: failing or .conflicts;
 
   ($board.viewer | ascii_downcase) as $me
   | ($board.codeowners | index($me) != null) as $isCodeowner
@@ -117,11 +123,13 @@ report=$(jq -n --argjson board "$board" --argjson issues "$issues" '
         if failing then "MY_CI"
         elif .conflicts then "MY_CONFLICTS"
         elif .bucket == "DRAFT" then "MY_DRAFTS"
-        elif .bucket == "THREADS" or .changesRequested then "MY_FEEDBACK"
-        elif .approved then "MY_APPROVED"
+        elif .bucket == "THREADS" or .changesRequested or (.threadsAwaitingAuthor // 0) > 0
+          then "MY_FEEDBACK"
+        elif .bucket == "OWN" and .approved then "MY_APPROVED"
         else "MY_WAITING" end
       elif .bucket == "DRAFT" or (.viewersTurn | not) then null
       elif .bucket == "REPLY" then "REPLY"
+      elif authorBlocked then null
       elif .assignedToMe then
         {INLINE: "ASSIGNED_SKILL", LOCAL: "ASSIGNED_SKILL", MANUAL: "ASSIGNED_APPROVE",
          MERGE: "ASSIGNED_MERGE"}[.bucket]
@@ -158,7 +166,7 @@ report=$(jq -n --argjson board "$board" --argjson issues "$issues" '
       isCodeowner: $isCodeowner,
       notes: ([($board.advisoryNotes // [])[],
         (if $board.truncated then "There are more open PRs: only the oldest \($board.fetched) were read." else empty end),
-        (if $board.reviewDecisionsMissing then "GitHub couldn'"'"'t read approvals for some PRs, so approved ones show as needing approval." else empty end),
+        (if $board.reviewDecisionsMissing then "GitHub couldn'"'"'t read approvals for some PRs, so approved ones show as needing approval and change requests may be missing." else empty end),
         (if $issues.data.search.issueCount > ($issues.data.search.nodes | length)
          then "You have more than \($issues.data.search.nodes | length) open issues: only the oldest were read." else empty end)]),
       sections: [
@@ -188,6 +196,8 @@ fi
 
 if $html; then
   [[ -n "$out" ]] || out="${TMPDIR:-/tmp}"
+  # pnpm runs scripts from the repository root; INIT_CWD is where the user ran the command.
+  [[ "$out" == /* ]] || out="${INIT_CWD:-$PWD}/$out"
   [[ -d "$out" ]] && out="${out%/}/my-work-${repo%%/*}-${repo#*/}.html"
   # "<" is escaped so no title can close the <script> block it is embedded in.
   json=$(jq -c '.' <<<"$report" | sed 's/</\\u003c/g')
@@ -365,7 +375,8 @@ else
 fi
 
 echo "${bold}My work in $(jq -r .repo <<<"$report")${reset} ${dim}(as @$(jq -r .viewer <<<"$report"))${reset}"
-jq -r '.notes[] | "  \(.)"' <<<"$report"
+# Remote text could carry terminal escape sequences, so C0/C1 controls and DEL become spaces.
+jq -r '.notes[] | "  \(gsub("[\u0001-\u001f\u007f-\u009f]+"; " "))"' <<<"$report"
 
 # Fields are split on \x1f, not tab: `read` collapses runs of whitespace separators, so an
 # empty field would shift the rest left.
@@ -373,12 +384,12 @@ rows=$(jq -r '.sections[] | select(.items | length > 0) as $s
   | ($s.group + "\u001f" + $s.title + "\u001f\u001f\u001f\u001f"),
     ($s.items[] | ["", "",
       .ref + (if .kind == "advisory" or .advisory then " [\((.advisory // .).severity // "no severity")]" else "" end),
-      ((.title | gsub("[\u001f\r\n]+"; " "))
+      (.title
         + (if .kind == "pr" then " (\(.author))" else "" end)),
       ([(if .kind == "pr" then "Assignee: \(.assignee)" else empty end),
         (if .days == null then empty elif .kind == "pr" then "waiting \(.days)d" else "opened \(.days)d ago" end),
         (if .note != "" then .note else empty end)] | join(" · ")),
-      .url] | join("\u001f"))' <<<"$report")
+      .url] | map(tostring | gsub("[\u0001-\u001f\u007f-\u009f]+"; " ")) | join("\u001f"))' <<<"$report")
 
 if [[ -z "$rows" ]]; then
   echo

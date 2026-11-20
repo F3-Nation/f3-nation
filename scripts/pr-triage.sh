@@ -519,6 +519,10 @@ classify='
           codeownerAssignees: [$assignees[] | select(codeowner and (lower_login != ($author | lower_login)))],
           unresolvedThreads: ($open | length),
           threadOpeners: ($open | unique),
+          # Unresolved threads whose last comment isn'"'"'t the author'"'"'s, whatever the bucket:
+          # INLINE outranks THREADS, so the bucket alone hides a review bot'"'"'s unanswered threads.
+          threadsAwaitingAuthor: ([$openThreads[]
+            | select((.lastComment.nodes[0].author.login // "") != $author)] | length),
           approved: $approved,
           conflicts: $conflicts,
           # The head commit'"'"'s combined check state: SUCCESS, PENDING, FAILURE, ERROR, EXPECTED,
