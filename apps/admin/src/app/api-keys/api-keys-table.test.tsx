@@ -211,8 +211,8 @@ describe("ApiKeysTable", () => {
     user: "User",
     editor: "Editor",
     admin: "Admin",
-    password_manager: "Password manager",
-    password_reader: "Password reader",
+    password_manager: "Password Manager",
+    password_reader: "Password Reader",
   } satisfies Record<UserRole, string>;
 
   it.each(UserRole)(
@@ -256,7 +256,7 @@ describe("ApiKeysTable", () => {
 
     expect(screen.getByText("Region Seven (User)")).toBeTruthy();
     expect(screen.getByText("Region Eight (Admin)")).toBeTruthy();
-    expect(screen.getByText("Region Nine (Password reader)")).toBeTruthy();
+    expect(screen.getByText("Region Nine (Password Reader)")).toBeTruthy();
     expect(screen.queryByText("Restore access")).toBeNull();
     expect(screen.queryByText("Revoke access")).toBeNull();
     expect(screen.queryByText("Delete key")).toBeNull();

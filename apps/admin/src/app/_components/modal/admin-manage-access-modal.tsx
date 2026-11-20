@@ -1,13 +1,11 @@
 "use client";
 
 import isNumber from "lodash/isNumber";
-import { CheckCircle2, Plus, UserPlus, X } from "lucide-react";
+import { CheckCircle2, UserPlus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { isValidEmail } from "@acme/shared/app/functions";
-import type { RoleEntry } from "@acme/shared/app/types";
-import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import { Command, CommandGroup, CommandItem } from "@acme/ui/command";
@@ -28,13 +26,6 @@ import {
   useForm,
 } from "@acme/ui/form";
 import { Input } from "@acme/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@acme/ui/select";
 import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
@@ -50,8 +41,8 @@ import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
-import { toGrantableRoleEntries } from "~/lib/auth/session";
-import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
+import { toRoleAssignments } from "~/lib/roles";
+import { RoleAssignmentsField } from "~/app/_components/role-assignments-field";
 
 export default function AdminManageAccessModal({
   data,
@@ -102,7 +93,7 @@ export default function AdminManageAccessModal({
       lastName: "",
       f3Name: "",
       phone: "",
-      roles: [] as RoleEntry[],
+      roles: [],
     },
   });
 
@@ -324,13 +315,21 @@ export default function AdminManageAccessModal({
       form.setValue("f3Name", user.f3Name ?? "");
       form.setValue("phone", user.phone ?? "");
 
-      // Load only grantable roles into the editable form. Dormant/hidden roles
-      // (e.g. password_*) are intentionally omitted so an editor can't
-      // mislabel or overwrite them; the API preserves those assignments on
-      // save (see user.crupdate's rolesToDelete guard).
-      form.setValue("roles", toGrantableRoleEntries(user.roles));
+      // Every role the user holds, so a save resubmits the ones left alone.
+      form.setValue("roles", toRoleAssignments(user.roles));
     }
   }, [userByIdData, form]);
+
+  // Names for the read-only rows of orgs this admin can't manage.
+  const roleOrgNames = useMemo(
+    () =>
+      new Map(
+        (userByIdData?.user?.roles ?? []).flatMap((role) =>
+          role.orgName ? [[role.orgId, role.orgName] as const] : [],
+        ),
+      ),
+    [userByIdData],
+  );
 
   // Check if we can submit (either user selected or creating new)
   const canSubmit = selectedUserId !== null || isCreatingNew;
@@ -372,11 +371,6 @@ export default function AdminManageAccessModal({
                   toast.error(
                     "Please select an organization for all roles before saving",
                   );
-                  return;
-                }
-                const orgIds = data.roles.map((r) => r.orgId);
-                if (new Set(orgIds).size !== orgIds.length) {
-                  toast.error("A user can only have one role per organization");
                   return;
                 }
                 // When updating an existing user (has id), email is not required
@@ -686,164 +680,13 @@ export default function AdminManageAccessModal({
                           ? `Existing roles are shown below. Add or modify roles as needed.`
                           : `Assign roles to the user. They will be added to any existing roles.`}
                       </FormDescription>
-                      <div className="space-y-2">
-                        {(field.value as RoleEntry[]).map(
-                          (roleEntry, index) => {
-                            // Check if admin has access to this org
-                            const adminOrgIds = new Set(
-                              orgs.orgs.map((org) => org.id),
-                            );
-                            const isNewRole = roleEntry.orgId === -1;
-                            const hasAccess =
-                              isNewRole || adminOrgIds.has(roleEntry.orgId);
-
-                            // Get org name from user's roles (API includes orgName)
-                            const userRole = userByIdData?.user?.roles.find(
-                              (r) => r.orgId === roleEntry.orgId,
-                            );
-                            const orgName = userRole?.orgName;
-
-                            if (!hasAccess) {
-                              // Render disabled/grayed out row for orgs the admin can't access
-                              return (
-                                <div
-                                  key={index}
-                                  className="flex flex-col gap-2 rounded-md border border-input p-2 opacity-50 sm:flex-row sm:items-center sm:border-0 sm:p-0"
-                                >
-                                  <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground sm:w-[200px]">
-                                    {roleEntry.roleName === "admin"
-                                      ? "Admin"
-                                      : "Editor"}
-                                  </div>
-                                  <div className="flex h-9 flex-1 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
-                                    {orgName ?? `Org #${roleEntry.orgId}`}
-                                  </div>
-                                  <div className="hidden h-8 w-8 sm:block" />
-                                </div>
-                              );
-                            }
-
-                            const assignedOrgIds = new Set(
-                              (field.value as RoleEntry[])
-                                .filter((_, i) => i !== index)
-                                .map((r) => r.orgId),
-                            );
-
-                            return (
-                              <div
-                                key={index}
-                                className="flex flex-col gap-2 rounded-md border p-2 sm:flex-row sm:items-center sm:border-0 sm:p-0"
-                              >
-                                <Select
-                                  onValueChange={(value) => {
-                                    const newRoles = [
-                                      ...(field.value as RoleEntry[]),
-                                    ];
-                                    newRoles[index] = {
-                                      orgId: roleEntry.orgId,
-                                      roleName: value as "editor" | "admin",
-                                    };
-                                    field.onChange(newRoles);
-                                  }}
-                                  value={roleEntry.roleName}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger className="w-full sm:w-[200px]">
-                                      <SelectValue placeholder="Select a role" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="editor">
-                                      Editor
-                                    </SelectItem>
-                                    <SelectItem value="admin">Admin</SelectItem>
-                                  </SelectContent>
-                                </Select>
-
-                                <VirtualizedCombobox
-                                  value={roleEntry.orgId.toString()}
-                                  options={orgs.orgs
-                                    .filter(
-                                      (org) => !assignedOrgIds.has(org.id),
-                                    )
-                                    .map((org) => ({
-                                      value: org.id.toString(),
-                                      label: `${org.name} (${org.orgType})`,
-                                    }))}
-                                  searchPlaceholder="Select an organization"
-                                  disabled={isLoadingOrgs}
-                                  onSelect={(value) => {
-                                    const orgId = safeParseInt(value);
-                                    if (orgId == undefined) {
-                                      toast.error("Invalid orgId");
-                                      return;
-                                    }
-                                    const newRoles = [
-                                      ...(field.value as RoleEntry[]),
-                                    ];
-                                    newRoles[index] = {
-                                      roleName:
-                                        newRoles[index]?.roleName ?? "editor",
-                                      orgId,
-                                    };
-                                    field.onChange(newRoles);
-                                  }}
-                                  isMulti={false}
-                                />
-
-                                <Button
-                                  variant="ghost"
-                                  type="button"
-                                  size="sm"
-                                  className="self-end sm:self-auto"
-                                  onClick={() => {
-                                    const newRoles = [
-                                      ...(field.value as RoleEntry[]),
-                                    ];
-                                    newRoles.splice(index, 1);
-                                    field.onChange(newRoles);
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            );
-                          },
-                        )}
-
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex flex-col">
-                            <p className="text-xs text-gray-500">
-                              Admins can invite & edit
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Editors can edit
-                            </p>
-                          </div>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="mt-2"
-                            onClick={() => {
-                              // Use -1 as placeholder to indicate "no org selected"
-                              // This prevents accidental saves with wrong org (issue #63)
-                              const newRoleEntry: RoleEntry = {
-                                roleName: "editor",
-                                orgId: -1,
-                              };
-                              field.onChange([
-                                ...(field.value as RoleEntry[]),
-                                newRoleEntry,
-                              ]);
-                            }}
-                          >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add Role
-                          </Button>
-                        </div>
-                      </div>
+                      <RoleAssignmentsField
+                        value={field.value}
+                        onChange={field.onChange}
+                        orgOptions={orgs.orgs}
+                        orgNames={roleOrgNames}
+                        isLoadingOrgs={isLoadingOrgs}
+                      />
                       <FormMessage />
                     </FormItem>
                   )}

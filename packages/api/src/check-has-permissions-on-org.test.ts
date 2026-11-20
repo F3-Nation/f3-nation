@@ -1,9 +1,12 @@
 import type { Session } from "@acme/auth";
 import type { UserRole } from "@acme/shared/app/enums";
 import { inArray, schema } from "@acme/db";
+import { OrgType } from "@acme/shared/app/enums";
 import {
   Permission,
+  ROLE_ORG_TYPES,
   ROLE_PERMISSIONS,
+  roleAllowedOnOrgType,
   roleHasPermission,
 } from "@acme/shared/app/permissions";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -280,5 +283,28 @@ describe("checkHasPermissionsOnOrg", () => {
         db,
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe("roleAllowedOnOrgType", () => {
+  it("allows the password roles on regions only", () => {
+    for (const role of ["password_manager", "password_reader"] as const) {
+      expect(
+        OrgType.filter((type) => roleAllowedOnOrgType(role, type)),
+      ).toEqual(["region"]);
+    }
+  });
+
+  it("allows an unrestricted role on every org type", () => {
+    for (const role of ["admin", "editor", "user"] as const) {
+      expect(Object.hasOwn(ROLE_ORG_TYPES, role)).toBe(false);
+      expect(OrgType.every((type) => roleAllowedOnOrgType(role, type))).toBe(
+        true,
+      );
+    }
+  });
+
+  it("doesn't read inherited object keys as a restriction", () => {
+    expect(roleAllowedOnOrgType("toString" as UserRole, "region")).toBe(true);
   });
 });

@@ -2,11 +2,8 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
 
 import { routes } from "@acme/shared/app/constants";
-import type { RoleEntry } from "@acme/shared/app/types";
-import { safeParseInt } from "@acme/shared/common/functions";
 import { Button } from "@acme/ui/button";
 import {
   Form,
@@ -18,21 +15,14 @@ import {
   useForm,
 } from "@acme/ui/form";
 import { Input } from "@acme/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@acme/ui/select";
 import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
 import type { RouterOutputs } from "~/orpc/types";
-import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { client } from "~/orpc/client";
 import { invalidateQueries, orpc, ORPCError, useMutation } from "~/orpc/react";
-import { toGrantableRoleEntries } from "~/lib/auth/session";
+import { toRoleAssignments } from "~/lib/roles";
+import { RoleAssignmentsField } from "~/app/_components/role-assignments-field";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { EmailChangeHint } from "~/app/_components/email-change-hint";
@@ -58,9 +48,27 @@ export default function UserMutate({
       return { items: orgs, total };
     },
   });
-  const sortedRegions = useMemo(() => {
-    return [...(regions ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  }, [regions]);
+  const regionOptions = useMemo(
+    () =>
+      [...(regions ?? [])]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((region) => ({
+          id: region.id,
+          name: region.name,
+          orgType: "region" as const,
+        })),
+    [regions],
+  );
+  // Names for the read-only rows of roles on orgs that aren't regions.
+  const roleOrgNames = useMemo(
+    () =>
+      new Map(
+        (user?.roles ?? []).flatMap((role) =>
+          role.orgName ? [[role.orgId, role.orgName] as const] : [],
+        ),
+      ),
+    [user],
+  );
 
   const form = useForm({
     schema: CrupdateUserSchema,
@@ -70,7 +78,7 @@ export default function UserMutate({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: toGrantableRoleEntries(user?.roles),
+      roles: toRoleAssignments(user?.roles),
     },
   });
 
@@ -112,6 +120,12 @@ export default function UserMutate({
             <form
               onSubmit={form.handleSubmit(
                 (data) => {
+                  if (data.roles.some((role) => role.orgId < 0)) {
+                    toast.error(
+                      "Please select a region for all roles before saving",
+                    );
+                    return;
+                  }
                   // Deliberately not logged: this payload is a full user record
                   // (email, phone, emergency contact). AGENTS.md: never log PII.
                   crupdateUser.mutate(data);
@@ -217,105 +231,13 @@ export default function UserMutate({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Roles</FormLabel>
-                    <div className="space-y-2">
-                      {(field.value as RoleEntry[]).map((roleEntry, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <Select
-                            onValueChange={(value) => {
-                              const newRoles = [
-                                ...(field.value as RoleEntry[]),
-                              ];
-                              newRoles[index] = {
-                                orgId: roleEntry.orgId,
-                                roleName: value as "editor" | "admin",
-                              };
-                              field.onChange(newRoles);
-                            }}
-                            value={roleEntry.roleName}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="w-[200px]">
-                                <SelectValue placeholder="Select a role" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="editor">Editor</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          <VirtualizedCombobox
-                            value={roleEntry.orgId.toString()}
-                            options={sortedRegions.map((region) => ({
-                              value: region.id.toString(),
-                              label: region.name,
-                            }))}
-                            searchPlaceholder="Select a region"
-                            onSelect={(value) => {
-                              const orgId = safeParseInt(value);
-                              if (orgId == undefined) {
-                                toast.error("Invalid orgId");
-                                return;
-                              }
-                              const newRoles = [
-                                ...(field.value as RoleEntry[]),
-                              ];
-                              newRoles[index] = {
-                                roleName: newRoles[index]?.roleName ?? "editor",
-                                orgId,
-                              };
-                              field.onChange(newRoles);
-                            }}
-                            isMulti={false}
-                          />
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const newRoles = [
-                                ...(field.value as RoleEntry[]),
-                              ];
-                              newRoles.splice(index, 1);
-                              field.onChange(newRoles);
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex flex-col">
-                          <p className="text-xs text-gray-500">
-                            Admins can invite & edit
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Editors can edit
-                          </p>
-                        </div>
-
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => {
-                            const newRoleEntry: RoleEntry = {
-                              roleName: "editor",
-                              orgId: 1,
-                            };
-                            field.onChange([
-                              ...(field.value as RoleEntry[]),
-                              newRoleEntry,
-                            ]);
-                          }}
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Add Role
-                        </Button>
-                      </div>
-                    </div>
+                    <RoleAssignmentsField
+                      value={field.value}
+                      onChange={field.onChange}
+                      orgOptions={regionOptions}
+                      orgNames={roleOrgNames}
+                      orgPlaceholder="Select a region"
+                    />
                     <FormMessage />
                   </FormItem>
                 )}

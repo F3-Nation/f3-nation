@@ -3,7 +3,6 @@
 import { MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 
-import type { UserRole } from "@acme/shared/app/enums";
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@acme/ui/card";
@@ -28,6 +27,7 @@ import { toast } from "@acme/ui/toast";
 
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
+import { RoleBadges } from "~/app/_components/role-badges";
 
 type ApiKeyRow = RouterOutputs["apiKey"]["list"]["apiKeys"][number];
 
@@ -41,22 +41,6 @@ const statusBadgeVariant: Record<
   revoked: "destructive",
   expired: "outline",
 };
-
-const ROLE_STYLES = {
-  user: "bg-gray-100 text-gray-700 border-gray-200",
-  admin: "bg-purple-100 text-purple-700 border-purple-200",
-  editor: "bg-blue-100 text-blue-700 border-blue-200",
-  password_manager: "bg-gray-100 text-gray-700 border-gray-200",
-  password_reader: "bg-gray-100 text-gray-700 border-gray-200",
-} satisfies Record<UserRole, string>;
-
-const ROLE_LABELS = {
-  user: "User",
-  admin: "Admin",
-  editor: "Editor",
-  password_manager: "Password manager",
-  password_reader: "Password reader",
-} satisfies Record<UserRole, string>;
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
@@ -188,18 +172,7 @@ export const ApiKeysTable = () => {
                       <TableCell className="hidden lg:table-cell">
                         <div className="flex flex-wrap items-center gap-2">
                           {row.roles.length > 0 ? (
-                            row.roles.map((role, index) => {
-                              return (
-                                <span
-                                  key={`${row.id}-${role.orgId}-${index}`}
-                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-                                    ROLE_STYLES[role.roleName]
-                                  }`}
-                                >
-                                  {role.orgName} ({ROLE_LABELS[role.roleName]})
-                                </span>
-                              );
-                            })
+                            <RoleBadges roles={row.roles} />
                           ) : (
                             <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-gray-700">
                               No access
