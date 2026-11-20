@@ -6,8 +6,10 @@ for moving a feature onto the API are in [API_MIGRATION.md](API_MIGRATION.md).
 
 ## Where the contract lives
 
-The API publishes its own OpenAPI spec, generated from the router, so it
-can't drift from what the API does:
+The API publishes its own OpenAPI spec, generated from the router's schemas
+and descriptions, so its paths, parameters and field shapes match the code.
+The spec's overview prose (such as its authentication section) is written by
+hand; when it disagrees with a procedure, the router is right:
 
 - **Spec:** `/docs/openapi.json` on any API host, for example
   `https://api.f3nation.com/docs/openapi.json`, or

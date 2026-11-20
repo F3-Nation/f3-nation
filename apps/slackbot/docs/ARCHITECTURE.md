@@ -36,7 +36,8 @@ features/<module>.py   (handler function)
 ### `features/`
 
 - **What**: Slack interaction handlers. One file (or sub-package) per feature area.
-- **Allowed imports**: `application.*`, `utilities.*`, `slack_sdk.*`, stdlib.
+- **Allowed imports**: `application.*`, `infrastructure.api_client`, `utilities.*`, `slack_sdk.*`,
+  stdlib.
 - **Forbidden imports**: `f3_data_models.*` for writes to shared tables; those go through the
   F3 API.
 - **Pattern**: `EventTagViews` class for pure UI construction + handler functions for

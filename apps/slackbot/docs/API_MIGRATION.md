@@ -111,6 +111,10 @@ say how updates read prior state and surface failures.
 API ids are F3 ids, not Slack ids. Map a Slack user to an F3 user with
 `get_user` in `utilities/helper_functions.py`, and map F3 user ids back to
 Slack ids from the cached Slack users, filtered to the current workspace.
+`get_user` isn't read-only: when a Slack account has no linked F3 user, it
+creates one through SQLAlchemy, in every environment. That is one of the
+bot's remaining direct writes to a shared table. When identity creation moves
+to the API, change `get_user` itself, not the handlers that call it.
 
 ### Test it
 
