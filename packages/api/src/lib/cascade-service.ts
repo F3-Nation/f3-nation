@@ -6,7 +6,8 @@
  * and soft-deleting them when series or orgs are deleted.
  */
 
-import { and, eq, gte, inArray, isNotNull, isNull, or, schema } from "@acme/db";
+import type { SQL } from "@acme/db";
+import { and, eq, gte, inArray, isNotNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 
@@ -399,11 +400,10 @@ async function createEventInstancesForSeriesInTransaction(
 }
 
 /**
- * Fields an admin can change on one date of a series. A series edit only
- * carries these to dates that still hold the series' previous value, so a
- * date someone moved, retimed, renamed or wrote a note on keeps that change.
- * The rest (privacy, org, highlight, meta) always follow the series: a series
- * made private must hide every date.
+ * Fields an admin can change on one date of a series. On a date marked with a
+ * series exception, a series edit keeps the date's own value for these (see
+ * updateFutureInstancesInTransaction). The rest (privacy, org, highlight,
+ * meta) always follow the series: a series made private must hide every date.
  */
 const OVERRIDABLE_INSTANCE_FIELDS = [
   "locationId",
@@ -426,8 +426,9 @@ export async function updateFutureInstances(
   startDate?: string,
   options?: {
     /**
-     * The series' values before this edit. When given, an overridable field
-     * is only written to instances still holding the previous value.
+     * The series' values before this edit. When given, a date with a series
+     * exception keeps its own value for any overridable field that differs
+     * from these.
      */
     previous?: Pick<SeriesData, OverridableInstanceField>;
     fields?: (
@@ -507,35 +508,33 @@ async function updateFutureInstancesInTransaction(
     ...(shouldUpdate("orgId") ? { orgId: series.orgId } : {}),
   };
 
+  // With the series' previous values, an overridable field keeps a date's own
+  // value only when the date carries a series exception (closed, different
+  // time) and its value differs from the series' previous one. Every other
+  // date follows the series as before, including rows that drifted from it.
+  // Start and end time are judged as a pair so a date can't end up finishing
+  // before it starts. All SET expressions read the row's values before the
+  // update, so one statement does it.
   const previous = options?.previous;
-  const sharedUpdate: Partial<typeof instanceUpdate> = {};
-  for (const [field, value] of Object.entries(instanceUpdate) as [
-    keyof typeof instanceUpdate,
-    unknown,
-  ][]) {
-    if (!previous || !isOverridableField(field)) {
-      Object.assign(sharedUpdate, { [field]: value });
-      continue;
+  const instance = schema.eventInstances;
+  const matchesPrevious = (field: OverridableInstanceField): SQL => {
+    if (!previous) return sql`TRUE`;
+    if (field === "startTime" || field === "endTime") {
+      return sql`(${instance.startTime} IS NOT DISTINCT FROM ${previous.startTime} AND ${instance.endTime} IS NOT DISTINCT FROM ${previous.endTime})`;
     }
-    const before = previous[field];
-    // Unchanged on the series: a date that differs is an override, and one
-    // that matches already holds the value.
-    if (before === series[field]) continue;
-    const column = schema.eventInstances[field];
-    await db
-      .update(schema.eventInstances)
-      .set({ [field]: series[field] })
-      .where(
-        and(
-          inArray(schema.eventInstances.id, instanceIds),
-          before === null ? isNull(column) : eq(column, before),
-        ),
-      );
+    return sql`${instance[field]} IS NOT DISTINCT FROM ${previous[field]}`;
+  };
+  const update: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(instanceUpdate)) {
+    update[field] =
+      previous && isOverridableField(field)
+        ? sql`CASE WHEN ${instance.seriesException} IS NULL OR ${matchesPrevious(field)} THEN ${value} ELSE ${instance[field]} END`
+        : value;
   }
-  if (Object.keys(sharedUpdate).length > 0) {
+  if (Object.keys(update).length > 0) {
     await db
       .update(schema.eventInstances)
-      .set(sharedUpdate)
+      .set(update)
       .where(inArray(schema.eventInstances.id, instanceIds));
   }
 

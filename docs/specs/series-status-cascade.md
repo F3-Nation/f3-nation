@@ -71,12 +71,17 @@ hard-deleting or regenerating instances.
   `event.crupdate` includes an effective structural schedule change THEN the
   request fails with `BAD_REQUEST` and does not hard-delete or regenerate
   instances.
-- **AC-11** — GIVEN a series instance dated today or later whose start time,
-  end time, location, description or name differs from the series' value WHEN
-  the series is edited through `event.crupdate` without a structural change
-  (in place or as a status change) THEN that field keeps the instance's value,
-  while instances still holding the series' previous value take the new one.
-- **AC-12** — GIVEN the same edit THEN `isPrivate`, `orgId`, `highlight` and
+- **AC-11** — GIVEN a series instance dated today or later that has a series
+  exception (closed, different time) and whose location, description or name
+  differs from the series' value before the edit WHEN the series is edited
+  through `event.crupdate` without a structural change (in place or as a
+  status change) THEN that field keeps the instance's value. Start and end time
+  are kept together when either differs, so the date can't end before it
+  starts.
+- **AC-12** — GIVEN the same edit THEN an instance without a series exception
+  takes the series' new values for every field, as before, even where it had
+  drifted from the series.
+- **AC-13** — GIVEN the same edit THEN `isPrivate`, `orgId`, `highlight` and
   `meta` are written to every instance dated today or later, whatever the
   instance held; a series made private hides every date.
 

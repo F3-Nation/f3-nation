@@ -1222,8 +1222,9 @@ describe("Cascade Service", () => {
         .from(schema.eventInstances)
         .where(eq(schema.eventInstances.seriesId, series.id))
         .orderBy(schema.eventInstances.startDate);
-      const [changed, plain] = instances;
-      if (!changed || !plain) throw new Error("Expected two instances");
+      const [changed, plain, drifted, longer] = instances;
+      if (!changed || !plain || !drifted || !longer)
+        throw new Error("Expected four instances");
 
       // An admin moves one date: new time and place, its own note and name.
       await db
@@ -1237,6 +1238,18 @@ describe("Cascade Service", () => {
           name: "Turkey Bowl",
         })
         .where(eq(schema.eventInstances.id, changed.id));
+      // A date that drifted from the series without being marked: it still
+      // follows the series, as every unmarked date always has.
+      await db
+        .update(schema.eventInstances)
+        .set({ name: "Legacy name", description: "" })
+        .where(eq(schema.eventInstances.id, drifted.id));
+      // A marked date that only runs longer: its start still matches, but
+      // the times move as a pair so it can't end before it starts.
+      await db
+        .update(schema.eventInstances)
+        .set({ seriesException: "different-time", endTime: "0700" })
+        .where(eq(schema.eventInstances.id, longer.id));
 
       await updateFutureInstances(
         db,
@@ -1279,6 +1292,18 @@ describe("Cascade Service", () => {
         name: "Turkey Bowl",
         // Privacy always follows the series.
         isPrivate: true,
+      });
+      expect(byId.get(drifted.id)).toMatchObject({
+        name: "Renamed Series",
+        description: "Meet at the new track",
+        startTime: "0545",
+      });
+      expect(byId.get(longer.id)).toMatchObject({
+        startTime: "0530",
+        endTime: "0700",
+        // Fields the date didn't change still follow the series.
+        locationId: newLocation.id,
+        name: "Renamed Series",
       });
     });
 
