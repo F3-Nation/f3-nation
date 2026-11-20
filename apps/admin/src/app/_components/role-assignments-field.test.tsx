@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RoleAssignment } from "./role-assignments-field";
@@ -178,6 +184,47 @@ describe("RoleAssignmentsField", () => {
     expect(onChange).toHaveBeenLastCalledWith([
       { orgId: -1, roleName: "editor" },
     ]);
+  });
+
+  it("reports an added org with no role as incomplete until a role is chosen", () => {
+    const onIncompleteChange = vi.fn<(incomplete: boolean) => void>();
+    render(
+      <RoleAssignmentsField
+        value={[{ orgId: 81, roleName: "editor" }]}
+        onChange={vi.fn()}
+        orgOptions={[BOONE, BOONE_AO]}
+        onIncompleteChange={onIncompleteChange}
+      />,
+    );
+    expect(onIncompleteChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /Add organization/ }));
+    // No org chosen yet: the empty row would add nothing either way.
+    expect(onIncompleteChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getAllByLabelText("Organization")[1]!, {
+      target: { value: "8" },
+    });
+    expect(onIncompleteChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(within(roleBoxes(1)).getByLabelText("Admin"));
+    expect(onIncompleteChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("doesn't count clearing a loaded org's roles as incomplete", () => {
+    const onIncompleteChange = vi.fn<(incomplete: boolean) => void>();
+    render(
+      <RoleAssignmentsField
+        value={[{ orgId: 8, roleName: "admin" }]}
+        onChange={vi.fn()}
+        orgOptions={[BOONE]}
+        onIncompleteChange={onIncompleteChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Admin"));
+
+    expect(onIncompleteChange).toHaveBeenLastCalledWith(false);
   });
 
   it("rebuilds its rows when the value changes from outside", () => {

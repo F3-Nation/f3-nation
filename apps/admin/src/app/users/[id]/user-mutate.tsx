@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { routes } from "@acme/shared/app/constants";
@@ -19,12 +19,11 @@ import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
 import type { RouterOutputs } from "~/orpc/types";
-import { client } from "~/orpc/client";
 import { invalidateQueries, orpc, ORPCError, useMutation } from "~/orpc/react";
 import { toRoleAssignments } from "~/lib/roles";
 import { RoleAssignmentsField } from "~/app/_components/role-assignments-field";
 import { useAuth } from "~/utils/hooks/use-auth";
-import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
+import { useRoleGrantOrgs } from "~/utils/hooks/use-role-grant-orgs";
 import { EmailChangeHint } from "~/app/_components/email-change-hint";
 
 export default function UserMutate({
@@ -36,30 +35,9 @@ export default function UserMutate({
   const { isNationAdmin } = useAuth();
   // The API lets only nation admins change an existing user's email.
   const canChangeEmail = !user?.id || isNationAdmin;
-  const { data: regions } = useFetchAllPages({
-    path: ["org", "all"],
-    queryKey: ["org.all.everyRegion"],
-    fetchPage: async ({ pageIndex, pageSize }) => {
-      const { orgs, total } = await client.org.all({
-        orgTypes: ["region"],
-        pageIndex,
-        pageSize,
-      });
-      return { items: orgs, total };
-    },
-  });
-  const regionOptions = useMemo(
-    () =>
-      [...(regions ?? [])]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((region) => ({
-          id: region.id,
-          name: region.name,
-          orgType: "region" as const,
-        })),
-    [regions],
-  );
-  // Names for the read-only rows of roles on orgs that aren't regions.
+  const { orgs: grantOrgs, isLoading: isLoadingOrgs } = useRoleGrantOrgs();
+  const [hasIncompleteRoles, setHasIncompleteRoles] = useState(false);
+  // Names for the read-only rows of orgs this admin can't manage.
   const roleOrgNames = useMemo(
     () =>
       new Map(
@@ -120,9 +98,15 @@ export default function UserMutate({
             <form
               onSubmit={form.handleSubmit(
                 (data) => {
+                  if (hasIncompleteRoles) {
+                    toast.error(
+                      "Choose at least one role for each organization you added",
+                    );
+                    return;
+                  }
                   if (data.roles.some((role) => role.orgId < 0)) {
                     toast.error(
-                      "Please select a region for all roles before saving",
+                      "Please select an organization for all roles before saving",
                     );
                     return;
                   }
@@ -234,9 +218,10 @@ export default function UserMutate({
                     <RoleAssignmentsField
                       value={field.value}
                       onChange={field.onChange}
-                      orgOptions={regionOptions}
+                      orgOptions={grantOrgs}
                       orgNames={roleOrgNames}
-                      orgPlaceholder="Select a region"
+                      isLoadingOrgs={isLoadingOrgs}
+                      onIncompleteChange={setHasIncompleteRoles}
                     />
                     <FormMessage />
                   </FormItem>

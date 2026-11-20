@@ -29,7 +29,6 @@ import { Input } from "@acme/ui/input";
 import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
-import { client } from "~/orpc/client";
 import {
   ORPCError,
   invalidateQueries,
@@ -39,8 +38,7 @@ import {
 } from "~/orpc/react";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
-import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
-import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
+import { useRoleGrantOrgs } from "~/utils/hooks/use-role-grant-orgs";
 import { toRoleAssignments } from "~/lib/roles";
 import { RoleAssignmentsField } from "~/app/_components/role-assignments-field";
 
@@ -55,34 +53,8 @@ export default function AdminManageAccessModal({
   });
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-  // Get orgs where user has admin role (required to manage access)
-  const { data: accessibleOrgs, isLoading: isLoadingOrgs } = useFetchAllPages({
-    path: ["org", "accessible"],
-    queryKey: ["org.accessible.adminManageAccessModal"],
-    fetchPage: async ({ pageIndex, pageSize }) => {
-      const { orgs, total } = await client.org.accessible({
-        orgTypes: AdminScopeOrgTypes,
-        pageIndex,
-        pageSize,
-      });
-      return { items: orgs, total };
-    },
-  });
-  const accessibleOrgsData = useMemo(
-    () => (accessibleOrgs ? { orgs: accessibleOrgs } : undefined),
-    [accessibleOrgs],
-  );
-
-  // Filter to only orgs where user is admin (or all orgs if nation admin - roles will be empty)
-  const orgs = useMemo(() => {
-    if (!accessibleOrgsData?.orgs) return { orgs: [] };
-    const adminOrgs = accessibleOrgsData.orgs.filter(
-      (org) =>
-        // Nation admins get empty roles array but can manage all orgs
-        org.roles.length === 0 || org.roles.includes("admin"),
-    );
-    return { orgs: adminOrgs };
-  }, [accessibleOrgsData]);
+  const { orgs: grantOrgs, isLoading: isLoadingOrgs } = useRoleGrantOrgs();
+  const [hasIncompleteRoles, setHasIncompleteRoles] = useState(false);
 
   const form = useForm({
     schema: CrupdateUserSchema,
@@ -360,6 +332,12 @@ export default function AdminManageAccessModal({
                 if (!canSubmit) {
                   toast.error(
                     "Please select an existing user or create a new user",
+                  );
+                  return;
+                }
+                if (hasIncompleteRoles) {
+                  toast.error(
+                    "Choose at least one role for each organization you added",
                   );
                   return;
                 }
@@ -683,9 +661,10 @@ export default function AdminManageAccessModal({
                       <RoleAssignmentsField
                         value={field.value}
                         onChange={field.onChange}
-                        orgOptions={orgs.orgs}
+                        orgOptions={grantOrgs}
                         orgNames={roleOrgNames}
                         isLoadingOrgs={isLoadingOrgs}
+                        onIncompleteChange={setHasIncompleteRoles}
                       />
                       <FormMessage />
                     </FormItem>

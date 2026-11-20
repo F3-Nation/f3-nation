@@ -257,12 +257,11 @@ if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
   echo "WARNING: the checkout has uncommitted changes; they are built into $TAG"
 fi
 IMAGE="$IMAGE_BASE:$TAG"
-TURBO_VERSION="$(grep '^  turbo:' "$REPO/pnpm-workspace.yaml" | awk '{print $2}')"
 cat >"$TMP/cloudbuild.yaml" <<YAML
 steps:
   - name: gcr.io/cloud-builders/docker
     args: [build, --file, tooling/scripts/Dockerfile.staging-refresh,
-           --build-arg, TURBO_VERSION=${TURBO_VERSION}, --tag, "${IMAGE}", .]
+           --tag, "${IMAGE}", .]
 images: ["${IMAGE}"]
 options:
   machineType: E2_HIGHCPU_8

@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { OrgType, UserRole } from "@acme/shared/app/enums";
 import { safeParseInt } from "@acme/shared/common/functions";
@@ -34,6 +34,8 @@ interface Row {
   key: number;
   orgId: number;
   roleNames: UserRole[];
+  /** Added with "Add organization" rather than loaded with the user. */
+  added?: boolean;
 }
 
 const NO_ORG = -1;
@@ -67,8 +69,8 @@ const sameAssignments = (
 
 /**
  * Edits a user's roles as one row per org, each with a multi-select of roles.
- * Rows for orgs outside `orgOptions` (ones the editor can't manage) are shown
- * read-only and kept as they are.
+ * Rows for orgs outside `orgOptions` are shown read-only and kept as they are,
+ * so a save resubmits them unchanged.
  */
 export function RoleAssignmentsField({
   value,
@@ -77,6 +79,7 @@ export function RoleAssignmentsField({
   orgNames,
   isLoadingOrgs = false,
   orgPlaceholder = "Select an organization",
+  onIncompleteChange,
 }: {
   value: readonly RoleAssignment[];
   onChange: (roles: RoleAssignment[]) => void;
@@ -85,6 +88,11 @@ export function RoleAssignmentsField({
   orgNames?: ReadonlyMap<number, string>;
   isLoadingOrgs?: boolean;
   orgPlaceholder?: string;
+  /**
+   * Told whether an added org has no role chosen yet. Such a row adds nothing
+   * to the value, so a form that saved it would silently grant nothing.
+   */
+  onIncompleteChange?: (incomplete: boolean) => void;
 }) {
   const [rows, setRows] = useState<Row[]>(() => toRows(value, 0));
   const [nextKey, setNextKey] = useState(rows.length);
@@ -99,6 +107,13 @@ export function RoleAssignmentsField({
   } else if (value !== syncedValue) {
     setSyncedValue(value);
   }
+
+  const incomplete = rows.some(
+    (row) => row.added && row.orgId !== NO_ORG && row.roleNames.length === 0,
+  );
+  useEffect(() => {
+    onIncompleteChange?.(incomplete);
+  }, [incomplete, onIncompleteChange]);
 
   const update = (nextRows: Row[]) => {
     setRows(nextRows);
@@ -240,7 +255,10 @@ export function RoleAssignmentsField({
           className="mt-2 shrink-0"
           onClick={() => {
             // No org preselected, so a save can't land on the wrong one.
-            setRows([...rows, { key: nextKey, orgId: NO_ORG, roleNames: [] }]);
+            setRows([
+              ...rows,
+              { key: nextKey, orgId: NO_ORG, roleNames: [], added: true },
+            ]);
             setNextKey(nextKey + 1);
           }}
         >

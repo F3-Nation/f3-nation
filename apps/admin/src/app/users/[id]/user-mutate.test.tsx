@@ -52,10 +52,10 @@ const user = {
   roles: [],
 } as unknown as Parameters<typeof UserMutate>[0]["user"];
 
-function renderForm() {
+function renderForm(formUser = user) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <UserMutate user={user} />
+      <UserMutate user={formUser} />
     </QueryClientProvider>,
   );
 }
@@ -84,6 +84,29 @@ describe("UserMutate navigation", () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Successfully upserted user",
     );
+  });
+
+  it("sends back every role the user holds when saving", async () => {
+    mocks.crupdate.mockResolvedValue({});
+    renderForm({
+      ...user,
+      roles: [
+        { orgId: 8, orgName: "Boone", roleName: "admin" },
+        { orgId: 8, orgName: "Boone", roleName: "password_manager" },
+        { orgId: 1, orgName: "F3 Nation", roleName: "admin" },
+      ],
+    } as unknown as Parameters<typeof UserMutate>[0]["user"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await vi.waitFor(() => expect(mocks.crupdate).toHaveBeenCalledTimes(1));
+    expect(
+      (mocks.crupdate.mock.calls[0]?.[0] as { roles: unknown }).roles,
+    ).toEqual([
+      { orgId: 8, roleName: "admin" },
+      { orgId: 8, roleName: "password_manager" },
+      { orgId: 1, roleName: "admin" },
+    ]);
   });
 
   it("stays on the form when the save fails", async () => {

@@ -21,6 +21,7 @@ review_links_status=0
 skill_frontmatter_status=0
 gh_check_status=0
 release_protections_status=0
+dockerfile_installs_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
 pnpm run lint:ws || ws_status=$?
@@ -45,6 +46,8 @@ node scripts/check-skill-frontmatter.mjs || skill_frontmatter_status=$?
 bash scripts/check-skill-frontmatter.test.sh || skill_frontmatter_status=$?
 bash scripts/gh-check.test.sh || gh_check_status=$?
 bash scripts/release-protections.test.sh || release_protections_status=$?
+node scripts/check-dockerfile-global-installs.mjs || dockerfile_installs_status=$?
+bash scripts/check-dockerfile-global-installs.test.sh || dockerfile_installs_status=$?
 
 if [ "$turbo_status" -ne 0 ]; then
   exit "$turbo_status"
@@ -116,6 +119,10 @@ fi
 
 if [ "$release_protections_status" -ne 0 ]; then
   exit "$release_protections_status"
+fi
+
+if [ "$dockerfile_installs_status" -ne 0 ]; then
+  exit "$dockerfile_installs_status"
 fi
 
 if [ "$github_scripts_status" -ne 0 ]; then
