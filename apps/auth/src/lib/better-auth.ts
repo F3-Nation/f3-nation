@@ -39,7 +39,7 @@
  */
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, formCsrfMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins/bearer";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
@@ -51,6 +51,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { and, eq, isNull } from "drizzle-orm";
+import { z } from "zod";
 
 // Type-only — erased at compile time, so this does NOT import ~/lib/db (and
 // its DATABASE_* env requirement) as a module-load side effect. See getAuth's
@@ -165,6 +166,16 @@ export interface CreateAuthInstanceOptions {
     otp: string,
     options: { consume: boolean },
   ) => Promise<boolean>;
+  /**
+   * Reserves one send to `email` under the per-address send limit and
+   * returns whether it was allowed. It runs before Better Auth generates and
+   * stores the code, so a refused request gets a 429 and leaves the code a
+   * parallel request emailed in place. Production wires this to email-mfa.ts's
+   * reserveEmailCodeSend, the limit /api/verify-email's sends count against
+   * too; sendVerificationOTP then attaches the code to the reservation. See
+   * SEND_VERIFICATION_OTP_PATH below.
+   */
+  reserveOtpSend: (email: string) => Promise<boolean>;
   /**
    * Marks `users.emailVerified` once an email-code sign-in succeeds, as the
    * legacy sign-in in email-mfa.ts does. user.crupdate clears it whenever a
@@ -307,10 +318,10 @@ function f3ProfileClaims(profile: F3Profile, scopes: string[]) {
  * Every emailOTP endpoint that checks a submitted code. Each is checked
  * against the shared budget (claimOtpAttempt), where a wrong code spends an
  * attempt, before Better Auth's own check runs. Only sign-in codes are
- * recorded in that budget, so the other code types, which nothing in this app
- * sends, are refused here as well. A flow that starts sending them has to
- * record its codes there too (deliverBetterAuthOtp), or every one of its
- * codes will be refused.
+ * recorded as checkable in that budget, so the other code types, which
+ * nothing in this app sends, are refused here as well. A flow that starts
+ * sending them has to record its codes as checkable too
+ * (deliverBetterAuthOtp), or every one of its codes will be refused.
  */
 const OTP_VERIFYING_PATHS = new Set([
   "/sign-in/email-otp",
@@ -319,6 +330,25 @@ const OTP_VERIFYING_PATHS = new Set([
   "/email-otp/reset-password",
   "/email-otp/change-email",
 ]);
+
+/**
+ * emailOTP endpoints that email a code this app never uses: only sign-in
+ * codes are recorded as checkable (see OTP_VERIFYING_PATHS), passwords are
+ * off (emailAndPassword) and so is change-email. They are listed in
+ * `disabledPaths`, which Better Auth answers with a 404 before hooks run, so
+ * nothing can reach them to spend an address's send limit without a usable
+ * code being emailed. A flow that starts using one has to take it out of
+ * here and reserve its sends in hooks.before only once the request is known
+ * to send (valid body, signed-in caller where required).
+ */
+const UNUSED_OTP_SENDING_PATHS = [
+  "/email-otp/request-password-reset",
+  "/forget-password/email-otp",
+  "/email-otp/request-email-change",
+];
+
+/** The only emailOTP send this app makes, reserved in hooks.before. */
+const SEND_VERIFICATION_OTP_PATH = "/email-otp/send-verification-otp";
 
 /**
  * Hops that may append themselves to X-Forwarded-For after the client's own
@@ -372,6 +402,7 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
     secret: options.secret,
     database: options.database,
     emailAndPassword: { enabled: false },
+    disabledPaths: [...UNUSED_OTP_SENDING_PATHS],
     advanced: {
       ipAddress: { trustedProxies: TRUSTED_PROXIES },
     },
@@ -397,6 +428,39 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         }
         if (ctx.path === "/oauth2/token" && isRecord(ctx.body)) {
           ctx.body.resource ??= resource;
+          return;
+        }
+        // Reserves a send under the per-address limit (reserveOtpSend) before
+        // Better Auth generates the code: its own limiter counts per IP, so
+        // without this, requests spread across IPs could flood one inbox and
+        // keep minting fresh guess budgets. Hooks run before the endpoint
+        // validates its body and runs its CSRF check, so only a request the
+        // endpoint will act on, and that will email a code, is counted;
+        // anything else falls through to the endpoint's own refusal.
+        // sign-in is the only type that always sends (sign-up is on, so even
+        // an unknown address gets its code) and the only one whose codes can
+        // be checked (OTP_VERIFYING_PATHS).
+        if (ctx.path === SEND_VERIFICATION_OTP_PATH) {
+          const body = (ctx.body ?? {}) as { email?: unknown; type?: unknown };
+          if (typeof body.email !== "string") return;
+          if (body.type !== "sign-in") {
+            // Same refusal the endpoint gives a change-email send.
+            throw new APIError("BAD_REQUEST", {
+              message: "Invalid OTP type",
+            });
+          }
+          // The endpoint lowercases before validating; mirror it.
+          const email = body.email.toLowerCase();
+          if (!z.email().safeParse(email).success) return;
+          await formCsrfMiddleware(ctx);
+          if (!(await options.reserveOtpSend(email))) {
+            // Same wording /api/verify-email gives, which the login form shows.
+            throw new APIError("TOO_MANY_REQUESTS", {
+              code: "TOO_MANY_OTP_REQUESTS",
+              message:
+                "Too many codes requested. Please wait a few minutes and try again.",
+            });
+          }
           return;
         }
         if (!OTP_VERIFYING_PATHS.has(ctx.path)) return;
@@ -811,7 +875,8 @@ export async function getAuth() {
   const { db } = await import("~/lib/db");
   const { env } = await import("~/env");
   const { deliverBetterAuthOtp } = await import("~/lib/better-auth-email");
-  const { claimEmailCode } = await import("~/lib/email-mfa");
+  const { claimEmailCode, reserveEmailCodeSend } =
+    await import("~/lib/email-mfa");
 
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error(
@@ -853,6 +918,7 @@ export async function getAuth() {
       return existing ? existing.id : null;
     },
     claimOtpAttempt: claimEmailCode,
+    reserveOtpSend: reserveEmailCodeSend,
     markEmailVerified: markF3EmailVerifiedInDb(db),
     isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
     allowClientAction: allowProductionClientAction,

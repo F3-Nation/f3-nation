@@ -5,7 +5,7 @@ import type { Mock } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { and, eq, gt, isNull, lt } from "@acme/db";
+import { and, count, eq, gt, isNull, lt, sql } from "@acme/db";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
 const { createTransport, sendMail } = vi.hoisted(() => {
@@ -30,6 +30,7 @@ function chain(result: unknown) {
     "from",
     "where",
     "limit",
+    "orderBy",
     "set",
     "values",
     "returning",
@@ -45,12 +46,18 @@ function chain(result: unknown) {
 
 // update() resolves to one row by default, so findMatchingCode's attempt
 // claim succeeds unless a test says otherwise.
+// sendEmailCode runs its checks and writes in one transaction on the same
+// mocked client, so the call order below matches what it sends.
 const dbMock = {
   update: vi.fn<(table: unknown) => ReturnType<typeof chain>>(() =>
     chain([{ id: "code-1" }]),
   ),
   insert: vi.fn(() => chain([])),
   select: vi.fn(() => chain([])),
+  execute: vi.fn((_query: SQL) => Promise.resolve([])),
+  transaction: vi.fn(
+    (fn: (tx: unknown) => Promise<unknown>): Promise<unknown> => fn(dbMock),
+  ),
 };
 
 vi.mock("~/lib/db", () => ({ db: dbMock }));
@@ -65,9 +72,11 @@ vi.mock("~/env", () => ({
 }));
 
 const {
+  EmailCodeRateLimitedError,
   checkEmailCode,
   claimEmailCode,
   recordEmailCode,
+  reserveEmailCodeSend,
   sendEmailCode,
   verifyEmailCode,
 } = await import("../../src/lib/email-mfa");
@@ -187,6 +196,138 @@ describe("sendEmailCode", () => {
     );
     const callArgs = (sendMail.mock.calls[0]?.[0] ?? {}) as TestMailOptions;
     expect(callArgs.html).not.toContain("callbackUrl=");
+  });
+
+  describe("per-address limit", () => {
+    const recentSends = (inWindow: number, inCooldown: number) =>
+      dbMock.select.mockReturnValueOnce(chain([{ inWindow, inCooldown }]));
+
+    it("refuses once the address has had five codes in the last hour, storing and sending nothing", async () => {
+      recentSends(5, 0);
+
+      await expect(sendEmailCode("user@example.com")).rejects.toBeInstanceOf(
+        EmailCodeRateLimitedError,
+      );
+
+      expect(dbMock.insert).not.toHaveBeenCalled();
+      expect(dbMock.update).not.toHaveBeenCalled();
+      expect(sendMail).not.toHaveBeenCalled();
+    });
+
+    it("refuses a second code within the cooldown", async () => {
+      recentSends(1, 1);
+
+      await expect(sendEmailCode("user@example.com")).rejects.toBeInstanceOf(
+        EmailCodeRateLimitedError,
+      );
+
+      expect(dbMock.insert).not.toHaveBeenCalled();
+      expect(sendMail).not.toHaveBeenCalled();
+    });
+
+    it("counts a send toward the cooldown only within the last 30 seconds", async () => {
+      await sendEmailCode("user@example.com");
+
+      const [selection] = dbMock.select.mock.calls[0] as unknown as [
+        { inWindow: SQL; inCooldown: SQL },
+      ];
+      expect(toQuery(selection.inCooldown)).toEqual(
+        toQuery(
+          count(
+            sql`case when ${emailMfaCodes.createdAt} > timezone('utc'::text, now()) - interval '30 seconds' then 1 end`,
+          ),
+        ),
+      );
+      expect(toQuery(selection.inWindow)).toEqual(toQuery(count()));
+    });
+
+    it("sends while the address is under the limit and out of the cooldown", async () => {
+      recentSends(4, 0);
+
+      await sendEmailCode("user@example.com");
+
+      expect(dbMock.insert).toHaveBeenCalledTimes(1);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+    });
+
+    it("counts the normalized address's recent codes under a lock held until the new code is stored", async () => {
+      await sendEmailCode("  User@Example.com ");
+
+      expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+      const lock = toQuery(dbMock.execute.mock.calls[0]![0]);
+      expect(lock.sql).toContain("pg_advisory_xact_lock");
+      expect(lock.params).toEqual(["email-mfa-send:user@example.com"]);
+
+      const countChain = dbMock.select.mock.results[0]?.value as ChainMock;
+      const where = toQuery(countChain.where.mock.calls[0]?.[0] as SQL);
+      expect(where).toEqual(
+        toQuery(
+          and(
+            eq(emailMfaCodes.email, "user@example.com"),
+            gt(
+              emailMfaCodes.createdAt,
+              sql`timezone('utc'::text, now()) - interval '1 hour'`,
+            ),
+          ),
+        ),
+      );
+      expect(
+        dbMock.execute.mock.invocationCallOrder[0]! <
+          dbMock.select.mock.invocationCallOrder[0]!,
+      ).toBe(true);
+      expect(
+        dbMock.select.mock.invocationCallOrder[0]! <
+          dbMock.insert.mock.invocationCallOrder[0]!,
+      ).toBe(true);
+    });
+
+    it("stores the new code inside the locked transaction and emails it only after the transaction commits", async () => {
+      // A separate executor shows which writes ran on the transaction, and
+      // the flag shows whether they finished before it ended.
+      let txOpen = false;
+      const settledInTx: string[] = [];
+      type Then = (
+        resolve: (v: unknown) => unknown,
+        reject?: (e: unknown) => unknown,
+      ) => Promise<unknown>;
+      const txChain = (name: string, result: unknown) => {
+        const c = chain(result);
+        const then = c.then as Then;
+        c.then = ((resolve, reject) =>
+          then((v) => {
+            if (txOpen) settledInTx.push(name);
+            return resolve(v);
+          }, reject)) satisfies Then;
+        return c;
+      };
+      const tx = {
+        update: vi.fn(() => txChain("update", [])),
+        insert: vi.fn(() => txChain("insert", [])),
+        select: vi.fn(() => chain([])),
+        execute: vi.fn(() => Promise.resolve([])),
+      };
+      dbMock.transaction.mockImplementationOnce(async (fn) => {
+        txOpen = true;
+        try {
+          return await fn(tx);
+        } finally {
+          txOpen = false;
+        }
+      });
+      let txOpenAtSend: boolean | undefined;
+      sendMail.mockImplementationOnce(() => {
+        txOpenAtSend = txOpen;
+        return Promise.resolve({ messageId: "test-msg-id" });
+      });
+
+      await sendEmailCode("user@example.com");
+
+      expect(dbMock.update).not.toHaveBeenCalled();
+      expect(dbMock.insert).not.toHaveBeenCalled();
+      expect(settledInTx).toEqual(["update", "insert"]);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(txOpenAtSend).toBe(false);
+    });
   });
 
   it("logs 'unparseable' when the rejected callbackUrl is not a valid URL", async () => {
@@ -424,9 +565,57 @@ describe("recordEmailCode", () => {
     vi.clearAllMocks();
   });
 
-  it("stores a hash of an externally generated code without sending mail", async () => {
-    await recordEmailCode(" User@Example.COM", "246810");
+  // The first select looks for the send's reservation; the second, run only
+  // when there is none, counts the address's recent sends.
+  const withReservation = () =>
+    dbMock.select.mockReturnValueOnce(chain([{ id: "reservation-1" }]));
 
+  it("fills in the send's reservation with a checkable code as the active one", async () => {
+    withReservation();
+
+    await recordEmailCode(" User@Example.COM", "246810", { checkable: true });
+
+    expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+    const lock = toQuery(dbMock.execute.mock.calls[0]![0]);
+    expect(lock.params).toEqual(["email-mfa-send:user@example.com"]);
+    const lookup = dbMock.select.mock.results[0]?.value as ChainMock;
+    const where = toQuery(lookup.where.mock.calls[0]?.[0] as SQL);
+    expect(where.params).toEqual(
+      expect.arrayContaining(["user@example.com", "reserved"]),
+    );
+    // Only the lookup ran: a reserved send isn't counted again.
+    expect(dbMock.select).toHaveBeenCalledTimes(1);
+    expect(dbMock.insert).not.toHaveBeenCalled();
+    // The earlier active code is used up, then the reservation becomes it.
+    expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
+    expect(updateChain(1).set).toHaveBeenCalledWith({
+      codeHash: hashCode("246810"),
+      expiresAt: "2026-09-25T00:10:00.000Z",
+      consumedAt: null,
+    });
+    const target = toQuery(updateChain(1).where.mock.calls[0]?.[0] as SQL);
+    expect(target.params).toEqual(["reservation-1"]);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("fills in the reservation with any other code already used, leaving the active code alone", async () => {
+    withReservation();
+
+    await recordEmailCode("user@example.com", "246810", { checkable: false });
+
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
+    expect(updateChain(0).set).toHaveBeenCalledWith({
+      codeHash: hashCode("246810"),
+      expiresAt: NOW,
+      consumedAt: NOW,
+    });
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it("without a reservation, counts the send under the lock and stores a checkable code", async () => {
+    await recordEmailCode(" User@Example.COM", "246810", { checkable: true });
+
+    expect(dbMock.select).toHaveBeenCalledTimes(2);
     expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
     const insertChain = dbMock.insert.mock.results[0]?.value as ChainMock;
     expect(insertChain.values).toHaveBeenCalledWith(
@@ -434,9 +623,97 @@ describe("recordEmailCode", () => {
         email: "user@example.com",
         codeHash: hashCode("246810"),
         attemptCount: 0,
+        expiresAt: "2026-09-25T00:10:00.000Z",
+        consumedAt: null,
       }),
     );
-    expect(sendMail).not.toHaveBeenCalled();
+    expect(
+      dbMock.select.mock.invocationCallOrder[1]! <
+        dbMock.insert.mock.invocationCallOrder[0]!,
+    ).toBe(true);
+  });
+
+  it("without a reservation, stores any other code already used", async () => {
+    await recordEmailCode("user@example.com", "246810", { checkable: false });
+
+    expect(dbMock.update).not.toHaveBeenCalled();
+    const insertChain = dbMock.insert.mock.results[0]?.value as ChainMock;
+    expect(insertChain.values).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        email: "user@example.com",
+        codeHash: hashCode("246810"),
+        consumedAt: NOW,
+        expiresAt: NOW,
+      }),
+    );
+  });
+
+  it.each([
+    [5, 0],
+    [1, 1],
+  ])(
+    "without a reservation, refuses, storing nothing, when over the limit (%i in the hour, %i in the cooldown)",
+    async (inWindow, inCooldown) => {
+      dbMock.select
+        .mockReturnValueOnce(chain([]))
+        .mockReturnValueOnce(chain([{ inWindow, inCooldown }]));
+
+      await expect(
+        recordEmailCode("user@example.com", "246810", { checkable: true }),
+      ).rejects.toBeInstanceOf(EmailCodeRateLimitedError);
+
+      expect(dbMock.insert).not.toHaveBeenCalled();
+      expect(dbMock.update).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("reserveEmailCodeSend", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reserves a send, under the per-address lock, as an uncheckable placeholder", async () => {
+    expect(await reserveEmailCodeSend(" User@Example.com")).toBe(true);
+
+    expect(dbMock.transaction).toHaveBeenCalledTimes(1);
+    const lock = toQuery(dbMock.execute.mock.calls[0]![0]);
+    expect(lock.params).toEqual(["email-mfa-send:user@example.com"]);
+    const insertChain = dbMock.insert.mock.results[0]?.value as ChainMock;
+    expect(insertChain.values).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        email: "user@example.com",
+        codeHash: "reserved",
+        consumedAt: NOW,
+        expiresAt: NOW,
+      }),
+    );
+    expect(
+      dbMock.select.mock.invocationCallOrder[0]! <
+        dbMock.insert.mock.invocationCallOrder[0]!,
+    ).toBe(true);
+  });
+
+  it.each([
+    [5, 0],
+    [1, 1],
+  ])(
+    "refuses, reserving nothing, with %i sends in the hour and %i in the cooldown",
+    async (inWindow, inCooldown) => {
+      dbMock.select.mockReturnValueOnce(chain([{ inWindow, inCooldown }]));
+
+      expect(await reserveEmailCodeSend("user@example.com")).toBe(false);
+
+      expect(dbMock.insert).not.toHaveBeenCalled();
+    },
+  );
+
+  it("lets anything other than the limit propagate", async () => {
+    dbMock.execute.mockRejectedValueOnce(new Error("connection lost"));
+
+    await expect(reserveEmailCodeSend("user@example.com")).rejects.toThrow(
+      "connection lost",
+    );
   });
 });
 
