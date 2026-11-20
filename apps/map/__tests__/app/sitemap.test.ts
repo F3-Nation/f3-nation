@@ -8,17 +8,35 @@ const mockEnv = vi.hoisted((): { F3_MAP_BASE_URL: string | undefined } => ({
 
 vi.mock("~/env", () => ({ env: mockEnv }));
 
-import sitemap from "~/app/sitemap";
+import sitemap, { dynamic } from "~/app/sitemap";
 
 describe("sitemap.xml", () => {
   beforeEach(() => {
     mockEnv.F3_MAP_BASE_URL = "https://staging.map.f3nation.com";
   });
 
-  it("lists the map's root URL on the configured site URL", () => {
-    expect(sitemap().map((entry) => entry.url)).toEqual([
-      "https://staging.map.f3nation.com/",
+  it("lists the root, help and changelog pages on the configured site URL", () => {
+    expect(sitemap()).toEqual([
+      {
+        url: "https://staging.map.f3nation.com/",
+        changeFrequency: "daily",
+        priority: 1,
+      },
+      {
+        url: "https://staging.map.f3nation.com/help",
+        changeFrequency: "monthly",
+        priority: 0.5,
+      },
+      {
+        url: "https://staging.map.f3nation.com/changelog",
+        changeFrequency: "weekly",
+        priority: 0.3,
+      },
     ]);
+  });
+
+  it("is rendered per request, never at image build time", () => {
+    expect(dynamic).toBe("force-dynamic");
   });
 
   it("follows the configured URL per request and the localhost fallback", () => {
