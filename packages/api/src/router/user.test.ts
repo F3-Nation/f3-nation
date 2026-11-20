@@ -731,7 +731,7 @@ describe("User Router", () => {
       }
     });
 
-    it("should include PII when requester is an admin of an org the user has a role on outside their home region", async () => {
+    it("should not include PII when requester is an admin of an org the user has a role on outside their home region", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const [homeRegion, roleRegion] = await db
         .insert(schema.orgs)
@@ -786,8 +786,9 @@ describe("User Router", () => {
           includePii: true,
         });
 
-        expect(result.includePii).toBe(true);
-        expect(result.user?.email).toBe(testUser.email);
+        expect(result.includePii).toBe(false);
+        expect(result.user?.id).toBe(testUser.id);
+        expect(result.user?.email).toBeUndefined();
       } finally {
         await cleanup.user(testUser.id);
         await cleanup.org(homeRegion.id);
@@ -1508,7 +1509,7 @@ describe("User Router", () => {
         .where(eq(schema.orgs.id, regionB.id));
     });
 
-    it("should allow update when user has null home region but a role in the caller's region", async () => {
+    it("should reject update when user has null home region and only a role in the caller's region", async () => {
       const dbInstance = db;
 
       let [f3Nation] = await dbInstance
@@ -1587,19 +1588,22 @@ describe("User Router", () => {
 
       const client = createTestClient();
 
-      const result = await client.user.crupdate({
-        id: testUser.id,
-        f3Name: "Updated",
-        roles: [],
-      });
+      await expect(
+        client.user.crupdate({
+          id: testUser.id,
+          f3Name: "Updated",
+          roles: [],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
-      expect(result.id).toBe(testUser.id);
-      expect(result.f3Name).toBe("Updated");
+      const [after] = await dbInstance
+        .select({ f3Name: schema.users.f3Name })
+        .from(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      expect(after?.f3Name).toBe("NullHomeRegion");
 
       // Clean up
-      await dbInstance
-        .delete(schema.users)
-        .where(eq(schema.users.id, testUser.id));
+      await cleanup.user(testUser.id);
       await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
     });
 
