@@ -1119,6 +1119,15 @@ describe("Org Router", () => {
       expect(await storedMeta()).toEqual({ password_vault_enabled: false });
       await update({ password_vault_enabled: true });
       expect(await storedMeta()).toEqual({ password_vault_enabled: true });
+
+      // Anything but a boolean is refused, not stored as "off".
+      await expect(
+        update({ password_vault_enabled: "false" }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "meta.password_vault_enabled must be true or false",
+      });
+      expect(await storedMeta()).toEqual({ password_vault_enabled: true });
     });
     it("rejects an update when the org hierarchy changes before its row lock", async () => {
       const nation = await getOrCreateF3NationOrg();

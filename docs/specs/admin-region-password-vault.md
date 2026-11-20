@@ -66,7 +66,8 @@ Vault opt-in (region editor):
   the vault on or off WHEN they save without touching the box THEN the vault
   keeps the value the other person saved. `org.crupdate` keeps the stored
   `meta.password_vault_enabled` whenever the submitted `meta` leaves it out,
-  and the region editor sends it only when the box changed.
+  and the region editor sends it only when the box changed. A value other
+  than `true` or `false` is refused with `BAD_REQUEST`.
 
 Roles (Manage Access and the user edit page):
 

@@ -237,11 +237,26 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   // Drop any picked logo whenever org.byId returns a new org object (first
   // load, or a refetch with changed data), matching the form.reset effect.
+  // The password vault value the API holds for this form's org: what this
+  // form last saved, else the loaded value. A create can succeed before a
+  // later step fails, and a retry must compare against what it stored.
+  const [savedVaultOverride, setSavedVaultOverride] = useState<boolean | null>(
+    null,
+  );
+  const savedVaultEnabled =
+    savedVaultOverride ?? org?.meta?.password_vault_enabled === true;
+  const rememberSavedVault = (
+    meta: Record<string, unknown> | null | undefined,
+  ) => {
+    if (meta && Object.hasOwn(meta, "password_vault_enabled"))
+      setSavedVaultOverride(meta.password_vault_enabled === true);
+  };
   const [loadedOrg, setLoadedOrg] = useState(org);
   if (org !== loadedOrg) {
     setLoadedOrg(org);
     setSelectedLogoFile(null);
     setLogoPreviewUrl(null);
+    setSavedVaultOverride(null);
   }
   const form = useForm({
     schema,
@@ -465,7 +480,9 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                       ...data,
                       ...(!hasParent ? { parentId: undefined } : {}),
                       ...(config.passwordVault
-                        ? { meta: vaultChangeOnly(data.meta, org?.meta) }
+                        ? {
+                            meta: vaultChangeOnly(data.meta, savedVaultEnabled),
+                          }
                         : {}),
                       orgType,
                     };
@@ -473,6 +490,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                       let orgId = createdOrgId.current ?? data.id;
                       if (!orgId) {
                         const result = await crupdateOrg.mutateAsync(payload);
+                        rememberSavedVault(payload.meta);
                         orgId = result.org?.id;
                         if (
                           typeof orgId !== "number" ||
@@ -501,12 +519,14 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                         id: orgId,
                         ...(logoUrl ? { logoUrl } : {}),
                       });
+                      rememberSavedVault(payload.meta);
                       saved = true;
                       setSaveCompleted(true);
                       setSaveRecovery(null);
                       await onSuccess();
                     } else {
                       await crupdateOrg.mutateAsync(payload);
+                      rememberSavedVault(payload.meta);
                     }
                   } catch (error) {
                     if (config.logoPosition) {
@@ -855,9 +875,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                       <FormItem>
                         <PasswordVaultField
                           checked={field.value === true}
-                          savedEnabled={
-                            org?.meta?.password_vault_enabled === true
-                          }
+                          savedEnabled={savedVaultEnabled}
                           onChange={field.onChange}
                         />
                         <FormMessage />
@@ -1039,11 +1057,10 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
  */
 function vaultChangeOnly(
   meta: Record<string, unknown> | null | undefined,
-  savedMeta: Record<string, unknown> | null | undefined,
+  savedEnabled: boolean,
 ) {
   if (!meta) return meta;
   const { password_vault_enabled: enabled, ...rest } = meta;
-  const changed =
-    (enabled === true) !== (savedMeta?.password_vault_enabled === true);
+  const changed = (enabled === true) !== savedEnabled;
   return changed ? { ...rest, password_vault_enabled: enabled === true } : rest;
 }

@@ -821,6 +821,42 @@ describe("Region Area or Territory parent selection", () => {
     expect(mocks.save.mock.calls[0]![0].meta).toEqual(record.meta);
   });
 
+  it("turns the vault off on a retry after a create saved it on", async () => {
+    mocks.save.mockImplementation(async (input) => {
+      if (input.id == null) return { org: { ...record, id: 60 } };
+      return { org: { ...record, ...input } };
+    });
+    mocks.upload.mockRejectedValueOnce(new Error("Upload failed"));
+    const view = mount("region");
+    fireEvent.change(field("Name"), { target: { value: "New region" } });
+    await waitFor(() => expect(parentOptions().length).toBeGreaterThan(0));
+    fireEvent.change(parentSelect(), { target: { value: "2" } });
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: {
+        files: [new File(["synthetic"], "logo.png", { type: "image/png" })],
+      },
+    });
+    const checkbox = screen.getByRole("checkbox", { name: "Password vault" });
+    fireEvent.click(checkbox);
+    fireEvent.click(await screen.findByRole("button", { name: "Turn on" }));
+    save();
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]![0].meta).toMatchObject({
+      password_vault_enabled: true,
+    });
+
+    // The create stored true, so turning it off now is a real change.
+    fireEvent.click(checkbox);
+    fireEvent.click(await screen.findByRole("button", { name: "Turn off" }));
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2));
+    expect(mocks.save.mock.calls[1]![0]).toMatchObject({
+      id: 60,
+      meta: { password_vault_enabled: false },
+    });
+  });
+
   it("undoes an unsaved password vault change without asking again", async () => {
     mocks.byId.mockResolvedValue({ org: { ...record, parentId: 2 } });
     mount("region", record.id);

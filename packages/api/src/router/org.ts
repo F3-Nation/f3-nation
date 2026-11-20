@@ -772,14 +772,19 @@ export const orgRouter = {
       path: "/",
       tags: ["org"],
       summary: "Create or update organization",
-      description: `Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (${[
-        ...OrgType,
-      ]
-        .reverse()
-        .map((t) => orgTypeDisplay[t].label.toLowerCase())
-        .join(
-          " → ",
-        )}). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances. Updating a region's \`meta\` replaces it, except that \`firstEventNotificationSent\` is kept by the server and \`password_vault_enabled\` keeps its stored value when the submitted \`meta\` leaves it out.`,
+      description:
+        `Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (${[
+          ...OrgType,
+        ]
+          .reverse()
+          .map((t) => orgTypeDisplay[t].label.toLowerCase())
+          .join(
+            " → ",
+          )}). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances. ` +
+        "Updating a region's `meta` replaces it, except that " +
+        "`firstEventNotificationSent` is kept by the server and " +
+        "`password_vault_enabled` keeps its stored value when the submitted " +
+        "`meta` leaves it out; when given, it must be true or false.",
     })
     .output(
       z.object({
@@ -840,6 +845,17 @@ export const orgRouter = {
       if (!orgIdToCheck) {
         throw new ORPCError("BAD_REQUEST", {
           message: "Parent ID or ID is required",
+        });
+      }
+      // The vault sync treats only a literal true as enabled, so a string or
+      // number here would turn the vault off while looking like a yes.
+      if (
+        input.meta &&
+        Object.hasOwn(input.meta, "password_vault_enabled") &&
+        typeof input.meta.password_vault_enabled !== "boolean"
+      ) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "meta.password_vault_enabled must be true or false",
         });
       }
 

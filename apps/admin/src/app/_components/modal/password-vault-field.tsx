@@ -44,7 +44,10 @@ export function PasswordVaultField({
   savedEnabled: boolean;
   onChange: (enabled: boolean) => void;
 }) {
-  const [pending, setPending] = useState<boolean | null>(null);
+  // `enable` outlives `open`, so the dialog keeps its wording while it fades
+  // out after a choice.
+  const [dialog, setDialog] = useState({ open: false, enable: false });
+  const close = () => setDialog((current) => ({ ...current, open: false }));
 
   return (
     <>
@@ -56,7 +59,7 @@ export function PasswordVaultField({
             const next = state === true;
             // Going back to the saved value needs no warning.
             if (next === savedEnabled) onChange(next);
-            else setPending(next);
+            else setDialog({ open: true, enable: next });
           }}
         />
         <div className="grid gap-1">
@@ -74,9 +77,9 @@ export function PasswordVaultField({
         </div>
       </div>
       <AlertDialog
-        open={pending !== null}
+        open={dialog.open}
         onOpenChange={(open) => {
-          if (!open) setPending(null);
+          if (!open) close();
         }}
       >
         <AlertDialogContent
@@ -85,13 +88,13 @@ export function PasswordVaultField({
         >
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pending
+              {dialog.enable
                 ? "Turn on the password vault?"
                 : "Turn off the password vault?"}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
-                {pending ? (
+                {dialog.enable ? (
                   <p>
                     If you check this, a password vault will be created for your
                     region within the next hour. Once it is created, everyone
@@ -114,11 +117,11 @@ export function PasswordVaultField({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (pending !== null) onChange(pending);
-                setPending(null);
+                onChange(dialog.enable);
+                close();
               }}
             >
-              {pending ? "Turn on" : "Turn off"}
+              {dialog.enable ? "Turn on" : "Turn off"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
