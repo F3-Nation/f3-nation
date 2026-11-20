@@ -6,7 +6,7 @@
  * and soft-deleting them when series or orgs are deleted.
  */
 
-import type { SQL } from "@acme/db";
+import type { AnyColumn, SQL } from "@acme/db";
 import { and, eq, gte, inArray, isNotNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
@@ -517,19 +517,26 @@ async function updateFutureInstancesInTransaction(
   // update, so one statement does it.
   const previous = options?.previous;
   const instance = schema.eventInstances;
+  const sameAs = (column: SQL | AnyColumn, value: unknown): SQL =>
+    sql`${column} IS NOT DISTINCT FROM ${value}`;
   const matchesPrevious = (field: OverridableInstanceField): SQL => {
     if (!previous) return sql`TRUE`;
     if (field === "startTime" || field === "endTime") {
-      return sql`(${instance.startTime} IS NOT DISTINCT FROM ${previous.startTime} AND ${instance.endTime} IS NOT DISTINCT FROM ${previous.endTime})`;
+      const start = sameAs(instance.startTime, previous.startTime);
+      const end = sameAs(instance.endTime, previous.endTime);
+      return sql`(${start} AND ${end})`;
     }
-    return sql`${instance[field]} IS NOT DISTINCT FROM ${previous[field]}`;
+    return sameAs(instance[field], previous[field]);
   };
   const update: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(instanceUpdate)) {
+    if (!previous || !isOverridableField(field)) {
+      update[field] = value;
+      continue;
+    }
+    const follows = sql`${instance.seriesException} IS NULL OR ${matchesPrevious(field)}`;
     update[field] =
-      previous && isOverridableField(field)
-        ? sql`CASE WHEN ${instance.seriesException} IS NULL OR ${matchesPrevious(field)} THEN ${value} ELSE ${instance[field]} END`
-        : value;
+      sql`CASE WHEN ${follows} THEN ${value} ELSE ${instance[field]} END`;
   }
   if (Object.keys(update).length > 0) {
     await db
