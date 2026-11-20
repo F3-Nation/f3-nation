@@ -579,8 +579,11 @@ export const userRouter = {
           );
         });
         if (refused) {
+          const allowedOn = (ROLE_ORG_TYPES[refused.roleName] ?? []).join(
+            " or ",
+          );
           throw new ORPCError("BAD_REQUEST", {
-            message: `The ${refused.roleName} role can only be given on a ${(ROLE_ORG_TYPES[refused.roleName] ?? []).join(" or ")}`,
+            message: `The ${refused.roleName} role can only be given on a ${allowedOn}`,
           });
         }
       }

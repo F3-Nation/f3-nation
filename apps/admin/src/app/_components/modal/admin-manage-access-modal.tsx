@@ -663,6 +663,9 @@ export default function AdminManageAccessModal({
                           : `Assign roles to the user. They will be added to any existing roles.`}
                       </FormDescription>
                       <RoleAssignmentsField
+                        // A new person starts a fresh editor, so rows left
+                        // half-filled for the previous one don't carry over.
+                        key={selectedUserId ?? (isCreatingNew ? "new" : "none")}
                         value={field.value}
                         onChange={field.onChange}
                         orgOptions={grantOrgs}
