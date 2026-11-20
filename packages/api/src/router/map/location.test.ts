@@ -1097,7 +1097,7 @@ describe("Map Location Router", () => {
       const location = await createTestLocation(region.id);
       if (!location) throw new Error("Failed to create test location");
 
-      const seriesDescription = "Meet at the track";
+      const seriesDescription = "Meet at the track\nBring a coupon";
       const [event] = await db
         .insert(schema.events)
         .values({
@@ -1127,7 +1127,9 @@ describe("Map Location Router", () => {
             editedNote,
             seriesDescription,
             " \n ",
-            `${seriesDescription}\r\n`,
+            // CRLF between lines as well as trailing: only the REPLACE fold
+            // makes this match the series' LF text.
+            "Meet at the track\r\nBring a coupon\r\n",
           ].map((description) => ({
             name: `Closed Instance ${uniqueId()}`,
             orgId: ao.id,
