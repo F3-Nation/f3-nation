@@ -50,7 +50,7 @@ import {
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 // Type-only — erased at compile time, so this does NOT import ~/lib/db (and
 // its DATABASE_* env requirement) as a module-load side effect. See getAuth's
@@ -165,6 +165,13 @@ export interface CreateAuthInstanceOptions {
     otp: string,
     options: { consume: boolean },
   ) => Promise<boolean>;
+  /**
+   * Marks `users.emailVerified` once an email-code sign-in succeeds, as the
+   * legacy sign-in in email-mfa.ts does. user.crupdate clears it whenever a
+   * user's email changes, and the OAuth `email_verified` claim reads it.
+   * Production builds it with markF3EmailVerifiedInDb.
+   */
+  markEmailVerified: (f3UserId: number, email: string) => Promise<void>;
   /**
    * Returns whether the given F3 `users.id` currently holds the nation-admin
    * role — the same check `nationAdminProcedure` uses (packages/api/src/
@@ -441,6 +448,19 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
             code: sqlState(err),
           });
         }
+        // Better Auth's user id is the F3 users.id (see databaseHooks below).
+        // Same reasoning as above: a failure here must not undo the sign-in.
+        try {
+          await options.markEmailVerified(
+            Number(ctx.context.newSession.user.id),
+            body.email,
+          );
+        } catch (err) {
+          logError("auth.better_auth.email_verified_mark_failed", {
+            errorName: err instanceof Error ? err.name : typeof err,
+            code: sqlState(err),
+          });
+        }
       }),
     },
     databaseHooks: {
@@ -707,6 +727,28 @@ export async function isNationAdminForUser(
   return isNationAdminFromSession({ roles: userRoles });
 }
 
+/**
+ * Production's markEmailVerified. Writes only while the user's current email
+ * is the one just proven, so a sign-in can't verify an address the record no
+ * longer holds, and only when unset, matching email-mfa.ts.
+ */
+export function markF3EmailVerifiedInDb(
+  database: AuthDb,
+): CreateAuthInstanceOptions["markEmailVerified"] {
+  return async (f3UserId, email) => {
+    await database
+      .update(users)
+      .set({ emailVerified: new Date().toISOString() })
+      .where(
+        and(
+          eq(users.id, f3UserId),
+          eq(users.email, email.toLowerCase().trim()),
+          isNull(users.emailVerified),
+        ),
+      );
+  };
+}
+
 /** Production's findF3Profile, split out so it's testable with a stubbed db. */
 export async function findF3ProfileInDb(
   database: AuthDb,
@@ -811,6 +853,7 @@ export async function getAuth() {
       return existing ? existing.id : null;
     },
     claimOtpAttempt: claimEmailCode,
+    markEmailVerified: markF3EmailVerifiedInDb(db),
     isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
     allowClientAction: allowProductionClientAction,
     findF3Profile: (f3UserId) => findF3ProfileInDb(db, f3UserId),

@@ -33,6 +33,7 @@ describe("Better Auth against the @acme/db Drizzle schema", () => {
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(1),
       claimOtpAttempt: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(false),
       findF3Profile: () => Promise.resolve(null),
       allowClientAction: allowProductionClientAction,

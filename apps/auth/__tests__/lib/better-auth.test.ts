@@ -60,6 +60,8 @@ function createTestAuth(
   f3UserId: number | null,
   claimOtpAttempt: CreateAuthInstanceOptions["claimOtpAttempt"] = () =>
     Promise.resolve(true),
+  markEmailVerified: CreateAuthInstanceOptions["markEmailVerified"] = () =>
+    Promise.resolve(),
 ) {
   const memoryDb: MemoryDB = {};
   const options = {
@@ -71,6 +73,7 @@ function createTestAuth(
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
     claimOtpAttempt,
+    markEmailVerified,
     isNationAdmin: () => Promise.resolve(false),
     findF3Profile: findOnboardedProfile,
     // Permissive — unlike production, these tests need to exercise client
@@ -104,6 +107,7 @@ function createMultiUserTestAuth(
     findF3UserId: (email: string) =>
       Promise.resolve(emailToF3UserId[email] ?? null),
     claimOtpAttempt: () => Promise.resolve(true),
+    markEmailVerified: () => Promise.resolve(),
     isNationAdmin: (f3UserId: number) =>
       Promise.resolve(adminF3UserIds.has(f3UserId)),
     findF3Profile: findOnboardedProfile,
@@ -421,6 +425,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
       claimOtpAttempt: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(false),
       findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
@@ -473,6 +478,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
       claimOtpAttempt: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(false),
       findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
@@ -534,6 +540,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       findF3UserId: (email: string) =>
         Promise.resolve(email === "admin-m@f3nation.test" ? 701 : null),
       claimOtpAttempt: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(true),
       findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
@@ -598,6 +605,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(701),
       claimOtpAttempt: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(true),
       findF3Profile: findOnboardedProfile,
       allowClientAction: allowProductionClientAction,
@@ -639,6 +647,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       findF3UserId: (email: string) =>
         Promise.resolve(emailToF3UserId[email] ?? null),
       claimOtpAttempt: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(true),
       findF3Profile: findOnboardedProfile,
       allowClientAction: (
@@ -910,6 +919,7 @@ describe("client IP for Better Auth's rate limiter", () => {
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(null),
     claimOtpAttempt: () => Promise.resolve(true),
+    markEmailVerified: () => Promise.resolve(),
     isNationAdmin: () => Promise.resolve(false),
     findF3Profile: findOnboardedProfile,
     allowClientAction: () => Promise.resolve(true),
@@ -1136,5 +1146,70 @@ describe("shared OTP attempt budget", () => {
 
     expect(res.status).toBe(400);
     expect(claim).not.toHaveBeenCalled();
+  });
+});
+
+describe("marking the email verified after sign-in", () => {
+  const email = "verify@f3nation.test";
+
+  it("marks the signed-in user's email verified", async () => {
+    const markEmailVerified = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(4242, undefined, markEmailVerified);
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(markEmailVerified).toHaveBeenCalledExactlyOnceWith(4242, email);
+  });
+
+  it("leaves it unmarked when the code is wrong", async () => {
+    const markEmailVerified = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(4242, undefined, markEmailVerified);
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    const wrong = otp === "000000" ? "111111" : "000000";
+
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp: wrong } }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_OTP" } });
+    expect(markEmailVerified).not.toHaveBeenCalled();
+  });
+
+  it("leaves it unmarked when the email has no F3 account", async () => {
+    const markEmailVerified = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(null, undefined, markEmailVerified);
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp } }),
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+    expect(markEmailVerified).not.toHaveBeenCalled();
+  });
+
+  it("keeps the sign-in when marking it fails", async () => {
+    const markEmailVerified = vi.fn(() =>
+      Promise.reject(
+        Object.assign(new Error("terminating connection"), { code: "57P01" }),
+      ),
+    );
+    const logError = vi.spyOn(logging, "logError");
+    const auth = createTestAuth(4242, undefined, markEmailVerified);
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(signIn.token).toBeTruthy();
+    expect(logError).toHaveBeenCalledExactlyOnceWith(
+      "auth.better_auth.email_verified_mark_failed",
+      { errorName: "Error", code: "57P01" },
+    );
+    logError.mockRestore();
   });
 });

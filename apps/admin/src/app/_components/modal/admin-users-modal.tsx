@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import type { UserRole } from "@acme/shared/app/enums";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import {
@@ -64,6 +65,7 @@ import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
+import { EmailChangeHint } from "~/app/_components/email-change-hint";
 import {
   canEditUserProfile,
   roleOrgIdsNeedingParent,
@@ -194,6 +196,9 @@ export default function UserModal({
     editableOrgs: orgs.orgs,
     roleOrgParentIds,
   });
+
+  // The API lets only nation admins change an existing user's email.
+  const canChangeEmail = !user?.id || isNationAdminFromSession(session ?? null);
 
   const isHomeRegionDisabled = !canEditUser;
 
@@ -482,11 +487,14 @@ export default function UserModal({
                             <Input
                               placeholder="Email"
                               type="email"
-                              disabled={!canEditUser}
+                              disabled={!canEditUser || !canChangeEmail}
                               {...field}
                               value={field.value ?? ""}
                             />
                           </FormControl>
+                          {canEditUser && !canChangeEmail && (
+                            <EmailChangeHint />
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
