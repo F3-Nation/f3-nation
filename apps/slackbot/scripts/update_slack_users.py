@@ -32,7 +32,7 @@ def update_slack_users(force=False):
     A workspace that fails is logged and skipped so the rest still sync. A ``SlackApiError`` is
     only logged, so a revoked or misconfigured workspace doesn't fail every run. Any other error
     is counted, and after the loop a ``RuntimeError`` reports how many workspaces failed, so the
-    hourly runner logs a job failure and the standalone script exits non-zero.
+    run is recorded as failed.
     """
     if not is_production_deployment():
         logging.getLogger(__name__).info("Skipping Slack user profile sync outside production.")
@@ -177,11 +177,14 @@ def update_home_regions():
 
 def main():
     production = is_production_deployment()
-    update_slack_users()
-    if production:
-        update_home_regions()
-    else:
-        logging.getLogger(__name__).info("Skipping home-region refresh outside production.")
+    # A failed workspace sync still raises, but only after the home-region refresh has run.
+    try:
+        update_slack_users()
+    finally:
+        if production:
+            update_home_regions()
+        else:
+            logging.getLogger(__name__).info("Skipping home-region refresh outside production.")
 
 
 if __name__ == "__main__":

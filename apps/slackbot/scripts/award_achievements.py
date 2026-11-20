@@ -789,7 +789,8 @@ def run(achievement_id=None, dry_run=False, skip_post=False, today: date | None 
                     f.write(f"{c.achievement_id},{c.user_id},{c.award_year},{c.award_period},{c.metric}\n")
         print(f"Done. Candidates processed: {total_candidates}")
 
-    # After the session block, so the awards commit before the job reports failure.
+    # Awards are committed as each achievement is processed, so failing here reports the
+    # skipped notifications without undoing any award.
     if failed_team_ids:
         print(f"Notifications skipped for {len(failed_team_ids)} workspace(s): {', '.join(failed_team_ids)}")
         raise RuntimeError(f"Achievement notifications skipped for {len(failed_team_ids)} workspace(s)")

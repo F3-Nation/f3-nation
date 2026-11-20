@@ -54,7 +54,7 @@ def _row(engine, team_id):
 
 
 def _write_file(directory, team_id, *, team_name=None, enterprise_id=None, token=FILE_TOKEN):
-    # Production wrote the files without a client_id.
+    # No client_id, so the file lands in `none-<team_id>/bot-latest`, the layout the importer reads.
     FileInstallationStore(base_dir=str(directory)).save_bot(
         Bot(
             enterprise_id=enterprise_id,

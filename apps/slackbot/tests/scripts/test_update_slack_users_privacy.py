@@ -60,6 +60,19 @@ def test_script_skips_home_region_refresh_outside_production(monkeypatch, caplog
     assert "Skipping home-region refresh outside production." in caplog.text
 
 
+def test_script_refreshes_home_regions_when_user_sync_fails(monkeypatch):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    sync = Mock(side_effect=RuntimeError("Slack user sync failed for 1 workspace(s)"))
+    home_regions = Mock()
+    monkeypatch.setattr(update_slack_users, "update_slack_users", sync)
+    monkeypatch.setattr(update_slack_users, "update_home_regions", home_regions)
+
+    with pytest.raises(RuntimeError, match="Slack user sync failed"):
+        update_slack_users.main()
+
+    home_regions.assert_called_once_with()
+
+
 def test_script_validates_environment_before_running_jobs(monkeypatch):
     monkeypatch.setenv("SLACKBOT_ENV", "invalid")
     sync = Mock(side_effect=AssertionError("sync should not run"))

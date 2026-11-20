@@ -19,14 +19,13 @@ only reads. The architecture and its tradeoffs are in
 - Bolt app and OAuth settings: [`main.py`](../../apps/slackbot/main.py) and
   `get_oauth_settings` in
   [`helper_functions.py`](../../apps/slackbot/utilities/helper_functions.py).
-  The per-request region lookup in the same file currently copies Bolt's
-  `context["bot_token"]` into `slack_spaces`. That copy goes away.
-- Token readers to migrate: every Python read of `bot_token` (from
-  `SlackSettings`, `SlackSpace` or the settings JSON) in
-  `apps/slackbot/features/` and `apps/slackbot/scripts/`. Find them with
-  `grep -rn bot_token apps/slackbot --include=*.py`. DB Admin has no action
-  that writes a token: Bolt's request token is read from the same row, so
-  copying it back would change nothing.
+  The per-request region lookup in the same file fills a workspace's settings
+  and never writes a token.
+- Token readers: Slackbot code outside `apps/slackbot/utilities/slack_tokens/`
+  gets a client from `slack_client_for_team` and never reads `bot_token`;
+  `apps/slackbot/tests/test_token_access_boundary.py` enforces this. DB Admin
+  has no action that writes a token: Bolt's request token is read from the
+  same row, so copying it back would change nothing.
 - API reader: `getSlackBotTokenForOrg` in
   [`slack.ts`](../../packages/api/src/router/slack.ts).
 - Hourly job: [`hourly_runner.py`](../../apps/slackbot/scripts/hourly_runner.py),
@@ -155,14 +154,16 @@ refreshes earlier than its window.
   rest of the job.
 - **AC-9** — GIVEN a Slack call that fails with `token_revoked` WHEN it was
   made with a token from the getter THEN the caller re-reads the row and
-  retries once with the token stored there. A second failure is raised.
+  retries once with the stored token if it differs from the one that failed.
+  A second failure is raised.
 - **AC-10** — GIVEN the TypeScript API sending a Slack message for a region
   WHEN the region's row has a valid token THEN the API uses
   `slack_spaces.bot_token`, makes no refresh call, and has no access to the
   encryption key.
 - **AC-11** — GIVEN the API's Slack call fails with `token_revoked` WHEN it
   used `slack_spaces.bot_token` THEN the API re-reads the row and retries once
-  with the stored token. A second failure is reported as today.
+  with the stored token if it differs from the one that failed. A second
+  failure is reported like any other Slack API error.
 - **AC-12** — GIVEN any workspace WHEN an admin opens the DB Admin menu THEN
   it offers no action that writes a bot token; reinstalling the app is how a
   stale token is replaced.
@@ -185,18 +186,17 @@ refreshes earlier than its window.
   Slackbot source file outside the token module reads a `bot_token` attribute
   or key, or calls the getter directly.
 - **AC-15** — GIVEN local development (`LOCAL_DEVELOPMENT`) WHEN the Slackbot
-  starts THEN it runs with a single long-lived token and no OAuth store, as it
-  does today, and the getter returns that token.
+  starts THEN it runs with the single long-lived `SLACK_BOT_TOKEN` and no
+  OAuth store, and the getter returns that token.
 - **AC-16** — GIVEN the hourly sweep WHEN the encryption key is missing or
   can't decrypt a row THEN the job fails that workspace with a logged error
   and does not overwrite the row.
 - **AC-17** — GIVEN `ADMIN_TEAM_ID` names a workspace with a `slack_spaces`
   row WHEN the connection-request flow notifies admins in `ADMIN_CHANNEL_ID`
-  THEN the token comes from the getter for that team. `ADMIN_BOT_TOKEN` no
-  longer exists. GIVEN `ADMIN_TEAM_ID` is unset or has no row THEN no admin
-  notification is sent and `slack.token.admin_team_missing` is logged; the
-  rest of the connection-request flow continues as it does today when admin
-  notifications aren't configured.
+  THEN the token comes from the getter for that team. GIVEN `ADMIN_TEAM_ID` is
+  unset or its workspace has no stored token THEN no admin notification is
+  sent and `slack.token.admin_team_missing` is logged; the rest of the
+  connection-request flow continues without the admin notification.
 - **AC-18** — GIVEN a rotating row WHEN Bolt authorizes a request for that
   workspace THEN the `Bot` the store returns has no expiry and no refresh
   token, and Bolt makes no refresh call and no `save_bot` call of its own.
@@ -212,14 +212,15 @@ refreshes earlier than its window.
 This feature adds no user-facing procedures. Its authorization boundary is
 which runtimes hold which secrets.
 
-| Action                                   | Allowed                                                                                 | Explicitly denied                                         |
-| ---------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Decrypt a refresh token                  | Slackbot service and Slackbot job (hold `SLACK_TOKEN_ENCRYPTION_KEY`)                   | API, Next.js apps, local dev against shared DBs           |
-| Refresh a token                          | Slackbot service (Bolt authorization, getter) and Slackbot job (getter, sweep)          | API                                                       |
-| Read the current access token            | Slackbot service, Slackbot job, API (existing `slack_spaces` read)                      | Browser clients, Slack metadata, logs                     |
-| Overwrite a workspace's token by hand    | Nobody; a workspace admin reinstalls the app, which saves a new token through the store | Everyone, including DB Admin                              |
-| Convert a workspace to rotation          | Release owner, with the conversion CLI                                                  | Everyone else; the Slackbot service and job never convert |
-| Re-encrypt refresh tokens with a new key | Release owner, with the re-key CLI                                                      | Everyone else                                             |
+| Action                                             | Allowed                                                                                 | Explicitly denied                                         |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Decrypt a refresh token                            | Slackbot service and Slackbot job (hold `SLACK_TOKEN_ENCRYPTION_KEY`)                   | API, Next.js apps, local dev against shared DBs           |
+| Refresh a token                                    | Slackbot service (Bolt authorization, getter) and Slackbot job (getter, sweep)          | API                                                       |
+| Read the current access token                      | Slackbot service, Slackbot job, API (existing `slack_spaces` read)                      | Browser clients, Slack metadata, logs                     |
+| Overwrite a workspace's token by hand              | Nobody; a workspace admin reinstalls the app, which saves a new token through the store | Everyone, including DB Admin                              |
+| Import Bolt installation files into `slack_spaces` | Release owner, with the import CLI; it never replaces a rotating row                    | Everyone else; the Slackbot service and job never import  |
+| Convert a workspace to rotation                    | Release owner, with the conversion CLI                                                  | Everyone else; the Slackbot service and job never convert |
+| Re-encrypt refresh tokens with a new key           | Release owner, with the re-key CLI                                                      | Everyone else                                             |
 
 ## 6. Out of scope / non-goals
 
@@ -241,11 +242,14 @@ Rotation can't be disabled on a Slack app, so the order is binding:
 1. Every reader goes through the getter or the API's table read, and the
    custom store is live in production, while tokens are still long-lived
    (null expiry). The settings-JSON copy is gone and the GCS installation
-   files have been imported into `slack_spaces`. The import never overwrites
-   a rotating row, so running it again after conversion is safe.
-   `ADMIN_TEAM_ID` has replaced `ADMIN_BOT_TOKEN` in every environment,
-   because that token is a copy of the production app's token for the admin
-   workspace and would be revoked by converting it.
+   files have been imported into `slack_spaces`. The import skips rotating rows
+   but replaces a non-rotating row's token with its file's, so it runs only
+   while the files are at least as new as the rows.
+   `ADMIN_TEAM_ID` has replaced `ADMIN_BOT_TOKEN` in every environment, and
+   `ADMIN_BOT_TOKEN` is removed from the Slackbot service and job once an
+   image that reads `ADMIN_TEAM_ID` runs there, because that token is a copy
+   of the production app's token for the admin workspace and would be revoked
+   by converting it.
 2. The rotation path is exercised against a separate rotation-enabled test
    app, never the production or shared dev app.
 3. Rotation is enabled on the staging app, its workspaces are converted with
@@ -278,15 +282,19 @@ Events through the Slackbot's logging helpers. They never include token
 values, refresh tokens or key material, only the team ID.
 
 - `slack.token.refreshed`: team ID, path (`authorize`, `getter`, `sweep`).
-- `slack.token.refresh_failed`: team ID, path, Slack error code. Alert on any
+- `slack.token.refresh_failed`: team ID, path, Slack error code. `path` is
+  `save_bot_locked` when an install or import save fails, and `install` when
+  an OAuth install hits a lock timeout or an encryption-key error. Alert on any
   occurrence in the sweep.
 - `slack.token.lock_timeout`: team ID, path.
 - `slack.token.revoked_retry`: team ID, whether the retry succeeded.
 - `slack.token.decrypt_failed`: team ID.
-- `slack.token.admin_team_missing`: whether `ADMIN_TEAM_ID` is unset or has
-  no row.
+- `slack.token.admin_team_missing`: whether `ADMIN_TEAM_ID` is unset or its
+  workspace has no stored token.
 - `slack.token.encryption_key_invalid`: logged at ERROR when the app or the
   hourly job starts outside local development and `SLACK_TOKEN_ENCRYPTION_KEY`
   is unset or doesn't parse. No key material.
 - `slack.token.install_refused`: team ID. An OAuth install's token was not
-  saved because the stored rotating token expires later.
+  saved because it expires before the stored rotating token, or has no expiry.
+- `slack.token.save_refused`: team ID, path. A refresh or a Bolt save offered
+  a token the save guard rejected.

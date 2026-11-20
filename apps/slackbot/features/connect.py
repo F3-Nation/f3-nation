@@ -70,7 +70,11 @@ def _admin_client(logger: Logger):
         logger.warning(
             "slack.token.admin_team_missing",
             extra={
-                "json_fields": {"event": "slack.token.admin_team_missing", "reason": "no_row", "team_id": admin_team_id}
+                "json_fields": {
+                    "event": "slack.token.admin_team_missing",
+                    "reason": "no_token",
+                    "team_id": admin_team_id,
+                }
             },
         )
     return admin_client

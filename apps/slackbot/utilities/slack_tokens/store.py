@@ -1,7 +1,8 @@
 """Bolt installation store backed by the `slack_spaces` credential columns.
 
-Bolt must never refresh a token itself: its rotation path saves through the
-store without the per-workspace lock. `find_bot` therefore refreshes under the
+Bolt must never refresh a token itself: its rotation path calls Slack outside the
+per-workspace lock, so two processes can both refresh and one keeps a token the
+other's refresh revoked. `find_bot` therefore refreshes under the
 lock (`refresh_if_needed`) and returns a `Bot` with no expiry and no refresh
 token, which Bolt treats as a non-rotating installation.
 """
@@ -17,6 +18,7 @@ from slack_sdk.oauth.installation_store.installation_store import InstallationSt
 from utilities.slack_tokens.crypto import TokenDecryptError
 from utilities.slack_tokens.refresh import (
     STORE_WINDOW_MINUTES,
+    TokenLockTimeout,
     TokenSaveError,
     load_bot,
     locked_row,
@@ -41,13 +43,21 @@ def _non_rotating(bot: Optional[Bot]) -> Optional[Bot]:
 
 class SlackSpaceInstallationStore(InstallationStore):
     def save(self, installation: Installation) -> None:
-        saved = save_bot_locked(
-            installation.to_bot(), team_id=installation.team_id, workspace_name=installation.team_name
-        )
+        # Bolt answers a BoltError from the store with its storage-error page; any other
+        # exception escapes its OAuth callback as a bare 500.
+        try:
+            saved = save_bot_locked(
+                installation.to_bot(), team_id=installation.team_id, workspace_name=installation.team_name
+            )
+        except TokenSaveError:
+            # `save_bot_locked` already logged `slack.token.refresh_failed`.
+            raise BoltError("The installation was not saved") from None
+        except (TokenLockTimeout, TokenDecryptError) as e:
+            log_refresh_failure(installation.team_id, e, path="install")
+            raise BoltError("The installation was not saved") from None
         if not saved:
-            # The save guard refused a token expiring earlier than the stored rotating one.
+            # The save guard refused a token that expires before the stored rotating one, or never expires.
             _log_refused("slack.token.install_refused", installation.team_id)
-            # Bolt answers a BoltError from the store with its storage-error page, not the success page.
             raise BoltError("The installation was not saved")
 
     def save_bot(self, bot: Bot) -> None:

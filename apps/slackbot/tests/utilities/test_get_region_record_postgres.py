@@ -97,3 +97,29 @@ def test_get_region_record_keeps_settings_configured_elsewhere(isolated_postgres
     assert helper_functions.REGION_RECORDS[TEAM_ID] is record
     stored = json.loads(_space_rows(isolated_postgres)[0][2])
     assert stored["org_id"] == 77 and stored["canvas_channel"] == "C_CANVAS"
+
+
+@pytest.mark.parametrize(
+    "stored, error_type",
+    [
+        ({"team_id": "T_OTHER", "org_id": 5}, "team_id_mismatch"),
+        ({"team_id": TEAM_ID, "unexpected_key": True}, "TypeError"),
+    ],
+)
+def test_get_region_record_leaves_unreadable_settings_for_repair(isolated_postgres, caplog, stored, error_type):
+    _seed(isolated_postgres, expires_in=None, refresh_token=None)
+    with Session(isolated_postgres) as session:
+        session.execute(
+            text("UPDATE slack_spaces SET settings = CAST(:s AS json) WHERE team_id = :t"),
+            {"s": json.dumps(stored), "t": TEAM_ID},
+        )
+        session.commit()
+    # A cached entry for another workspace skips the bulk cache load, so only this lookup parses the row.
+    helper_functions.REGION_RECORDS["T_OTHER"] = SlackSettings(team_id="T_OTHER")
+
+    record = helper_functions.get_region_record(TEAM_ID, {}, {}, _slack_client(), MagicMock())
+
+    assert record.org_id is None
+    assert json.loads(_space_rows(isolated_postgres)[0][2]) == stored
+    [event] = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.settings.invalid"]
+    assert event.json_fields == {"event": "slack.settings.invalid", "team_id": TEAM_ID, "error_type": error_type}

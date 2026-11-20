@@ -137,7 +137,7 @@ External package managing database schema. Located at: `https://github.com/F3-Na
 ### Slack Integration
 
 - Uses `slack-bolt` 1.22.0 with `SlackRequestHandler` adapter for Flask/Functions Framework
-- OAuth handled by `FileInstallationStore` (mounted volume in production)
+- OAuth installations are stored in the workspace's `slack_spaces` row by `SlackSpaceInstallationStore` (bot-only); the OAuth state store uses a mounted volume in production
 - `process_before_response=True` in production for faster ack
 
 ### Environment Configuration
