@@ -53,7 +53,11 @@ export default function AdminManageAccessModal({
   });
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-  const { orgs: grantOrgs, isLoading: isLoadingOrgs } = useRoleGrantOrgs();
+  const {
+    orgs: grantOrgs,
+    isLoading: isLoadingOrgs,
+    isError: orgsFailed,
+  } = useRoleGrantOrgs();
   const [hasIncompleteRoles, setHasIncompleteRoles] = useState(false);
 
   const form = useForm({
@@ -664,6 +668,7 @@ export default function AdminManageAccessModal({
                         orgOptions={grantOrgs}
                         orgNames={roleOrgNames}
                         isLoadingOrgs={isLoadingOrgs}
+                        orgsFailed={orgsFailed}
                         onIncompleteChange={setHasIncompleteRoles}
                       />
                       <FormMessage />

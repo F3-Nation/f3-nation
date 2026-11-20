@@ -7,10 +7,12 @@ import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 /**
  * The orgs the signed-in user may give or remove roles on: those where they
  * are an admin. The API requires admin on an org (or an org above it) to
- * change roles there, so role editors offer only these.
+ * change roles there, so role editors offer only these. `isError` is set when
+ * the list failed to load, so an editor can say so instead of looking as if
+ * the user manages no orgs.
  */
 export function useRoleGrantOrgs() {
-  const { data, isLoading } = useFetchAllPages({
+  const { data, isLoading, isError } = useFetchAllPages({
     path: ["org", "accessible"],
     queryKey: ["org.accessible.roleGrantOrgs"],
     fetchPage: async ({ pageIndex, pageSize }) => {
@@ -30,5 +32,5 @@ export function useRoleGrantOrgs() {
       ),
     [data],
   );
-  return { orgs, isLoading };
+  return { orgs, isLoading, isError };
 }
