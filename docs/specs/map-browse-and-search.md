@@ -136,6 +136,22 @@ their own query schedule.
   error page. Google disables its markers when it rejects a key, so the map is
   not kept on screen without them.
 
+### Notes for one date
+
+- **AC-20** — GIVEN a series date in the next 30 days that shows as an
+  upcoming change (closed, different time, or a different location) and whose
+  description differs from the series' description WHEN its workout's panel is
+  open THEN that description shows under the date's row in the upcoming-changes
+  box, with URLs as links, and the panel's Notes still show the series
+  description.
+- **AC-21** — GIVEN a series date whose description is blank or matches the
+  series' description, ignoring surrounding whitespace and line-ending style,
+  THEN no note shows under its row. (Generated dates carry a copy of the
+  series description.)
+- **AC-22** — GIVEN a one-off instance with a description WHEN its pin's
+  panel or hover card is open THEN the description shows as its Notes, and the
+  upcoming-changes box doesn't repeat it.
+
 ## 5. Roles & authorization (RBAC)
 
 Browsing is anonymous by design, and (as of #378) that includes the API

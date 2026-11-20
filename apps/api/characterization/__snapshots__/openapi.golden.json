@@ -10609,6 +10609,17 @@
                         ],
                         "description": "AO name"
                       },
+                      "description": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "The instance's own description: null when it is empty or the same as its series' description"
+                      },
                       "endTime": {
                         "anyOf": [
                           {
@@ -10805,6 +10816,7 @@
                       "seriesException",
                       "highlight",
                       "name",
+                      "description",
                       "lat",
                       "lon",
                       "aoName",

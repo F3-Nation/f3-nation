@@ -6,13 +6,50 @@ import { UpdatesCallout } from "~/app/_components/workout/updates-callout";
 
 const instance = (overrides: Partial<UpdateInstance> = {}): UpdateInstance => ({
   id: 1,
+  seriesId: 7,
   startDate: "2026-09-02",
   startTime: "0615",
   seriesException: "different-time",
+  description: null,
   ...overrides,
 });
 
 describe("UpdatesCallout", () => {
+  it("shows a series date's own note under its change, with links", () => {
+    render(
+      <UpdatesCallout
+        instances={[
+          instance({
+            seriesException: "closed",
+            description:
+              "Meet at Raven's Nest instead: https://map.f3nation.com/?locationId=47177",
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText(/Meet at Raven's Nest instead/)).toBeTruthy();
+    expect(
+      screen.getByRole("link", {
+        name: "https://map.f3nation.com/?locationId=47177",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("leaves a one-off's description to the panel's Notes", () => {
+    render(
+      <UpdatesCallout
+        instances={[
+          instance({
+            seriesId: null,
+            seriesException: null,
+            description: "Annual Turkey Bowl",
+          }),
+        ]}
+      />,
+    );
+    expect(screen.queryByText("Annual Turkey Bowl")).toBeNull();
+  });
+
   it("renders nothing when there are no updates", () => {
     const { container } = render(<UpdatesCallout instances={[]} />);
     expect(container).toBeEmptyDOMElement();
