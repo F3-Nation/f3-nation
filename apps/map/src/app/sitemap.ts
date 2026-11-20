@@ -6,5 +6,10 @@ import { getSiteUrl } from "~/lib/site";
 export const dynamic = "force-dynamic";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [{ url: `${getSiteUrl()}/`, changeFrequency: "daily", priority: 1 }];
+  const siteUrl = getSiteUrl();
+  return [
+    { url: `${siteUrl}/`, changeFrequency: "daily", priority: 1 },
+    { url: `${siteUrl}/help`, changeFrequency: "monthly", priority: 0.5 },
+    { url: `${siteUrl}/changelog`, changeFrequency: "weekly", priority: 0.3 },
+  ];
 }

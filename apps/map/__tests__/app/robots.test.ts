@@ -8,7 +8,7 @@ const mockEnv = vi.hoisted((): { F3_MAP_BASE_URL: string | undefined } => ({
 
 vi.mock("~/env", () => ({ env: mockEnv }));
 
-import robots from "~/app/robots";
+import robots, { dynamic } from "~/app/robots";
 
 describe("robots.txt", () => {
   beforeEach(() => {
@@ -26,6 +26,10 @@ describe("robots.txt", () => {
     mockEnv.F3_MAP_BASE_URL = "https://map.f3nation.com///";
 
     expect(robots().sitemap).toBe("https://map.f3nation.com/sitemap.xml");
+  });
+
+  it("is rendered per request, never at image build time", () => {
+    expect(dynamic).toBe("force-dynamic");
   });
 
   it("reads the URL on every request, not once at import", () => {
