@@ -14,6 +14,7 @@ import {
 } from "@acme/ui/dropdown-menu";
 
 import { navigateToSsoLogout, useAdminSession } from "~/lib/auth/client";
+import { RoleBadges } from "~/app/_components/role-badges";
 
 export const AdminUserMenu = () => {
   const { data: session } = useAdminSession();
@@ -61,27 +62,7 @@ export const AdminUserMenu = () => {
               Roles
             </DropdownMenuLabel>
             <div className="px-2 py-1.5">
-              <div className="flex flex-wrap gap-1">
-                {session.roles.map((role) => {
-                  // Sessions can carry roles beyond these three.
-                  const roleStyles: Partial<Record<string, string>> = {
-                    admin: "bg-purple-100 text-purple-700 border-purple-200",
-                    editor: "bg-blue-100 text-blue-700 border-blue-200",
-                    user: "bg-green-100 text-green-700 border-green-200",
-                  };
-                  const roleStyle =
-                    roleStyles[role.roleName] ??
-                    "bg-muted text-muted-foreground border-muted";
-                  return (
-                    <span
-                      key={`${role.orgId}-${role.roleName}`}
-                      className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-medium ${roleStyle}`}
-                    >
-                      {role.orgName} ({role.roleName})
-                    </span>
-                  );
-                })}
-              </div>
+              <RoleBadges roles={session.roles} badgeClassName="px-1.5" />
             </div>
             <DropdownMenuSeparator />
           </>

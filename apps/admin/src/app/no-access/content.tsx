@@ -8,6 +8,7 @@ import {
   navigateToSsoLogout,
   useAdminSession,
 } from "~/lib/auth/client";
+import { roleLabel } from "~/lib/roles";
 
 const CLEAR_BROWSER_DATA_GUIDE_URL =
   "https://us.norton.com/blog/how-to/how-to-clear-cookies";
@@ -72,10 +73,10 @@ export default function NoAccess() {
                 <p className="text-sm text-gray-500">
                   Your roles:{" "}
                   {session.roles.map((role, index) => (
-                    <span key={role.orgId}>
+                    <span key={`${role.orgId}-${role.roleName}`}>
                       {index > 0 && ", "}
                       <span className="font-medium text-red-600">
-                        {role.orgName} - {role.roleName}
+                        {role.orgName} - {roleLabel(role.roleName)}
                       </span>
                     </span>
                   ))}

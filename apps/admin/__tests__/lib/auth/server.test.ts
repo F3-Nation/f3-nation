@@ -208,49 +208,25 @@ describe("admin auth server helpers", () => {
     });
   });
 
-  it("drops non-admin roles when hydrating the session", async () => {
+  it("keeps password roles when hydrating the session", async () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "valid-token" }),
     });
     verifyAccessTokenMock.mockResolvedValue(validPayload);
+    const passwordRole = {
+      roleId: 4,
+      orgId: 10,
+      orgName: "F3 Nation",
+      roleName: "password_manager",
+    };
     getMyProfileMock.mockResolvedValue({
-      roles: [
-        ...adminRoles,
-        {
-          roleId: 4,
-          orgId: 10,
-          orgName: "F3 Nation",
-          roleName: "password_manager",
-        },
-      ],
+      roles: [...adminRoles, passwordRole],
     });
 
     const { getSessionUser } = await import("~/lib/auth/server");
     const user = await getSessionUser();
 
-    expect(user?.roles).toEqual(adminRoles);
-  });
-
-  it("hydrates no roles when the profile holds only password roles", async () => {
-    cookiesMock.mockResolvedValue({
-      get: vi.fn().mockReturnValue({ value: "valid-token" }),
-    });
-    verifyAccessTokenMock.mockResolvedValue(validPayload);
-    getMyProfileMock.mockResolvedValue({
-      roles: [
-        {
-          roleId: 5,
-          orgId: 10,
-          orgName: "F3 Nation",
-          roleName: "password_reader",
-        },
-      ],
-    });
-
-    const { getSessionUser } = await import("~/lib/auth/server");
-    const user = await getSessionUser();
-
-    expect(user?.roles).toEqual([]);
+    expect(user?.roles).toEqual([...adminRoles, passwordRole]);
   });
 
   it("returns session without roles when getMyProfile throws", async () => {
@@ -392,6 +368,35 @@ describe("admin auth server helpers", () => {
     verifyAccessTokenMock.mockResolvedValue(validPayload);
     getMyProfileMock.mockResolvedValue({
       roles: [{ roleId: 2, orgId: 10, orgName: "F3 Nation", roleName: "user" }],
+    });
+
+    const { requireAdminPortalAccess } = await import("~/lib/auth/server");
+
+    await expect(requireAdminPortalAccess()).rejects.toThrow(
+      "reason=no-admin-access",
+    );
+  });
+
+  it("redirects to no-access page when user holds only password roles", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "valid-token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue(validPayload);
+    getMyProfileMock.mockResolvedValue({
+      roles: [
+        {
+          roleId: 4,
+          orgId: 10,
+          orgName: "F3 Nation",
+          roleName: "password_manager",
+        },
+        {
+          roleId: 5,
+          orgId: 11,
+          orgName: "Boone",
+          roleName: "password_reader",
+        },
+      ],
     });
 
     const { requireAdminPortalAccess } = await import("~/lib/auth/server");

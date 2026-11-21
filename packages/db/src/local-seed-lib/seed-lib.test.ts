@@ -144,9 +144,13 @@ function fakeDb(selectResults: unknown[][] = []) {
 }
 
 describe("seedDevUsers", () => {
+  // Every role seedDevUsers seeds, so a test that passes these as existing
+  // rows sees no role insert.
   const roles = [
     { id: 1, name: "admin" },
     { id: 2, name: "editor" },
+    { id: 3, name: "password_manager" },
+    { id: 4, name: "password_reader" },
   ];
 
   it("inserts missing roles, upserts each dev user and attaches roles", async () => {
@@ -165,6 +169,12 @@ describe("seedDevUsers", () => {
     });
     // roles, 4 users, and a role link for every user but the role-less one.
     expect(inserts).toHaveLength(1 + 4 + 3);
+    expect(inserts[0]).toEqual([
+      { name: "editor" },
+      { name: "admin" },
+      { name: "password_manager" },
+      { name: "password_reader" },
+    ]);
   });
 
   it("gives a region-scoped dev user no role when its region is missing", async () => {
@@ -181,7 +191,7 @@ describe("seedDevUsers", () => {
     expect(inserts).toHaveLength(4 + 2);
   });
 
-  it("skips role inserts when both exist and users that can't be read back", async () => {
+  it("skips role inserts when every role exists and users that can't be read back", async () => {
     const { db, inserts } = fakeDb([roles, roles, [{ id: 10 }], [], [], []]);
     await seedDevUsers(db, 1);
     expect(inserts).toHaveLength(4 + 1);
