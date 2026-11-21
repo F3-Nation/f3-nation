@@ -5,6 +5,7 @@ import { and, eq, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { GrantableUserRole } from "@acme/shared/app/enums";
 import type { UserRole } from "@acme/shared/app/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
@@ -34,6 +35,7 @@ import {
   hasRoleOnAny,
   isDuplicateEmailError,
   isForeignKeyViolationError,
+  isProfileEditorOf,
   shapeUserPii,
   userDetailOutputSchema,
   userListInputSchema,
@@ -128,7 +130,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "List users by organization",
       description:
-        "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations.",
+        "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations, and only for users whose home region is one of those organizations or below one, or for every user when the nation is one of them; each user's piiVisible says which.",
     })
     .output(
       z.object({
@@ -177,10 +179,20 @@ export const userRouter = {
         orgIds: allOrgIds,
       };
 
+      // An admin of the requested orgs is a profile editor of the users homed
+      // in them or below them, and of every user when one of them is the
+      // nation. Users matched only through a role keep their PII hidden.
+      const coversNation =
+        includePii &&
+        (await getProfileScopeOrgIds(ctx, null)).some((nationId) =>
+          allOrgIds.includes(nationId),
+        );
+
       return buildUserListQuery({
         ctx,
         input: inputWithDescendants,
         includePii,
+        piiHomeRegionIds: coversNation ? undefined : allOrgIds,
       });
     }),
   byId: editorProcedure
@@ -192,7 +204,7 @@ export const userRouter = {
           .optional()
           .default(false)
           .describe(
-            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
           ),
       }),
     )
@@ -202,7 +214,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by ID",
       description:
-        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
     })
     .output(
       z.object({
@@ -231,7 +243,7 @@ export const userRouter = {
           .optional()
           .default(false)
           .describe(
-            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
           ),
       }),
     )
@@ -241,7 +253,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by email",
       description:
-        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
     })
     .output(
       z.object({
@@ -336,7 +348,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Create or update user",
       description:
-        "Create a new user or update an existing one, including role assignments for organizations. Administrators of an existing member's current home region may correct it to another active region without destination editing rights; API keys use only their own roles. Changed non-null home regions must be active regions with active ancestors. Administrator corrections send no member notifications. A source-administrator correction returns CONFLICT if the member row changes or is deleted during the request. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "Create a new user or update an existing one, including role assignments for organizations. Administrators of an existing member's current home region may correct it to another active region without destination editing rights; API keys use only their own roles. Changed non-null home regions must be active regions with active ancestors. Administrator corrections send no member notifications. A source-administrator correction returns CONFLICT if the member row changes or is deleted during the request. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it. Changing an existing user's email, including the requester's own, requires the F3 Nation admin role and marks the new email unverified until its owner next signs in through F3 Auth.",
     })
     .output(
       UserSelectSchema.partial({
@@ -392,31 +404,20 @@ export const userRouter = {
             .where(eq(schema.rolesXUsersXOrg.userId, input.id))
         : [];
 
-      // An API key's session.id is its owner, so keys never edit "themselves".
+      // An API key is not a person, so it never edits "itself".
       const isSelf =
         !ctx.session.apiKey &&
         input.id !== undefined &&
         ctx.session.id === input.id;
 
-      const roleOrgIds = existingRoles.map((role) => role.orgId);
       const isProfileEditor =
-        !!existingUser &&
-        (await hasRoleOnAny(
-          ctx,
-          await getProfileScopeOrgIds(
-            ctx,
-            existingUser.homeRegionId,
-            roleOrgIds,
-          ),
-          "editor",
-        ));
+        !!existingUser && (await isProfileEditorOf(ctx, existingUser));
       const canEditProfile = isSelf || !existingUser || isProfileEditor;
 
       // PII access: for an existing user, the checkUserPiiAccess rule (profile
-      // editor, or admin on one of their orgs); for a new user, admin on any
-      // org being assigned.
+      // editor); for a new user, admin on any org being assigned.
       const hasPiiAccess = existingUser
-        ? isProfileEditor || (await hasRoleOnAny(ctx, roleOrgIds, "admin"))
+        ? isProfileEditor
         : await hasRoleOnAny(
             ctx,
             roles.map((role) => role.orgId),
@@ -425,31 +426,39 @@ export const userRouter = {
 
       // Clients resend the whole form, so only reject fields that change. A
       // PII field sent as "" was hidden by the form and is never written.
-      if (existingUser) {
-        const changedKeys = Object.entries(rest)
-          .filter(([key, value]) => {
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Object.entries drops undefined from optional props
-            if (key === "id" || value === undefined) return false;
-            if (PII_FIELDS.has(key) && value === "") return false;
-            if (key === "email" && typeof value === "string") {
-              return (
-                normalizeEmail(value) !== normalizeEmail(existingUser.email)
-              );
-            }
-            const stored = existingUser[key as keyof typeof existingUser];
-            return !isSameProfileValue(value, stored);
-          })
-          .map(([key]) => key);
-        if (!hasPiiAccess && changedKeys.some((key) => PII_FIELDS.has(key))) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message: "You are not authorized to change this user's PII",
-          });
-        }
-        if (!canEditProfile && changedKeys.length > 0) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message: "You are not authorized to edit this user's profile",
-          });
-        }
+      const changedKeys = existingUser
+        ? Object.entries(rest)
+            .filter(([key, value]) => {
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Object.entries drops undefined from optional props
+              if (key === "id" || value === undefined) return false;
+              if (PII_FIELDS.has(key) && value === "") return false;
+              if (key === "email" && typeof value === "string") {
+                return (
+                  normalizeEmail(value) !== normalizeEmail(existingUser.email)
+                );
+              }
+              const stored = existingUser[key as keyof typeof existingUser];
+              return !isSameProfileValue(value, stored);
+            })
+            .map(([key]) => key)
+        : [];
+      // Sign-in is by emailed code, so whoever sets a user's email controls
+      // the account. Only nation admins may change one, their own included.
+      const isEmailChange = changedKeys.includes("email");
+      if (isEmailChange && !isNationAdminFromSession(ctx.session)) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: ERRORS.MUST_BE_NATION_ADMIN_TO_CHANGE_EMAIL,
+        });
+      }
+      if (!hasPiiAccess && changedKeys.some((key) => PII_FIELDS.has(key))) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "You are not authorized to change this user's PII",
+        });
+      }
+      if (!canEditProfile && changedKeys.length > 0) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "You are not authorized to edit this user's profile",
+        });
       }
 
       const newHomeRegionId = rest.homeRegionId;
@@ -609,6 +618,11 @@ export const userRouter = {
         updateSet = rest;
       }
 
+      // The new address is unproven until its owner signs in with it.
+      const saveSet = isEmailChange
+        ? { ...updateSet, emailVerified: null }
+        : updateSet;
+
       if (!input.id && !_email) {
         throw new ORPCError("BAD_REQUEST", {
           message: "Email is required for new users",
@@ -654,7 +668,7 @@ export const userRouter = {
                 sourceAdminCorrection && existingUser?.homeRegionId != null
                   ? await transactionDb
                       .update(schema.users)
-                      .set(updateSet)
+                      .set(saveSet)
                       .where(
                         and(
                           eq(schema.users.id, existingUser.id),
@@ -671,7 +685,7 @@ export const userRouter = {
                       .values({ ...rest, email: normalizedEmail ?? "" })
                       .onConflictDoUpdate({
                         target: [schema.users.id],
-                        set: updateSet,
+                        set: saveSet,
                       })
                       .returning();
 

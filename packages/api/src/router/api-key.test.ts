@@ -35,6 +35,11 @@ import {
 } from "../__tests__/test-utils";
 import * as loggerModule from "../logger";
 
+// `create` requires at least one role; tests that don't care which use this.
+const nationEditor = async () => [
+  { orgId: (await getOrCreateF3NationOrg()).id, roleName: "editor" as const },
+];
+
 describe("API Key Router", () => {
   // Track created API keys for cleanup
   const createdApiKeyIds: number[] = [];
@@ -80,6 +85,7 @@ describe("API Key Router", () => {
       // Create an API key first
       const client = createTestClient();
       const createResult = await client.apiKey.create({
+        roles: await nationEditor(),
         name: `List Test ${uniqueId()}`,
       });
 
@@ -98,31 +104,62 @@ describe("API Key Router", () => {
       }
     });
 
-    // Regression: read-only keys (e.g. the seeded Map App key) carry no role
-    // association — read-only access is the absence of a role. Listing such a
-    // key must succeed and report empty roles, not fail output validation.
-    it("should list a read-only key (no roles) without failing validation", async () => {
+    // A key with no roles can exist in the database although `create` refuses
+    // one. Listing it must succeed and report empty roles, not fail output
+    // validation.
+    it("lists an existing key with no roles without failing validation", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
-      const client = createTestClient();
-      const createResult = await client.apiKey.create({
-        name: `Read-only List Test ${uniqueId()}`,
-      });
-      if (createResult.id) {
-        createdApiKeyIds.push(createResult.id);
-      }
+      const [legacyKey] = await db
+        .insert(schema.apiKeys)
+        .values({
+          key: `f3_${uniqueId()}`,
+          name: `No-role List Test ${uniqueId()}`,
+          ownerId: session.id,
+        })
+        .returning({ id: schema.apiKeys.id });
+      if (!legacyKey) throw new Error("Failed to insert key");
+      createdApiKeyIds.push(legacyKey.id);
 
+      const client = createTestClient();
       const result = await client.apiKey.list();
-      const key = result.apiKeys.find((k) => k.id === createResult.id);
-      expect(key).toBeDefined();
+      const key = result.apiKeys.find((k) => k.id === legacyKey.id);
+      expect(key?.id).toBe(legacyKey.id);
       expect(key?.roles).toEqual([]);
       expect(key?.orgIds).toEqual([]);
     });
   });
 
   describe("create", () => {
-    it("should create an API key with name only", async () => {
+    it.each([
+      ["omitted", undefined],
+      ["empty", []],
+    ] as const)(
+      "rejects a key whose roles are %s and creates nothing",
+      async (_label, roles) => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+        const client = createTestClient();
+        const name = `No-role Create ${uniqueId()}`;
+
+        await expect(
+          client.apiKey.create({
+            name,
+            // Bypass client typing to exercise runtime validation.
+            roles: roles as unknown as Awaited<ReturnType<typeof nationEditor>>,
+          }),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+        const rows = await db
+          .select({ id: schema.apiKeys.id })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.name, name));
+        expect(rows).toEqual([]);
+      },
+    );
+
+    it("should create an API key with a name and one role", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -130,6 +167,7 @@ describe("API Key Router", () => {
       const keyName = `Test API Key ${uniqueId()}`;
 
       const result = await client.apiKey.create({
+        roles: await nationEditor(),
         name: keyName,
       });
 
@@ -141,6 +179,13 @@ describe("API Key Router", () => {
       if (result.id) {
         createdApiKeyIds.push(result.id);
       }
+
+      const [nationRole] = await nationEditor();
+      const grants = await db
+        .select({ orgId: schema.rolesXApiKeysXOrg.orgId })
+        .from(schema.rolesXApiKeysXOrg)
+        .where(eq(schema.rolesXApiKeysXOrg.apiKeyId, result.id));
+      expect(grants).toEqual([{ orgId: nationRole?.orgId }]);
     });
 
     it("should create an API key with description", async () => {
@@ -152,6 +197,7 @@ describe("API Key Router", () => {
       const description = "Test description for API key";
 
       const result = await client.apiKey.create({
+        roles: await nationEditor(),
         name: keyName,
         description,
       });
@@ -253,6 +299,7 @@ describe("API Key Router", () => {
       ).toISOString(); // 30 days from now
 
       const result = await client.apiKey.create({
+        roles: await nationEditor(),
         name: keyName,
         expiresAt,
       });
@@ -273,6 +320,7 @@ describe("API Key Router", () => {
 
       await expect(
         client.apiKey.create({
+          roles: await nationEditor(),
           name: "",
         }),
       ).rejects.toThrow();
@@ -288,6 +336,7 @@ describe("API Key Router", () => {
 
       // Create an API key first
       const createResult = await client.apiKey.create({
+        roles: await nationEditor(),
         name: `Revoke Test ${uniqueId()}`,
       });
 
@@ -313,6 +362,7 @@ describe("API Key Router", () => {
 
       // Create and revoke an API key
       const createResult = await client.apiKey.create({
+        roles: await nationEditor(),
         name: `Restore Test ${uniqueId()}`,
       });
 
@@ -341,6 +391,7 @@ describe("API Key Router", () => {
         await mockAuthWithSession(session);
         const client = createTestClient();
         const created = await client.apiKey.create({
+          roles: await nationEditor(),
           name: `String Restore Test ${uniqueId()}`,
         });
         createdApiKeyIds.push(created.id);
@@ -366,6 +417,7 @@ describe("API Key Router", () => {
       await mockAuthWithSession(session);
       const client = createTestClient();
       const created = await client.apiKey.create({
+        roles: await nationEditor(),
         name: `Default Revoke Test ${uniqueId()}`,
       });
       createdApiKeyIds.push(created.id);
@@ -387,6 +439,7 @@ describe("API Key Router", () => {
         await mockAuthWithSession(session);
         const client = createTestClient();
         const created = await client.apiKey.create({
+          roles: await nationEditor(),
           name: `Invalid Revoke Test ${uniqueId()}`,
         });
         createdApiKeyIds.push(created.id);
@@ -442,6 +495,7 @@ describe("API Key Router", () => {
 
       // Create an API key first
       const createResult = await client.apiKey.create({
+        roles: await nationEditor(),
         name: `Purge Test ${uniqueId()}`,
       });
 
@@ -489,6 +543,7 @@ describe("API Key Router", () => {
 
       // Create an API key first
       const createResult = await client.apiKey.create({
+        roles: await nationEditor(),
         name: `Validate Test ${uniqueId()}`,
       });
 
@@ -525,6 +580,7 @@ describe("API Key Router", () => {
 
       // Create and revoke an API key
       const createResult = await client.apiKey.create({
+        roles: await nationEditor(),
         name: `Validate Revoked Test ${uniqueId()}`,
       });
 
@@ -554,6 +610,7 @@ describe("API Key Router", () => {
       // Create an API key that's already expired
       const expiredDate = new Date(Date.now() - 1000 * 60 * 60).toISOString(); // 1 hour ago
       const createResult = await client.apiKey.create({
+        roles: await nationEditor(),
         name: `Validate Expired Test ${uniqueId()}`,
         expiresAt: expiredDate,
       });

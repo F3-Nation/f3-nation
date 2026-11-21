@@ -102,6 +102,20 @@ describe("readOrgIdFromUrl", () => {
   });
 });
 
+describe("reading the URL without a window", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // The static export renders this route with no window at build time.
+  it("returns null for level and org", () => {
+    setSearch("?level=regions&org=42");
+    vi.stubGlobal("window", undefined);
+    expect(readLevelFromUrl()).toBeNull();
+    expect(readOrgIdFromUrl()).toBeNull();
+  });
+});
+
 describe("writeUrlState", () => {
   it("keeps a saved viewport when the level or org changes", () => {
     setSearch("?level=areas&org=3&at=35.5,-80.5,10");

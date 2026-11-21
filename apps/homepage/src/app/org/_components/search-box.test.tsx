@@ -199,6 +199,25 @@ describe("SearchBox", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
+  it("closes the list on a click outside it and keeps it open on one inside", () => {
+    render(
+      <SearchBox
+        presentLayers={["region", "area", "sector"]}
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
+    const input = screen.getByRole("searchbox");
+    fireEvent.change(input, { target: { value: "Char" } });
+
+    fireEvent.click(input);
+    expect(screen.getByRole("listbox")).toBeTruthy();
+
+    fireEvent.click(document.body);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
   it("clears results and closes when the query is emptied", () => {
     render(
       <SearchBox

@@ -1,6 +1,6 @@
 <!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
+## This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
@@ -72,7 +72,9 @@ Both are stable across dev runs. Neither depends on parsing arbitrary email-rend
 
 `/api/verify-email` enforces a 10-requests-per-minute-per-IP cap **in production only**. Under `NODE_ENV !== "production"` (local dev, CI) the limit is bypassed -- with the default `.env.example` config, mail is caught by Mailpit, so there is no real inbox to bomb. The bypass keys on `NODE_ENV`, not on `EMAIL_SERVER`, so it is only safe while `EMAIL_SERVER` points at Mailpit (see [Production safety](#production-safety)). Preview images run with `NODE_ENV=production`, so the cap applies there (see [`docs/PREVIEW_AUTH.md`](../../docs/PREVIEW_AUTH.md)). This bypass is what makes parallel agent QA viable without 429s.
 
-`/api/auth/callback/email-mfa` (the NextAuth Credentials POST endpoint) has no application-level rate limit in any environment.
+Separately, and in every environment, one address is sent at most 5 codes an hour and no two within 30 seconds, counting every code either backend sends; past that, `/api/verify-email` and Better Auth's code-sending endpoints answer 429 and send nothing. The count is kept in `email_mfa_codes`, so it holds across instances. Better Auth's endpoints reserve the send before generating a code, so a refused request never replaces a code another request already emailed. Use a fresh address per QA run, or wait out the cooldown, when a flow sends to the same address twice.
+
+`/api/auth/callback/email-mfa` (the NextAuth Credentials POST endpoint) only redeems codes and never sends one. It has no request rate limit of its own; each code's 5-attempt budget bounds guessing.
 
 ---
 
@@ -278,7 +280,11 @@ client is hostile.
   re-login.
 - Attempt budgets are shared by every entry point that accepts a code. In
   Better Auth (`src/lib/better-auth.ts`), a new endpoint that checks an
-  emailed code joins `OTP_VERIFYING_PATHS`. Its plugin order (`emailOTP`,
+  emailed code joins `OTP_VERIFYING_PATHS`. Only `/email-otp/send-verification-otp`
+  (type `sign-in`) may email a code; the other emailOTP send paths are in
+  `disabledPaths`. Enabling one means reserving its sends in `hooks.before`,
+  and only after the request is known to send (hooks run before the
+  endpoint's body, session and CSRF checks). Its plugin order (`emailOTP`,
   `jwt`, `oauthProvider`, the claim-shape plugin, then `bearer`) is
   load-bearing.
 - Compare secrets in constant time (`constantTimeEqual`, or `timingSafeEqual`

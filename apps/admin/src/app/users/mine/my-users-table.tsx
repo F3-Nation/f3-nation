@@ -2,7 +2,7 @@
 
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { useQuery } from "@tanstack/react-query";
-import type { TableOptions } from "@tanstack/react-table";
+import type { CellContext, TableOptions } from "@tanstack/react-table";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -330,10 +330,17 @@ export const MyUsersTable = () => {
   );
 };
 
-const columns: TableOptions<
-  MdTableFeatures,
-  RouterOutputs["user"]["byOrgs"]["users"][number]
->["columns"] = [
+type UserRow = RouterOutputs["user"]["byOrgs"]["users"][number];
+
+/** Email and phone, which the API withholds for some rows (`piiVisible`). */
+const PiiCell = (cell: CellContext<MdTableFeatures, UserRow, unknown>) =>
+  cell.row.original.piiVisible ? (
+    <Cell {...cell} />
+  ) : (
+    <Cell className="text-muted-foreground">Hidden</Cell>
+  );
+
+const columns: TableOptions<MdTableFeatures, UserRow>["columns"] = [
   {
     accessorKey: "name",
     meta: { name: "Name" },
@@ -416,13 +423,13 @@ const columns: TableOptions<
     accessorKey: "email",
     meta: { name: "Email" },
     header: Header,
-    cell: (cell) => <Cell {...cell} />,
+    cell: PiiCell,
   },
   {
     accessorKey: "phone",
     meta: { name: "Phone" },
     header: Header,
-    cell: (cell) => <Cell {...cell} />,
+    cell: PiiCell,
   },
   {
     accessorKey: "homeRegion",

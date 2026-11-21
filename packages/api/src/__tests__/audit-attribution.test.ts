@@ -5,12 +5,18 @@ import { createRouterClient } from "@orpc/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 
-import { protectedProcedure, publicReadProcedure } from "../shared";
+import {
+  API_KEY_SESSION_USER_ID,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import {
   cleanup,
   createAdminSession,
   createTestClient,
   db,
+  getOrCreateF3NationOrg,
+  getOrCreateRoles,
 } from "./test-utils";
 
 vi.mock("@acme/shared/common/constants", async (importOriginal) => ({
@@ -170,11 +176,22 @@ describe("API request audit attribution", () => {
       .returning({ id: schema.apiKeys.id });
     if (!credential) throw new Error("Missing synthetic credential");
     keyIds.push(credential.id);
+    // A key with no roles counts as no credential, so grant one.
+    await getOrCreateRoles();
+    const [editor] = await db
+      .select({ id: schema.roles.id })
+      .from(schema.roles)
+      .where(eq(schema.roles.name, "editor"));
+    await db.insert(schema.rolesXApiKeysXOrg).values({
+      apiKeyId: credential.id,
+      roleId: editor!.id,
+      orgId: (await getOrCreateF3NationOrg()).id,
+    });
     const client = createRouterClient(
       {
         write: publicReadProcedure.handler(async ({ context }) => ({
           id: await insertTag(context.db),
-          ownerId: context.session?.id,
+          sessionUserId: context.session?.id,
           credentialId: context.session?.apiKey?.id,
         })),
       },
@@ -189,7 +206,7 @@ describe("API request audit attribution", () => {
     );
     const result = await client.write();
     expect(result).toMatchObject({
-      ownerId: owner.id,
+      sessionUserId: API_KEY_SESSION_USER_ID,
       credentialId: credential.id,
     });
     expect(await tagHistory(result.id)).toEqual([
@@ -336,6 +353,9 @@ describe("API request audit attribution", () => {
     };
     vi.mocked(getSessionFromHeaders).mockResolvedValue(session);
     const result = await createTestClient().apiKey.create({
+      roles: [
+        { orgId: (await getOrCreateF3NationOrg()).id, roleName: "editor" },
+      ],
       name: "synthetic audit mutation",
     });
     keyIds.push(result.id);

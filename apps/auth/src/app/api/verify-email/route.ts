@@ -4,7 +4,11 @@ import type { NextRequest } from "next/server";
 import { getTrustedClientIp } from "@acme/shared/common/client-ip";
 
 import { logError } from "~/lib/logging";
-import { sendEmailCode, verifyEmailCode } from "~/lib/email-mfa";
+import {
+  EmailCodeRateLimitedError,
+  sendEmailCode,
+  verifyEmailCode,
+} from "~/lib/email-mfa";
 import { rateLimit } from "~/lib/rate-limit";
 import { env } from "~/env";
 
@@ -47,6 +51,15 @@ export async function POST(request: NextRequest) {
       await sendEmailCode(email, body.callbackUrl);
       return NextResponse.json({ sent: true });
     } catch (err: unknown) {
+      if (err instanceof EmailCodeRateLimitedError) {
+        return NextResponse.json(
+          {
+            error:
+              "Too many codes requested. Please wait a few minutes and try again.",
+          },
+          { status: 429 },
+        );
+      }
       // Log the real error for GCP observability
       logError("auth.verify_email.send_failed", {}, err);
       // Return a generic message to avoid leaking internal details

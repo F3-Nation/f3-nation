@@ -1,10 +1,8 @@
 # ---------- Stage 1: Prune monorepo ----------
-ARG TURBO_VERSION=2
 # Node 25+ images no longer bundle Corepack; install it so pnpm comes from
 # the root packageManager pin (version and hash).
 ARG COREPACK_VERSION=0.36.0
 FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS builder
-ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
@@ -15,10 +13,12 @@ WORKDIR /app
 
 ARG COREPACK_VERSION
 RUN npm install -g corepack@${COREPACK_VERSION} && corepack enable
-RUN npm install -g turbo@${TURBO_VERSION}
 
 COPY . .
-RUN turbo prune f3-api --docker
+# turbo comes from the root lockfile (exact version and integrity hash), not a
+# global npm install that would resolve whatever the registry serves today.
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter=f3-nation && \
+    node_modules/.bin/turbo prune f3-api --docker
 
 # ---------- Stage 2: Install + bundle ----------
 FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS installer

@@ -77,8 +77,10 @@ a permission, on _some_ org. More in
   - Bound the page size.
 - Put a joined table's active/private predicate in the `LEFT JOIN`, not in
   `WHERE`, which drops the base row.
-- API-key sessions never inherit the key owner's privileges; self-edit and
-  "is owner" shortcuts exclude them.
+- An API key acts only through its own role grants, never as its owner: its
+  session's `id` is `API_KEY_SESSION_USER_ID` and it has no email. Never
+  authorize a key's request from `session.apiKey.ownerId`; self-edit and
+  "is owner" shortcuts exclude keys.
 - No identity-based overrides (hard-coded emails, dev backdoors) in an
   authorization path.
 - A refused write throws `ORPCError("UNAUTHORIZED")`. Never drop the refused

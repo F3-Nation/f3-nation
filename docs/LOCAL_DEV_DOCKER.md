@@ -321,11 +321,11 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 ## Running several checkouts at once (git worktrees)
 
-Every checkout normally uses the same ports (apps on 3000–3007, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
+Every checkout normally uses the same ports (apps on 3000–3007, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead. Put the worktree under `.claude/worktrees/`, not in a sibling folder ([why](../AGENTS.md#build-test-and-development-commands)):
 
 ```bash
-git worktree add ../f3-nation-review some-branch
-cd ../f3-nation-review
+git worktree add .claude/worktrees/review some-branch
+cd .claude/worktrees/review
 pnpm install
 pnpm local:setup --slot 1
 pnpm dev

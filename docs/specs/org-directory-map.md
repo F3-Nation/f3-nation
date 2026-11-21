@@ -40,7 +40,7 @@ unpopulated tier for one branch requires no per-level code.
     logic), `org-chart.ts` (`LAYER_TYPES`, `orgTypeRank`, `buildOrgHierarchy`),
     `geo-utils.ts`, `url-state.ts`, `api.ts`, `use-ao-search.ts` (debounced
     server-side AO search), `types.ts`
-  - `packages/api/src/router/org-chart/index.ts` (`protectedProcedure` REST
+  - `packages/api/src/router/org-chart/index.ts` (`publicReadProcedure` REST
     reads: `all`, `byId`, `byLocation` for AO location details, `aos`
     for AO name search, and `leadership` for the Table view)
   - `@acme/shared/app/enums` (`OrgType`),
@@ -379,19 +379,20 @@ unpopulated tier for one branch requires no per-level code.
 
 ### API
 
-- **AC-15** — GIVEN the org-chart endpoints are `protectedProcedure` WHEN the
-  homepage client calls `GET /v1/org-chart`, `GET /v1/org-chart/{orgId}`,
-  `GET /v1/org-chart/location/{locationId}`, `GET /v1/org-chart/aos`, or
-  `GET /v1/org-chart/leadership` THEN
-  it presents the read-only `NEXT_PUBLIC_ORG_MAP_API_KEY` as a Bearer token
-  (plus the `client` header) and receives the directory data; a call with no
-  valid key or session is rejected (UNAUTHORIZED), and requests are subject to
-  the per-IP rate limit.
+- **AC-15** — GIVEN the org-chart endpoints are `publicReadProcedure` WHEN
+  any caller, with or without a credential, calls `GET /v1/org-chart`,
+  `GET /v1/org-chart/{orgId}`, `GET /v1/org-chart/location/{locationId}`,
+  `GET /v1/org-chart/aos`, or `GET /v1/org-chart/leadership` THEN it receives
+  the directory data, and requests are subject to the per-IP rate limit. The
+  homepage client sends the `client` header, and a role-less Bearer key only
+  when `NEXT_PUBLIC_ORG_MAP_API_KEY` is set.
 - **AC-20** — GIVEN the AO location endpoint WHEN the client calls
   `GET /v1/org-chart/location/{locationId}` THEN it returns the active
   location's active AOs (`orgType = "ao"`, active), their active-event counts,
-  and active leadership only; an inactive location returns NOT_FOUND, and
-  inactive orgs, events, and users are excluded across every org-chart read.
+  and active leadership only. A location returns NOT_FOUND, with no name or
+  coordinates, unless it is active and hosts at least one active, non-private
+  event. Across every org-chart read, inactive orgs, events and users,
+  private events, and anything under an inactive ancestor org are excluded.
   Location/AO counts never double-count an AO across co-located records
   (records sharing coordinates merge, taking the max AO count).
 - **AC-30** — GIVEN the leadership endpoint WHEN the client calls
@@ -406,30 +407,27 @@ unpopulated tier for one branch requires no per-level code.
 
 ## 5. Roles & authorization (RBAC)
 
-The directory is **public, read-only, and requires no user account**. `/org` is
-a static export, so it can't proxy calls server-side the way `apps/map` does;
-instead the browser sends a **read-only API key** (`NEXT_PUBLIC_ORG_MAP_API_KEY`)
-as a Bearer token on each org-chart request, plus a `client` header. The
-org-chart read procedures stay **`protectedProcedure`** — the API key is the
-trusted caller (`apps/map`'s equivalent browse endpoints moved to a
-credential-free `publicReadProcedure` tier in #378; this directory's data
-hasn't been re-tiered the same way). Because it is a
-`NEXT_PUBLIC_*` var baked into the static bundle, the key is visible in devtools;
-that is acceptable here because it is scoped to the read-only, already-public
-org-chart directory data and grants nothing else.
+The directory is **public, read-only, and requires no user account**. The
+org-chart read procedures are **`publicReadProcedure`**, so the browser calls
+them directly with no credential, plus a `client` header. The static bundle
+carries an API key only when `NEXT_PUBLIC_ORG_MAP_API_KEY` is set, and then
+only a role-less one: anything in it is visible in devtools.
 
-| Action                                                                                    | Allowed                                                     | Explicitly denied                           |
-| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------- |
-| Browse the directory map, search, view details                                            | Everyone, anonymous included (the app supplies the API key) | —                                           |
-| Call `GET /v1/org-chart[/{id}]`, `/org-chart/location/{id}`, or `/org-chart/aos` directly | Callers presenting a valid API key or session               | Unauthenticated direct calls (UNAUTHORIZED) |
-| Create / edit / delete any org data here                                                  | No one (feature is read-only)                               | All callers (no write endpoints exist)      |
+| Action                                                                                                             | Allowed                       | Explicitly denied                      |
+| ------------------------------------------------------------------------------------------------------------------ | ----------------------------- | -------------------------------------- |
+| Browse the directory map, search, view details                                                                     | Everyone, anonymous included  | —                                      |
+| Call `GET /v1/org-chart[/{id}]`, `/org-chart/location/{id}`, `/org-chart/aos`, or `/org-chart/leadership` directly | Everyone, anonymous included  | —                                      |
+| Create / edit / delete any org data here                                                                           | No one (feature is read-only) | All callers (no write endpoints exist) |
 
 All callers are subject to the in-memory per-IP rate limit (~500 req/min per
 instance in production) — a per-instance limit, not a global cap.
 
 Every read procedure (`all`, `byId`, `byLocation`, `aos`) returns **active
-records only** — inactive orgs, locations, events, and users are excluded, so
-the directory never surfaces deactivated orgs, venues, or people.
+records only** — inactive orgs, locations, events, and users are excluded, as
+is anything under an inactive ancestor org, so the directory never surfaces
+deactivated orgs, venues, or people. Every contact detail on an org (email,
+phone, website, social links) is public by intent and returned to every
+caller.
 
 ## 6. Out of scope / non-goals
 
@@ -452,8 +450,8 @@ the directory never surfaces deactivated orgs, venues, or people.
    (AC-21).
 5. An admin-less org surfaces the nearest ancestor admins; an inconclusive
    lookup shows the distinct "couldn't verify" message (AC-14).
-6. The homepage client presents the API key and receives org-chart data; an
-   unauthenticated direct call is rejected (AC-15).
+6. The org-chart endpoints serve the directory to a caller with no credential,
+   with every org contact detail returned (AC-15).
 7. Clicking a region reveals its AO pins; hovering/clicking a pin opens the
    location panel listing the active AOs there (AC-17, AC-18); co-located pins
    fan out so each is selectable (AC-19); the location endpoint returns only
