@@ -37,8 +37,9 @@ can relate Slack activity to F3 records without its own copy of the mapping.
   `UNAUTHORIZED`.
 - **AC-5** — GIVEN any successful request THEN the response holds only the F3
   user ID: no Slack profile fields, email, integration tokens or metadata.
-- **AC-6** — GIVEN a team ID or user ID that is not an uppercase alphanumeric
-  Slack ID THEN the call fails with `BAD_REQUEST` before any database query.
+- **AC-6** — GIVEN an authenticated caller and a team ID or user ID that is
+  not 1–64 uppercase alphanumeric characters THEN the call fails with
+  `BAD_REQUEST` without querying `slack_users`.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -49,9 +50,13 @@ workspace and member IDs, which are visible to that workspace's members. The
 reverse lookup (an F3 user's Slack identities across workspaces) is out of
 scope because it would collect a person's accounts in one answer.
 
-| Action                   | Allowed                                                   | Explicitly denied                        |
-| ------------------------ | --------------------------------------------------------- | ---------------------------------------- |
-| Resolve a Slack identity | Any signed-in user or API key, whatever its roles or orgs | Callers with no valid session or API key |
+An API key qualifies when it holds an `editor` or `admin` grant on any org.
+A key with no role grants resolves to no session on every endpoint, so it is
+rejected here like a caller with no credential.
+
+| Action                   | Allowed                                                                                    | Explicitly denied                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Resolve a Slack identity | Any signed-in user, Auth access token, or API key holding an `editor` or `admin` org grant | Callers with no valid credential, and API keys with no role grants |
 
 ## 6. Out of scope / non-goals
 
@@ -61,8 +66,9 @@ scope because it would collect a person's accounts in one answer.
 
 ## 7. Critical-path test cases
 
-- AC-1, AC-2 and AC-3 for an API key with no roles.
-- AC-4 for a request with no session.
+- AC-1, AC-2 and AC-3 for an API key holding an `editor` grant, sent as a
+  bearer token through the real authentication path.
+- AC-4 for a request with no session, and for an API key with no role grants.
 
 ## 8. Observability
 

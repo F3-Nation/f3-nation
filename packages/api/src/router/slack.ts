@@ -447,8 +447,10 @@ export const callSlackWebApi = async ({
 };
 
 export const slackRouter = {
-  // Open to every authenticated caller: the mapping is not personal
-  // information, and a caller must already know the workspace and member IDs.
+  // Open to every authenticated caller, with no per-org check: the mapping is
+  // not personal information, and a caller must already know the workspace and
+  // member IDs. An API key with no role grants resolves to no session, so it is
+  // rejected here as on every protected endpoint.
   // See docs/specs/slack-user-resolution.md.
   resolveUser: protectedProcedure
     .input(resolveSlackUserInputSchema)
