@@ -378,7 +378,13 @@ class GcsPublisher:
             raise ValueError("current pointer producer revision is malformed")
         retained = pointer["retainedPrevious"]
         if retained is not None:
-            if not isinstance(retained, dict) or not _SAFE_COMPONENT.fullmatch(str(retained.get("releaseId", ""))):
+            # GC compares releaseId with listed prefix names, so a non-string ID would leave
+            # the rollback target unprotected.
+            if (
+                not isinstance(retained, dict)
+                or not isinstance(retained.get("releaseId"), str)
+                or not _SAFE_COMPONENT.fullmatch(retained["releaseId"])
+            ):
                 raise ValueError("retained pointer metadata is malformed")
             if not re.fullmatch(r"[0-9a-f]{64}", str(retained.get("manifestSha256", ""))):
                 raise ValueError("retained pointer hash is malformed")
@@ -387,6 +393,13 @@ class GcsPublisher:
             if retained.get("manifestUri") != f"{retained_prefix}release.json":
                 raise ValueError("retained pointer URI is malformed")
         return blob, pointer, generation
+
+    def read_current_pointer(self) -> tuple[dict[str, Any], str] | None:
+        """Return the validated product pointer and its generation, or ``None`` if absent."""
+        _, pointer, generation = self._read_pointer()
+        if pointer is None or generation is None:
+            return None
+        return pointer, generation
 
     def _validate_release(
         self,
