@@ -1419,6 +1419,7 @@ async function obfuscate(sql: Sql): Promise<void> {
   });
 
   // ---- attendance / positions / achievements (free text & meta sweeps) ----
+  // attendance.attendance_type (pax / q / co_q) is kept: a role, not PII.
   await transformTable(sql, {
     table: "attendance",
     pk: "id",
