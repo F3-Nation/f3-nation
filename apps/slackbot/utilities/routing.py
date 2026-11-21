@@ -145,6 +145,7 @@ ACTION_MAPPER = {
     actions.CALENDAR_HOME_EVENT_TYPE_FILTER: (home.build_home_form, False, False),
     actions.CALENDAR_HOME_SHOW_MORE: (home.build_home_form, False, False),
     actions.CALENDAR_HOME_SHOW_FIRST: (home.build_home_form, False, False),
+    actions.CALENDAR_HOME_FILTERS: (home.build_home_form, False, False),
     actions.EVENT_PREBLAST_HC: (event_preblast.handle_event_preblast_action, False, False),
     actions.EVENT_PREBLAST_UN_HC: (event_preblast.handle_event_preblast_action, False, False),
     actions.EVENT_PREBLAST_TAKE_Q: (event_preblast.handle_event_preblast_action, False, False),
