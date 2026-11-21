@@ -846,6 +846,45 @@ class ActionsBlock(BaseBlock):
 
 
 @dataclass
+class ContainerBlock(BaseBlock):
+    """Groups up to 10 child blocks under a title; `is_collapsible` lets the user fold them away."""
+
+    child_blocks: List[BaseBlock] = field(default_factory=list)
+    is_collapsible: bool = False
+    default_collapsed: bool = False
+
+    def as_form_field(self):
+        j = {
+            "type": "container",
+            "title": self.make_label_field(),
+            "child_blocks": [b.as_form_field() for b in self.child_blocks],
+        }
+        if self.action:
+            j["block_id"] = self.action
+        if self.is_collapsible:
+            j["is_collapsible"] = True
+            if self.default_collapsed:
+                j["default_collapsed"] = True
+        return j
+
+
+def count_blocks(blocks: List[BaseBlock]) -> int:
+    """Count blocks the way the modal limit is applied here: a container and each of its children count once."""
+    return sum(1 + count_blocks(b.child_blocks) if isinstance(b, ContainerBlock) else 1 for b in blocks)
+
+
+def _flatten_blocks(blocks: List[BaseBlock]) -> List[BaseBlock]:
+    """Return blocks with each container replaced by its children, since state values are keyed by block_id."""
+    flat: List[BaseBlock] = []
+    for block in blocks:
+        if isinstance(block, ContainerBlock):
+            flat.extend(_flatten_blocks(block.child_blocks))
+        else:
+            flat.append(block)
+    return flat
+
+
+@dataclass
 class BlockView:
     blocks: List[BaseBlock]
 
@@ -856,7 +895,7 @@ class BlockView:
         self.blocks.append(block)
 
     def set_initial_values(self, values: dict):
-        for block in self.blocks:
+        for block in _flatten_blocks(self.blocks):
             if block.action in values and isinstance(block, InputBlock):
                 block.element.initial_value = values[block.action]
             elif block.action in values and isinstance(block, SectionBlock):
@@ -882,7 +921,7 @@ class BlockView:
         view_blocks = body["view"]["blocks"]
 
         selected_values = {}
-        for block in self.blocks:
+        for block in _flatten_blocks(self.blocks):
             if isinstance(block, InputBlock):
                 selected_values[block.action] = block.get_selected_value(values)
             elif isinstance(block, ContextBlock) and block.action:

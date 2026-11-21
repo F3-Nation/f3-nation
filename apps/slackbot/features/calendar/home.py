@@ -41,6 +41,7 @@ from utilities.database.special_queries import CalendarHomeQuery, get_admin_user
 from utilities.helper_functions import (
     _parse_view_private_metadata,
     current_date_cst,
+    escape_mrkdwn,
     get_location_display_name,
     get_user,
     safe_convert,
@@ -50,30 +51,158 @@ from utilities.helper_functions import (
 from utilities.slack import actions, orm
 
 SLACK_MODAL_BLOCK_LIMIT = 100
+# Events requested per page. A page renders fewer when their blocks would pass the modal limit.
+HOME_PAGE_SIZE = 60
+FILTER_ACTIONS = {
+    actions.CALENDAR_HOME_AO_FILTER,
+    actions.CALENDAR_HOME_EVENT_TYPE_FILTER,
+    actions.CALENDAR_HOME_DATE_FILTER,
+    actions.CALENDAR_HOME_Q_FILTER,
+}
+OPTION_LABELS = {
+    actions.FILTER_OPEN_Q: "Show only open Q slots",
+    actions.FILTER_MY_EVENTS: "Show only my events",
+    actions.FILTER_SPECIAL_EVENTS: "Special events only",
+}
+OPTION_SUMMARIES = {
+    actions.FILTER_OPEN_Q: "Open Q only",
+    actions.FILTER_MY_EVENTS: "My events only",
+    actions.FILTER_SPECIAL_EVENTS: "Special events only",
+}
+LEGEND = ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast posted · :star: special event"
+# Overflow actions that can instead be the row's visible button, with the button label for each.
+PRIMARY_ACTION_LABELS = {"Take Q": "Take Q", "HC": "HC", "Un-HC": ":white_check_mark: Going"}
 
 
 def _append_calendar_event_group(
     blocks: list[orm.BaseBlock],
-    event_block: orm.SectionBlock,
+    event_blocks: list[orm.BaseBlock],
     event_date: datetime.date,
     active_date: datetime.date | None,
+    block_limit: int,
 ) -> tuple[datetime.date | None, bool]:
-    """Append a complete date/event group when it fits in Slack's modal limit."""
+    """Append an event's blocks, with a date header when the date changes, only if all of them fit."""
     candidate_blocks: list[orm.BaseBlock] = []
     if event_date != active_date:
-        candidate_blocks.extend(
-            [
-                orm.DividerBlock(),
-                orm.HeaderBlock(label=f":calendar: {event_date.strftime('%A, %B %d')}"),
-            ]
-        )
-    candidate_blocks.append(event_block)
+        candidate_blocks.append(orm.HeaderBlock(label=f":calendar: {event_date.strftime('%A, %B %d')}"))
+    candidate_blocks.extend(event_blocks)
 
-    if len(blocks) + len(candidate_blocks) > SLACK_MODAL_BLOCK_LIMIT:
+    if orm.count_blocks(blocks) + len(candidate_blocks) > block_limit:
         return active_date, False
 
     blocks.extend(candidate_blocks)
     return event_date, True
+
+
+def _event_title(event: CalendarHomeQuery) -> str:
+    ao_name = escape_mrkdwn(event.org.name)
+    start_time = event.event.start_time or "TBD"
+    if event.event.highlight:
+        return f":star: {escape_mrkdwn(event.event.name)} — {ao_name} @ {start_time}"
+    if event.series and event.series.name and event.org.name not in event.series.name:
+        return f"{escape_mrkdwn(event.series.name)} — {ao_name} @ {start_time}"
+    event_types = " / ".join(escape_mrkdwn(t.name) for t in event.event_types)
+    return f"{ao_name} — {event_types} @ {start_time}"
+
+
+def _event_option_names(event: CalendarHomeQuery, user_is_admin: bool) -> list[str]:
+    """Every action the viewer can take on an open event, in overflow-menu order."""
+    option_names: list[str] = []
+    if not user_is_admin:
+        option_names.append("Edit Preblast" if event.user_q else "View Preblast")
+    if not event.planned_qs:
+        option_names.append("Take Q")
+    option_names.append("Un-HC" if event.user_attending else "HC")
+    if user_is_admin:
+        option_names.extend(["Assign Q", "Close Event"])
+        option_names.append("Edit Preblast" if event.event.start_date > current_date_cst() else "Edit Backblast")
+    return option_names
+
+
+def _primary_button(event_id: int, option_names: list[str]) -> orm.ButtonElement | None:
+    """The row's visible button: Take Q when the Q slot is open, otherwise HC or Going (Un-HC)."""
+    action = next((a for a in PRIMARY_ACTION_LABELS if a in option_names), None)
+    if action is None:
+        return None
+    button = orm.ButtonElement(
+        label=PRIMARY_ACTION_LABELS[action],
+        action=f"{actions.CALENDAR_HOME_EVENT}_{event_id}_button",
+        value=action,
+    )
+    if action == "Un-HC":
+        button.confirm = orm.ConfirmObject(
+            title="Remove your HC?", text="You'll no longer be listed as going.", confirm="Un-HC", deny="Keep HC"
+        )
+    else:
+        button.style = "primary"
+    return button
+
+
+def _event_blocks(event: CalendarHomeQuery, user_is_admin: bool) -> list[orm.BaseBlock]:
+    """A bold title line and a detail line, then the visible button and the overflow menu of other actions."""
+    overflow_action = f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}"
+    if event.event.series_exception == Series_Exception.closed:
+        event_types = " / ".join(escape_mrkdwn(t.name) for t in event.event_types)
+        label = f"*{escape_mrkdwn(event.org.name)} — {event_types} @ {event.event.start_time or 'TBD'}*"
+        label += "\n:no_entry: Closed"
+        option = "Reopen Event" if user_is_admin else "Event Closed"
+        return [
+            orm.SectionBlock(
+                label=label,
+                element=orm.OverflowElement(action=overflow_action, options=orm.as_selector_options([option])),
+            )
+        ]
+
+    details = [f"Q: {escape_mrkdwn(event.planned_qs)}" if event.planned_qs else "Q: Open!", f"{event.hc_count or 0} HC"]
+    icons = " ".join(
+        icon
+        for icon, shown in [
+            (":muscle:", event.user_q),
+            (":white_check_mark:", event.user_attending),
+            (":pencil:", event.event.preblast_rich),
+        ]
+        if shown
+    )
+    if icons:
+        details.append(icons)
+    label = f"*{_event_title(event)}*\n{' · '.join(details)}"
+
+    option_names = _event_option_names(event, user_is_admin)
+    button = _primary_button(event.event.id, option_names)
+    other_options = [o for o in option_names if button is None or o != button.value]
+    elements: list = [button] if button else []
+    if other_options:
+        elements.append(orm.OverflowElement(action=overflow_action, options=orm.as_selector_options(other_options)))
+    return [orm.SectionBlock(label=label), orm.ActionsBlock(elements=elements)]
+
+
+def _filter_summary(filter_data: dict, group_by_option: str, start_date_selected: datetime.date | None) -> list[str]:
+    """One short phrase per active filter, in display order."""
+    parts = []
+    group_count = len(safe_get(filter_data, actions.CALENDAR_HOME_AO_FILTER) or [])
+    if group_count:
+        noun = "AO" if group_by_option == "ao" else "location"
+        parts.append(f"{group_count} {noun}{'s' if group_count > 1 else ''}")
+    type_count = len(safe_get(filter_data, actions.CALENDAR_HOME_EVENT_TYPE_FILTER) or [])
+    if type_count:
+        parts.append(f"{type_count} event type{'s' if type_count > 1 else ''}")
+    selected_options = safe_get(filter_data, actions.CALENDAR_HOME_Q_FILTER) or []
+    parts.extend(OPTION_SUMMARIES[o] for o in OPTION_SUMMARIES if o in selected_options)
+    if start_date_selected:
+        parts.append(f"from {start_date_selected.strftime('%a, %b %d')}")
+    return parts
+
+
+def _page_offset(body: dict, action_id: str | None, view_id: str | None) -> int:
+    """Which page to show: Show more carries its offset, a filter change or Back to start returns to the first page,
+    and any other refresh of the same view keeps the page it was on."""
+    if action_id == actions.CALENDAR_HOME_SHOW_MORE:
+        return max(safe_convert(safe_get(body, "actions", 0, "value"), int) or 0, 0)
+    if action_id in FILTER_ACTIONS or action_id == actions.CALENDAR_HOME_SHOW_FIRST:
+        return 0
+    if view_id and safe_get(body, "view", "id") == view_id:
+        return max(safe_convert(safe_get(_parse_view_private_metadata(body), "offset"), int) or 0, 0)
+    return 0
 
 
 def handle_event_preblast_select_button(
@@ -114,6 +243,10 @@ def build_home_form(
             user_is_admin = any(u[0].id == user_id for u in admin_users) or any(u.id == user_id for u in aoq_users)
         metadata["user_is_admin"] = user_is_admin
 
+    view_id = update_view_id or safe_get(body, actions.LOADING_ID) or safe_get(body, "view", "id")
+    offset = _page_offset(body, action_id, view_id)
+    metadata["offset"] = offset
+
     start_time = time.time()
     group_by_option = region_record.calendar_group_by_option or "ao"
     ao_records = DbManager.find_records(
@@ -135,19 +268,7 @@ def build_home_form(
     logger.debug(f"AO and Event Type query time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
 
-    blocks = [
-        orm.ActionsBlock(
-            elements=[
-                orm.ButtonElement(
-                    ":calendar: Calendar Images", value="calendar", action=actions.OPEN_CALENDAR_IMAGE_BUTTON
-                ),
-                orm.ButtonElement(
-                    ":world_map: Nearby Special Events", value="nearby", action=actions.NEARBY_EVENTS_OPEN
-                ),
-            ]
-        ),
-        orm.DividerBlock(),
-        orm.SectionBlock(label="*Upcoming Schedule*"),
+    filter_inputs: list[orm.BaseBlock] = [
         orm.InputBlock(
             label="Filter AOs" if group_by_option == "ao" else "Filter Locations",
             action=actions.CALENDAR_HOME_AO_FILTER,
@@ -188,27 +309,24 @@ def build_home_form(
             label="Other options",
             action=actions.CALENDAR_HOME_Q_FILTER,
             element=orm.CheckboxInputElement(
-                options=orm.as_selector_options(
-                    names=["Show only open Q slots", "Show only my events", "Include events from nearby regions"],
-                    values=[actions.FILTER_OPEN_Q, actions.FILTER_MY_EVENTS],  # , actions.FILTER_NEARBY_REGIONS],
-                ),
+                options=orm.as_selector_options(names=list(OPTION_LABELS.values()), values=list(OPTION_LABELS)),
             ),
             dispatch_action=True,
         ),
     ]
 
     if safe_get(body, "view"):
-        existing_filter_data = orm.BlockView(blocks=blocks).get_selected_values(body)
+        existing_filter_data = orm.BlockView(blocks=filter_inputs).get_selected_values(body)
     else:
         existing_filter_data = {}
 
     # Build the filter
-    start_date = (
-        safe_convert(
-            safe_get(existing_filter_data, actions.CALENDAR_HOME_DATE_FILTER), datetime.datetime.strptime, ["%Y-%m-%d"]
-        )
-        or datetime.datetime.now(tz=pytz.timezone("US/Central")).date()
+    start_date_selected = safe_convert(
+        safe_get(existing_filter_data, actions.CALENDAR_HOME_DATE_FILTER), datetime.datetime.strptime, ["%Y-%m-%d"]
     )
+    if start_date_selected:
+        start_date_selected = start_date_selected.date()
+    start_date = start_date_selected or datetime.datetime.now(tz=pytz.timezone("US/Central")).date()
 
     selected_group_filter_ids = [
         v
@@ -228,88 +346,93 @@ def build_home_form(
 
     if safe_get(existing_filter_data, actions.CALENDAR_HOME_EVENT_TYPE_FILTER):
         event_type_ids = [int(x) for x in safe_get(existing_filter_data, actions.CALENDAR_HOME_EVENT_TYPE_FILTER)]
-        filter.append(EventType.id.in_(event_type_ids))
+        filter.append(EventInstance.event_types.any(EventType.id.in_(event_type_ids)))
 
-    open_q_only = actions.FILTER_OPEN_Q in (safe_get(existing_filter_data, actions.CALENDAR_HOME_Q_FILTER) or [])
-    only_users_events = actions.FILTER_MY_EVENTS in (
-        safe_get(existing_filter_data, actions.CALENDAR_HOME_Q_FILTER) or []
-    )
+    selected_options = safe_get(existing_filter_data, actions.CALENDAR_HOME_Q_FILTER) or []
+    open_q_only = actions.FILTER_OPEN_Q in selected_options
+    only_users_events = actions.FILTER_MY_EVENTS in selected_options
+    if actions.FILTER_SPECIAL_EVENTS in selected_options:
+        filter.append(EventInstance.highlight.is_(True))
+
+    summary_parts = _filter_summary(existing_filter_data, group_by_option, start_date_selected)
+    blocks: list[orm.BaseBlock] = [
+        orm.ActionsBlock(
+            elements=[
+                orm.ButtonElement(
+                    ":calendar: Calendar Images", value="calendar", action=actions.OPEN_CALENDAR_IMAGE_BUTTON
+                ),
+                orm.ButtonElement(
+                    ":world_map: Nearby Special Events", value="nearby", action=actions.NEARBY_EVENTS_OPEN
+                ),
+            ]
+        ),
+        orm.ContainerBlock(
+            action=actions.CALENDAR_HOME_FILTERS,
+            label=f":gear: Filters ({len(summary_parts)} active)" if summary_parts else ":gear: Filters",
+            child_blocks=filter_inputs,
+            is_collapsible=True,
+            # Stay open while the user is changing filters; start folded everywhere else.
+            default_collapsed=action_id not in FILTER_ACTIONS,
+        ),
+        orm.ContextBlock(
+            element=orm.ContextElement(
+                initial_value=f"Showing: {' · '.join(summary_parts)}"
+                if summary_parts
+                else "Showing: all upcoming events"
+            )
+        ),
+        orm.ContextBlock(element=orm.ContextElement(initial_value=LEGEND)),
+    ]
+
     # Run the query
-    # TODO: implement pagination / dynamic limit
     split_time = time.time()
     logger.debug(f"Block building time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
     events: list[CalendarHomeQuery] = home_schedule_query(
-        user_id, filter, limit=100, open_q_only=open_q_only, only_users_events=only_users_events
+        user_id,
+        filter,
+        limit=HOME_PAGE_SIZE,
+        offset=offset,
+        open_q_only=open_q_only,
+        only_users_events=only_users_events,
     )
 
     split_time = time.time()
     logger.debug(f"Home schedule query: {split_time - start_time:.2f} seconds")
     start_time = time.time()
 
-    # Build the event list
+    # Build the event list, keeping one block free for the paging buttons.
     active_date: datetime.date | None = None
+    rendered = 0
     for event in events:
-        option_names: List[str] = []
-        if event.event.series_exception == Series_Exception.closed:
-            label = f"{event.org.name} {' / '.join(t.name for t in event.event_types)} - CLOSED :no_entry:"
-            if user_is_admin:
-                option_names.append("Reopen Event")
-            else:
-                option_names.append("Event Closed")
-        else:
-            if not user_is_admin:
-                if event.user_q:
-                    option_names.append("Edit Preblast")
-                else:
-                    option_names.append("View Preblast")
-            if event.event.highlight:
-                label = f":star: *{event.event.name}* @ {event.org.name} @ {event.event.start_time}"
-            elif event.series and event.series.name and event.org.name not in event.series.name:
-                label = f"{event.series.name} @ {event.org.name} @ {event.event.start_time}"
-            else:
-                label = f"{event.org.name} {' / '.join(t.name for t in event.event_types)} @ {event.event.start_time}"  # noqa
-            if event.planned_qs:
-                label += f" / Q: {event.planned_qs}"
-            else:
-                label += " / Q: Open!"
-                option_names.append("Take Q")
-            if event.user_q:
-                label += " :muscle:"
-            if event.user_attending:
-                label += " :white_check_mark:"
-                option_names.append("Un-HC")
-            else:
-                option_names.append("HC")
-            if event.event.preblast_rich:
-                label += " :pencil:"
-            if user_is_admin:
-                option_names.append("Assign Q")
-                option_names.append("Close Event")
-                if event.event.start_date > current_date_cst():
-                    option_names.append("Edit Preblast")
-                else:
-                    option_names.append("Edit Backblast")
-        event_block = orm.SectionBlock(
-            label=label,
-            element=orm.OverflowElement(
-                action=f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}",
-                options=orm.as_selector_options(option_names),
-            ),
-        )
         active_date, appended = _append_calendar_event_group(
             blocks=blocks,
-            event_block=event_block,
+            event_blocks=_event_blocks(event, user_is_admin),
             event_date=event.event.start_date,
             active_date=active_date,
+            block_limit=SLACK_MODAL_BLOCK_LIMIT - 1,
         )
         if not appended:
             break
+        rendered += 1
 
-    # TODO: add "next page" button
+    if not events:
+        blocks.append(orm.SectionBlock(label="No upcoming events match these filters."))
+
+    paging_buttons = []
+    if offset > 0:
+        paging_buttons.append(
+            orm.ButtonElement(label=":rewind: Back to start", action=actions.CALENDAR_HOME_SHOW_FIRST, value="0")
+        )
+    if rendered < len(events) or len(events) == HOME_PAGE_SIZE:
+        paging_buttons.append(
+            orm.ButtonElement(label="Show more", action=actions.CALENDAR_HOME_SHOW_MORE, value=str(offset + rendered))
+        )
+    if paging_buttons:
+        blocks.append(orm.ActionsBlock(elements=paging_buttons))
+
     form = orm.BlockView(blocks=blocks)
     form.set_initial_values(existing_filter_data)
-    view_id = update_view_id or safe_get(body, actions.LOADING_ID) or safe_get(body, "view", "id")
     split_time = time.time()
     logger.debug(f"Block build 2 time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
@@ -598,7 +721,8 @@ def handle_assign_q_form(
 
 def handle_home_event(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     event_instance_id = safe_convert(safe_get(body, "actions", 0, "action_id").split("_")[1], int)
-    action = safe_get(body, "actions", 0, "selected_option", "value")
+    # The overflow menu sends the chosen option; the row's visible button sends the same action name as its value.
+    action = safe_get(body, "actions", 0, "selected_option", "value") or safe_get(body, "actions", 0, "value")
     user_id = get_user(
         safe_get(body, "user", "id"), region_record, client, logger, require_link=action != "View Preblast"
     ).user_id
