@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.11.0...pkg-db@0.12.0) (2026-11-21)
+
+
+### Features
+
+* **release:** merge the release and test plan skills into one release skill ([#1736](https://github.com/F3-Nation/f3-nation/issues/1736)) ([5408353](https://github.com/F3-Nation/f3-nation/commit/540835395762ff5d92e2aa6106137f4215f95ffe))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.8.0
+
 ## [0.11.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.10.2...pkg-db@0.11.0) (2026-11-17)
 
 

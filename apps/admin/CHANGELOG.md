@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.11.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.11.0...admin@2.11.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **admin:** fix suppressed react-hooks lint violations ([#1454](https://github.com/F3-Nation/f3-nation/issues/1454)) ([a018ec8](https://github.com/F3-Nation/f3-nation/commit/a018ec8b5805e97be10dd918154a72cd0b84e049))
+* **admin:** skip the closeModal click restore once the document is gone ([#1730](https://github.com/F3-Nation/f3-nation/issues/1730)) ([27db41a](https://github.com/F3-Nation/f3-nation/commit/27db41a8ca596fb87425f39fcf8961a9b7ad695c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.18.0
+    * @acme/shared bumped to 0.8.0
+    * @acme/ui bumped to 0.3.2
+    * @acme/validators bumped to 0.5.4
+
 ## [2.11.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.10.0...admin@2.11.0) (2026-11-17)
 
 
