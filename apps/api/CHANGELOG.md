@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.14.0](https://github.com/F3-Nation/f3-nation/compare/api@6.13.1...api@6.14.0) (2026-11-21)
+
+
+### Features
+
+* **api,shared:** add ADR 0002 permission checks and use them for Slack messages ([#1682](https://github.com/F3-Nation/f3-nation/issues/1682)) ([ac9bfbc](https://github.com/F3-Nation/f3-nation/commit/ac9bfbcd24a56cc085ed0b986a3fc82021d939c2))
+* **homepage:** add Table view to /org directory ([#1705](https://github.com/F3-Nation/f3-nation/issues/1705)) ([845716a](https://github.com/F3-Nation/f3-nation/commit/845716a9e286bc5506ddea542ee280fc31cc9968))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.18.0
+    * @acme/shared bumped to 0.8.0
+  * devDependencies
+    * @acme/db bumped to 0.12.0
+
 ## [6.13.1](https://github.com/F3-Nation/f3-nation/compare/api@6.13.0...api@6.13.1) (2026-11-17)
 
 

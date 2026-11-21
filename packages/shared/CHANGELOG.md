@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.7.0...pkg-shared@0.8.0) (2026-11-21)
+
+
+### Features
+
+* **api,shared:** add ADR 0002 permission checks and use them for Slack messages ([#1682](https://github.com/F3-Nation/f3-nation/issues/1682)) ([ac9bfbc](https://github.com/F3-Nation/f3-nation/commit/ac9bfbcd24a56cc085ed0b986a3fc82021d939c2))
+
 ## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.6.0...pkg-shared@0.7.0) (2026-11-17)
 
 

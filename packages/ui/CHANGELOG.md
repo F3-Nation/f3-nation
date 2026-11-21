@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.2](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.3.1...pkg-ui@0.3.2) (2026-11-21)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.8.0
+
 ## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.3.0...pkg-ui@0.3.1) (2026-11-17)
 
 
