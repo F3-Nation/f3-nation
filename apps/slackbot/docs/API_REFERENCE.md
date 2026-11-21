@@ -233,7 +233,8 @@ Strava integration uses its server-only credential store, not these endpoints.
 | `GET`    | `/v1/user/orgs`          | Users by org (includes descendants)                  |
 | `DELETE` | `/v1/user/delete/{id}`   | Permanent delete (nation admin only)                 |
 
-**Role values:** `"user"` | `"editor"` | `"admin"`
+**Role values:** `"user"` | `"editor"` | `"admin"` | `"password_manager"` | `"password_reader"`.
+New `password_manager` and `password_reader` assignments are accepted only on regions; existing assignments on other organization types may be resubmitted unchanged.
 
 **PII fields** (`email`, `phone`, `emergencyContact`, etc.) require `includePii=true`
 query param and admin role.

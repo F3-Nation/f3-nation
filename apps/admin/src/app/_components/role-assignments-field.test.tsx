@@ -274,6 +274,30 @@ describe("RoleAssignmentsField", () => {
     expect(onIncompleteChange).toHaveBeenLastCalledWith(true);
   });
 
+  it("shows every row read-only when the org list failed to load", () => {
+    const onChange = vi.fn<(roles: RoleAssignment[]) => void>();
+    render(
+      <RoleAssignmentsField
+        value={[
+          { orgId: 8, roleName: "admin" },
+          { orgId: 8, roleName: "password_manager" },
+        ]}
+        onChange={onChange}
+        orgOptions={[BOONE, BOONE_AO]}
+        orgNames={new Map([[8, "Boone"]])}
+        orgsFailed
+      />,
+    );
+
+    expect(screen.queryByLabelText("Organization")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Roles" })).toBeNull();
+    expect(screen.getByText("Admin, Password Manager")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Add organization/ }),
+    ).toHaveProperty("disabled", true);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("rebuilds its rows when the value changes from outside", () => {
     const onChange = vi.fn();
     const { rerender } = render(
