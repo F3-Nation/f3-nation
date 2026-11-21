@@ -26,6 +26,7 @@ from sqlalchemy import and_, case, func, literal, select, union_all
 
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import safe_get
+from utilities.slack_tokens.client import slack_client_for_team
 
 
 @dataclass
@@ -170,11 +171,18 @@ def _add_glow_effects(ax, n_glow_lines: int = 10, diff_linewidth: float = 1.05, 
 
 
 def upload_files_to_slack(file_paths: List[str], settings: SlackSettings, text: str, channel: str):
-    if not settings.bot_token or not file_paths or not channel:
-        print("Slack bot token or reporting channel not configured; skipping upload")
+    if not file_paths or not channel:
+        print("Reporting channel not configured; skipping upload")
         return
 
-    client = WebClient(token=settings.bot_token)
+    try:
+        client = slack_client_for_team(settings.team_id)
+    except Exception as e:
+        print(f"Error getting Slack client for team {settings.team_id}: {type(e).__name__}")
+        return
+    if client is None:
+        print(f"No Slack installation for team {settings.team_id}; skipping upload")
+        return
 
     file_list = []
     for fp in file_paths:

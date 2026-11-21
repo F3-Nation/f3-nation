@@ -651,7 +651,7 @@ def test_calendar_refresh_commits_when_special_events_are_outside_window(calenda
 
     client = MagicMock()
     client.chat_postMessage.side_effect = post
-    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    monkeypatch.setattr(calendar_images, "slack_client_for_team", lambda *args, **kwargs: client)
     exports = run([row("Synthetic AO", now)], now, force=True, special_events=[event])
 
     assert len(exports) == 1
@@ -1271,7 +1271,7 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
     failed = outcome in {"both_fail", "initial_fail"}
     if failed:
         fail(client.chat_postMessage)
-    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    monkeypatch.setattr(calendar_images, "slack_client_for_team", lambda *args, **kwargs: client)
     monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings, session=None: [])
 
     def remove(path):
@@ -1384,7 +1384,7 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
     client = MagicMock()
     client.chat_update.return_value = {"ok": True}
     client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
-    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    monkeypatch.setattr(calendar_images, "slack_client_for_team", lambda *args, **kwargs: client)
     monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings, session=None: [])
     if failure in {"both_rejected", "update_rejected_post_timeout"}:
         client.chat_update.return_value = {"ok": False}
