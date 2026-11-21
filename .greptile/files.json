@@ -255,6 +255,11 @@
       "scope": ["apps/slackbot/**"]
     },
     {
+      "path": "docs/specs/slack-user-resolution.md",
+      "description": "Feature spec: Slack user resolution. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["packages/api/**"]
+    },
+    {
       "path": "docs/specs/slackbot-nonproduction-profile-privacy.md",
       "description": "Feature spec: Slackbot non-production profile privacy. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["apps/slackbot/**"]
