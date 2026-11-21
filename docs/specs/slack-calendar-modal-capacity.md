@@ -9,7 +9,8 @@ events one page at a time. Filters sit in a collapsible section so the schedule
 starts near the top. Each event shows a bold title line, a detail line and its
 most likely action as a visible button. A page renders chronologically ordered
 events until the next complete event group would exceed Slack's 100-block
-modal limit, and "Show more" continues from there. Rendering counts fixed
+modal limit, less one block kept free for the paging row, and "Show more"
+continues from there. Rendering counts fixed
 controls, the filter section and each of its inputs, date headers and every
 event, including closed events. A rejected modal update must be observable and
 must not leave the user indefinitely on a loading view.
@@ -50,8 +51,9 @@ must not leave the user indefinitely on a loading view.
 - **AC-3** — GIVEN a closed event WHEN capacity is evaluated THEN it consumes
   one block (title, detail and menu in one section) under the same capacity
   rule as an open event, which consumes two (a section and a row of actions).
-- **AC-4** — GIVEN an event group that brings the event list to exactly the
-  limit WHEN capacity is evaluated THEN the complete group is appended.
+- **AC-4** — GIVEN an event group that brings the modal to exactly 99 blocks
+  (100 less the block kept for the paging row) WHEN capacity is evaluated THEN
+  the complete group is appended, and the paging row still fits.
 - **AC-5** — GIVEN additional chronological events after the page reaches
   capacity WHEN rendering continues THEN no later event is appended and a
   "Show more" button continues from the first event not shown.
@@ -78,10 +80,13 @@ must not leave the user indefinitely on a loading view.
   action the user may take stays in the overflow menu.
 - **AC-12** — GIVEN an event with more than one event type WHEN the schedule is
   queried THEN it is listed once, with all of its types, and an event-type
-  filter matches it when any of its types is selected.
-- **AC-13** — GIVEN the user is on a later page WHEN an event action refreshes
-  the calendar THEN the same page is shown; "Back to start" returns to the
-  first page.
+  filter matches it when any of its types is selected. Events with no event
+  type are not listed.
+- **AC-13** — GIVEN the user is on a later page WHEN an action taken directly
+  on the calendar (HC, Un-HC, Take Q, Reopen) refreshes it THEN the same page is
+  shown. A refresh from a modal stacked on top (Assign Q, Close Event) and
+  "Back to start" return to the first page. A later page with no events left
+  says so and points back to the first page.
 - **AC-14** — GIVEN "Special events only" is selected WHEN the schedule is
   queried THEN only highlighted events are listed.
 
@@ -105,10 +110,11 @@ permissions continue to determine which event actions are available.
 
 ## 7. Critical-path test cases
 
-1. A full page of open and closed events stays within 100 blocks and ends with
-   "Show more" (AC-1/AC-3/AC-5).
+1. A page that fills the event area exactly still has room for "Show more", and
+   a short page cut by the limit still offers it (AC-1/AC-3/AC-4/AC-5).
 2. A new date whose complete group cannot fit leaves no orphan date header
    (AC-2), and a group that reaches the limit exactly is appended (AC-4).
+   Closed events take one block each (AC-3).
 3. A rejected `views.update` records only sanitized error context and propagates
    to the dispatcher (AC-6/AC-7).
 4. A failed completed-view update replaces the loading modal with a generic
@@ -118,7 +124,10 @@ permissions continue to determine which event actions are available.
    (AC-9/AC-10).
 6. Each row type renders its visible button and menu (AC-11).
 7. Against Postgres, a two-type event is listed once, the type filter matches
-   it, and offsets page through events without gaps or repeats (AC-12/AC-13).
+   it, an untyped event is left out, and offsets page through events without
+   gaps or repeats (AC-12).
+8. Show more, Back to start, a refresh from the same view and one from a
+   stacked modal each land on the right page (AC-13).
 
 ## 8. Observability
 

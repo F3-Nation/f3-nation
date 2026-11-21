@@ -25,7 +25,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from utilities.database import special_queries  # noqa: E402
 
-POSTGRES_IMAGE = "postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
+POSTGRES_IMAGE = os.environ.get(
+    "SLACKBOT_POSTGRES_IMAGE",
+    "postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280",
+)
 pytestmark = pytest.mark.skipif(
     os.environ.get("SLACKBOT_POSTGRES_TESTS") != "1",
     reason="set SLACKBOT_POSTGRES_TESTS=1 to run disposable-Postgres integration tests",
@@ -126,6 +129,13 @@ def schedule(engine):
                     highlight=False,
                 )
             )
+        session.flush()
+        # Event 6 has no event type, so the schedule leaves it out.
+        session.add(
+            EventInstance(
+                id=6, org_id=10, name="Event 6", start_date=START, start_time="0515", is_active=True, highlight=False
+            )
+        )
         session.flush()
         session.add_all([EventType_x_EventInstance(event_instance_id=i, event_type_id=1) for i in day_offsets])
         # Event 3 has two event types: it must still come back as one schedule entry.

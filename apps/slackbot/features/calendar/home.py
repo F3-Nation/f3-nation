@@ -69,7 +69,7 @@ OPTION_SUMMARIES = {
     actions.FILTER_MY_EVENTS: "My events only",
     actions.FILTER_SPECIAL_EVENTS: "Special events only",
 }
-LEGEND = ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast posted · :star: special event"
+LEGEND = ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast written · :star: special event"
 # Overflow actions that can instead be the row's visible button, with the button label for each.
 PRIMARY_ACTION_LABELS = {"Take Q": "Take Q", "HC": "HC", "Un-HC": ":white_check_mark: Going"}
 
@@ -195,7 +195,8 @@ def _filter_summary(filter_data: dict, group_by_option: str, start_date_selected
 
 def _page_offset(body: dict, action_id: str | None, view_id: str | None) -> int:
     """Which page to show: Show more carries its offset, a filter change or Back to start returns to the first page,
-    and any other refresh of the same view keeps the page it was on."""
+    and an action taken directly on the calendar (HC, Take Q, Reopen) keeps the page it was on. A refresh from a
+    modal stacked on top (Assign Q, Close Event) arrives from that modal's view, so it returns to the first page."""
     if action_id == actions.CALENDAR_HOME_SHOW_MORE:
         return max(safe_convert(safe_get(body, "actions", 0, "value"), int) or 0, 0)
     if action_id in FILTER_ACTIONS or action_id == actions.CALENDAR_HOME_SHOW_FIRST:
@@ -417,7 +418,12 @@ def build_home_form(
         rendered += 1
 
     if not events:
-        blocks.append(orm.SectionBlock(label="No upcoming events match these filters."))
+        empty_text = (
+            "No more events. Use Back to start to see the first page."
+            if offset > 0
+            else "No upcoming events match these filters."
+        )
+        blocks.append(orm.SectionBlock(label=empty_text))
 
     paging_buttons = []
     if offset > 0:
@@ -444,7 +450,9 @@ def build_home_form(
             callback_id=actions.CALENDAR_HOME_CALLBACK_ID,
             submit_button_text="None",
             parent_metadata=metadata,
-            raise_on_error=view_id == safe_get(body, actions.LOADING_ID),
+            # Paging has no loading view to fall back on, so a rejected update must reach the dispatcher.
+            raise_on_error=view_id == safe_get(body, actions.LOADING_ID)
+            or action_id in (actions.CALENDAR_HOME_SHOW_MORE, actions.CALENDAR_HOME_SHOW_FIRST),
         )
     else:
         form.post_modal(

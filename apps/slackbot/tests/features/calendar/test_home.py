@@ -297,7 +297,7 @@ def test_top_row_legend_and_collapsed_filters_on_open():
     ]
     assert summary["elements"][0]["text"] == "Showing: all upcoming events"
     assert legend["elements"][0]["text"] == (
-        ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast posted · :star: special event"
+        ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast written · :star: special event"
     )
     assert _event_blocks(view) == [
         {"type": "section", "text": {"type": "mrkdwn", "text": "No upcoming events match these filters."}}
@@ -413,16 +413,93 @@ def test_last_page_has_no_show_more_button():
     )
 
 
-def test_waxhaw_shaped_closed_events_stay_under_100_blocks():
-    start_date = datetime.date(2026, 8, 23)
-    events = [
-        _calendar_event(i, start_date + datetime.timedelta(days=i // 4), closed=i >= 56) for i in range(HOME_PAGE_SIZE)
-    ]
+def test_closed_events_take_one_block_each():
+    events = [_calendar_event(i, FUTURE, closed=True) for i in range(10)] + [_calendar_event(10, FUTURE)]
 
     view, _ = _render(events)
 
-    assert _slack_block_count(view["blocks"]) <= SLACK_MODAL_BLOCK_LIMIT
-    assert view["blocks"][-1]["elements"][0]["action_id"] == actions.CALENDAR_HOME_SHOW_MORE
+    assert [b["type"] for b in _event_blocks(view)] == ["header"] + ["section"] * 11 + ["actions"]
+    assert all("accessory" in b for b in _event_blocks(view)[1:11])
+
+
+def test_page_that_fills_the_limit_keeps_room_for_show_more():
+    # 8 fixed blocks + 1 date header + 1 closed event leaves an even number of blocks for two-block open events,
+    # so without the reserved block the last event would reach 100 and the paging row would be the 101st.
+    events = [_calendar_event(0, FUTURE, closed=True)] + [_calendar_event(i, FUTURE) for i in range(1, 50)]
+
+    view, _ = _render(events)
+
+    assert _slack_block_count(view["blocks"]) == SLACK_MODAL_BLOCK_LIMIT - 1
+    assert view["blocks"][-1]["elements"][-1]["action_id"] == actions.CALENDAR_HOME_SHOW_MORE
+
+
+def test_short_page_cut_by_the_block_limit_still_offers_show_more():
+    events = [_calendar_event(i, FUTURE) for i in range(50)]
+
+    view, _ = _render(events)
+
+    show_more = view["blocks"][-1]["elements"][-1]
+    assert show_more["action_id"] == actions.CALENDAR_HOME_SHOW_MORE
+    assert show_more["value"] == "45"
+
+
+def test_back_to_start_returns_to_the_first_page():
+    body = _filter_body({}, action_id=actions.CALENDAR_HOME_SHOW_FIRST, private_metadata='{"offset": 37}', value="0")
+
+    _, schedule_query = _render(_busy_schedule(5), body)
+
+    assert schedule_query.call_args.kwargs["offset"] == 0
+
+
+def test_offset_saved_on_another_view_is_ignored():
+    body = _filter_body(
+        {}, action_id=f"{actions.CALENDAR_HOME_EVENT}_7_button", view_id="V_OTHER", private_metadata='{"offset": 37}'
+    )
+
+    _, schedule_query = _render(_busy_schedule(5), body)
+
+    assert schedule_query.call_args.kwargs["offset"] == 0
+
+
+def test_empty_later_page_points_back_to_the_first_page():
+    body = _filter_body({}, action_id=actions.CALENDAR_HOME_SHOW_MORE, value="60")
+
+    view, _ = _render([], body)
+
+    assert view["blocks"][-2]["text"]["text"] == "No more events. Use Back to start to see the first page."
+    assert [e["action_id"] for e in view["blocks"][-1]["elements"]] == [actions.CALENDAR_HOME_SHOW_FIRST]
+
+
+@pytest.mark.parametrize("action_id", [actions.CALENDAR_HOME_SHOW_MORE, actions.CALENDAR_HOME_SHOW_FIRST])
+def test_rejected_page_change_reaches_the_dispatcher(action_id):
+    client = MagicMock()
+    client.views_update.side_effect = SlackApiError("Slack rejected modal", {"error": "invalid_blocks"})
+    body = _filter_body({}, action_id=action_id, value="45")
+
+    with (
+        patch("features.calendar.home.get_user", return_value=SimpleNamespace(user_id=1)),
+        patch("features.calendar.home.get_admin_users", return_value=[]),
+        patch("features.calendar.home.get_aoq_users", return_value=[]),
+        patch("features.calendar.home.DbManager.find_records", return_value=[]),
+        patch("features.calendar.home.DbManager.find_join_records2", return_value=[]),
+        patch("features.calendar.home.home_schedule_query", return_value=[]),
+        pytest.raises(SlackApiError),
+    ):
+        build_home_form(
+            body=body,
+            client=client,
+            logger=MagicMock(),
+            context={},
+            region_record=SimpleNamespace(org_id=1, team_id="T_TEST", calendar_group_by_option="ao"),
+        )
+
+
+def test_event_button_routes_to_the_calendar_event_handler():
+    from utilities.helper_functions import get_request_type
+
+    body = {"type": "block_actions", "actions": [{"action_id": f"{actions.CALENDAR_HOME_EVENT}_7_button"}]}
+
+    assert get_request_type(body) == ("block_actions", actions.CALENDAR_HOME_EVENT)
 
 
 @pytest.mark.parametrize(("button_value", "expected"), [("HC", "create"), ("Un-HC", "delete")])

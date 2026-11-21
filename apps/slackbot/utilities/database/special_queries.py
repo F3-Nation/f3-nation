@@ -99,44 +99,52 @@ def home_schedule_query(
     `EventInstance.event_types.any(...)`: joining event types directly would repeat an event once per type.
     """
     order_by = (EventInstance.start_date, EventInstance.id, Org.name, EventInstance.start_time)
-    filtered_ids = select(EventInstance.id).join(Org, Org.id == EventInstance.org_id).filter(*filters)
+    # Events with no event type are left off the schedule, as they were when types were joined in directly.
+    base_filters = [*filters, EventInstance.event_types.any()]
+    filtered_ids = select(EventInstance.id).join(Org, Org.id == EventInstance.org_id).filter(*base_filters)
+    summary_columns = ("planned_qs", "user_attending", "user_q", "hc_count")
 
     if open_q_only or only_users_events:
-        # The page depends on the attendance summary, so summarize every matching event before paging.
+        # The page depends on the attendance summary, so summarize every matching event before paging, and carry
+        # the summary through the page so it is computed once.
         summary = _home_attendance_summary(user_id, filtered_ids)
         page_stmt = (
-            select(EventInstance.id)
+            select(EventInstance.id, *(summary.c[c] for c in summary_columns))
             .join(Org, Org.id == EventInstance.org_id)
             .outerjoin(summary, summary.c.event_instance_id == EventInstance.id)
-            .filter(*filters)
+            .filter(*base_filters)
         )
         if open_q_only:
             page_stmt = page_stmt.filter(summary.c.planned_qs.is_(None))
         if only_users_events:
             page_stmt = page_stmt.filter(summary.c.user_attending == 1)
         page = page_stmt.order_by(*order_by).limit(limit).offset(offset).cte("home_page")
+        page_summary = page.c
+        summary_join = None
     else:
         # Page first, then summarize attendance only for the events on the page.
         page = filtered_ids.order_by(*order_by).limit(limit).offset(offset).cte("home_page")
         summary = _home_attendance_summary(user_id, select(page.c.id))
+        page_summary = summary.c
+        summary_join = summary
 
     query = (
         select(
             EventInstance,
             Org,
-            summary.c.planned_qs,
-            summary.c.user_attending,
-            summary.c.user_q,
+            page_summary.planned_qs,
+            page_summary.user_attending,
+            page_summary.user_q,
             Event,
-            summary.c.hc_count,
+            page_summary.hc_count,
         )
         .select_from(page)
         .join(EventInstance, EventInstance.id == page.c.id)
         .join(Org, Org.id == EventInstance.org_id)
-        .outerjoin(summary, summary.c.event_instance_id == EventInstance.id)
-        .outerjoin(Event, Event.id == EventInstance.series_id)
-        .order_by(*order_by)
     )
+    if summary_join is not None:
+        query = query.outerjoin(summary_join, summary_join.c.event_instance_id == EventInstance.id)
+    query = query.outerjoin(Event, Event.id == EventInstance.series_id).order_by(*order_by)
 
     with get_session() as session:
         results = session.execute(query).all()
