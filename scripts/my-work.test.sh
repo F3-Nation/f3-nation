@@ -3,8 +3,13 @@
 # Run directly: bash scripts/my-work.test.sh
 set -uo pipefail
 
-# my-work needs jq, but `pnpm lint` runs this for everyone, so don't fail lint for it.
+# my-work needs jq. `pnpm lint` runs this for everyone, so a local run without jq skips; in
+# CI a missing jq fails, so lint can't pass without running these tests.
 if ! command -v jq >/dev/null 2>&1; then
+  if [[ -n "${CI:-}" ]]; then
+    echo "FAIL: my-work tests need jq, which isn't installed" >&2
+    exit 1
+  fi
   echo "SKIP: my-work tests need jq, which isn't installed"
   exit 0
 fi
@@ -28,6 +33,11 @@ assert_eq() {
 tmp_dir=""
 trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/my-work-test.XXXXXX")" || exit 1
+
+mkdir "$tmp_dir/no-tools"
+missing_jq=$(CI=true PATH="$tmp_dir/no-tools" "$BASH" "${BASH_SOURCE[0]}" 2>&1)
+assert_eq "in CI, a missing jq fails instead of skipping" \
+  "1|FAIL: my-work tests need jq, which isn't installed" "$?|$missing_jq"
 
 printf '*  @andy @viewer\n' >"$tmp_dir/CODEOWNERS"
 printf '*  @andy\n' >"$tmp_dir/CODEOWNERS-without-viewer"
@@ -185,6 +195,15 @@ assert_eq "--html exits 0" "0" "$?"
 assert_eq "the HTML is readable only by you" "600" "$(stat -c %a "$out" 2>/dev/null || stat -f %Lp "$out")"
 embedded=$(sed -n '/<script type="application\/json" id="data">/,/<\/script>/p' "$out" | sed '1d;$d')
 assert_eq "the HTML embeds the report" "acme/repo" "$(jq -r .repo <<<"$embedded")"
+
+hostile='</script><script>alert(1)</script>'
+jq --arg t "$hostile" '.data.search.nodes[0].title = $t' "$tmp_dir/issues.json" >"$tmp_dir/hostile-issues.json"
+hostile_out="$tmp_dir/hostile.html"
+ISSUES="$tmp_dir/hostile-issues.json" run --out "$hostile_out" --no-open >/dev/null
+assert_eq "a title can't close the HTML's data block" "0" "$(grep -cF '<script>alert(1)' "$hostile_out")"
+hostile_embedded=$(sed -n '/<script type="application\/json" id="data">/,/<\/script>/p' "$hostile_out" | sed '1d;$d')
+assert_eq "the embedded JSON keeps that title intact" "$hostile" \
+  "$(jq -r '.sections[].items[] | select(.ref == "#100") | .title' <<<"$hostile_embedded")"
 
 mkdir -p "$tmp_dir/caller"
 (cd / && INIT_CWD="$tmp_dir/caller" run --out relative.html --no-open >/dev/null)

@@ -3,8 +3,13 @@
 # Run directly: bash scripts/pr-triage.test.sh
 set -uo pipefail
 
-# pr-triage itself needs jq, but `pnpm lint` runs this for everyone, so don't fail lint for it.
+# pr-triage itself needs jq. `pnpm lint` runs this for everyone, so a local run without jq
+# skips; in CI a missing jq fails, so lint can't pass without running these tests.
 if ! command -v jq >/dev/null 2>&1; then
+  if [[ -n "${CI:-}" ]]; then
+    echo "FAIL: pr-triage tests need jq, which isn't installed" >&2
+    exit 1
+  fi
   echo "SKIP: pr-triage tests need jq, which isn't installed"
   exit 0
 fi
@@ -28,6 +33,11 @@ assert_eq() {
 tmp_dir=""
 trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/pr-triage-test.XXXXXX")" || exit 1
+
+mkdir "$tmp_dir/no-tools"
+missing_jq=$(CI=true PATH="$tmp_dir/no-tools" "$BASH" "${BASH_SOURCE[0]}" 2>&1)
+assert_eq "in CI, a missing jq fails instead of skipping" \
+  "1|FAIL: pr-triage tests need jq, which isn't installed" "$?|$missing_jq"
 
 # "Andy" in a different case from the fixture's "andy", so every match is case-insensitive.
 cat >"$tmp_dir/CODEOWNERS" <<'OWNERS'

@@ -176,7 +176,7 @@ report=$(printf '%s\n%s\n' "$board" "$issues" | jq -n 'input as $board | input a
         ["MY_CONFLICTS", "Your PRs", "Merge conflicts", "Merge main into the branch and resolve the conflicts."],
         ["MY_FEEDBACK", "Your PRs", "Feedback to address", "Unresolved review threads, a local test that asked for changes, or a change request."],
         ["MY_APPROVED", "Your PRs", "Approved: waiting to merge", "Anyone with write access can add these to the merge queue."],
-        ["REPLY", "Reviewing", "The author replied: your turn in the threads", "Answer or resolve the threads the author replied to."],
+        ["REPLY", "Reviewing", "The author replied: your turn in the threads", "Answer the threads the author replied to; the PR author resolves them."],
         ["ASSIGNED_SKILL", "Reviewing", "Assigned to you: run a review skill", "Run the skill named on each card."],
         ["ASSIGNED_APPROVE", "Reviewing", "Assigned to you: review and approve", "Both skills are done."],
         ["ASSIGNED_MERGE", "Reviewing", "Assigned to you: ready to merge", "Approved; add these to the merge queue."],
