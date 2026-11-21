@@ -1203,6 +1203,152 @@ describe("Cascade Service", () => {
       expect(rows.map((row) => row.eventTagId)).toEqual([overrideTag.id]);
     });
 
+    it("should keep a date's own time, location and note when the series changes", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const seriesLocation = await createTestLocation(region.id);
+      const awayLocation = await createTestLocation(region.id);
+      const newLocation = await createTestLocation(region.id);
+      const series = await createTestSeries(ao.id, seriesLocation.id, {
+        dayOfWeek: "thursday",
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+        description: "Meet at the track",
+      });
+
+      await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+      const instances = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id))
+        .orderBy(schema.eventInstances.startDate);
+      const [changed, plain, drifted, longer] = instances;
+      if (!changed || !plain || !drifted || !longer)
+        throw new Error("Expected four instances");
+
+      // An admin moves one date: new time and place, its own note and name.
+      await db
+        .update(schema.eventInstances)
+        .set({
+          seriesException: "different-time",
+          startTime: "0630",
+          endTime: "0715",
+          locationId: awayLocation.id,
+          description: "Turkey Bowl at the park",
+          name: "Turkey Bowl",
+        })
+        .where(eq(schema.eventInstances.id, changed.id));
+      // A date that drifted from the series without being marked: it still
+      // follows the series, as every unmarked date always has.
+      await db
+        .update(schema.eventInstances)
+        .set({ name: "Legacy name", description: "" })
+        .where(eq(schema.eventInstances.id, drifted.id));
+      // A marked date that only runs longer: its start still matches, but
+      // the times move as a pair so it can't end before it starts.
+      await db
+        .update(schema.eventInstances)
+        .set({ seriesException: "different-time", endTime: "0700" })
+        .where(eq(schema.eventInstances.id, longer.id));
+
+      await updateFutureInstances(
+        db,
+        {
+          ...series,
+          startTime: "0545",
+          endTime: "0630",
+          locationId: newLocation.id,
+          description: "Meet at the new track",
+          name: "Renamed Series",
+          isPrivate: true,
+        },
+        "2026-04-01",
+        { previous: series },
+      );
+
+      const byId = new Map(
+        (
+          await db
+            .select()
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.seriesId, series.id))
+        ).map((row) => [row.id, row]),
+      );
+
+      expect(byId.get(plain.id)).toMatchObject({
+        startTime: "0545",
+        endTime: "0630",
+        locationId: newLocation.id,
+        description: "Meet at the new track",
+        name: "Renamed Series",
+        isPrivate: true,
+      });
+      expect(byId.get(changed.id)).toMatchObject({
+        seriesException: "different-time",
+        startTime: "0630",
+        endTime: "0715",
+        locationId: awayLocation.id,
+        description: "Turkey Bowl at the park",
+        name: "Turkey Bowl",
+        // Privacy always follows the series.
+        isPrivate: true,
+      });
+      expect(byId.get(drifted.id)).toMatchObject({
+        name: "Renamed Series",
+        description: "Meet at the new track",
+        startTime: "0545",
+      });
+      expect(byId.get(longer.id)).toMatchObject({
+        startTime: "0530",
+        endTime: "0700",
+        // Fields the date didn't change still follow the series.
+        locationId: newLocation.id,
+        name: "Renamed Series",
+      });
+    });
+
+    it("should carry a series change to a date whose old value was null", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const series = await createTestSeries(ao.id, null, {
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+        description: null,
+      });
+      await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+      const [marked, unmarked] = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id))
+        .orderBy(schema.eventInstances.startDate);
+      if (!marked || !unmarked) throw new Error("Expected two instances");
+      // Marked, with the same null description as the series: only the
+      // null-safe comparison lets it take the new description.
+      await db
+        .update(schema.eventInstances)
+        .set({ seriesException: "different-time" })
+        .where(eq(schema.eventInstances.id, marked.id));
+
+      await updateFutureInstances(
+        db,
+        { ...series, description: "Now with directions" },
+        "2026-04-01",
+        { previous: series },
+      );
+
+      const rows = await db
+        .select({
+          id: schema.eventInstances.id,
+          description: schema.eventInstances.description,
+        })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      const descriptionOf = (id: number) =>
+        rows.find((row) => row.id === id)?.description;
+      expect(descriptionOf(marked.id)).toBe("Now with directions");
+      expect(descriptionOf(unmarked.id)).toBe("Now with directions");
+    });
+
     it("should return 0 when there are no future instances", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);

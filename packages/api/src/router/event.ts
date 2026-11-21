@@ -1355,7 +1355,10 @@ export const eventRouter = {
                         : effectiveEventTagIds,
                   },
                   undefined,
-                  { fields: instanceUpdateFields },
+                  {
+                    fields: instanceUpdateFields,
+                    previous: transactionExistingEvent,
+                  },
                 );
               }
             }
@@ -1393,16 +1396,22 @@ export const eventRouter = {
                 ...seriesData,
               });
             } else {
-              // Non-structural change: update future instances in place
-              await updateFutureInstances(transactionDb, {
-                ...seriesData,
-                // An omitted tag field must not overwrite per-instance
-                // overrides during an in-place series update.
-                eventTagIds:
-                  normalizedEventTagIds === undefined
-                    ? undefined
-                    : effectiveEventTagIds,
-              });
+              // Non-structural change: update future instances in place,
+              // keeping any date someone changed by hand.
+              await updateFutureInstances(
+                transactionDb,
+                {
+                  ...seriesData,
+                  // An omitted tag field must not overwrite per-instance
+                  // overrides during an in-place series update.
+                  eventTagIds:
+                    normalizedEventTagIds === undefined
+                      ? undefined
+                      : effectiveEventTagIds,
+                },
+                undefined,
+                { previous: transactionExistingEvent },
+              );
             }
           } else {
             // Converting a non-series event to a series: create instances from series start date
