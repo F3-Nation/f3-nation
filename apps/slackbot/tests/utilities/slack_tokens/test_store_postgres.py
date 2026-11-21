@@ -12,6 +12,7 @@ from slack_bolt.error import BoltError
 from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth.installation_store import Installation
 from slack_sdk.oauth.token_rotation import TokenRotator
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from tests import postgres_fixture
@@ -200,6 +201,44 @@ def test_save_failure_raises_bolt_error(monkeypatch, caplog, error, logged_here)
         }
     else:
         assert failed == []
+
+
+def test_save_commit_failure_raises_bolt_error(isolated_postgres, monkeypatch, caplog):
+    _seed(isolated_postgres, expires_in=None)
+    before = _row(isolated_postgres)
+
+    # Fail only the commit of the token write, through the real save path.
+    written = []
+    original_write, original_commit = refresh._write, Session.commit
+
+    def recording_write(row, bot):
+        original_write(row, bot)
+        written.append(True)
+
+    def failing_commit(self):
+        if written:
+            written.clear()
+            raise OperationalError("COMMIT", {}, Exception("connection dropped"))
+        original_commit(self)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(refresh, "_write", recording_write)
+        patched.setattr(Session, "commit", failing_commit)
+        with pytest.raises(BoltError) as raised:
+            SlackSpaceInstallationStore().save(_installation())
+
+    assert raised.value.__cause__ is None
+    assert _row(isolated_postgres) == before
+    [record] = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
+    assert record.levelno == logging.ERROR
+    assert record.json_fields == {
+        "event": "slack.token.refresh_failed",
+        "team_id": TEAM_ID,
+        "path": "save_bot_locked",
+        "error_type": "OperationalError",
+    }
+    for text_ in (caplog.text, str(raised.value)):
+        assert NEW_TOKEN not in text_ and NEW_REFRESH not in text_
 
 
 def test_save_without_encryption_key_raises_bolt_error(isolated_postgres, monkeypatch, caplog):

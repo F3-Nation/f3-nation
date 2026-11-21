@@ -208,7 +208,7 @@ def save_bot_locked(
     Returns False without writing when the save guard rejects the token.
     With `expected_token` (a token string, or None for "no row or no token"),
     raises `TokenChanged` without writing if the row no longer holds it.
-    Raises `TokenSaveError` if the database rejects the write.
+    Raises `TokenSaveError` if the database rejects the write or its commit.
     `workspace_name` is written only when the row is created.
     """
     with _locked(team_id) as (session, row):
@@ -220,7 +220,8 @@ def save_bot_locked(
         elif not _guard_allows(row, bot):
             return False
         _write(row, bot)
-        _flush(session, team_id, "save_bot_locked")
+        # Commit here, not when `_locked` exits, so a failed commit is sanitized and logged too.
+        _flush(session, team_id, "save_bot_locked", commit=True)
         return True
 
 
