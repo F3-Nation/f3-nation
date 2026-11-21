@@ -63,6 +63,24 @@
  *   (dry run by default — prints what would be inserted and which existing rows would get referenceId)
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth --confirm
  *   (actually writes)
+ *
+ * Running it against staging or prod:
+ *   1. Start a cloud-sql-proxy for that database and leave it running. Setup
+ *      for macOS, Linux and Windows is in docs/CLOUD_SQL_PROXY.md.
+ *   2. Create apps/auth/.env.staging (or .env.prod; both are gitignored):
+ *        DATABASE_HOST=127.0.0.1
+ *        DATABASE_PORT=5482            (5481 for prod)
+ *        DATABASE_USER=<your db user>
+ *        DATABASE_PASSWORD=<your db password>
+ *        DATABASE_NAME=f3_staging
+ *   3. Dry run, passing --resource as the issuer resource that Better Auth
+ *      seeded in that database (on staging,
+ *      https://staging.auth3.f3nation.com/api/auth2):
+ *        pnpm -C apps/auth migrate-oauth-clients-to-better-auth --env staging --resource <issuer>
+ *   4. Read the output, then run the same command with --confirm and answer y.
+ *   5. Delete the env file and stop the proxy.
+ * The script connects without SSL to a loopback host, since the proxy's local
+ * port doesn't speak it, and requires SSL for any other host.
  */
 import path from "path";
 import readline from "readline";
@@ -245,6 +263,25 @@ export function planMigration({
   return { newRows, toStamp, needsReview, toLink };
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/**
+ * SSL is required for any staging or prod host, except a loopback one: that
+ * is a cloud-sql-proxy, whose local port doesn't speak SSL (the proxy already
+ * encrypts its connection to Cloud SQL). --env local never uses SSL.
+ */
+export function sslFor(
+  targetEnv: string,
+  databaseHost: string,
+): false | "require" {
+  if (targetEnv === "local") return false;
+  // DATABASE_HOST may carry a port ("127.0.0.1:5482"), which postgres accepts.
+  const host = databaseHost.trim().toLowerCase();
+  const isLoopback =
+    LOOPBACK_HOSTS.has(host) || LOOPBACK_HOSTS.has(host.replace(/:\d+$/, ""));
+  return isLoopback ? false : "require";
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const envIndex = args.indexOf("--env");
@@ -321,9 +358,7 @@ async function main() {
     user: databaseUser,
     password: databasePassword,
     database: databaseName,
-    // Matches packages/db/src/utils/functions.ts's existing ssl convention —
-    // required for any non-local target.
-    ssl: targetEnv === "local" ? false : "require",
+    ssl: sslFor(targetEnv, databaseHost),
   });
   const db = drizzle(sql);
 
