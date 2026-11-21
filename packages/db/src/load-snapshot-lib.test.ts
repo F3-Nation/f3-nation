@@ -429,6 +429,7 @@ function harness(over: Partial<LoadDeps> = {}) {
       newestMigration: rec("newestMigration", () => Promise.resolve(1000)),
       analyze: rec("analyze", () => Promise.resolve()),
       recomputeAoCounts: rec("aoCounts", () => Promise.resolve()),
+      recomputeAttendanceTypes: rec("attendanceTypes", () => Promise.resolve()),
       resetAllSequences: rec("sequences", () => Promise.resolve(3)),
       nationIds: rec("nationIds", () => Promise.resolve([1])),
       regionIdsByName: rec("regionIds", () => Promise.resolve({ Boone: 9 })),
@@ -473,6 +474,7 @@ describe("runLoad", () => {
       "docker:restore",
       "analyze",
       "aoCounts",
+      "attendanceTypes",
       "sequences",
       "nationIds",
       "seedUsers",
@@ -967,6 +969,10 @@ describe("createLoadDb", () => {
     expect(fake.execute).toHaveBeenCalledTimes(2);
     expect(render(fake.execute.mock.calls[1]?.[0]).sql).toBe(
       "SELECT public.recount_org_ao_counts()",
+    );
+    await loadDb.recomputeAttendanceTypes();
+    expect(render(fake.execute.mock.calls[2]?.[0]).sql).toBe(
+      "CALL public.backfill_attendance_type()",
     );
     await expect(loadDb.resetAllSequences()).resolves.toBe(0);
   });

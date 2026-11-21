@@ -9,9 +9,8 @@ SET LOCAL lock_timeout = '3s';--> statement-breakpoint
 -- guarantee production's fixed ids (1 PAX, 2 Q, 3 Co-Q). Any other type name
 -- counts as pax.
 
--- VOLATILE, not STABLE: each call takes a fresh snapshot, so after the trigger
--- below waits on a concurrent writer's lock it sees that writer's committed
--- link rows.
+-- VOLATILE, not STABLE: each call reads link rows committed up to that call,
+-- not those visible to the calling query's snapshot.
 CREATE OR REPLACE FUNCTION public.attendance_type_from_links(target_attendance_id integer)
 RETURNS public.attendance_type
 LANGUAGE sql
@@ -98,13 +97,23 @@ FOR EACH ROW EXECUTE FUNCTION public.sync_attendance_type();--> statement-breakp
 -- so the procedure can be stopped and run again. Each changed record gets one
 -- audit-history entry and a new `updated` timestamp.
 --
+-- Each batch first locks its attendance rows, as the trigger does, and only
+-- then computes their types in a separate statement. Computing and writing in
+-- one statement could compute a type from a link row that a concurrent
+-- transaction is deleting, then wait for that transaction's lock and write the
+-- stale type after it commits.
+--
+-- Each batch waits at most 5s for a lock. A timeout stops the run with an
+-- error; batches already done stay committed, and the run can simply be
+-- started again. A notice after each batch reports progress.
+--
 -- No SET clause and no SECURITY DEFINER: either would forbid the COMMIT, so
 -- every name is schema-qualified instead.
 CREATE OR REPLACE PROCEDURE public.backfill_attendance_type(batch_size integer DEFAULT 10000)
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  last_id integer := 0;
+  last_id bigint := 0;
   max_id integer;
   changed integer;
   total integer := 0;
@@ -124,6 +133,22 @@ BEGIN
   FROM public.attendance_x_attendance_types x;
 
   WHILE last_id < COALESCE(max_id, 0) LOOP
+    -- COMMIT resets a transaction-local setting, so set it in every batch.
+    PERFORM set_config('lock_timeout', '5s', true);
+
+    PERFORM 1
+    FROM public.attendance a
+    WHERE a.id IN (
+        SELECT x.attendance_id
+        FROM public.attendance_x_attendance_types x
+        JOIN public.attendance_types t ON t.id = x.attendance_type_id
+        WHERE t.type IN ('Q', 'Co-Q')
+          AND x.attendance_id > last_id
+          AND x.attendance_id <= last_id + batch_size
+      )
+    ORDER BY a.id
+    FOR NO KEY UPDATE OF a;
+
     UPDATE public.attendance a
     SET attendance_type = public.attendance_type_from_links(a.id)
     WHERE a.id IN (
@@ -139,6 +164,8 @@ BEGIN
     total := total + changed;
     last_id := last_id + batch_size;
     COMMIT;
+    RAISE NOTICE 'attendance_type backfill: ids up to % done, % record(s) changed so far',
+      LEAST(last_id, max_id), total;
   END LOOP;
 
   RAISE NOTICE 'attendance_type backfill updated % record(s)', total;

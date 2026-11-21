@@ -363,6 +363,7 @@ export interface LoadDb {
   newestMigration: () => Promise<number | null>;
   analyze: () => Promise<void>;
   recomputeAoCounts: () => Promise<void>;
+  recomputeAttendanceTypes: () => Promise<void>;
   resetAllSequences: () => Promise<number>;
   nationIds: () => Promise<number[]>;
   regionIdsByName: (names: string[]) => Promise<Record<string, number>>;
@@ -584,6 +585,7 @@ export async function runLoad(
     try {
       await deps.db.analyze();
       await deps.db.recomputeAoCounts();
+      await deps.db.recomputeAttendanceTypes();
       await deps.db.resetAllSequences();
       await seedDevLogins(deps);
     } catch (err) {
@@ -662,6 +664,14 @@ export function createLoadDb(db: AppDb, migrationsTable: string): LoadDb {
     // The trigger that keeps ao_count current is off during a restore.
     async recomputeAoCounts() {
       await db.execute(sql`SELECT public.recount_org_ao_counts()`);
+    },
+
+    // The trigger that keeps attendance.attendance_type current is off during
+    // a restore, and a snapshot without that column loads every record as
+    // pax. The procedure commits per batch, so it must not run inside a
+    // transaction block.
+    async recomputeAttendanceTypes() {
+      await db.execute(sql`CALL public.backfill_attendance_type()`);
     },
 
     resetAllSequences: () => resetAllSequences(db),

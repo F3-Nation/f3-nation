@@ -26,8 +26,8 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
   let eventInstanceId: number;
   const typeIds = {} as Record<TypeName, number>;
 
-  // Matches the API's lookup by name: test databases don't guarantee the ids
-  // 1, 2 and 3 that production uses.
+  // Looked up by name: test databases don't guarantee the ids 1, 2 and 3
+  // that production uses.
   const getOrCreateType = async (type: TypeName) => {
     const [existing] = await db
       .select()
@@ -145,6 +145,49 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
     return must(rows[0]).v;
   };
 
+  // Resolves once the given backend is waiting on a lock, so a test knows a
+  // concurrent statement reached the server and blocked before it releases
+  // that lock. Fails if the statement finishes first.
+  const waitUntilBlocked = async (pid: number, pending: Promise<unknown>) => {
+    const state = { settled: false };
+    void pending.then(
+      () => (state.settled = true),
+      () => (state.settled = true),
+    );
+    const deadline = Date.now() + 5_000;
+    for (;;) {
+      if (state.settled) {
+        throw new Error("Expected the statement to wait on a lock");
+      }
+      const rows = await db.execute<{ waiting: boolean }>(sql`
+        SELECT wait_event_type = 'Lock' AS waiting
+        FROM pg_stat_activity WHERE pid = ${pid}`);
+      if (rows[0]?.waiting) return;
+      if (Date.now() > deadline) {
+        throw new Error("Timed out waiting for the statement to block");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  };
+
+  // Two single-connection clients, for tests that hold a lock in one while
+  // the other waits on it.
+  const openClients = async () => {
+    const { default: postgres } = await import("postgres");
+    const { env } = await import("@acme/env");
+    const url = must(env.TEST_DATABASE_URL);
+    const first = postgres(url, { max: 1, prepare: false });
+    const second = postgres(url, {
+      max: 1,
+      prepare: false,
+      onnotice: () => undefined,
+    });
+    const [row] = await second<
+      { pid: number }[]
+    >`SELECT pg_backend_pid() AS pid`;
+    return { first, second, secondPid: must(row).pid };
+  };
+
   it("is pax for a record with no link rows", async () => {
     expect(await typeOf(await newAttendance())).toBe("pax");
   });
@@ -242,11 +285,7 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
   it("ends correct when two transactions change one record's link rows at once", async () => {
     const id = await newAttendance();
     await link(id, "Q");
-    const { default: postgres } = await import("postgres");
-    const { env } = await import("@acme/env");
-    const url = must(env.TEST_DATABASE_URL);
-    const first = postgres(url, { max: 1, prepare: false });
-    const second = postgres(url, { max: 1, prepare: false });
+    const { first, second, secondPid } = await openClients();
     try {
       // The first transaction removes Q and stays open. The second adds Co-Q
       // while the first's change is still invisible to it; it must wait for
@@ -258,7 +297,7 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
       const insert = second`
         INSERT INTO attendance_x_attendance_types (attendance_id, attendance_type_id)
         VALUES (${id}, ${typeIds["Co-Q"]})`.execute();
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await waitUntilBlocked(secondPid, insert);
       await first`COMMIT`;
       await insert;
     } finally {
@@ -267,6 +306,35 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
     }
 
     expect(await typeOf(id)).toBe("co_q");
+  });
+
+  // SECURITY DEFINER lets a login that may write link rows, but not update
+  // attendance, keep working.
+  it("syncs a link row written by a role that can't update attendance", async () => {
+    const id = await newAttendance();
+    const rollback = new Error("rollback");
+    let typeSeen: string | undefined;
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.execute(sql`CREATE ROLE attendance_link_writer NOLOGIN`);
+        await tx.execute(
+          sql`GRANT USAGE ON SCHEMA public TO attendance_link_writer`,
+        );
+        await tx.execute(
+          sql`GRANT INSERT ON attendance_x_attendance_types TO attendance_link_writer`,
+        );
+        await tx.execute(sql`SET LOCAL ROLE attendance_link_writer`);
+        await tx.execute(sql`
+          INSERT INTO attendance_x_attendance_types (attendance_id, attendance_type_id)
+          VALUES (${id}, ${typeIds.Q})`);
+        await tx.execute(sql`RESET ROLE`);
+        const rows = await tx.execute<{ t: string }>(sql`
+          SELECT attendance_type::text AS t FROM attendance WHERE id = ${id}`);
+        typeSeen = rows[0]?.t;
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+    expect(typeSeen).toBe("q");
   });
 
   it("deletes an attendance record whose link rows cascade", async () => {
@@ -350,6 +418,93 @@ describe("attendance_type sync from attendance_x_attendance_types", () => {
 
       expect(await typeOf(id)).toBe("q");
       expect(await rowVersion(id)).toBe(before);
+    });
+
+    // Drizzle wraps the Postgres error, whose message is on `cause`.
+    const pgErrorText = async (run: () => Promise<unknown>) => {
+      try {
+        await run();
+      } catch (error) {
+        const err = error as Error & { cause?: { message?: string } };
+        return `${err.message} ${err.cause?.message ?? ""}`;
+      }
+      throw new Error("Expected the call to fail");
+    };
+
+    it.each(["0", "-1", "NULL"])("rejects batch_size %s", async (size) => {
+      expect(
+        await pgErrorText(() =>
+          db.execute(sql.raw(`CALL public.backfill_attendance_type(${size})`)),
+        ),
+      ).toMatch(/batch_size must be a positive integer/);
+    });
+
+    // The exception is raised before the procedure's first COMMIT, so it can
+    // run inside a transaction block, whose rollback restores the name.
+    it("stops when no type is named Co-Q", async () => {
+      expect(
+        await pgErrorText(() =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`
+              UPDATE attendance_types SET type = 'Co-Q-renamed'
+              WHERE id = ${typeIds["Co-Q"]}`);
+            await tx.execute(sql`CALL public.backfill_attendance_type()`);
+          }),
+        ),
+      ).toMatch(/attendance_types needs rows named Q and Co-Q/);
+    });
+
+    it("reaches a record at the highest integer id without overflowing", async () => {
+      // A fresh record supplies a user; the copy at maxId is not planned, so
+      // it doesn't collide with it.
+      await newAttendance();
+      const maxId = 2147483647;
+      await db.insert(schema.attendance).values({
+        id: maxId,
+        userId: must(createdUserIds.at(-1)),
+        eventInstanceId,
+        isPlanned: false,
+      });
+      try {
+        await link(maxId, "Q");
+        await forceType([maxId], "pax");
+
+        // Two batches: the second ends past the integer limit.
+        await db.execute(sql`CALL public.backfill_attendance_type(1073741824)`);
+
+        expect(await typeOf(maxId)).toBe("q");
+      } finally {
+        await db
+          .delete(schema.attendance)
+          .where(eq(schema.attendance.id, maxId));
+      }
+    });
+
+    it("does not restore a leadership type removed while it runs", async () => {
+      const id = await newAttendance();
+      await link(id, "Q");
+      await forceType([id], "pax");
+      const { first, second, secondPid } = await openClients();
+      try {
+        // The first transaction removes Q and holds the record's lock. Its
+        // trigger skips the write because the record is already pax. The
+        // backfill still sees the uncommitted link row and must not write q
+        // once the removal commits.
+        await first`BEGIN`;
+        await first`
+          DELETE FROM attendance_x_attendance_types
+          WHERE attendance_id = ${id} AND attendance_type_id = ${typeIds.Q}`;
+        const backfill =
+          second`CALL public.backfill_attendance_type()`.execute();
+        await waitUntilBlocked(secondPid, backfill);
+        await first`COMMIT`;
+        await backfill;
+      } finally {
+        await first.end();
+        await second.end();
+      }
+
+      expect(await typeOf(id)).toBe("pax");
     });
   });
 });
