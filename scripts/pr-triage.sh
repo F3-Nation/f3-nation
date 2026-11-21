@@ -67,6 +67,8 @@ SEP=$'\x1f'
 NOT_NEEDED_LABEL="local test: not needed"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CODEOWNERS_FILE="${PR_TRIAGE_CODEOWNERS:-$script_dir/../.github/CODEOWNERS}"
+# shellcheck source=scripts/lib/open-file.sh
+. "$script_dir/lib/open-file.sh"
 
 usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "pr-triage: $*" >&2; exit 1; }
@@ -157,7 +159,7 @@ query($owner: String!, $name: String!, $cursor: String) {
           nodes { ... on ReopenedEvent { createdAt } }
         }
         commits(last: 1) {
-          nodes { commit { oid committedDate } }
+          nodes { commit { oid committedDate statusCheckRollup { state } } }
         }
         # Both ends of each list: a skill marker may be among the oldest or the newest.
         comments(last: 100) { ...comments }
@@ -517,7 +519,19 @@ classify='
           codeownerAssignees: [$assignees[] | select(codeowner and (lower_login != ($author | lower_login)))],
           unresolvedThreads: ($open | length),
           threadOpeners: ($open | unique),
+          # Unresolved threads whose last comment isn'"'"'t the author'"'"'s, whatever the bucket:
+          # INLINE outranks THREADS, so the bucket alone hides a review bot'"'"'s unanswered threads.
+          threadsAwaitingAuthor: ([$openThreads[]
+            | select((.lastComment.nodes[0].author.login // "") != $author)] | length),
           approved: $approved,
+          conflicts: $conflicts,
+          # The head commit'"'"'s combined check state: SUCCESS, PENDING, FAILURE, ERROR, EXPECTED,
+          # or null when nothing reports on it.
+          ciState: ($head.statusCheckRollup.state // null),
+          changesRequested: (if $pr | has("latestOpinionatedReviews")
+            then any($pr.latestOpinionatedReviews.nodes[]?; .state == "CHANGES_REQUESTED")
+            else $pr.reviewDecision == "CHANGES_REQUESTED" end),
+          awaitingFixes: $awaitingFixes,
           turnSince: ($turnSince | todate),
           url: $pr.url,
           mine: ($author == $me),
@@ -581,8 +595,11 @@ if [[ -s "$work_dir/advisories.json" ]]; then
     fi
   done < <(jq -r '.[] | [.ghsa, .severity, .fork] | join("\u001f")' "$work_dir/advisories.json")
   (( ${#fork_boards[@]} > 0 )) || fork_boards=(/dev/null)
+  # The board goes through a file in the private work_dir, not argv: it can hold advisory PR
+  # titles, and a large one would pass the per-argument size limit.
+  printf '%s\n' "$board" >"$work_dir/base.json"
   # shellcheck disable=SC2016
-  board=$(jq -s --argjson base "$board" --slurpfile advisories "$work_dir/advisories.json" \
+  board=$(jq -s --slurpfile base "$work_dir/base.json" --slurpfile advisories "$work_dir/advisories.json" \
     --arg statuses "$statuses" --arg repo "$repo" '
     def forks($n): "\($n) security advisory fork\(if $n == 1 then "" else "s" end)";
     . as $forks
@@ -596,7 +613,7 @@ if [[ -s "$work_dir/advisories.json" ]]; then
         if $status[$i] == "read" then {read: (.read + 1), fork: $forks[.read]}
         else {read, fork: null} end;
         {advisory: $all[$i], status: $status[$i], fork})] as $each
-    | $base
+    | $base[0]
     | .prs = ([$forks[].prs[]] + .prs)
     | .advisoryForks = ($forks | length)
     # A fork that could not be read, or whose PRs were cut off, is left out: whether it has a
@@ -623,24 +640,6 @@ if $json; then
   printf '%s\n' "$board"
   exit 0
 fi
-
-open_file() {
-  local file="$1"
-  if grep -qi microsoft /proc/version 2>/dev/null; then
-    if command -v wslview >/dev/null 2>&1; then
-      wslview "$file"
-    else
-      # explorer.exe exits non-zero even when it opens the file.
-      explorer.exe "$(wslpath -w "$file")" || true
-    fi
-  elif [[ "$(uname -s)" == "Darwin" ]]; then
-    open "$file"
-  elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$file" >/dev/null 2>&1
-  else
-    return 1
-  fi
-}
 
 if $html; then
   [[ -n "$out" ]] || out="${TMPDIR:-/tmp}"
