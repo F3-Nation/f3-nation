@@ -91,8 +91,9 @@ vestigial `Permissions` enums (`packages/shared/src/app/constants.ts`,
 - `nationAdminProcedure` requires `admin` on the org whose id is
   `F3_NATION_ORG_ID` **and** whose name contains "f3 nation"
   (`isNationAdminFromSession` in `packages/shared/src/app/role-checks.ts`).
-  The name match is fragile: renaming that org would lock every nation
-  admin out.
+  The name match is fragile: renaming that org to a name that does not
+  contain "f3 nation" (in any letter case) would lock every nation admin
+  out.
 - The org-hierarchy walk is the genuinely hard part of the system's
   authorization, and it already exists and works.
 
