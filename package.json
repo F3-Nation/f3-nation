@@ -37,6 +37,8 @@
     "lint:unused": "SKIP_ENV_VALIDATION=true DATABASE_URL=placeholder knip",
     "lint": "bash scripts/lint.sh",
     "local:setup": "bash scripts/local-setup.sh",
+    "my-work": "bash scripts/my-work.sh",
+    "my-work:html": "bash scripts/my-work.sh --html",
     "postinstall": "bash scripts/postinstall-uv-sync.sh",
     "pr:triage": "bash scripts/pr-triage.sh --with-advisories",
     "pr:triage:html": "bash scripts/pr-triage.sh --with-advisories --html",
