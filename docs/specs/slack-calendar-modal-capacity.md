@@ -5,12 +5,13 @@
 ## 1. Summary
 
 The interactive Slack calendar (Calendar Home) shows the region's upcoming
-events one page at a time. Filters sit in a collapsible section so the schedule
-starts near the top. Each event shows a bold title line, a detail line and its
+events one page at a time. Filter inputs stay hidden behind a Filters button so
+the schedule starts near the top; Slack does not allow its collapsible container
+block in modals. Each event shows a bold title line, a detail line and its
 most likely action as a visible button. A page renders chronologically ordered
 events until the next complete event group would exceed Slack's 100-block
 modal limit, and "Show more" continues from there. Rendering counts fixed
-controls, the filter section and each of its inputs, date headers and every
+controls, any filter inputs on screen, date headers and every
 event, including closed events. A rejected modal update must be observable and
 must not leave the user indefinitely on a loading view.
 
@@ -44,7 +45,7 @@ must not leave the user indefinitely on a loading view.
 
 - **AC-1** — GIVEN calendar controls and future events WHEN the event list is
   rendered THEN the resulting modal contains no more than 100 blocks, counting
-  the filter section and each block inside it.
+  each filter input on screen.
 - **AC-2** — GIVEN an event on a date that is not yet rendered WHEN its date
   header and event blocks would exceed the limit THEN none of them is appended.
 - **AC-3** — GIVEN a closed event WHEN capacity is evaluated THEN it consumes
@@ -67,11 +68,12 @@ must not leave the user indefinitely on a loading view.
   error response.
 
 - **AC-9** — GIVEN Calendar Home opens WHEN it renders THEN the filter inputs
-  are inside a collapsible section that starts collapsed, titled with the
-  number of active filters, followed by a one-line summary of those filters
-  and a legend for the event icons.
+  are hidden and the top row has a Filters button labelled with the number of
+  active filters, followed by a one-line summary of those filters and a legend
+  for the event icons. The button shows or hides the inputs, and hidden
+  filters keep applying, including across pages.
 - **AC-10** — GIVEN the user changes a filter WHEN the calendar re-renders THEN
-  the filter section stays expanded and the first page of results is shown.
+  the filter inputs stay shown and the first page of results is shown.
 - **AC-11** — GIVEN an open event WHEN its row renders THEN the visible button
   is Take Q when the Q slot is open, otherwise HC, or Going when the user has
   already HC'd; Going removes the HC only after a confirmation. Every other
@@ -113,8 +115,10 @@ permissions continue to determine which event actions are available.
    to the dispatcher (AC-6/AC-7).
 4. A failed completed-view update replaces the loading modal with a generic
    error view, with direct-message fallback if replacement fails (AC-8).
-5. Opening the calendar renders the collapsed filter section, summary and
-   legend; a filter change keeps it expanded and resets to the first page
+5. Opening the calendar renders hidden filter inputs, the Filters button,
+   summary and legend; the button shows and hides the inputs without dropping
+   active filters; a filter change keeps them shown and resets to the first
+   page; no block type outside those Slack allows in modals is sent
    (AC-9/AC-10).
 6. Each row type renders its visible button and menu (AC-11).
 7. Against Postgres, a two-type event is listed once, the type filter matches

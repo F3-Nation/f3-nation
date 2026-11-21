@@ -87,7 +87,7 @@ def _append_calendar_event_group(
         candidate_blocks.append(orm.HeaderBlock(label=f":calendar: {event_date.strftime('%A, %B %d')}"))
     candidate_blocks.extend(event_blocks)
 
-    if orm.count_blocks(blocks) + len(candidate_blocks) > block_limit:
+    if len(blocks) + len(candidate_blocks) > block_limit:
         return active_date, False
 
     blocks.extend(candidate_blocks)
@@ -205,6 +205,30 @@ def _page_offset(body: dict, action_id: str | None, view_id: str | None) -> int:
     return 0
 
 
+def _filter_inputs_were_shown(body: dict, action_id: str | None, stored: dict) -> bool:
+    """Whether the view the user acted in had the filter inputs on screen, so its state holds their current values."""
+    if safe_get(stored, "filters_open") or action_id in FILTER_ACTIONS:
+        return True
+    state_values = safe_get(body, "view", "state", "values") or {}
+    return any(block_id in state_values for block_id in FILTER_ACTIONS)
+
+
+def _filters_open(action_id: str | None, were_shown: bool) -> bool:
+    """Whether the filter inputs show: the Filters button flips them, a filter change keeps them showing, any other
+    refresh of the same view keeps them as they were, and a newly opened calendar starts with them hidden."""
+    if action_id == actions.CALENDAR_HOME_FILTERS:
+        return not were_shown
+    if action_id in FILTER_ACTIONS:
+        return True
+    return were_shown
+
+
+def _filters_button_label(filters_open: bool, active_count: int) -> str:
+    if filters_open:
+        return ":gear: Hide filters"
+    return f":gear: Filters ({active_count} active)" if active_count else ":gear: Filters"
+
+
 def handle_event_preblast_select_button(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
@@ -246,6 +270,11 @@ def build_home_form(
     view_id = update_view_id or safe_get(body, actions.LOADING_ID) or safe_get(body, "view", "id")
     offset = _page_offset(body, action_id, view_id)
     metadata["offset"] = offset
+    # Filter values and visibility live in private_metadata so they survive while the inputs are hidden.
+    same_view = bool(view_id) and safe_get(body, "view", "id") == view_id
+    stored = _parse_view_private_metadata(body) if same_view else {}
+    filter_inputs_were_shown = same_view and _filter_inputs_were_shown(body, action_id, stored)
+    filters_open = _filters_open(action_id, filter_inputs_were_shown)
 
     start_time = time.time()
     group_by_option = region_record.calendar_group_by_option or "ao"
@@ -315,10 +344,12 @@ def build_home_form(
         ),
     ]
 
-    if safe_get(body, "view"):
+    if filter_inputs_were_shown:
         existing_filter_data = orm.BlockView(blocks=filter_inputs).get_selected_values(body)
     else:
-        existing_filter_data = {}
+        existing_filter_data = safe_get(stored, "filters") or {}
+    metadata["filters"] = {k: v for k, v in existing_filter_data.items() if v}
+    metadata["filters_open"] = filters_open
 
     # Build the filter
     start_date_selected = safe_convert(
@@ -364,16 +395,15 @@ def build_home_form(
                 orm.ButtonElement(
                     ":world_map: Nearby Special Events", value="nearby", action=actions.NEARBY_EVENTS_OPEN
                 ),
+                # Slack's collapsible container block isn't allowed in modals, so a button shows and hides the inputs.
+                orm.ButtonElement(
+                    _filters_button_label(filters_open, len(summary_parts)),
+                    value="hide" if filters_open else "show",
+                    action=actions.CALENDAR_HOME_FILTERS,
+                ),
             ]
         ),
-        orm.ContainerBlock(
-            action=actions.CALENDAR_HOME_FILTERS,
-            label=f":gear: Filters ({len(summary_parts)} active)" if summary_parts else ":gear: Filters",
-            child_blocks=filter_inputs,
-            is_collapsible=True,
-            # Stay open while the user is changing filters; start folded everywhere else.
-            default_collapsed=action_id not in FILTER_ACTIONS,
-        ),
+        *(filter_inputs if filters_open else []),
         orm.ContextBlock(
             element=orm.ContextElement(
                 initial_value=f"Showing: {' · '.join(summary_parts)}"

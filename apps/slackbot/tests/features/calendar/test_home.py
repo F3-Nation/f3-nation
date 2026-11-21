@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import sys
 from types import SimpleNamespace
@@ -127,13 +128,37 @@ def _render(events, body=None, *, admin=False, update_view_id="V_TEST"):
     return call.kwargs["view"], schedule_query
 
 
+def _legend_index(view):
+    return next(
+        i
+        for i, b in enumerate(view["blocks"])
+        if b["type"] == "context" and b["elements"][0]["text"].startswith(":muscle:")
+    )
+
+
 def _event_blocks(view):
-    """Blocks after the fixed header area (top buttons, filters, summary, legend)."""
-    return view["blocks"][4:]
+    """Blocks after the fixed header area (top buttons, any filter inputs, summary, legend)."""
+    return view["blocks"][_legend_index(view) + 1 :]
 
 
 def _slack_block_count(blocks):
-    return sum(1 + _slack_block_count(b.get("child_blocks", [])) for b in blocks)
+    return len(blocks)
+
+
+FILTER_BLOCK_IDS = [
+    actions.CALENDAR_HOME_AO_FILTER,
+    actions.CALENDAR_HOME_EVENT_TYPE_FILTER,
+    actions.CALENDAR_HOME_DATE_FILTER,
+    actions.CALENDAR_HOME_Q_FILTER,
+]
+
+
+def _filter_inputs(view):
+    return [b for b in view["blocks"] if b.get("block_id") in FILTER_BLOCK_IDS]
+
+
+def _filters_button(view):
+    return next(e for e in view["blocks"][0]["elements"] if e["action_id"] == actions.CALENDAR_HOME_FILTERS)
 
 
 def _filter_body(state: dict, *, action_id: str, view_id="V_TEST", private_metadata=None, value=None) -> dict:
@@ -280,21 +305,17 @@ def test_days_are_separated_by_date_headers_without_dividers():
     assert [b["type"] for b in _event_blocks(view)] == ["header", "section", "actions", "header", "section", "actions"]
 
 
-def test_top_row_legend_and_collapsed_filters_on_open():
+def test_top_row_legend_and_hidden_filters_on_open():
     view, _ = _render([], update_view_id=None)
 
-    top, filters, summary, legend = view["blocks"][:4]
-    assert [e["action_id"] for e in top["elements"]] == [actions.OPEN_CALENDAR_IMAGE_BUTTON, actions.NEARBY_EVENTS_OPEN]
-    assert filters["type"] == "container"
-    assert filters["title"]["text"] == ":gear: Filters"
-    assert filters["is_collapsible"] is True
-    assert filters["default_collapsed"] is True
-    assert [c["block_id"] for c in filters["child_blocks"]] == [
-        actions.CALENDAR_HOME_AO_FILTER,
-        actions.CALENDAR_HOME_EVENT_TYPE_FILTER,
-        actions.CALENDAR_HOME_DATE_FILTER,
-        actions.CALENDAR_HOME_Q_FILTER,
+    top, summary, legend = view["blocks"][:3]
+    assert [e["action_id"] for e in top["elements"]] == [
+        actions.OPEN_CALENDAR_IMAGE_BUTTON,
+        actions.NEARBY_EVENTS_OPEN,
+        actions.CALENDAR_HOME_FILTERS,
     ]
+    assert _filters_button(view)["text"]["text"] == ":gear: Filters"
+    assert _filter_inputs(view) == []
     assert summary["elements"][0]["text"] == "Showing: all upcoming events"
     assert legend["elements"][0]["text"] == (
         ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast posted · :star: special event"
@@ -304,7 +325,49 @@ def test_top_row_legend_and_collapsed_filters_on_open():
     ]
 
 
-def test_filters_stay_expanded_and_count_active_filters_after_a_filter_change():
+def test_calendar_uses_only_block_types_slack_allows_in_modals():
+    # Slack rejects a modal containing a container block with invalid_arguments.
+    view, _ = _render(_busy_schedule(5), _filter_body({}, action_id=actions.CALENDAR_HOME_FILTERS))
+
+    allowed = {"actions", "context", "divider", "header", "image", "input", "section"}
+    assert {b["type"] for b in view["blocks"]} <= allowed
+
+
+def test_filters_button_shows_the_filter_inputs_below_the_top_row():
+    view, _ = _render([], _filter_body({}, action_id=actions.CALENDAR_HOME_FILTERS))
+
+    assert [b["block_id"] for b in view["blocks"][1:5]] == FILTER_BLOCK_IDS
+    assert _filters_button(view)["text"]["text"] == ":gear: Hide filters"
+    assert '"filters_open": true' in client_metadata(view)
+
+
+def test_hiding_filters_keeps_them_applied_and_counts_them_on_the_button():
+    body = _filter_body(
+        {actions.CALENDAR_HOME_Q_FILTER: [actions.FILTER_OPEN_Q]},
+        action_id=actions.CALENDAR_HOME_FILTERS,
+        private_metadata='{"filters_open": true}',
+    )
+
+    view, schedule_query = _render([], body)
+
+    assert _filter_inputs(view) == []
+    assert _filters_button(view)["text"]["text"] == ":gear: Filters (1 active)"
+    assert view["blocks"][1]["elements"][0]["text"] == "Showing: Open Q only"
+    assert schedule_query.call_args.kwargs["open_q_only"] is True
+
+
+def test_hidden_filters_still_apply_on_show_more():
+    metadata = json.dumps({"filters_open": False, "filters": {actions.CALENDAR_HOME_Q_FILTER: [actions.FILTER_OPEN_Q]}})
+    body = _filter_body({}, action_id=actions.CALENDAR_HOME_SHOW_MORE, value="37", private_metadata=metadata)
+
+    view, schedule_query = _render(_busy_schedule(5), body)
+
+    assert schedule_query.call_args.kwargs["open_q_only"] is True
+    assert schedule_query.call_args.kwargs["offset"] == 37
+    assert _filter_inputs(view) == []
+
+
+def test_filters_stay_shown_and_count_active_filters_after_a_filter_change():
     body = _filter_body(
         {
             actions.CALENDAR_HOME_AO_FILTER: ["11", "12"],
@@ -316,9 +379,9 @@ def test_filters_stay_expanded_and_count_active_filters_after_a_filter_change():
 
     view, schedule_query = _render([], body)
 
-    filters, summary = view["blocks"][1:3]
-    assert filters["title"]["text"] == ":gear: Filters (4 active)"
-    assert "default_collapsed" not in filters
+    assert [b["block_id"] for b in _filter_inputs(view)] == FILTER_BLOCK_IDS
+    assert _filters_button(view)["text"]["text"] == ":gear: Hide filters"
+    summary = view["blocks"][_legend_index(view) - 1]
     assert summary["elements"][0]["text"] == "Showing: 2 AOs · Open Q only · Special events only · from Mon, Sep 07"
     assert schedule_query.call_args.kwargs["open_q_only"] is True
     compiled = [str(f) for f in schedule_query.call_args.args[1]]
@@ -326,9 +389,9 @@ def test_filters_stay_expanded_and_count_active_filters_after_a_filter_change():
 
 
 def test_other_options_offer_special_events_and_not_nearby_regions():
-    view, _ = _render([])
+    view, _ = _render([], _filter_body({}, action_id=actions.CALENDAR_HOME_FILTERS))
 
-    options = view["blocks"][1]["child_blocks"][3]["element"]["options"]
+    options = _filter_inputs(view)[3]["element"]["options"]
     assert [o["value"] for o in options] == [
         actions.FILTER_OPEN_Q,
         actions.FILTER_MY_EVENTS,
