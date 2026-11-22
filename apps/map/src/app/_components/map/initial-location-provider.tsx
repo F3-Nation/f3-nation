@@ -65,17 +65,15 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
           ? { lat: queryLat, lng: queryLon }
           : null;
 
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-    const initialZoom = queryZoom
-      ? queryZoom
-      : !!queryLocationId || (queryLat != null && queryLon != null)
-        ? CLOSE_ZOOM
-        : mapStore.get("zoom");
-
     return {
       center: queryParamCenter ?? mapStore.get("center"),
       didSetQueryParamLocation: !!queryParamCenter,
-      zoom: initialZoom,
+      zoom: getInitialZoom({
+        queryZoom,
+        hasQueryLocation:
+          !!queryLocationId || (queryLat != null && queryLon != null),
+        storedZoom: mapStore.get("zoom"),
+      }),
     };
   });
 

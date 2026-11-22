@@ -167,8 +167,7 @@ export const TextSearchResultsProvider = ({
   }, [text]);
 
   const visibleGeoResults =
-    text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS ||
-    geoState.query !== text
+    text.length < MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS || geoState.query !== text
       ? NO_GEO_RESULTS
       : geoState.results;
 
