@@ -21179,6 +21179,71 @@
         ]
       }
     },
+    "/v1/slack/user/{slackTeamId}/{slackUserId}": {
+      "get": {
+        "description": "Return the F3 user ID linked to a Slack member in a workspace. Returns 404 when the workspace has no stored member with that ID.",
+        "operationId": "slack.resolveUser",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "slackTeamId",
+            "required": true,
+            "schema": {
+              "description": "Slack workspace (team) ID, e.g. T0123ABCD",
+              "pattern": "^[A-Z0-9]{1,64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slackUserId",
+            "required": true,
+            "schema": {
+              "description": "Slack member ID, e.g. U0123ABCD",
+              "pattern": "^[A-Z0-9]{1,64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "userId": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "F3 user ID linked to this Slack member, or null when the member has no linked F3 user"
+                    }
+                  },
+                  "required": [
+                    "userId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Resolve a Slack member to an F3 user",
+        "tags": [
+          "slack"
+        ]
+      }
+    },
     "/v1/status": {
       "get": {
         "description": "Returns aggregated status for contract and external monitors, cached for 60 seconds.",
