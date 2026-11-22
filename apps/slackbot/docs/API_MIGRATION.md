@@ -16,7 +16,11 @@ to run against a local API are in [API_REFERENCE.md](API_REFERENCE.md).
 - **The bot never writes shared tables directly.** Every change to shared F3
   data goes through an API endpoint. The bot keeps direct write access only
   to tables holding Slack-only state: Slack workspaces, Slack accounts, the
-  link between an org and its workspace, and the `slackbot` schema. When the
+  link between an org and its workspace, and the `slackbot` schema, listed
+  in `BOT_OWNED_TABLES` and `BOT_OWNED_SCHEMA` in `utilities/constants.py`.
+  A test in `tests/test_shared_table_writes.py` fails when the bot adds a
+  direct write to any other table; its baseline file lists the writes still
+  to move, and shrinks as each one moves to the API. When the
   bot keeps its own Slack bookkeeping (a dismissed reminder, a posted
   message's timestamp, where a message was cross-posted) in the `meta` column
   of a shared row, that state moves to a bot-owned table, not to the API. A

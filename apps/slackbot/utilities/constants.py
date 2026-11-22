@@ -23,6 +23,13 @@ SLACK_SCOPES = "SLACK_SCOPES"
 PASSWORD_ENCRYPT_KEY = "PASSWORD_ENCRYPT_KEY"
 APP_URL = "APP_URL"
 
+# Tables holding Slack-only state, which the bot may keep writing directly.
+# Every other table is shared F3 data and is written through the F3 API.
+# tests/shared_table_writes.py checks the bot's code against this list;
+# define the bot's database grants from it too.
+BOT_OWNED_TABLES = frozenset({"slack_spaces", "slack_users", "orgs_x_slack_spaces"})
+BOT_OWNED_SCHEMA = "slackbot"
+
 DATABASE_HOST = "DATABASE_HOST"
 ADMIN_DATABASE_USER = "ADMIN_DATABASE_USER"
 ADMIN_DATABASE_PASSWORD = "ADMIN_DATABASE_PASSWORD"

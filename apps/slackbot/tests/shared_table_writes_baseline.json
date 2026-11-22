@@ -1,0 +1,23 @@
+{
+  "features/achievements.py": 4,
+  "features/backblast.py": 13,
+  "features/calendar/event_instance.py": 1,
+  "features/calendar/home.py": 13,
+  "features/calendar/nearby_events.py": 2,
+  "features/connect.py": 1,
+  "features/db_admin.py": 3,
+  "features/fng.py": 1,
+  "features/paxminer_mapping.py": 1,
+  "features/region.py": 3,
+  "features/user.py": 1,
+  "infrastructure/strava_credentials.py": 1,
+  "scripts/award_achievements.py": 1,
+  "scripts/backblast_reminders.py": 1,
+  "scripts/calendar_images.py": 1,
+  "scripts/fng_reminders.py": 1,
+  "scripts/home_region_nudge.py": 2,
+  "scripts/q_lineups.py": 3,
+  "scripts/update_slack_users.py": 1,
+  "utilities/database/special_queries.py": 2,
+  "utilities/helper_functions.py": 4
+}
