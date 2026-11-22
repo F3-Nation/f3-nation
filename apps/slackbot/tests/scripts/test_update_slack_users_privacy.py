@@ -73,6 +73,31 @@ def test_script_refreshes_home_regions_when_user_sync_fails(monkeypatch):
     home_regions.assert_called_once_with()
 
 
+def test_script_raises_sync_error_and_logs_home_region_error_when_both_fail(monkeypatch, caplog):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    caplog.set_level("ERROR")
+    sync = Mock(side_effect=RuntimeError("Slack user sync failed for 1 workspace(s)"))
+    home_regions = Mock(side_effect=ValueError("secret query detail"))
+    monkeypatch.setattr(update_slack_users, "update_slack_users", sync)
+    monkeypatch.setattr(update_slack_users, "update_home_regions", home_regions)
+
+    with pytest.raises(RuntimeError, match="Slack user sync failed"):
+        update_slack_users.main()
+
+    home_regions.assert_called_once_with()
+    assert "slack.home_region.refresh_failed error_type=ValueError" in caplog.text
+    assert "secret query detail" not in caplog.text
+
+
+def test_script_raises_home_region_error_when_sync_succeeds(monkeypatch):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    monkeypatch.setattr(update_slack_users, "update_slack_users", Mock())
+    monkeypatch.setattr(update_slack_users, "update_home_regions", Mock(side_effect=ValueError("boom")))
+
+    with pytest.raises(ValueError, match="boom"):
+        update_slack_users.main()
+
+
 def test_script_validates_environment_before_running_jobs(monkeypatch):
     monkeypatch.setenv("SLACKBOT_ENV", "invalid")
     sync = Mock(side_effect=AssertionError("sync should not run"))

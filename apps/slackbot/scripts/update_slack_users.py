@@ -175,16 +175,42 @@ def update_home_regions():
             session.commit()
 
 
+def _log_home_region_failure(error: Exception) -> None:
+    """Log the exception type only: exception text can embed query data."""
+    error_type = type(error).__name__
+    logging.getLogger(__name__).error(
+        "slack.home_region.refresh_failed error_type=%s",
+        error_type,
+        extra={"json_fields": {"event": "slack.home_region.refresh_failed", "error_type": error_type}},
+    )
+
+
 def main():
+    """
+    Sync Slack users, then refresh home regions even when the sync fails.
+
+    When both steps fail, the home-region failure is logged here and the sync error is the one
+    raised, so a home-region error never hides the sync failure from the caller's job log.
+    """
     production = is_production_deployment()
-    # A failed workspace sync still raises, but only after the home-region refresh has run.
+    sync_error: Exception | None = None
     try:
         update_slack_users()
-    finally:
-        if production:
+    except Exception as e:
+        sync_error = e
+
+    if production:
+        try:
             update_home_regions()
-        else:
-            logging.getLogger(__name__).info("Skipping home-region refresh outside production.")
+        except Exception as e:
+            if sync_error is None:
+                raise
+            _log_home_region_failure(e)
+    else:
+        logging.getLogger(__name__).info("Skipping home-region refresh outside production.")
+
+    if sync_error is not None:
+        raise sync_error
 
 
 if __name__ == "__main__":
