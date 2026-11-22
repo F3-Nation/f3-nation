@@ -8,12 +8,12 @@
  * required check is failing, it conflicts with its base, a team member or a
  * bot has commented in an unresolved review thread since the author's last
  * reply, or a team member or a bot requested changes and nothing has been
- * pushed since. A draft gets a "draft" reason (shown in the job summary) but
- * is never nudged or closed: a draft is work in progress, not a PR waiting
- * on review. While the PR waits on bots or codeowners the clock doesn't run;
- * it restarts from the earliest open item (or the author's last activity, if
- * later). Any push, author comment, ready-for-review or reopen resets it. Bot
- * comments and reviewer pings don't.
+ * pushed since. A draft is always the author's turn: no reviewer works on a
+ * draft, so only the author can move it forward. While a ready PR waits on
+ * bots or codeowners the clock doesn't run; it restarts from the earliest
+ * open item (or the author's last activity, if later). Any push, author
+ * comment, ready-for-review or reopen resets it. Bot comments and reviewer
+ * pings don't.
  *
  * When a PR that was already reminded stops being the author's turn (or gets
  * `keep-open`), the run records `pausedAt` in the reminder's marker. The next
@@ -42,8 +42,7 @@ const KEEP_OPEN_LABEL = "keep-open";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Days of the author's turn before the nudge and before the close, by who the
-// author is to the repo. Drafts are never nudged or closed. The close also needs
-// a nudge posted at least (close - nudge) days earlier in the same stretch, so
+// author is to the repo. The close also needs a nudge posted at least (close - nudge) days earlier in the same stretch, so
 // nobody is closed without that much warning.
 const DAYS = {
   team: { nudge: 5, close: 10 }, // owners, members, collaborators and codeowners
@@ -146,7 +145,7 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
           lastAuthorActivity = maxTs(lastAuthorActivity, ts(item.createdAt));
         break;
       case "ReadyForReviewEvent":
-        // Draft time isn't the author's turn: whoever marks it ready, the
+        // Marking it ready hands it to the reviewers: whoever does it, the
         // clock starts again from here.
         lastHandoff = maxTs(lastHandoff, ts(item.createdAt));
         lastAuthorActivity = maxTs(lastAuthorActivity, ts(item.createdAt));
@@ -338,8 +337,6 @@ function summarize(pr, requiredContexts, nudge, writers = new Set()) {
  */
 function decide(facts, now) {
   if (facts.exempt) return { action: "none", why: "exempt" };
-  // Work in progress: the author isn't keeping anyone waiting.
-  if (facts.isDraft) return { action: "none", why: "draft" };
   if (!facts.reasons.length)
     return { action: "none", why: "not author's turn" };
 
@@ -427,6 +424,8 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 function describeReasons(reasons) {
   return reasons.map((r) => {
     switch (r.kind) {
+      case "draft":
+        return "It's still a Draft. Push your next change, mark it ready for review, or close it if you've moved on.";
       case "checks":
         return `Required ${r.names.length === 1 ? "check" : "checks"} failing: ${r.names.map((n) => `\`${n}\``).join(", ")}.`;
       case "conflict":
@@ -759,7 +758,7 @@ async function run({
       const pausedAt = ts(nudge?.pausedAt);
       const pause =
         decision.action === "none" &&
-        ["not author's turn", "exempt", "draft"].includes(decision.why) &&
+        ["not author's turn", "exempt"].includes(decision.why) &&
         // Paused even while mergeability is UNKNOWN: if it turns out to be a
         // conflict, the cost is a repeat reminder; not pausing could let an
         // old reminder close the PR.
