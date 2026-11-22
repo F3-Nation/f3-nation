@@ -9,10 +9,10 @@ shared_table_writes_baseline.json, which is the list of writes still to move.
 A write is a DbManager write helper or execute_sql_query,
 session.add/add_all/delete/merge, session.execute of an insert/update/delete
 statement (or of raw SQL that isn't a single SELECT), session.scalar/scalars
-of a statement that resolves to a write, or session.query(...).update()/
+of an insert/update/delete statement, or session.query(...).update()/
 .delete(). Its table comes from the model named in the call, directly or
-through a variable assigned in the same function. A target that can't be
-told statically counts as a shared write.
+through every value assigned to a variable in the same function. A target
+that can't be told statically counts as a shared write.
 
 The baseline holds counts, not sites, so a change that moves one write to
 the API and adds another in the same file keeps the count and passes.
@@ -146,6 +146,7 @@ class _Resolver:
         self.assignments = assignments
         self.aliases = aliases
         self.visiting = set()
+        self.looped = set()
 
     def tables(self, node):
         """Tables of the rows an expression evaluates to."""
@@ -179,14 +180,47 @@ class _Resolver:
         values = self.assignments.get(name)
         if not values:
             return None
-        # `query = query.where(...)` refers back to the variable's other assignments.
+        # `query = query.where(...)` refers back to the variable's other assignments,
+        # so it resolves only when some assignment resolves without looping back.
         if name in self.visiting:
+            self.looped.add(name)
             return set()
         self.visiting.add(name)
         try:
-            return self._all(values, resolve)
+            found, seeded = set(), False
+            for value in values:
+                self.looped.discard(name)
+                tables = resolve(value)
+                if tables is None:
+                    return None
+                found |= tables
+                seeded = seeded or name not in self.looped
+            return found if seeded else None
         finally:
             self.visiting.discard(name)
+            self.looped.discard(name)
+
+    def is_write_statement(self, node):
+        """Whether a statement is an insert/update/delete, whatever its target."""
+        if isinstance(node, ast.Name):
+            if node.id in self.visiting:
+                return False
+            self.visiting.add(node.id)
+            try:
+                return any(self.is_write_statement(value) for value in self.assignments.get(node.id, []))
+            finally:
+                self.visiting.discard(node.id)
+        if not isinstance(node, ast.Call):
+            return False
+        func = node.func
+        if isinstance(func, ast.Name):
+            return self.aliases.get(func.id, func.id) in WRITE_STATEMENTS
+        if isinstance(func, ast.Attribute) and isinstance(func.value, (ast.Call, ast.Name)):
+            return self.is_write_statement(func.value)
+        return False
+
+    def all_tables(self, nodes):
+        return self._all(nodes)
 
     def statement(self, node):
         """Tables a statement passed to session.execute writes to."""
@@ -240,18 +274,31 @@ def _is_select_sql(node):
     return bool(words) and words[0].lower() == "select" and ";" not in sql
 
 
-def _query_model(node, assignments):
-    """Return X for a session.query(X)... chain, or a variable holding one, or None."""
-    if isinstance(node, ast.Name):
-        for value in assignments.get(node.id, []):
-            if isinstance(value, ast.Call) and (model := _query_model(value, {})) is not None:
-                return model
-        return None
+def _query_targets(node, assignments, visiting=frozenset()):
+    """Return the models a session.query(X)... chain, or a variable holding one, can target.
+
+    None means the expression isn't traced to any session.query (dict.update()
+    stays a non-write). Otherwise every model found is listed, plus
+    _UNKNOWN_VALUE when some other assignment can't be traced.
+    """
     while isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
         if node.func.attr == "query" and _is_session(node.func.value):
-            return node.args[0] if node.args else None
+            return [node.args[0] if node.args else _UNKNOWN_VALUE]
         node = node.func.value
-    return None
+    if not isinstance(node, ast.Name):
+        return None
+    if node.id in visiting:
+        return []
+    found, unknown = [], False
+    for value in assignments.get(node.id, []):
+        targets = _query_targets(value, assignments, visiting | {node.id})
+        if targets is None:
+            unknown = True
+        else:
+            found.extend(targets)
+    if not found:
+        return None
+    return [*found, _UNKNOWN_VALUE] if unknown else found
 
 
 def _db_manager_target(call):
@@ -278,14 +325,17 @@ def _written_tables(call, resolver):
             return resolver.tables(call.args[0]) if call.args else None
         if func.attr == "execute":
             return resolver.statement(call.args[0]) if call.args else None
-        # scalar/scalars almost always read rows, so only a statement that
-        # resolves to a write (insert(...).returning(...)) counts.
+        # scalar/scalars almost always read rows, so only an insert/update/delete
+        # statement (insert(...).returning(...)) counts, traced or not.
         if func.attr in {"scalar", "scalars"} and call.args:
-            return resolver.statement(call.args[0]) or NOT_A_WRITE
+            tables = resolver.statement(call.args[0])
+            if tables is None and resolver.is_write_statement(call.args[0]):
+                return None
+            return tables or NOT_A_WRITE
     if func.attr in QUERY_BULK_WRITES:
-        model = _query_model(receiver, resolver.assignments)
-        if model is not None:
-            return resolver.tables(model)
+        targets = _query_targets(receiver, resolver.assignments)
+        if targets is not None:
+            return resolver.all_tables(targets)
     return NOT_A_WRITE
 
 
@@ -344,7 +394,7 @@ def scan(root):
     result = {}
     for path in sorted(root.rglob("*.py")):
         parts = path.relative_to(root).parts
-        if parts[0] in SKIPPED_DIRS or any(part.startswith(".") for part in parts):
+        if any(part in SKIPPED_DIRS for part in parts[:-1]) or any(part.startswith(".") for part in parts):
             continue
         rel = "/".join(parts)
         tree = ast.parse(path.read_text(encoding="utf-8"))

@@ -32,7 +32,14 @@ def test_db_manager_write_to_shared_model_is_counted(tmp_path):
 
 def test_tests_and_installed_packages_are_not_scanned(tmp_path):
     write = "DbManager.update_record(User, 1, {})\n"
-    for name in ("tests/test_user.py", ".venv/lib/pkg.py", "node_modules/pkg/x.py", "features/user.py"):
+    for name in (
+        "tests/test_user.py",
+        ".venv/lib/pkg.py",
+        "node_modules/pkg/x.py",
+        "features/tests/test_user.py",
+        "features/node_modules/pkg/x.py",
+        "features/user.py",
+    ):
         _scan_source(tmp_path, write, name)
 
     assert list(scan(tmp_path)) == ["features/user.py"]
@@ -180,6 +187,68 @@ def test_reads_are_not_counted_but_an_untraceable_statement_is(tmp_path):
     )
 
     assert _tables(result) == [UNRESOLVED, UNRESOLVED]
+
+
+def test_every_query_assignment_and_alias_is_followed(tmp_path):
+    result = _scan_source(
+        tmp_path,
+        """
+        def reassigned(session):
+            query = session.query(SlackSpace)
+            query = session.query(User)
+            query.delete()
+
+        def aliased(session):
+            query = session.query(Org)
+            other = query
+            other.update({})
+
+        def intermediate(session):
+            query = session.query(User)
+            filtered = query.filter(User.id == 1)
+            filtered.delete()
+
+        def refined(session):
+            query = session.query(SlackSpace)
+            query = query.filter(SlackSpace.id == 1)
+            query.delete()
+
+        def partly_known(session, flag):
+            query = session.query(SlackSpace)
+            if flag:
+                query = get_query()
+            query.update({})
+
+        def not_a_query():
+            options = load_options()
+            options.update({})
+        """,
+    )
+
+    assert _tables(result) == ["users", "orgs", "users", UNRESOLVED]
+
+
+def test_a_write_statement_with_an_untraceable_target_is_counted(tmp_path):
+    result = _scan_source(
+        tmp_path,
+        """
+        from queries import statement
+        from sqlalchemy import delete, insert
+
+        def remove(session, model, row_id):
+            session.scalar(delete(model).where(model.id == row_id).returning(model.id))
+            stmt = insert(model).values(name="x")
+            session.scalars(stmt.returning(model.id)).all()
+            session.scalar(insert(SlackSpace).values(team_id="T").returning(SlackSpace.id))
+            session.scalar(load_statement())
+
+        def imported(session):
+            statement = statement.where(User.id == 1)
+            session.execute(statement)
+        """,
+    )
+
+    assert _tables(result) == [UNRESOLVED, UNRESOLVED, UNRESOLVED]
 
 
 def _writes(*lines):
