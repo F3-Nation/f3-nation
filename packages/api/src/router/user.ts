@@ -1,22 +1,21 @@
 import { getTableColumns } from "drizzle-orm";
 import { lockHomeRegion } from "../lib/lock-home-region";
 import { rejectStravaMetadata } from "../lib/user-metadata";
-import { and, eq, schema, sql } from "@acme/db";
+import chunk from "lodash/chunk";
+import { and, eq, inArray, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
+import {
+  ROLE_ORG_TYPES,
+  roleAllowedOnOrgType,
+} from "@acme/shared/app/permissions";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
-import { GrantableUserRole } from "@acme/shared/app/enums";
-import type { UserRole } from "@acme/shared/app/enums";
+import type { OrgType } from "@acme/shared/app/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
 import { CrupdateUserSchema, UserSelectSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
-
-interface RoleInput {
-  orgId: number;
-  roleName: UserRole;
-}
 
 import {
   checkHasRoleOnAllOrgs,
@@ -381,8 +380,7 @@ export const userRouter = {
       if (!ctx.session) throw new ORPCError("UNAUTHORIZED");
       rejectStravaMetadata(input.meta);
       // emailVerified is set by the sign-in flow, never by callers.
-      const { roles: rawRoles, emailVerified: _emailVerified, ...rest } = input;
-      const roles = rawRoles as RoleInput[];
+      const { roles, emailVerified: _emailVerified, ...rest } = input;
 
       const [existingUser] = input.id
         ? await ctx.db
@@ -512,7 +510,6 @@ export const userRouter = {
         },
         {} as Record<string, number>,
       );
-      const idToRoleName = new Map(dbRoles.map((role) => [role.id, role.name]));
 
       const newRolesToInsert = roles.filter(
         (role) =>
@@ -524,42 +521,15 @@ export const userRouter = {
       );
       logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
 
-      const rolesToDelete = existingRoles.filter((existingRole) => {
-        // Never delete assignments for dormant/non-grantable roles (e.g.
-        // password_*). The admin UI hides them and callers only ever submit
-        // grantable roles, so their absence from the payload means "not
-        // shown", not "remove it" — deleting them would silently revoke a
-        // grant the editor could not even see.
-        const existingName = idToRoleName.get(existingRole.roleId);
-        if (
-          existingName &&
-          !(GrantableUserRole as readonly string[]).includes(existingName)
-        )
-          return false;
-        return !roles.some(
-          (role) =>
-            roleNameToId[role.roleName] === existingRole.roleId &&
-            role.orgId === existingRole.orgId,
-        );
-      });
+      const rolesToDelete = existingRoles.filter(
+        (existingRole) =>
+          !roles.some(
+            (role) =>
+              roleNameToId[role.roleName] === existingRole.roleId &&
+              role.orgId === existingRole.orgId,
+          ),
+      );
       logDebug("api.user.roles_to_delete", { rolesToDelete });
-
-      // The submitted list is validated for one-role-per-org, but dormant
-      // roles (password_*) are hidden from the form and preserved above
-      // rather than deleted. Inserting a grantable role on an org where such
-      // a hidden role is retained would leave the user with two roles on that
-      // org, silently bypassing the one-role-per-org rule. Reject it instead.
-      const retainedRoles = existingRoles.filter(
-        (existingRole) => !rolesToDelete.includes(existingRole),
-      );
-      const conflictingInsert = newRolesToInsert.find((role) =>
-        retainedRoles.some((retained) => retained.orgId === role.orgId),
-      );
-      if (conflictingInsert) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: ERRORS.ROLE_CONFLICTS_WITH_HIDDEN_ROLE,
-        });
-      }
 
       const requireAdminOn = async (orgIds: number[], message: string) => {
         if (
@@ -581,6 +551,42 @@ export const userRouter = {
         rolesToDelete.map((role) => role.orgId),
         ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
       );
+
+      // Some roles can be given only on certain org types. Only new grants
+      // are checked, so saving a user who already holds an assignment from
+      // before a restriction existed isn't refused.
+      const restrictedInserts = newRolesToInsert.filter((role) =>
+        Object.hasOwn(ROLE_ORG_TYPES, role.roleName),
+      );
+      if (restrictedInserts.length > 0) {
+        const orgTypeById = new Map<number, OrgType>();
+        // Postgres caps a statement's bind parameters, so long lists are split.
+        for (const ids of chunk(
+          [...new Set(restrictedInserts.map((role) => role.orgId))],
+          10_000,
+        )) {
+          const rows = await ctx.db
+            .select({ id: schema.orgs.id, orgType: schema.orgs.orgType })
+            .from(schema.orgs)
+            .where(inArray(schema.orgs.id, ids));
+          for (const row of rows) orgTypeById.set(row.id, row.orgType);
+        }
+        const refused = restrictedInserts.find((role) => {
+          const orgType = orgTypeById.get(role.orgId);
+          return (
+            orgType !== undefined &&
+            !roleAllowedOnOrgType(role.roleName, orgType)
+          );
+        });
+        if (refused) {
+          const allowedOn = (ROLE_ORG_TYPES[refused.roleName] ?? []).join(
+            " or ",
+          );
+          throw new ORPCError("BAD_REQUEST", {
+            message: `The ${refused.roleName} role can only be given on a ${allowedOn}`,
+          });
+        }
+      }
 
       // Prepare update data - only include PII if user has access
       const {
@@ -747,9 +753,9 @@ export const userRouter = {
               newRolesToInsert.map((role) => {
                 const roleId = roleNameToId[role.roleName];
                 if (roleId === undefined) {
-                  // roleName is schema-constrained to "user"/"editor"/"admin", so
-                  // this only fires if the roles table is missing its seeded
-                  // rows — a server data-integrity problem, not a client error.
+                  // roleName is schema-constrained to UserRole, so this only
+                  // fires if the roles table has no row for that role — a
+                  // server data-integrity problem, not a client error.
                   throw new ORPCError("INTERNAL_SERVER_ERROR", {
                     message: `Role ${role.roleName} not found`,
                   });

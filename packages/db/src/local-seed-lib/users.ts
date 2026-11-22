@@ -23,8 +23,14 @@ export async function seedDevUsers(
   regionIds: Record<string, number> = {},
 ): Promise<SeedUsersResult> {
   // 7. Roles — seed access-grant roles only; a signed-in user needs no role
-  // for member-tier access.
-  const SEED_ROLES = ["editor", "admin"] as const;
+  // for member-tier access. user.crupdate looks each role up by name, so a
+  // role without a row here can't be granted locally.
+  const SEED_ROLES = [
+    "editor",
+    "admin",
+    "password_manager",
+    "password_reader",
+  ] as const;
   const existingRoles = await db.select().from(schema.roles);
   const rolesToInsert = SEED_ROLES.filter(
     (r) => !existingRoles.some((e) => e.name === r),
