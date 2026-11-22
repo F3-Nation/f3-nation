@@ -29,7 +29,7 @@ flowchart TD
     J -- Yes --> K["Codeowner approves and merges"]
 ```
 
-`pr-review-inline` gives the PR to several reviewers, each focused on one aspect of the code: correctness, access and data exposure, failure handling, tests, and whether the comments and docs are true. The reviewer prompts ship with the skill, so every assistant runs the same prompts. A PR that changes only ordinary docs gets just the docs reviewer. Changes to agent instructions (anything under `.agents/`, `.claude/` or `.github/`, any `AGENTS.md`, `REVIEW.md` or `CLAUDE.md`, and any doc an `AGENTS.md` tells agents they must read) count as code and get all five, and so does every PR from a fork or an outside contributor. `--shallow` uses a single reviewer instead; it is for a very minor PR, and the skill ignores it on a PR from a fork or an outside contributor and on one over about 1,000 changed lines.
+`pr-review-inline` gives the PR to several reviewers, each focused on one aspect of the code: correctness, access and data exposure, failure handling, tests, and whether the comments and docs are true. The reviewer prompts ship with the skill, so every assistant runs the same prompts. A PR that changes only ordinary docs gets just the docs reviewer. Changes to agent instructions (anything under `.agents/`, `.claude/` or `.github/`, any `AGENTS.md`, `REVIEW.md` or `CLAUDE.md`, and any doc an `AGENTS.md` tells agents they must read) count as code and get all five, and so does every PR from a fork or an outside contributor. The skill picks how deep to go from the diff, never from how it was asked: only a very small, contained change gets a single reviewer covering every aspect, and never one from a fork or an outside contributor, or one that touches sign-in, permissions, the API, the database, environment variables, dependencies, CI, scripts or agent instructions.
 
 On a PR's first pass, the answer to "Codeowner wants a local test?" is normally Yes. No is for a small PR (see [Small PRs](#small-prs)), or for fixes after a local test that a reviewer can confirm by reading the diff.
 
@@ -85,7 +85,7 @@ For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @
 
 ### Run it
 
-1. **Start a new session** with your AI assistant, opened in your copy of this repository: a new `claude` in a terminal or a new session in the Claude desktop app, or a new Codex thread. A fresh session keeps the review from inheriting whatever you were working on. **Use a frontier model** (the most capable Claude or Codex model available to you): these runs are the main line of review for the PR, and smaller models miss the subtle bugs this stage exists to catch.
+1. **Start a new session** with your AI assistant, opened in your copy of this repository: a new `claude` in a terminal or a new session in the Claude desktop app, a new Codex thread, or a new Cursor agent chat. A fresh session keeps the review from inheriting whatever you were working on. **Use a frontier model** (the most capable model your assistant offers): these runs are the main line of review for the PR, and smaller models miss the subtle bugs this stage exists to catch.
 2. **Type the skill with the PR number.** For PR 1234:
 
    ```text
@@ -96,7 +96,7 @@ For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @
    /pr-local-test 1234
    ```
 
-   Add `--shallow` only for a very minor PR; the full set of reviewers costs more time and tokens. In Codex, start the command with `$` instead of `/`, or ask in plain words: "Run the pr-review-inline skill on PR 1234."
+   In Codex, start the command with `$` instead of `/`. In any assistant, you can also ask in plain words: "Run the pr-review-inline skill on PR 1234."
 
 3. **Let it work.** `pr-review-inline` posts its findings as line-level comments on the PR. `pr-local-test` shows you its results and a draft review, and posts only after you tell it to.
 
@@ -161,4 +161,4 @@ The label marks the end of the bot feedback, not readiness for a codeowner's fin
 
 ## Small PRs
 
-A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline --shallow` and no local test, and another might be approved and merged directly. To skip the local test, a codeowner other than the PR's author adds the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.
+A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get only `pr-review-inline` and no local test, and another might be approved and merged directly. To skip the local test, a codeowner other than the PR's author adds the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.
