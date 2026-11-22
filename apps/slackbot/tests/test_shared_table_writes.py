@@ -59,10 +59,32 @@ def test_unresolvable_target_is_counted(tmp_path):
         def save(model, rows):
             DbManager.update_records(cls=model, filters=[], fields={})
             session.add(rows[2])
+
+        def refine(session, stmt):
+            stmt = stmt.where(1)
+            session.execute(stmt)
+
+        def loop(session, orgs):
+            org = None
+            for org in orgs:
+                break
+            session.delete(org)
+
+        def default(session, record=None):
+            if record is None:
+                record = SlackSpace(team_id="T")
+            session.add(record)
+
+        def mixed(session, flag, unknown):
+            record = SlackSpace(team_id="T")
+            if flag:
+                record = load_somehow()
+            session.add(record)
+            session.add_all([SlackSpace(team_id="T"), unknown])
         """,
     )
 
-    assert _tables(result) == [UNRESOLVED, UNRESOLVED]
+    assert _tables(result) == [UNRESOLVED] * 7
 
 
 def test_variable_target_is_followed_to_its_assignment(tmp_path):
@@ -96,7 +118,8 @@ def test_statement_and_query_writes_are_counted(tmp_path):
     result = _scan_source(
         tmp_path,
         """
-        from sqlalchemy import insert, update
+        from f3_data_models.utils import DbManager as Db
+        from sqlalchemy import insert, text, update
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         def save(session, user_id, record):
@@ -109,10 +132,31 @@ def test_statement_and_query_writes_are_counted(tmp_path):
             session.query(SlackSpace).filter(SlackSpace.id == 1).update({"settings": {}})
             options = {}
             options.update({"a": 1})
+
+        def more(session, self):
+            session.scalar(insert(Org).values(name="x").returning(Org.id))
+            query = session.query(User).filter(User.id == 1)
+            query.delete()
+            DbManager.execute_sql_query("delete from users")
+            self.session.add(Attendance(user_id=1))
+            session.execute(text("select 1; delete from users"))
+            Db.create_record(EventInstance(org_id=1))
         """,
     )
 
-    assert _tables(result) == ["users", "achievements_x_users", "attendance", UNRESOLVED, "orgs"]
+    assert _tables(result) == [
+        "users",
+        "achievements_x_users",
+        "attendance",
+        UNRESOLVED,
+        "orgs",
+        "orgs",
+        "users",
+        UNRESOLVED,
+        "attendance",
+        UNRESOLVED,
+        "event_instances",
+    ]
 
 
 def test_reads_are_not_counted_but_an_untraceable_statement_is(tmp_path):
@@ -129,6 +173,7 @@ def test_reads_are_not_counted_but_an_untraceable_statement_is(tmp_path):
             session.execute(union_all(select(User.id), select(Org.id)))
             session.execute(select(func.pg_advisory_xact_lock(1)))
             session.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": 1})
+            session.scalars(_joinedloads(Org, query)).all()
             session.execute(text("DELETE FROM users"))
             session.execute(statement)
         """,
