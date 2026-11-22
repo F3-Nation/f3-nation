@@ -55,7 +55,6 @@ import {
   invalidateQueries,
   orpc,
   useMutation,
-  useQueries,
   useQuery,
 } from "~/orpc/react";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
@@ -66,10 +65,7 @@ import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 import { EmailChangeHint } from "~/app/_components/email-change-hint";
-import {
-  canEditUserProfile,
-  roleOrgIdsNeedingParent,
-} from "./user-editor-config";
+import { canEditUserProfile } from "./user-editor-config";
 
 export default function UserModal({
   data,
@@ -178,23 +174,10 @@ export default function UserModal({
     return { orgs: adminOrgs };
   }, [accessibleOrgsData]);
 
-  const roleOrgParentQueries = useQueries({
-    queries: roleOrgIdsNeedingParent({
-      user,
-      editableOrgs: orgs.orgs,
-    }).map((id) => orpc.org.byId.queryOptions({ input: { id } })),
-  });
-  const roleOrgParentIds = new Map(
-    roleOrgParentQueries.flatMap(({ data }) =>
-      data?.org ? [[data.org.id, data.org.parentId] as const] : [],
-    ),
-  );
-
   const canEditUser = canEditUserProfile({
     user,
     sessionUserId: session?.id,
     editableOrgs: orgs.orgs,
-    roleOrgParentIds,
   });
 
   // The API lets only nation admins change an existing user's email.

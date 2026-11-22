@@ -21928,6 +21928,10 @@
                               }
                             ]
                           },
+                          "piiVisible": {
+                            "description": "Whether this user's PII fields (email, phone, emergency contacts) are included",
+                            "type": "boolean"
+                          },
                           "roles": {
                             "description": "User roles",
                             "items": {
@@ -21977,7 +21981,8 @@
                           "created",
                           "status",
                           "roles",
-                          "name"
+                          "name",
+                          "piiVisible"
                         ],
                         "type": "object"
                       },
@@ -22002,7 +22007,7 @@
         ]
       },
       "post": {
-        "description": "Create a new user or update an existing one, including role assignments for organizations. Administrators of an existing member's current home region may correct it to another active region without destination editing rights; API keys use only their own roles. Changed non-null home regions must be active regions with active ancestors. Administrator corrections send no member notifications. A source-administrator correction returns CONFLICT if the member row changes or is deleted during the request. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations. Changing an existing user's email, including the requester's own, requires the F3 Nation admin role and marks the new email unverified until its owner next signs in through F3 Auth.",
+        "description": "Create a new user or update an existing one, including role assignments for organizations. Administrators of an existing member's current home region may correct it to another active region without destination editing rights; API keys use only their own roles. Changed non-null home regions must be active regions with active ancestors. Administrator corrections send no member notifications. A source-administrator correction returns CONFLICT if the member row changes or is deleted during the request. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it. Changing an existing user's email, including the requester's own, requires the F3 Nation admin role and marks the new email unverified until its owner next signs in through F3 Auth.",
         "operationId": "user.crupdate",
         "parameters": [
           {
@@ -22458,7 +22463,7 @@
     },
     "/v1/user/email/{email}": {
       "get": {
-        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
         "operationId": "user.byEmail",
         "parameters": [
           {
@@ -22481,7 +22486,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
               "type": "boolean"
             }
           }
@@ -22993,6 +22998,10 @@
                               }
                             ]
                           },
+                          "piiVisible": {
+                            "description": "Whether this user's PII fields (email, phone, emergency contacts) are included",
+                            "type": "boolean"
+                          },
                           "roles": {
                             "description": "User roles",
                             "items": {
@@ -23042,7 +23051,8 @@
                           "created",
                           "status",
                           "roles",
-                          "name"
+                          "name",
+                          "piiVisible"
                         ],
                         "type": "object"
                       },
@@ -23069,7 +23079,7 @@
     },
     "/v1/user/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
         "operationId": "user.byId",
         "parameters": [
           {
@@ -23091,7 +23101,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
               "type": "boolean"
             }
           }
@@ -23382,7 +23392,7 @@
     },
     "/v1/user/orgs": {
       "get": {
-        "description": "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations.",
+        "description": "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations, and only for users whose home region is one of those organizations or below one, or for every user when the nation is one of them; each user's piiVisible says which.",
         "operationId": "user.byOrgs",
         "parameters": [
           {
@@ -23724,6 +23734,10 @@
                               }
                             ]
                           },
+                          "piiVisible": {
+                            "description": "Whether this user's PII fields (email, phone, emergency contacts) are included",
+                            "type": "boolean"
+                          },
                           "roles": {
                             "description": "User roles",
                             "items": {
@@ -23773,7 +23787,8 @@
                           "created",
                           "status",
                           "roles",
-                          "name"
+                          "name",
+                          "piiVisible"
                         ],
                         "type": "object"
                       },
