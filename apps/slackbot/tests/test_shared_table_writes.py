@@ -251,6 +251,26 @@ def test_a_write_statement_with_an_untraceable_target_is_counted(tmp_path):
     assert _tables(result) == [UNRESOLVED, UNRESOLVED, UNRESOLVED]
 
 
+def test_unpacked_assignments_are_paired_with_their_values(tmp_path):
+    result = _scan_source(
+        tmp_path,
+        """
+        from sqlalchemy import insert, select
+
+        def save(session):
+            stmt, unused = insert(User), 1
+            session.scalar(stmt)
+            (query, (record, n)) = select(Org), (Org(name="x"), 1)
+            session.scalar(query)
+            session.add(record)
+            first, *rest = load_statements()
+            session.execute(first)
+        """,
+    )
+
+    assert _tables(result) == ["users", "orgs", UNRESOLVED]
+
+
 def _writes(*lines):
     return [Write(line, "users") for line in lines]
 

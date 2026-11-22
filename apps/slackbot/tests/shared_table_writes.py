@@ -108,6 +108,16 @@ def _assignments(scope):
     values = {}
 
     def bind(target, value):
+        # `stmt, n = insert(User), 1` pairs each name with its own value.
+        if (
+            isinstance(target, (ast.Tuple, ast.List))
+            and isinstance(value, (ast.Tuple, ast.List))
+            and len(target.elts) == len(value.elts)
+            and not any(isinstance(elt, ast.Starred) for elt in [*target.elts, *value.elts])
+        ):
+            for sub_target, sub_value in zip(target.elts, value.elts, strict=True):
+                bind(sub_target, sub_value)
+            return
         for name in ast.walk(target):
             if isinstance(name, ast.Name):
                 simple = isinstance(target, ast.Name) and value is not None
