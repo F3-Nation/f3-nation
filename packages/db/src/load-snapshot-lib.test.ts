@@ -428,6 +428,9 @@ function harness(over: Partial<LoadDeps> = {}) {
       ),
       newestMigration: rec("newestMigration", () => Promise.resolve(1000)),
       analyze: rec("analyze", () => Promise.resolve()),
+      hasAttendanceTypeBackfill: rec("hasBackfill", () =>
+        Promise.resolve(true),
+      ),
       recomputeAoCounts: rec("aoCounts", () => Promise.resolve()),
       recomputeAttendanceTypes: rec("attendanceTypes", () => Promise.resolve()),
       resetAllSequences: rec("sequences", () => Promise.resolve(3)),
@@ -470,6 +473,7 @@ describe("runLoad", () => {
       "docker:list",
       "localColumns",
       "newestMigration",
+      "hasBackfill",
       "confirm",
       "docker:restore",
       "analyze",
@@ -708,6 +712,13 @@ describe("runLoad", () => {
           d.db.newestMigration = () => Promise.resolve(null);
         },
         /no migration history/,
+      ],
+      [
+        "a local database without the attendance-type procedure",
+        (d) => {
+          d.db.hasAttendanceTypeBackfill = () => Promise.resolve(false);
+        },
+        /missing the attendance-type migration/,
       ],
       [
         "no terminal and no --yes",
@@ -959,6 +970,22 @@ describe("createLoadDb", () => {
     await expect(
       make([{ x: 1 }], [{ newest: null }]).loadDb.newestMigration(),
     ).resolves.toBeNull();
+  });
+
+  it("reports whether the attendance-type procedure exists", async () => {
+    const present = make([{ present: true }]);
+    await expect(present.loadDb.hasAttendanceTypeBackfill()).resolves.toBe(
+      true,
+    );
+    expect(render(present.fake.execute.mock.calls[0]?.[0]).sql).toContain(
+      "to_regprocedure('public.backfill_attendance_type(integer)')",
+    );
+    await expect(
+      make([{ present: false }]).loadDb.hasAttendanceTypeBackfill(),
+    ).resolves.toBe(false);
+    await expect(make([]).loadDb.hasAttendanceTypeBackfill()).resolves.toBe(
+      false,
+    );
   });
 
   it("analyzes, recomputes ao_count over the whole tree, and resets sequences", async () => {

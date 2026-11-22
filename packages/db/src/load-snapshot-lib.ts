@@ -363,6 +363,8 @@ export interface LoadDb {
   newestMigration: () => Promise<number | null>;
   analyze: () => Promise<void>;
   recomputeAoCounts: () => Promise<void>;
+  /** Whether the procedure `recomputeAttendanceTypes` calls exists. */
+  hasAttendanceTypeBackfill: () => Promise<boolean>;
   recomputeAttendanceTypes: () => Promise<void>;
   resetAllSequences: () => Promise<number>;
   nationIds: () => Promise<number[]>;
@@ -558,6 +560,14 @@ export async function runLoad(
     assertDumpMatchesManifest(toc.stdout, manifest);
     assertColumns(manifest, await deps.db.localColumns(tables));
     assertMigration(await deps.db.newestMigration(), manifest);
+    // A local database and snapshot that are both older than the procedure
+    // pass the checks above, but post-load setup calls it after the restore
+    // has committed.
+    if (!(await deps.db.hasAttendanceTypeBackfill())) {
+      throw new Error(
+        "Your local database is missing the attendance-type migration. Run `pnpm db:migrate:local`, then load again.",
+      );
+    }
 
     if (!args.yes) {
       if (!deps.isTTY) {
@@ -664,6 +674,13 @@ export function createLoadDb(db: AppDb, migrationsTable: string): LoadDb {
     // The trigger that keeps ao_count current is off during a restore.
     async recomputeAoCounts() {
       await db.execute(sql`SELECT public.recount_org_ao_counts()`);
+    },
+
+    async hasAttendanceTypeBackfill() {
+      const [row] = await db.execute<{ present: boolean }>(
+        sql`SELECT to_regprocedure('public.backfill_attendance_type(integer)') IS NOT NULL AS present`,
+      );
+      return row?.present === true;
     },
 
     // The trigger that keeps attendance.attendance_type current is off during
