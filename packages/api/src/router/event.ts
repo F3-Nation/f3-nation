@@ -35,6 +35,7 @@ import { EventCrupdateSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { defaultRecurrence } from "../lib/event-recurrence";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { logError } from "../logger";
@@ -1094,16 +1095,31 @@ export const eventRouter = {
           });
         }
 
+        // A stored NULL cadence is weekly, so compare defaulted values or every
+        // legacy row would look like its schedule changed. Fields the caller
+        // left out keep their stored value.
+        const storedRecurrence =
+          transactionExistingEvent &&
+          defaultRecurrence(transactionExistingEvent);
+        const recurrence = defaultRecurrence({
+          recurrencePattern:
+            input.recurrencePattern !== undefined
+              ? input.recurrencePattern
+              : transactionExistingEvent?.recurrencePattern,
+          recurrenceInterval:
+            input.recurrenceInterval !== undefined
+              ? input.recurrenceInterval
+              : transactionExistingEvent?.recurrenceInterval,
+        });
+
         const structuralScheduleChanged =
           transactionExistingEvent !== undefined &&
           ((input.dayOfWeek !== undefined &&
             input.dayOfWeek !== transactionExistingEvent.dayOfWeek) ||
-            (input.recurrencePattern !== undefined &&
-              input.recurrencePattern !==
-                transactionExistingEvent.recurrencePattern) ||
-            (input.recurrenceInterval !== undefined &&
-              input.recurrenceInterval !==
-                transactionExistingEvent.recurrenceInterval) ||
+            recurrence.recurrencePattern !==
+              storedRecurrence?.recurrencePattern ||
+            recurrence.recurrenceInterval !==
+              storedRecurrence.recurrenceInterval ||
             (input.indexWithinInterval !== undefined &&
               input.indexWithinInterval !==
                 transactionExistingEvent.indexWithinInterval) ||
@@ -1121,6 +1137,8 @@ export const eventRouter = {
               "An existing event series cannot change its schedule during a status transition",
           });
         }
+
+        Object.assign(eventToUpdate, recurrence);
 
         const [result] = await transactionDb
           .insert(schema.events)
@@ -1371,8 +1389,7 @@ export const eventRouter = {
             // Existing series: check for structural changes
             const existingSeriesData = {
               dayOfWeek: transactionExistingEvent.dayOfWeek,
-              recurrencePattern: transactionExistingEvent.recurrencePattern,
-              recurrenceInterval: transactionExistingEvent.recurrenceInterval,
+              ...storedRecurrence,
               indexWithinInterval: transactionExistingEvent.indexWithinInterval,
               startDate: transactionExistingEvent.startDate,
               endDate: transactionExistingEvent.endDate,

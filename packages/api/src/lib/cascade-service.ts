@@ -6,7 +6,7 @@
  * and soft-deleting them when series or orgs are deleted.
  */
 
-import { and, eq, gte, inArray, isNotNull, or, schema } from "@acme/db";
+import { and, eq, gte, inArray, isNotNull, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 
@@ -71,7 +71,7 @@ function getCurrentDate(): string {
 }
 
 /**
- * Soft delete all series (events with recurrence patterns) belonging to an org
+ * Soft delete all series (events with a weekday) belonging to an org
  */
 export async function softDeleteSeriesForOrg(
   db: AppDb,
@@ -84,10 +84,8 @@ export async function softDeleteSeriesForOrg(
       and(
         eq(schema.events.orgId, orgId),
         eq(schema.events.isActive, true),
-        or(
-          isNotNull(schema.events.recurrencePattern),
-          isNotNull(schema.events.dayOfWeek),
-        ),
+        // Every row has a cadence, so only a weekday marks a series.
+        isNotNull(schema.events.dayOfWeek),
       ),
     )
     .returning({ id: schema.events.id });

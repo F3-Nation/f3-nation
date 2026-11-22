@@ -8,6 +8,7 @@ import { schema } from "@acme/db";
 
 import type { Context } from "../shared";
 import { logDebug, logError } from "../logger";
+import { defaultRecurrence } from "./event-recurrence";
 
 export const updateEvent = async (
   ctx: Context,
@@ -112,11 +113,13 @@ export const insertEvent = async (
     isActive: true,
     highlight: false,
     orgId: updateRequest.aoId,
-    recurrencePattern: updateRequest.eventRecurrencePattern ?? undefined,
-    recurrenceInterval: updateRequest.eventRecurrenceInterval ?? undefined,
     indexWithinInterval: updateRequest.eventIndexWithinInterval ?? undefined,
     meta: updateRequest.eventMeta ?? undefined,
     email: updateRequest.eventContactEmail ?? undefined,
+    ...defaultRecurrence({
+      recurrencePattern: updateRequest.eventRecurrencePattern,
+      recurrenceInterval: updateRequest.eventRecurrenceInterval,
+    }),
   };
 
   const [event] = await ctx.db
