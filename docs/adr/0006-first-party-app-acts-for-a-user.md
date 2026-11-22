@@ -120,7 +120,7 @@ express. The Slackbot has two:
   region admin does to that region's calendar, preblasts and backblasts:
   assign a Q, close or reopen an event, and edit someone else's preblast or
   backblast.
-- The Q of an event may edit that event's preblast.
+- The Q or Co-Q of an event may edit that event's preblast, backblast, location, and assigned event tags.
 
 A delegated call carries only what the API knows about the acting user, so
 it would refuse these people. Each such rule moves into the API, as
