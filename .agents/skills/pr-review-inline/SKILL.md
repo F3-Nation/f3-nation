@@ -266,16 +266,18 @@ review is full:
 - the diff touches no sign-in, session, permission, token or API-key code; no API procedure,
   route handler, proxy, server action or scheduled job; no database schema, migration or SQL;
   and no environment variable or `env.ts`;
-- Step 3's blast radius names no caller or consumer outside the changed files.
+- a search of the worktree (`git grep`) for each function, component, type or export the diff
+  changes finds no caller or consumer outside the changed files; a symbol you can't search for
+  counts as doubt.
 
 **Pick the seats** from the depth and the diff, using the first row that matches:
 
 | Diff                                                    | Seats                                                                         |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Prose only, not gated                                   | One `docs-truth` seat                                                         |
+| Prose only (Step 3), not gated, at either depth         | One `docs-truth` seat                                                         |
 | Light                                                   | One seat whose lane is every file in `lenses/`, pasted in order               |
-| Anything else (full)                                    | One seat per file in `lenses/`                                                |
 | Full, more than ~1,000 changed lines (counted as above) | One seat per lens, with `correctness` split into 2–3 seats by inventory group |
+| Anything else (full)                                    | One seat per file in `lenses/`                                                |
 
 Focus aspects the user names go into every seat's brief. They never remove a seat, and nothing
 else in the request changes the depth or the roster. Say in the report which depth ran and the
