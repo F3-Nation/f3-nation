@@ -204,15 +204,15 @@ describe("ApiKeysTable", () => {
     expect(screen.getByText("Region 9 (Editor)")).toBeTruthy();
     expect(screen.getByText("for the bot")).toBeTruthy();
     expect(screen.getByText("Unassigned")).toBeTruthy();
-    expect(screen.getByText("Read only")).toBeTruthy();
+    expect(screen.getByText("No access")).toBeTruthy();
   });
 
   const roleLabels = {
     user: "User",
     editor: "Editor",
     admin: "Admin",
-    password_manager: "Password manager",
-    password_reader: "Password reader",
+    password_manager: "Password Manager",
+    password_reader: "Password Reader",
   } satisfies Record<UserRole, string>;
 
   it.each(UserRole)(
@@ -229,7 +229,7 @@ describe("ApiKeysTable", () => {
       expect(
         screen.getByText(`Region Nine (${roleLabels[roleName]})`),
       ).toBeTruthy();
-      expect(screen.queryByText("Read only")).toBeNull();
+      expect(screen.queryByText("No access")).toBeNull();
       expect(screen.getByText("•••• abcd")).toBeTruthy();
       expect(screen.getByText("Revoke access")).toBeTruthy();
       expect(screen.queryByText("Delete key")).toBeNull();
@@ -256,7 +256,7 @@ describe("ApiKeysTable", () => {
 
     expect(screen.getByText("Region Seven (User)")).toBeTruthy();
     expect(screen.getByText("Region Eight (Admin)")).toBeTruthy();
-    expect(screen.getByText("Region Nine (Password reader)")).toBeTruthy();
+    expect(screen.getByText("Region Nine (Password Reader)")).toBeTruthy();
     expect(screen.queryByText("Restore access")).toBeNull();
     expect(screen.queryByText("Revoke access")).toBeNull();
     expect(screen.queryByText("Delete key")).toBeNull();

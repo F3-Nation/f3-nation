@@ -109,7 +109,7 @@ describe.runIf(target.inProcess)("API key resolution", () => {
     );
   });
 
-  it("resolves an empty role list — admin procedure then 401s", async () => {
+  it("treats a key with no roles as no credential — admin procedure then 401s", async () => {
     await expectUnauthorized(
       await target.invoke(keyReq("/v1/api-key", 5, noRoleKey.key)),
       "Unauthorized",

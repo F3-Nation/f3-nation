@@ -12,7 +12,7 @@ import {
   updateRequests,
   users,
 } from "@acme/db/schema/schema";
-import { DayOfWeek, GrantableUserRole } from "@acme/shared/app/enums";
+import { DayOfWeek, UserRole } from "@acme/shared/app/enums";
 
 // USER SCHEMA
 export const UserSelectSchema = createSelectSchema(users);
@@ -24,20 +24,19 @@ export type UserInsertType = z.infer<typeof UserInsertSchema>;
 export const CrupdateUserSchema = UserInsertSchema.extend({
   id: z.number().optional(),
 
+  // A user may hold several roles on one org; each org + role pair once.
   roles: z
     .object({
       orgId: z.number(),
-      // Only currently-active roles are assignable; password_* roles are
-      // dormant (see GrantableUserRole) and intentionally rejected here.
-      roleName: z.enum(GrantableUserRole),
+      roleName: z.enum(UserRole),
     })
     .array()
     .refine(
       (roles) => {
-        const orgIds = roles.map((r) => r.orgId);
-        return new Set(orgIds).size === orgIds.length;
+        const pairs = roles.map((r) => `${r.orgId}:${r.roleName}`);
+        return new Set(pairs).size === pairs.length;
       },
-      { error: "A user can only have one role per organization" },
+      { error: "A user can only hold each role once per organization" },
     ),
   f3Name: z.string().optional(),
   email: z

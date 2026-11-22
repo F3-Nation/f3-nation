@@ -3,6 +3,7 @@
 import "leaflet/dist/leaflet.css";
 
 import L from "leaflet";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
@@ -39,11 +40,16 @@ import {
   pathForNavigatingTo,
 } from "../_lib/navigation";
 import { fetchLocationById, fetchOrgById, fetchOrgChart } from "../_lib/api";
+import { runCancellable } from "../_lib/cancellable";
 import {
   readLevelFromUrl,
   readOrgIdFromUrl,
+  readViewportFromUrl,
   writeUrlState,
+  writeViewportToUrl,
 } from "../_lib/url-state";
+import type { ViewportRestore } from "../_lib/viewport-restore";
+import { viewportAction } from "../_lib/viewport-restore";
 import type { NearestAdminOrg } from "./org-info-panel";
 import { OrgInfoPanel } from "./org-info-panel";
 import { LocationInfoPanel } from "./location-info-panel";
@@ -185,7 +191,28 @@ function getFocusBounds(
 
 // ─── component ────────────────────────────────────────────────────────────────
 
-export default function OrgMap() {
+export default function OrgMap({
+  viewSwitcher,
+  onSelectionChange,
+}: {
+  /** Map / Table toggle, rendered beside the title. */
+  viewSwitcher?: ReactNode;
+  /**
+   * Told the org the visitor chose (drilled into, clicked, or deep-linked;
+   * null at Nation or a bare level). Hovering a region doesn't count.
+   */
+  onSelectionChange?: (orgId: number | null) => void;
+}) {
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  });
+  // Save a deliberate selection to the URL and report it. (Hover writes the
+  // URL directly, without reporting.)
+  const selectInUrl = useCallback((level: OrgType, orgId: number | null) => {
+    writeUrlState(level, orgId);
+    onSelectionChangeRef.current?.(orgId);
+  }, []);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   // Phone-only overlays that cover the map; fits are padded to clear them.
@@ -227,6 +254,16 @@ export default function OrgMap() {
   // waits for it (pendingPinPanRef) so it measures the settled view.
   const fitInFlightRef = useRef(false);
   const pendingPinPanRef = useRef(false);
+  // A center and zoom saved in the URL (?at=) that the first render restores
+  // instead of fitting, so a refresh keeps the user's view. It records the
+  // `selectedPath` array it restored for: redraws of that same array keep the
+  // view; the next navigation (a new array) fits again. See viewportAction.
+  const restoreViewportRef = useRef<ViewportRestore<Org[]> | null>(
+    (() => {
+      const viewport = readViewportFromUrl();
+      return viewport ? { viewport, path: null } : null;
+    })(),
+  );
   const [isLoaded, setIsLoaded] = useState(false);
   // The loaded hierarchy, for values derived during render (the info panel).
   // Set in the same update as isLoaded; the refs above hold the same maps for
@@ -304,9 +341,13 @@ export default function OrgMap() {
 
   // ── initial data load ────────────────────────────────────────────────────
 
+  // Cancellable so that in dev, where Strict Mode runs this twice, only the
+  // surviving run applies its result; otherwise the second run's fresh path
+  // looks like a new selection and replaces a restored ?at= view with a fit.
   useEffect(() => {
-    fetchOrgChart()
-      .then((items) => {
+    return runCancellable(
+      fetchOrgChart(),
+      (items) => {
         const {
           orgById,
           childrenByParent,
@@ -367,6 +408,9 @@ export default function OrgMap() {
 
         setCurrentLevel(startLevel);
         setSelectedPath(startPath);
+        onSelectionChangeRef.current?.(
+          urlOrgId != null && orgById.has(urlOrgId) ? urlOrgId : null,
+        );
         setHierarchy({
           orgById,
           childrenByParent,
@@ -375,11 +419,12 @@ export default function OrgMap() {
           descendantCache: descendantCacheRef.current,
         });
         setIsLoaded(true);
-      })
-      .catch((err: unknown) => {
+      },
+      (err: unknown) => {
         const msg = err instanceof Error ? err.message : "Unknown error";
         setLoadError(msg);
-      });
+      },
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -630,6 +675,16 @@ export default function OrgMap() {
     // a fit measures the re-fanned pins.
     const onMoveEnd = () => {
       fitInFlightRef.current = false;
+      // Save the view so a refresh restores it (after the data has loaded, so
+      // the map's placeholder view never overwrites a saved one).
+      if (isLoaded) {
+        const center = map.wrapLatLng(map.getCenter());
+        writeViewportToUrl({
+          lat: center.lat,
+          lng: center.lng,
+          zoom: map.getZoom(),
+        });
+      }
       if (pendingPinPanRef.current) {
         pendingPinPanRef.current = false;
         panPinsIntoView();
@@ -661,7 +716,7 @@ export default function OrgMap() {
       // Always record the selected org itself, not the last breadcrumb entry:
       // for a view-only leaf (region) the breadcrumb excludes the org, so
       // path[last] would be the parent area and break the deep-link.
-      writeUrlState(level, org.id);
+      selectInUrl(level, org.id);
 
       const bounds = getFocusBounds(
         org,
@@ -673,7 +728,7 @@ export default function OrgMap() {
 
       void loadOrgInfo(org);
     },
-    [loadOrgInfo, fitMapTo],
+    [loadOrgInfo, fitMapTo, selectInUrl],
   );
 
   const navigateToAo = useCallback(
@@ -698,13 +753,13 @@ export default function OrgMap() {
       pinLayerGroupRef.current?.clearLayers();
       setCurrentLevel(level);
       setSelectedPath([]);
-      writeUrlState(level, null);
+      selectInUrl(level, null);
 
       // Show nation info
       const nation = orgByIdRef.current.get(1);
       if (nation) void loadOrgInfo(nation);
     },
-    [loadOrgInfo],
+    [loadOrgInfo, selectInUrl],
   );
 
   const navigateViaBreadcrumb = useCallback(
@@ -719,7 +774,7 @@ export default function OrgMap() {
         setSelectedPath([]);
         const topLevel = presentLayers[presentLayers.length - 1] ?? "sector";
         setCurrentLevel(topLevel);
-        writeUrlState(topLevel, null);
+        selectInUrl(topLevel, null);
         const nation = orgByIdRef.current.get(1);
         if (nation) void loadOrgInfo(nation);
         return;
@@ -743,10 +798,10 @@ export default function OrgMap() {
           : (presentLayers[presentLayers.length - 1] ?? "sector");
       setCurrentLevel(newLevel);
       const lastOrg = newPath[newPath.length - 1];
-      writeUrlState(newLevel, lastOrg?.id ?? null);
+      selectInUrl(newLevel, lastOrg?.id ?? null);
       if (lastOrg) void loadOrgInfo(lastOrg);
     },
-    [selectedPath, presentLayers, loadOrgInfo],
+    [selectedPath, presentLayers, loadOrgInfo, selectInUrl],
   );
 
   // ── Leaflet layer render ─────────────────────────────────────────────────
@@ -816,7 +871,7 @@ export default function OrgMap() {
         if (org.orgType === LAYER_TYPES[0]) {
           // Leaf layer: show location pins for this org. Load its info too —
           // on touch there is no hover to have loaded it already.
-          writeUrlState(currentLevel, org.id);
+          selectInUrl(currentLevel, org.id);
           void loadOrgInfo(org);
           showPinsForOrg(org);
           schedulePinPan();
@@ -828,8 +883,15 @@ export default function OrgMap() {
       polygon.addTo(layerGroup);
     }
 
-    if (allLatLngs.length > 0) {
-      fitMapTo(L.latLngBounds(allLatLngs));
+    const restore = restoreViewportRef.current;
+    const action = viewportAction(restore, selectedPath);
+    if (restore && action === "restore") {
+      const { lat, lng, zoom } = restore.viewport;
+      map.setView([lat, lng], zoom, { animate: false });
+      restore.path = selectedPath;
+    } else if (action === "fit") {
+      restoreViewportRef.current = null;
+      if (allLatLngs.length > 0) fitMapTo(L.latLngBounds(allLatLngs));
     }
 
     return () => {
@@ -847,6 +909,7 @@ export default function OrgMap() {
     showPinsForOrg,
     schedulePinPan,
     fitMapTo,
+    selectInUrl,
   ]);
 
   // Keep the current (last) crumb in view when the phone breadcrumb scrolls.
@@ -1045,12 +1108,13 @@ export default function OrgMap() {
 
   return (
     <div className="flex h-dvh flex-col bg-[#f6f3ea]">
-      {/* Header. Landscape phones get the side-by-side layout (see `org-wide`)
-          but are short, so the header collapses to one row — title, then the
-          layer buttons and breadcrumb sharing the rest, each scrolling
-          sideways — and the gutters tighten to leave map room. */}
-      <header className="org-wide:flex-row org-wide:items-center org-wide:justify-between org-wide:gap-8 org-wide:px-6 org-wide:py-4 org-wide:[@media(max-height:500px)]:gap-4 org-wide:[@media(max-height:500px)]:py-2 flex flex-col gap-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea]">
-        <div className="org-wide:[@media(max-height:500px)]:shrink-0">
+      {/* Header: title, layer buttons, and the Map / Table toggle. Phones
+          wrap the layer buttons onto their own row below the title and toggle;
+          desktop is one row with the toggle top right. Landscape phones get
+          the side-by-side layout (see `org-wide`) but are short, so the layer
+          buttons scroll sideways and the gutters tighten to leave map room. */}
+      <header className="org-wide:flex-nowrap org-wide:gap-8 org-wide:px-6 org-wide:py-4 org-wide:[@media(max-height:500px)]:gap-4 org-wide:[@media(max-height:500px)]:py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea]">
+        <div className="org-wide:[@media(max-height:500px)]:shrink-0 order-1">
           <h1 className="org-wide:text-lg org-wide:[@media(max-height:500px)]:text-base org-wide:[@media(max-height:500px)]:whitespace-nowrap text-base font-bold">
             F3 Geographic Directory
           </h1>
@@ -1068,7 +1132,7 @@ export default function OrgMap() {
             row on phones instead of wrapping onto extra lines. */}
         <nav
           ref={layerNavRef}
-          className="org-wide:mx-0 org-wide:flex-wrap org-wide:overflow-visible org-wide:px-0 org-wide:[@media(max-height:500px)]:min-w-0 org-wide:[@media(max-height:500px)]:flex-1 org-wide:[@media(max-height:500px)]:flex-nowrap org-wide:[@media(max-height:500px)]:overflow-x-auto -mx-3 flex gap-2 overflow-x-auto px-3"
+          className="org-wide:order-2 org-wide:basis-auto org-wide:mx-0 org-wide:flex-wrap org-wide:overflow-visible org-wide:px-0 org-wide:[@media(max-height:500px)]:min-w-0 org-wide:[@media(max-height:500px)]:flex-1 org-wide:[@media(max-height:500px)]:flex-nowrap org-wide:[@media(max-height:500px)]:overflow-x-auto order-3 -mx-3 flex basis-[calc(100%+1.5rem)] gap-2 overflow-x-auto px-3"
           aria-label="Map layers"
         >
           {presentLayers
@@ -1091,34 +1155,9 @@ export default function OrgMap() {
             ))}
         </nav>
 
-        {/* Breadcrumb — a single scrolling line on phones. Capped on short
-            landscape screens so it can't squeeze the layer buttons out. */}
-        <nav
-          ref={breadcrumbRef}
-          className="org-wide:flex-none org-wide:overflow-visible org-wide:whitespace-normal org-wide:[@media(max-height:500px)]:max-w-[40%] org-wide:[@media(max-height:500px)]:min-w-0 org-wide:[@media(max-height:500px)]:flex-initial org-wide:[@media(max-height:500px)]:overflow-x-auto org-wide:[@media(max-height:500px)]:whitespace-nowrap overflow-x-auto text-sm whitespace-nowrap"
-          aria-label="Location breadcrumb"
-        >
-          {crumbs.map((crumb, idx) => {
-            const isLast = idx === crumbs.length - 1;
-            const isNation = crumb.depth === -1;
-            return (
-              <span key={crumb.depth}>
-                {idx > 0 && <span className="mx-2 text-[#e8e2d2]/50">/</span>}
-                <button
-                  type="button"
-                  onClick={() => navigateViaBreadcrumb(crumb.depth)}
-                  className={`transition-colors ${
-                    isLast && !isNation
-                      ? "text-[rgba(215,38,56,0.8)] hover:text-[rgba(215,38,56,1)]"
-                      : "cursor-pointer hover:underline"
-                  }`}
-                >
-                  {crumb.label}
-                </button>
-              </span>
-            );
-          })}
-        </nav>
+        {/* Map / Table toggle: beside the title on phones, top right on
+            desktop. */}
+        <div className="org-wide:order-3 order-2 shrink-0">{viewSwitcher}</div>
       </header>
 
       {/* Main content. Phones: full-bleed map with the search card floating on
@@ -1145,7 +1184,7 @@ export default function OrgMap() {
               just below the search card. */}
           <div
             ref={mapContainerRef}
-            className="org-overlay:[&_.leaflet-bottom.leaflet-right]:top-[4.25rem] org-overlay:[&_.leaflet-bottom.leaflet-right]:bottom-auto! org-overlay:[&_.leaflet-control-zoom]:hidden h-full w-full"
+            className="org-overlay:[&_.leaflet-bottom.leaflet-right]:top-[6.125rem] org-overlay:[&_.leaflet-bottom.leaflet-right]:bottom-auto! org-overlay:[&_.leaflet-control-zoom]:hidden h-full w-full"
           />
         </div>
 
@@ -1157,6 +1196,35 @@ export default function OrgMap() {
             ref={searchCardRef}
             className="org-wide:static org-wide:p-4 absolute inset-x-2 top-2 z-20 rounded-2xl bg-white p-2 shadow-md"
           >
+            {/* Breadcrumb — one line, scrolling sideways when long. */}
+            <nav
+              ref={breadcrumbRef}
+              className="org-wide:mb-3 mb-1.5 overflow-x-auto px-1 text-sm whitespace-nowrap text-muted-foreground"
+              aria-label="Location breadcrumb"
+            >
+              {crumbs.map((crumb, idx) => {
+                const isLast = idx === crumbs.length - 1;
+                const isNation = crumb.depth === -1;
+                return (
+                  <span key={crumb.depth}>
+                    {idx > 0 && (
+                      <span className="mx-2 text-muted-foreground/50">/</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => navigateViaBreadcrumb(crumb.depth)}
+                      className={`transition-colors ${
+                        isLast && !isNation
+                          ? "font-medium text-[#B70D06] hover:text-[#8f0a05]"
+                          : "cursor-pointer hover:text-foreground hover:underline"
+                      }`}
+                    >
+                      {crumb.label}
+                    </button>
+                  </span>
+                );
+              })}
+            </nav>
             <SearchBox
               presentLayers={presentLayers}
               getResults={getSearchResults}

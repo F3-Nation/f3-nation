@@ -431,8 +431,10 @@ function assertOwnPrs(owner, repo, board) {
 
 /**
  * Reads whose turn each PR is for every board, then builds the report.
- * `sources` is `[{ owner, repo, board, base? }]`: pr-triage's JSON for each
- * repo, and where its branch rules and team live (see `collectFacts()`).
+ * `sources` is `[{ owner, repo, board, base?, approvalsFor? }]`: pr-triage's
+ * JSON for each repo, and where its branch rules and team live (see
+ * `collectFacts()`). A board marked `reviewDecisionsMissing` adds a warning
+ * naming `approvalsFor` (default "some PRs").
  * `slackIdsRaw` is the CODEOWNERS_SLACK_IDS value. `extraLists`,
  * `headerExtras` and `boardHint`, when functions, get
  * `(board, factsByUrl, slackIds)` for the merged board and return
@@ -457,9 +459,22 @@ async function assembleReport({
   let fetched = 0;
   for (const { owner, repo, board } of sources)
     assertOwnPrs(owner, repo, board);
-  for (const { owner, repo, board, base } of sources) {
-    const collected = await collectFacts({ github, owner, repo, base });
+  for (const { owner, repo, board, base, approvalsFor } of sources) {
+    const collected = await collectFacts({
+      github,
+      owner,
+      repo,
+      base,
+      codeowners: board.codeowners ?? [],
+    });
     notes.push(...collected.notes);
+    // pr-triage re-read at least one page of these PRs without their review
+    // decisions, so it placed each approved PR on that page as still needing
+    // approval.
+    if (board.reviewDecisionsMissing)
+      notes.push(
+        `GitHub couldn't read approvals for ${approvalsFor ?? "some PRs"}, so approved ones show as needing approval.`,
+      );
     for (const pr of collected.prs)
       factsByUrl.set(pr.url, collected.factsFor(pr));
     prs.push(...(board.prs ?? []));

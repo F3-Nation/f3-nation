@@ -29,8 +29,8 @@ import { TestId } from "@acme/shared/common/enums";
  *         is searchable).
  *
  * The pending / RBAC submission outcomes (AC-8, AC-15, unauthenticated 401)
- * are covered API-side in tests/e2e/rbac.spec.ts with region-scoped seeded
- * API keys, because the local dev-mode credentials provider always signs the
+ * are covered API-side in tests/e2e/rbac.spec.ts with seeded dev users'
+ * auth-app access tokens, including a Boone-only editor, because the local dev-mode credentials provider always signs the
  * browser in as a NATION ADMIN (packages/auth/src/config.ts authorize()), so
  * the browser can only exercise the auto-apply path.
  *

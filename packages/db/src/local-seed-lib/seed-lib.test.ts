@@ -109,14 +109,6 @@ describe("LOCAL_API_KEYS", () => {
     );
     expect(unprefixed.map((k) => k.key)).toEqual([]);
   });
-
-  it("seeds the homepage org-chart key read-only", () => {
-    const orgMap = LOCAL_API_KEYS.find((k) => k.key === "local-org-map-key");
-    expect(orgMap).toBeDefined();
-    // Read-only = no role association (see seedApiKeys); the homepage only
-    // needs the public directory reads.
-    expect(orgMap?.role).toBeNull();
-  });
 });
 
 // A drizzle-like fake: every builder step returns the same thenable, and each
@@ -152,9 +144,13 @@ function fakeDb(selectResults: unknown[][] = []) {
 }
 
 describe("seedDevUsers", () => {
+  // Every role seedDevUsers seeds, so a test that passes these as existing
+  // rows sees no role insert.
   const roles = [
     { id: 1, name: "admin" },
     { id: 2, name: "editor" },
+    { id: 3, name: "password_manager" },
+    { id: 4, name: "password_reader" },
   ];
 
   it("inserts missing roles, upserts each dev user and attaches roles", async () => {
@@ -164,20 +160,41 @@ describe("seedDevUsers", () => {
       [{ id: 10 }],
       [{ id: 11 }],
       [{ id: 12 }],
+      [{ id: 13 }],
     ]);
-    const result = await seedDevUsers(db, 1);
+    const result = await seedDevUsers(db, 1, { Boone: 5 });
     expect(result).toEqual({
       adminUserId: 10,
       roleIds: { adminId: 1, editorId: 2 },
     });
-    // roles, 3 users, and a role link for the admin and the editor only.
-    expect(inserts).toHaveLength(1 + 3 + 2);
+    // roles, 4 users, and a role link for every user but the role-less one.
+    expect(inserts).toHaveLength(1 + 4 + 3);
+    expect(inserts[0]).toEqual([
+      { name: "editor" },
+      { name: "admin" },
+      { name: "password_manager" },
+      { name: "password_reader" },
+    ]);
   });
 
-  it("skips role inserts when both exist and users that can't be read back", async () => {
-    const { db, inserts } = fakeDb([roles, roles, [{ id: 10 }], [], []]);
+  it("gives a region-scoped dev user no role when its region is missing", async () => {
+    const { db, inserts } = fakeDb([
+      roles,
+      roles,
+      [{ id: 10 }],
+      [{ id: 11 }],
+      [{ id: 12 }],
+      [{ id: 13 }],
+    ]);
     await seedDevUsers(db, 1);
-    expect(inserts).toHaveLength(3 + 1);
+    // 4 users, and role links for the nation admin and editor only.
+    expect(inserts).toHaveLength(4 + 2);
+  });
+
+  it("skips role inserts when every role exists and users that can't be read back", async () => {
+    const { db, inserts } = fakeDb([roles, roles, [{ id: 10 }], [], [], []]);
+    await seedDevUsers(db, 1);
+    expect(inserts).toHaveLength(4 + 1);
   });
 
   it("throws when the roles are missing after the insert", async () => {
@@ -186,7 +203,7 @@ describe("seedDevUsers", () => {
   });
 
   it("throws when the admin dev user can't be found", async () => {
-    const { db } = fakeDb([roles, roles, [], [], []]);
+    const { db } = fakeDb([roles, roles, [], [], [], []]);
     await expect(seedDevUsers(db, 1)).rejects.toThrow(/Admin dev user missing/);
   });
 });
