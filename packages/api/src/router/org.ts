@@ -772,16 +772,14 @@ export const orgRouter = {
       path: "/",
       tags: ["org"],
       summary: "Create or update organization",
-      description:
-        `Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (${[
-          ...OrgType,
-        ]
-          .reverse()
-          .map((t) => orgTypeDisplay[t].label.toLowerCase())
-          .join(
-            " → ",
-          )}). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances. ` +
-        "In `meta`, `password_vault_enabled` must be true or false when given.",
+      description: `Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (${[
+        ...OrgType,
+      ]
+        .reverse()
+        .map((t) => orgTypeDisplay[t].label.toLowerCase())
+        .join(
+          " → ",
+        )}). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances.`,
     })
     .output(
       z.object({

@@ -13,7 +13,6 @@ interface OrgEditorConfig {
   retainLogo: boolean;
   logoPosition?: "afterParent" | "afterStatus";
   locationDescription?: boolean;
-  /** Show the password vault opt-in (`meta.password_vault_enabled`). */
   passwordVault?: boolean;
   compactLayout?: boolean;
   validationToast?: boolean;
