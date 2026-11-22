@@ -1188,7 +1188,11 @@ def extract_state_values(body: dict) -> dict[str, Any]:
 
 
 def error_stack(exc: BaseException) -> str:
-    """The last frames as file:line:function, never the message (it can carry emails or SQL parameters)."""
+    """The five innermost frames as file:line:function, innermost first so `a <- b` reads "a was called from b".
+
+    Never the message: it can carry emails or SQL parameters.
+    """
     return " <- ".join(
-        f"{os.path.basename(f.filename)}:{f.lineno}:{f.name}" for f in traceback.extract_tb(exc.__traceback__)[-5:]
+        f"{os.path.basename(f.filename)}:{f.lineno}:{f.name}"
+        for f in reversed(traceback.extract_tb(exc.__traceback__)[-5:])
     )
