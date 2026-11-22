@@ -1,11 +1,14 @@
 import type { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+let lastWhere: ReturnType<typeof vi.fn> | undefined;
+
 function chain(result: unknown) {
   const obj: Record<string, unknown> = {};
   for (const method of ["from", "where", "limit"]) {
     obj[method] = vi.fn(() => obj);
   }
+  lastWhere = obj.where as ReturnType<typeof vi.fn>;
   obj.then = (
     resolve: (v: unknown) => unknown,
     reject?: (e: unknown) => unknown,
@@ -16,10 +19,22 @@ function chain(result: unknown) {
 const dbMock = { select: vi.fn(() => chain([])) };
 
 vi.mock("~/lib/db", () => ({ db: dbMock }));
+vi.mock("@acme/db", () => ({
+  eq: (column: unknown, value: unknown) => ({ op: "eq", column, value }),
+}));
 vi.mock("~/lib/oauth", () => ({ getClient: vi.fn() }));
 
 const { getClient } = await import("~/lib/oauth");
 const { getCorsHeaders, handlePreflight } = await import("~/lib/cors");
+const { oauthClients } = await import("@acme/db/schema/schema");
+
+function expectOriginFilter() {
+  expect(lastWhere).toHaveBeenCalledWith({
+    op: "eq",
+    column: oauthClients.allowedOrigin,
+    value: ORIGIN,
+  });
+}
 
 const ORIGIN = "https://app.example.test";
 
@@ -82,11 +97,13 @@ describe("getCorsHeaders", () => {
     await expect(getCorsHeaders(makeRequest(ORIGIN))).resolves.toEqual(
       ALLOWED_HEADERS,
     );
+    expectOriginFilter();
     expect(getClient).not.toHaveBeenCalled();
   });
 
   it("refuses a preflight origin no client is registered for", async () => {
     await expect(getCorsHeaders(makeRequest(ORIGIN))).resolves.toEqual({});
+    expectOriginFilter();
   });
 });
 
