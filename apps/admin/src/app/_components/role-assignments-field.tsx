@@ -132,7 +132,10 @@ export function RoleAssignmentsField({
     onChange(assignments);
   };
 
-  const optionById = new Map(orgOptions.map((org) => [org.id, org]));
+  // A failed refetch keeps the previous list, so ignore it: without a
+  // current list every row stays read-only and is resubmitted unchanged.
+  const usableOrgOptions = orgsFailed ? [] : orgOptions;
+  const optionById = new Map(usableOrgOptions.map((org) => [org.id, org]));
 
   return (
     <div className="space-y-2">
@@ -174,7 +177,7 @@ export function RoleAssignmentsField({
             <div className="sm:w-1/2">
               <VirtualizedCombobox
                 value={row.orgId === NO_ORG ? undefined : row.orgId.toString()}
-                options={orgOptions
+                options={usableOrgOptions
                   .filter((option) => !usedOrgIds.has(option.id))
                   .map((option) => ({
                     value: option.id.toString(),

@@ -196,6 +196,26 @@ class Event_Category(enum.Enum):
     third_f = 3
 
 
+class Attendance_Type(enum.Enum):
+    """
+    Enum representing the capacity in which a user attends an event instance.
+
+    Stored as one value per attendance record in `attendance.attendance_type`.
+    While the `attendance_x_attendance_types` link table still exists, a
+    database trigger derives the value from it, taking the highest by the
+    precedence q, then co_q, then pax.
+
+    Attributes:
+        pax: a regular attendee (the Slack bot's "HC")
+        q: the leader
+        co_q: a co-leader
+    """
+
+    pax = 1
+    q = 2
+    co_q = 3
+
+
 class Request_Type(enum.Enum):
     """
     Enum representing the type of request.
@@ -1155,6 +1175,9 @@ class Attendance(Base):
         event_instance_id (int): The ID of the associated event instance.
         user_id (Optional[int]): The ID of the associated user.
         is_planned (bool): Whether this is planned attendance (True) vs actual attendance (False).
+        attendance_type (Attendance_Type): The record's single type. While the attendance types link table
+            exists, a database trigger derives it from the link rows and overwrites it whenever they change,
+            so a writer that sets this column must also write the matching link rows.
         meta (Optional[Dict[str, Any]]): Additional metadata for the attendance.
         created (datetime): The timestamp when the record was created.
         updated (datetime): The timestamp when the record was last updated.
@@ -1178,6 +1201,7 @@ class Attendance(Base):
     event_instance_id: Mapped[int] = mapped_column(ForeignKey("event_instances.id", onupdate="CASCADE"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     is_planned: Mapped[bool]
+    attendance_type: Mapped[Attendance_Type] = mapped_column(server_default=Attendance_Type.pax.name)
     meta: Mapped[Optional[Dict[str, Any]]]
     created: Mapped[dt_create]
     updated: Mapped[dt_update]

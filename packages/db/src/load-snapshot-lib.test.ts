@@ -428,7 +428,11 @@ function harness(over: Partial<LoadDeps> = {}) {
       ),
       newestMigration: rec("newestMigration", () => Promise.resolve(1000)),
       analyze: rec("analyze", () => Promise.resolve()),
+      hasAttendanceTypeBackfill: rec("hasBackfill", () =>
+        Promise.resolve(true),
+      ),
       recomputeAoCounts: rec("aoCounts", () => Promise.resolve()),
+      recomputeAttendanceTypes: rec("attendanceTypes", () => Promise.resolve()),
       resetAllSequences: rec("sequences", () => Promise.resolve(3)),
       nationIds: rec("nationIds", () => Promise.resolve([1])),
       regionIdsByName: rec("regionIds", () => Promise.resolve({ Boone: 9 })),
@@ -471,10 +475,12 @@ describe("runLoad", () => {
       "docker:list",
       "localColumns",
       "newestMigration",
+      "hasBackfill",
       "confirm",
       "docker:restore",
       "analyze",
       "aoCounts",
+      "attendanceTypes",
       "sequences",
       "nationIds",
       "regionIds",
@@ -709,6 +715,13 @@ describe("runLoad", () => {
           d.db.newestMigration = () => Promise.resolve(null);
         },
         /no migration history/,
+      ],
+      [
+        "a local database without the attendance-type procedure",
+        (d) => {
+          d.db.hasAttendanceTypeBackfill = () => Promise.resolve(false);
+        },
+        /missing the attendance-type migration/,
       ],
       [
         "no terminal and no --yes",
@@ -962,6 +975,22 @@ describe("createLoadDb", () => {
     ).resolves.toBeNull();
   });
 
+  it("reports whether the attendance-type procedure exists", async () => {
+    const present = make([{ present: true }]);
+    await expect(present.loadDb.hasAttendanceTypeBackfill()).resolves.toBe(
+      true,
+    );
+    expect(render(present.fake.execute.mock.calls[0]?.[0]).sql).toContain(
+      "to_regprocedure('public.backfill_attendance_type(integer)')",
+    );
+    await expect(
+      make([{ present: false }]).loadDb.hasAttendanceTypeBackfill(),
+    ).resolves.toBe(false);
+    await expect(make([]).loadDb.hasAttendanceTypeBackfill()).resolves.toBe(
+      false,
+    );
+  });
+
   it("analyzes, recomputes ao_count over the whole tree, and resets sequences", async () => {
     const { fake, loadDb } = make();
     await loadDb.analyze();
@@ -970,6 +999,10 @@ describe("createLoadDb", () => {
     expect(fake.execute).toHaveBeenCalledTimes(2);
     expect(render(fake.execute.mock.calls[1]?.[0]).sql).toBe(
       "SELECT public.recount_org_ao_counts()",
+    );
+    await loadDb.recomputeAttendanceTypes();
+    expect(render(fake.execute.mock.calls[2]?.[0]).sql).toBe(
+      "CALL public.backfill_attendance_type()",
     );
     await expect(loadDb.resetAllSequences()).resolves.toBe(0);
   });

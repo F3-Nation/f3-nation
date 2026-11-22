@@ -363,6 +363,9 @@ export interface LoadDb {
   newestMigration: () => Promise<number | null>;
   analyze: () => Promise<void>;
   recomputeAoCounts: () => Promise<void>;
+  /** Whether the procedure `recomputeAttendanceTypes` calls exists. */
+  hasAttendanceTypeBackfill: () => Promise<boolean>;
+  recomputeAttendanceTypes: () => Promise<void>;
   resetAllSequences: () => Promise<number>;
   nationIds: () => Promise<number[]>;
   regionIdsByName: (names: string[]) => Promise<Record<string, number>>;
@@ -563,6 +566,14 @@ export async function runLoad(
     assertDumpMatchesManifest(toc.stdout, manifest);
     assertColumns(manifest, await deps.db.localColumns(tables));
     assertMigration(await deps.db.newestMigration(), manifest);
+    // A local database and snapshot that are both older than the procedure
+    // pass the checks above, but post-load setup calls it after the restore
+    // has committed.
+    if (!(await deps.db.hasAttendanceTypeBackfill())) {
+      throw new Error(
+        "Your local database is missing the attendance-type migration. Run `pnpm db:migrate:local`, then load again.",
+      );
+    }
 
     if (!args.yes) {
       if (!deps.isTTY) {
@@ -590,6 +601,7 @@ export async function runLoad(
     try {
       await deps.db.analyze();
       await deps.db.recomputeAoCounts();
+      await deps.db.recomputeAttendanceTypes();
       await deps.db.resetAllSequences();
       await seedDevLogins(deps);
     } catch (err) {
@@ -668,6 +680,21 @@ export function createLoadDb(db: AppDb, migrationsTable: string): LoadDb {
     // The trigger that keeps ao_count current is off during a restore.
     async recomputeAoCounts() {
       await db.execute(sql`SELECT public.recount_org_ao_counts()`);
+    },
+
+    async hasAttendanceTypeBackfill() {
+      const [row] = await db.execute<{ present: boolean }>(
+        sql`SELECT to_regprocedure('public.backfill_attendance_type(integer)') IS NOT NULL AS present`,
+      );
+      return row?.present === true;
+    },
+
+    // The trigger that keeps attendance.attendance_type current is off during
+    // a restore, and a snapshot without that column loads every record as
+    // pax. The procedure commits per batch, so it must not run inside a
+    // transaction block.
+    async recomputeAttendanceTypes() {
+      await db.execute(sql`CALL public.backfill_attendance_type()`);
     },
 
     resetAllSequences: () => resetAllSequences(db),
