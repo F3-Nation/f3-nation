@@ -1063,7 +1063,7 @@ describe("Org Router", () => {
       ).not.toBe(true);
     });
 
-    it("keeps the region password vault opt-in unless the request names it", async () => {
+    it("saves the region password vault opt-in as sent and refuses non-booleans", async () => {
       await mockAuthWithSession(await createAdminSession());
       const client = createTestClient();
       const nation = await getOrCreateF3NationOrg();
@@ -1103,20 +1103,14 @@ describe("Org Router", () => {
           })
         )?.meta;
 
-      // Left out (an editor that didn't touch the box): the vault stays on.
-      await update({ keepMe: "changed" });
+      // The submitted meta replaces the stored one, the vault key included.
+      await update({ keepMe: "changed", password_vault_enabled: false });
       expect(await storedMeta()).toEqual({
         keepMe: "changed",
-        password_vault_enabled: true,
+        password_vault_enabled: false,
       });
-      await update(null);
-      expect(await storedMeta()).toEqual({ password_vault_enabled: true });
-
-      // Named: the request decides.
-      await update({ password_vault_enabled: false });
-      expect(await storedMeta()).toEqual({ password_vault_enabled: false });
-      await update({});
-      expect(await storedMeta()).toEqual({ password_vault_enabled: false });
+      await update({ keepMe: "changed" });
+      expect(await storedMeta()).toEqual({ keepMe: "changed" });
       await update({ password_vault_enabled: true });
       expect(await storedMeta()).toEqual({ password_vault_enabled: true });
 

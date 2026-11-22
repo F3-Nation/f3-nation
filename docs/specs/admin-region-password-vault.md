@@ -62,12 +62,9 @@ Vault opt-in (region editor):
   (unchecked), and every other `meta` key is saved unchanged.
 - **AC-6** — GIVEN an unsaved change to the box WHEN the editor changes it
   back to the saved value THEN no confirmation is shown.
-- **AC-15** — GIVEN the editor loaded the region before someone else turned
-  the vault on or off WHEN they save without touching the box THEN the vault
-  keeps the value the other person saved. `org.crupdate` keeps the stored
-  `meta.password_vault_enabled` whenever the submitted `meta` leaves it out,
-  and the region editor sends it only when the box changed. A value other
-  than `true` or `false` is refused with `BAD_REQUEST`.
+- **AC-15** — GIVEN `org.crupdate` WHEN the submitted `meta` holds a
+  `password_vault_enabled` other than `true` or `false` THEN it is refused
+  with `BAD_REQUEST` and nothing is saved.
 
 Roles (Manage Access and the user edit page):
 

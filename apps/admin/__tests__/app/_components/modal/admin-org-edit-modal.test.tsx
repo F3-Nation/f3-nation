@@ -821,7 +821,7 @@ describe("Region Area or Territory parent selection", () => {
     expect(mocks.save.mock.calls[0]![0].meta).toEqual(record.meta);
   });
 
-  it("turns the vault off on a retry after a create saved it on", async () => {
+  it("sends what the vault box shows on a retry after a failed save", async () => {
     mocks.save.mockImplementation(async (input) => {
       if (input.id == null) return { org: { ...record, id: 60 } };
       return { org: { ...record, ...input } };
@@ -845,9 +845,8 @@ describe("Region Area or Territory parent selection", () => {
       password_vault_enabled: true,
     });
 
-    // The create stored true, so turning it off now is a real change.
+    // The retry sends the box as it now stands, whatever the failed save stored.
     fireEvent.click(checkbox);
-    fireEvent.click(await screen.findByRole("button", { name: "Turn off" }));
     save();
 
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2));
@@ -885,7 +884,7 @@ describe("Region Area or Territory parent selection", () => {
     },
   );
 
-  it("leaves an untouched password vault out of the save, so the API keeps it", async () => {
+  it("sends an untouched password vault with every save", async () => {
     mocks.byId.mockResolvedValue({
       org: {
         ...record,
@@ -904,7 +903,10 @@ describe("Region Area or Territory parent selection", () => {
     save();
 
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
-    expect(mocks.save.mock.calls[0]![0].meta).toEqual(record.meta);
+    expect(mocks.save.mock.calls[0]![0].meta).toEqual({
+      ...record.meta,
+      password_vault_enabled: true,
+    });
   });
 
   it.each(["area", "territory"])(
