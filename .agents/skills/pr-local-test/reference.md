@@ -137,13 +137,13 @@ so on a tie use the lowest id, unless the PR's code or other test data points at
 Use that same id for every key, user, and child org in the check, and record it in `notes.md`.
 
 Seed each key with this snippet. Keep the key in a file and never print it. `role` is
-`editor`, `admin`, or `user`; any other value (e.g. `none`) makes a read-only key with no role.
+`editor` or `admin`; any other value, `user` included, makes a key the API treats as anonymous.
 Remove the indentation when you copy it: the closing `SQL` must start at column 0. psql prints
 one line per insert (user, key, role):
 
 - user: `INSERT 0 1` the first time, then `INSERT 0 0` because the user already exists
 - key: always `INSERT 0 1`, or the key wasn't created
-- role: `INSERT 0 1` for a role key, `INSERT 0 0` for a read-only key
+- role: `INSERT 0 1` for a role key, `INSERT 0 0` for a role-less key
 
 Run it directly in the agent's shell, not inside `bash -c '…'` (the quoting breaks). If your
 shell tool can't take a heredoc, write the SQL to `$RUN/<label>.sql` and pass it on stdin.

@@ -5,7 +5,6 @@
 # @acme/scripts package run from source through tsx. Built from the repo root
 # and deployed by tooling/scripts/staging-refresh/setup.sh:
 #   docker build -f tooling/scripts/Dockerfile.staging-refresh .
-ARG TURBO_VERSION=2
 # Node 25+ images no longer bundle Corepack; install it so pnpm comes from
 # the root packageManager pin (version and hash).
 ARG COREPACK_VERSION=0.36.0
@@ -16,15 +15,16 @@ FROM node:26.13.0-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300
 
 # ---------- Stage 1: prune the monorepo to @acme/scripts ----------
 FROM node AS builder
-ARG TURBO_VERSION
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 WORKDIR /app
 ARG COREPACK_VERSION
-RUN npm install -g corepack@${COREPACK_VERSION} turbo@${TURBO_VERSION} \
-  && corepack enable
+RUN npm install -g corepack@${COREPACK_VERSION} && corepack enable
 COPY . .
-RUN turbo prune @acme/scripts --docker
+# turbo comes from the root lockfile (exact version and integrity hash), not a
+# global npm install that would resolve whatever the registry serves today.
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter=f3-nation \
+  && node_modules/.bin/turbo prune @acme/scripts --docker
 
 # ---------- Stage 2: install from the pruned lockfile ----------
 FROM node AS installer

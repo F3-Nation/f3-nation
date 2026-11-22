@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, inArray, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -298,6 +298,370 @@ describe("Org Chart Router", () => {
         client.orgChart.byId({ orgId: 999999999 }),
       ).rejects.toThrow();
     });
+
+    it("serves an active org to an anonymous caller", async () => {
+      await mockAuthWithSession(null);
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+
+      const result = await createTestClient().orgChart.byId({
+        orgId: region!.id,
+      });
+
+      expect(result).toMatchObject({ id: region!.id, name: region!.name });
+    });
+
+    it("lists only admin and editor role holders to an anonymous caller", async () => {
+      await mockAuthWithSession(null);
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const [adminRole] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+      let [userRole] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "user"));
+      let insertedUserRoleId: number | undefined;
+      if (!userRole) {
+        [userRole] = await db
+          .insert(schema.roles)
+          .values({ name: "user", description: "user role" })
+          .returning();
+        insertedUserRoleId = userRole!.id;
+      }
+      const [admin, member] = await db
+        .insert(schema.users)
+        .values([
+          { email: `test-${uniqueId()}@example.com`, f3Name: "Admin" },
+          { email: `test-${uniqueId()}@example.com`, f3Name: "Member" },
+        ])
+        .returning();
+      await db.insert(schema.rolesXUsersXOrg).values([
+        { roleId: adminRole!.id, userId: admin!.id, orgId: region!.id },
+        { roleId: userRole!.id, userId: member!.id, orgId: region!.id },
+      ]);
+
+      try {
+        const result = await createTestClient().orgChart.byId({
+          orgId: region!.id,
+        });
+
+        expect(result.roles).toEqual([
+          expect.objectContaining({ title: "admin", userId: admin!.id }),
+        ]);
+      } finally {
+        await db
+          .delete(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.orgId, region!.id));
+        await cleanup.user(admin!.id);
+        await cleanup.user(member!.id);
+        if (insertedUserRoleId)
+          await db
+            .delete(schema.roles)
+            .where(eq(schema.roles.id, insertedUserRoleId));
+      }
+    });
+
+    it("hides an inactive org, or one under an inactive parent, from every caller", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const ao = await createOrg({ orgType: "ao", parentId: region!.id });
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, region!.id));
+
+      for (const session of [null, await createAdminSession()]) {
+        await mockAuthWithSession(session);
+        const client = createTestClient();
+        for (const orgId of [region!.id, ao!.id]) {
+          await expect(client.orgChart.byId({ orgId })).rejects.toMatchObject({
+            code: "NOT_FOUND",
+          });
+        }
+      }
+    });
+  });
+
+  describe("leadership", () => {
+    it("serves an anonymous caller", async () => {
+      await mockAuthWithSession(null);
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+
+      const result = await createTestClient().orgChart.leadership();
+
+      expect(result.orgs.map((org) => org.id)).toContain(region!.id);
+    });
+
+    it("lists position and role holders at active non-AO orgs only", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      const inactive = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      if (!region || !ao || !inactive) {
+        throw new Error("Failed to create org fixtures");
+      }
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, inactive.id));
+
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-${uniqueId()}@example.com`,
+          f3Name: "Table Leader",
+          homeRegionId: region.id,
+        })
+        .returning();
+      const [position] = await db
+        .insert(schema.positions)
+        .values({ name: `Test Position ${uniqueId()}`, isActive: true })
+        .returning();
+      const [role] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+      if (!user || !position || !role) {
+        throw new Error("Failed to create user/position/role fixtures");
+      }
+      await db.insert(schema.positionsXOrgsXUsers).values([
+        { positionId: position.id, orgId: region.id, userId: user.id },
+        { positionId: position.id, orgId: ao.id, userId: user.id },
+        { positionId: position.id, orgId: inactive.id, userId: user.id },
+      ]);
+      await db
+        .insert(schema.rolesXUsersXOrg)
+        .values({ roleId: role.id, orgId: region.id, userId: user.id });
+
+      try {
+        const client = createTestClient();
+        const result = await client.orgChart.leadership();
+        const mine = result.leaders.filter((l) => l.userId === user.id);
+
+        expect(mine).toEqual(
+          expect.arrayContaining([
+            {
+              orgId: region.id,
+              kind: "position",
+              id: position.id,
+              title: position.name,
+              userId: user.id,
+              f3Name: "Table Leader",
+              avatarUrl: null,
+              homeRegionName: region.name,
+            },
+            {
+              orgId: region.id,
+              kind: "role",
+              id: role.id,
+              title: "admin",
+              userId: user.id,
+              f3Name: "Table Leader",
+              avatarUrl: null,
+              homeRegionName: region.name,
+            },
+          ]),
+        );
+        expect(mine).toHaveLength(2);
+      } finally {
+        await db
+          .delete(schema.positionsXOrgsXUsers)
+          .where(eq(schema.positionsXOrgsXUsers.positionId, position.id));
+        await db
+          .delete(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, user.id));
+        await db
+          .delete(schema.positions)
+          .where(eq(schema.positions.id, position.id));
+        await cleanup.user(user.id);
+      }
+    });
+
+    it("lists active orgs without locations and drops inactive chains, positions and users", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      const inactive = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const deadSector = await createOrg({
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      const underDead = deadSector
+        ? await createOrg({ orgType: "region", parentId: deadSector.id })
+        : null;
+      if (!region || !ao || !inactive || !deadSector || !underDead) {
+        throw new Error("Failed to create org fixtures");
+      }
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(inArray(schema.orgs.id, [inactive.id, deadSector.id]));
+
+      const [leader] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-${uniqueId()}@example.com`,
+          f3Name: "Away Leader",
+          homeRegionId: inactive.id,
+        })
+        .returning();
+      // Active region, but under the inactive sector: not a home region.
+      const [orphanHome] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-${uniqueId()}@example.com`,
+          f3Name: "Orphan Home",
+          homeRegionId: underDead.id,
+        })
+        .returning();
+      const [userRole] = await db
+        .insert(schema.roles)
+        .values({ name: "user", description: "Test user role" })
+        .returning();
+      const [gone] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-${uniqueId()}@example.com`,
+          f3Name: "Gone Leader",
+          status: "inactive",
+        })
+        .returning();
+      const [position] = await db
+        .insert(schema.positions)
+        .values({ name: `Test Position ${uniqueId()}`, isActive: true })
+        .returning();
+      const [retired] = await db
+        .insert(schema.positions)
+        .values({ name: `Retired Position ${uniqueId()}`, isActive: false })
+        .returning();
+      const [role] = await db
+        .select()
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+      if (
+        !leader ||
+        !orphanHome ||
+        !userRole ||
+        !gone ||
+        !position ||
+        !retired ||
+        !role
+      ) {
+        throw new Error("Failed to create user/position/role fixtures");
+      }
+      await db.insert(schema.positionsXOrgsXUsers).values([
+        { positionId: position.id, orgId: region.id, userId: leader.id },
+        { positionId: retired.id, orgId: region.id, userId: leader.id },
+        { positionId: position.id, orgId: underDead.id, userId: leader.id },
+        { positionId: position.id, orgId: region.id, userId: gone.id },
+        { positionId: position.id, orgId: region.id, userId: orphanHome.id },
+      ]);
+      await db.insert(schema.rolesXUsersXOrg).values([
+        { roleId: role.id, orgId: region.id, userId: gone.id },
+        // Not a contact role: never listed.
+        { roleId: userRole.id, orgId: region.id, userId: leader.id },
+      ]);
+
+      try {
+        const client = createTestClient();
+        const result = await client.orgChart.leadership();
+
+        // The region has no locations but is still listed (unlike the chart).
+        expect(result.orgs).toContainEqual({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: nation.id,
+        });
+        const orgIds = new Set(result.orgs.map((o) => o.id));
+        expect(orgIds.has(ao.id)).toBe(false);
+        expect(orgIds.has(inactive.id)).toBe(false);
+        expect(orgIds.has(deadSector.id)).toBe(false);
+        expect(orgIds.has(underDead.id)).toBe(false);
+
+        // Inactive users, inactive positions and orgs under an inactive
+        // ancestor are dropped; an inactive home region is blanked.
+        expect(result.leaders.filter((l) => l.userId === gone.id)).toEqual([]);
+        expect(
+          result.leaders.find((l) => l.userId === orphanHome.id)
+            ?.homeRegionName,
+        ).toBeNull();
+        expect(
+          result.leaders.some(
+            (l) => l.kind === "position" && l.id === retired.id,
+          ),
+        ).toBe(false);
+        expect(result.leaders.filter((l) => l.userId === leader.id)).toEqual([
+          {
+            orgId: region.id,
+            kind: "position",
+            id: position.id,
+            title: position.name,
+            userId: leader.id,
+            f3Name: "Away Leader",
+            avatarUrl: null,
+            homeRegionName: null,
+          },
+        ]);
+      } finally {
+        await db
+          .delete(schema.positionsXOrgsXUsers)
+          .where(
+            inArray(schema.positionsXOrgsXUsers.positionId, [
+              position.id,
+              retired.id,
+            ]),
+          );
+        await db
+          .delete(schema.rolesXUsersXOrg)
+          .where(inArray(schema.rolesXUsersXOrg.userId, [gone.id, leader.id]));
+        await db.delete(schema.roles).where(eq(schema.roles.id, userRole.id));
+        await db
+          .delete(schema.positions)
+          .where(inArray(schema.positions.id, [position.id, retired.id]));
+        await cleanup.user(leader.id);
+        await cleanup.user(gone.id);
+        await cleanup.user(orphanHome.id);
+      }
+    });
   });
 
   describe("aos", () => {
@@ -426,7 +790,7 @@ describe("Org Chart Router", () => {
       ).rejects.toThrow();
     });
 
-    it("returns an empty aos array for a location with no active AO events", async () => {
+    it("returns an empty aos array for a location whose only public event is not an AO's", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
@@ -442,6 +806,7 @@ describe("Org Chart Router", () => {
       if (!location) {
         return;
       }
+      await createEvent({ orgId: region.id, locationId: location.id });
 
       const client = createTestClient();
       const result = await client.orgChart.byLocation({

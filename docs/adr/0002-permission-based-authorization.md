@@ -44,7 +44,7 @@ Granting sector-level **admin** so someone could **send a message** is the
 canonical over-grant: the role vocabulary (admin/editor) is coarser than the
 capabilities the org actually delegates.
 
-### What exists today (verified July 2026)
+### What existed when this was accepted (November 2026)
 
 **The planned permission model is already in the database — dormant.**
 `packages/db/drizzle/schema.ts` defines `permissions` and
@@ -60,25 +60,40 @@ vestigial `Permissions` enums (`packages/shared/src/app/constants.ts`,
    _any_ org. They are door-checks only; they scope nothing.
 2. Org-scoped checks at call sites: `checkHasRoleOnOrg`
    (`packages/api/src/check-has-role-on-org.ts`) takes a role + org and walks
-   _up_ the org hierarchy (AO → Region → Sector → Area → Nation) in SQL, so a
-   grant at Sector level covers everything beneath it. `"admin"` is
-   hard-coded as a superset of any requested role.
+   _up_ the org's ancestors in SQL without assuming a fixed set of tiers (see
+   [ADR 0003](0003-depth-agnostic-org-hierarchy.md)), so a grant at Sector
+   level covers everything beneath it. The walk follows at most
+   `ORG_TREE_MAX_DEPTH` parent edges
+   (`packages/shared/src/app/org-hierarchy.ts`), far more than the hierarchy
+   has; a grant farther up than that does not match, so the check denies.
+   `"admin"` is hard-coded as a superset of any requested role.
 
 **Load-bearing facts that constrain any redesign:**
 
-- Role grants live in `roles_x_users_x_org` (role × user × org) and are baked
-  into the JWT session at sign-in as `{orgId, orgName, roleName}[]`
-  (`packages/auth/src/lib/md-pg-drizzzle-adapter.ts`). Grant changes do not
-  reach live sessions until re-login or session update — the ComzQ grant
-  above needed a re-login to take effect.
+- Role grants live in `roles_x_users_x_org` (role × user × org). How fresh a
+  caller's roles are depends on the credential:
+  - Cookie sessions bake them into the session JWT at sign-in as
+    `{orgId, orgName, roleName}[]` (the `jwt` callback in
+    `packages/auth/src/config.ts`). Grant changes do not reach a live cookie
+    session until re-login or session update — the ComzQ grant above needed a
+    re-login to take effect.
+  - Auth-service access tokens and API keys carry no roles; when one of them
+    authenticates a request, the API reads its grants from the database for
+    that request (`getSession` in `packages/api/src/shared.ts`), so a grant
+    change takes effect at once. `getSession` checks the session cookie
+    first, so a request that also carries a valid cookie is authorized with
+    the cookie session's roles instead.
 - `roles.name` is a Postgres enum (`user_role`). Adding any new role (e.g. `comz`)
   requires an `ALTER TYPE` migration, not just an insert.
 - API keys authenticate through the same role tables
   (`roles_x_api_keys_x_org`, resolved in `packages/api/src/shared.ts`), so a
   permission layer must cover both principal types.
-- `nationAdminProcedure` relies on a fragile string match —
-  `orgName.toLowerCase().includes("f3 nation")` in
-  `packages/shared/src/app/role-checks.ts`.
+- `nationAdminProcedure` requires `admin` on the org whose id is
+  `F3_NATION_ORG_ID` **and** whose name contains "f3 nation"
+  (`isNationAdminFromSession` in `packages/shared/src/app/role-checks.ts`).
+  The name match is fragile: renaming that org to a name that does not
+  contain "f3 nation" (in any letter case) would lock every nation admin
+  out.
 - The org-hierarchy walk is the genuinely hard part of the system's
   authorization, and it already exists and works.
 
@@ -96,37 +111,55 @@ Concretely:
    `roles_x_permissions` tables:
 
    ```ts
-   export const PERMISSIONS = [
-     "entities.manage",
-     "security.manage",
-     "messages.send",
-     "pii.read",
-   ] as const;
+   export const Permission = {
+     EntitiesManage: { name: "entities.manage" /* displayName, description */ },
+     SecurityManage: { name: "security.manage" /* … */ },
+     MessagesSend: { name: "messages.send" /* … */ },
+     PiiRead: { name: "pii.read" /* … */ },
+   } as const;
 
-   export type Permission = (typeof PERMISSIONS)[number];
+   export type Permission = (typeof Permission)[keyof typeof Permission];
 
    export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
-     admin: ["entities.manage", "security.manage", "messages.send", "pii.read"],
-     editor: ["entities.manage", "messages.send", "pii.read"],
+     admin: [
+       Permission.EntitiesManage,
+       Permission.SecurityManage,
+       Permission.MessagesSend,
+       Permission.PiiRead,
+     ],
+     editor: [Permission.EntitiesManage, Permission.PiiRead],
      user: [],
      // Dormant today (no permissions wired); present so the map stays
      // exhaustive over UserRole.
      password_manager: [],
      password_reader: [],
-     // comz: ["messages.send"],  // planned addition — see step 5 below
+     // comz: [Permission.MessagesSend],  // planned addition — see step 5 below
    };
    ```
+
+   Each permission carries a `displayName` and `description` alongside its
+   `name`, so the API docs and refusal messages are built from the same
+   definition the checks use.
+
+   `editor` does not include `messages.send`, unlike the proposal quoted in
+   Context ("all but security.manage"). Sending Slack messages on an org's
+   behalf stays with admins, and with roles that are given `messages.send`
+   explicitly, such as the planned `comz`.
 
    This replaces the vestigial `Permissions` enums. The hard-coded
    `roleName === "admin"` bypass in `checkHasRoleOnOrg` disappears as a
    special case — admin is simply the role mapped to all permissions.
 
-2. **Add `checkHasPermissionOnOrg`** wrapping the existing
+2. **Add `checkHasPermissionsOnOrg`** sharing the existing
    `checkHasRoleOnOrg` hierarchy logic: identical ancestor walk, but a grant
    matches when `ROLE_PERMISSIONS[r.roleName]` includes the requested
-   permission. Add a `permissionProcedure(permission)` middleware factory to
-   replace the coarse `editorProcedure` / `adminProcedure` gates. The helper
-   accepts either principal type (session or API key).
+   permission. It takes one or more permissions and requires all of them;
+   different roles may supply different permissions. Add a
+   `permissionProcedure(...permissions)` middleware factory to replace the
+   coarse `editorProcedure` / `adminProcedure` gates; it gives the handler
+   `ctx.assertPermissionsOnOrg(orgId)` for the org-scoped check and lists the
+   permissions in the endpoint's API docs. The helper accepts either principal
+   type (session or API key).
 
 3. **Migrate endpoints incrementally.** Old role checks and new permission
    checks coexist; each endpoint migration preserves the two-layer structure
@@ -160,7 +193,7 @@ the org-hierarchy scoping stays as-is.
   runtime-editable policy that nobody has asked for. Data-driven mapping
   earns its complexity only when non-developers must change policy at
   runtime; "add a Comz role" happens at developer speed anyway. Crucially,
-  the call sites this ADR introduces (`checkHasPermissionOnOrg`) are the
+  the call sites this ADR introduces (`checkHasPermissionsOnOrg`) are the
   stable seam: if the org later needs runtime role composition, only the
   lookup behind the helper changes, and the tables are already waiting.
   A code-defined map is type-safe (typos fail the build, not silently at

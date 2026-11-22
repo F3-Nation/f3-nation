@@ -1,14 +1,17 @@
+import { createHash, randomBytes } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
-import { expect, test } from "@playwright/test";
+import { request as playwrightRequest, expect, test } from "@playwright/test";
 
 /**
  * Update-request RBAC — BLOCKING tier, API-only (no browser).
  *
  * Exercises the submission/review authorization matrix of
  * docs/specs/map-update-request-flow.md §5 directly against the API app
- * (E2E_API_URL) using the seeded local API keys as principals. The browser
+ * (E2E_API_URL). A change request must name a person, so submitters and
+ * reviewers are seeded dev users holding RS256 access tokens from the auth app
+ * (E2E_AUTH_URL), minted as in docs/PREVIEW_AUTH.md Recipe 3. The browser
  * suite (tests/e2e/update-request.spec.ts) cannot cover these paths because
- * the local dev-mode credentials provider always yields a nation-admin
+ * the map's dev-mode credentials provider always yields a nation-admin
  * session.
  *
  * Test → AC mapping:
@@ -16,23 +19,34 @@ import { expect, test } from "@playwright/test";
  *   - "nation editor submit is auto-applied"                        → AC-9
  *     (API half: status `approved` + the event exists in live data)
  *   - "non-editor cannot reject and the request stays pending"      → §5 reject
- *     row (editorProcedure denies role-less principals)
+ *     row (editorProcedure denies principals without an editor role)
  *   - "cross-region editor cannot reject; same editor can reject in
  *      their own region"                                            → AC-15
  *   - "unauthenticated submit is rejected"                          → §5 submit
  *     row (protectedProcedure → UNAUTHORIZED)
+ *   - "API keys cannot submit or reject"                            → AC-18
  *
  * Principals (seeded by pnpm db:seed:local —
- * packages/db/src/local-seed-lib/data.ts LOCAL_API_KEYS):
- *   - local-slackbot-key     admin on F3 Nation (used only for verification reads)
- *   - local-api-key          editor on F3 Nation → auto-apply everywhere
- *   - local-boone-editor-key editor scoped to the Boone REGION only
- *   - local-map-key          no role (read-only tier) → submits go pending
+ * packages/db/src/local-seed-lib/data.ts DEV_USERS and LOCAL_API_KEYS):
+ *   - dev-user@f3local.dev          no role → submits go pending
+ *   - dev-editor@f3local.dev        editor on F3 Nation → auto-apply everywhere
+ *   - dev-boone-editor@f3local.dev  editor of the Boone REGION only
+ *   - local-slackbot-key            admin key on F3 Nation (verification reads)
+ *   - local-map-key                 role-less key (treated as anonymous)
+ *   - local-boone-editor-key        editor key scoped to Boone
  *
- * Requests authenticate with `Authorization: Bearer <key>` plus a
- * `client: e2e` header — any non-oRPC client value routes to the OpenAPI
- * handler (apps/api/src/app/[[...rest]]/route.ts) and marks the bearer as an
- * API key rather than a JWT.
+ * User tokens: sign in to the auth app with the email-MFA callback, then run
+ * the PKCE authorization-code flow against the seeded `f3-me-local` client.
+ * The MFA code comes from Mailpit when E2E_MAILPIT_URL is set (local dev);
+ * otherwise it is the preview fixture code `424242`. A user that hasn't
+ * finished onboarding is onboarded with their seeded names first.
+ * E2E_OAUTH_REDIRECT_URI overrides the client's redirect URI for a slotted
+ * checkout whose Me app isn't on port 3003.
+ *
+ * Key requests send `Authorization: Bearer <key>` plus a `client: e2e`
+ * header — any non-oRPC client value routes to the OpenAPI handler
+ * (apps/api/src/app/[[...rest]]/route.ts) and marks the bearer as an API key
+ * rather than a JWT.
  *
  * REST paths come from packages/api/src/root.ts (prefix /v1, router prefix
  * /request) plus each procedure's .route() in
@@ -62,27 +76,178 @@ import { expect, test } from "@playwright/test";
 // a module-scope throw fails Playwright's *collection* for the entire run,
 // taking down unrelated specs; a beforeAll scopes the failure to this file.
 const API = (process.env.E2E_API_URL ?? "").replace(/\/$/, "");
+const AUTH = (process.env.E2E_AUTH_URL ?? "").replace(/\/$/, "");
+const MAILPIT = process.env.E2E_MAILPIT_URL?.replace(/\/$/, "");
+const OAUTH_REDIRECT_URI =
+  process.env.E2E_OAUTH_REDIRECT_URI ??
+  "http://localhost:3003/api/auth/callback";
+const OAUTH_CLIENT_ID = "f3-me-local";
+const OAUTH_CLIENT_SECRET = "local-me-client-secret";
+// The preview DB pre-provisions this code for every seeded dev user.
+const PREVIEW_MFA_CODE = "424242";
 
 test.beforeAll(() => {
-  if (!process.env.E2E_API_URL) {
-    throw new Error(
-      "E2E_API_URL is required but not set. Point it at the API app under " +
-        "test, e.g. E2E_API_URL=http://localhost:3001",
-    );
+  for (const name of ["E2E_API_URL", "E2E_AUTH_URL"] as const) {
+    if (!process.env[name]) {
+      throw new Error(
+        `${name} is required but not set. Point E2E_API_URL at the API app ` +
+          "and E2E_AUTH_URL at the auth app under test, e.g. " +
+          "E2E_API_URL=http://localhost:3001 E2E_AUTH_URL=http://localhost:3004",
+      );
+    }
   }
 });
 
-const KEYS = {
-  nationAdmin: "local-slackbot-key",
-  nationEditor: "local-api-key",
-  booneEditor: "local-boone-editor-key",
-  readOnly: "local-map-key",
+const USERS = {
+  nonEditor: "dev-user@f3local.dev",
+  nationEditor: "dev-editor@f3local.dev",
+  booneEditor: "dev-boone-editor@f3local.dev",
 } as const;
 
-const headers = (key: string) => ({
+const KEYS = {
+  nationAdmin: "local-slackbot-key",
+  roleless: "local-map-key",
+  booneEditor: "local-boone-editor-key",
+} as const;
+
+const keyHeaders = (key: string) => ({
   Authorization: `Bearer ${key}`,
   client: "e2e",
 });
+
+const base64url = (buf: Buffer) => buf.toString("base64url");
+
+/** The 6-digit MFA code for `email`: from Mailpit locally, else the fixture. */
+async function mfaCode(auth: APIRequestContext, email: string) {
+  if (!MAILPIT) return PREVIEW_MFA_CODE;
+
+  const sentAfter = Date.now() - 1_000;
+  const sendRes = await auth.post("/api/verify-email?action=send", {
+    data: { email },
+  });
+  expect(sendRes.ok(), `MFA send for ${email} should succeed`).toBe(true);
+
+  // Each send invalidates the previous code, so only a message newer than
+  // this send carries a usable one.
+  const mailpit = await playwrightRequest.newContext({ baseURL: MAILPIT });
+  try {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const search = await mailpit.get("/api/v1/search", {
+        params: { query: `to:"${email}"` },
+      });
+      expect(search.ok()).toBe(true);
+      const { messages } = (await search.json()) as {
+        messages: { ID: string; Created: string }[];
+      };
+      const fresh = messages.find(
+        (m) => new Date(m.Created).getTime() >= sentAfter,
+      );
+      if (fresh) {
+        const message = await mailpit.get(`/api/v1/message/${fresh.ID}`);
+        const { HTML } = (await message.json()) as { HTML: string };
+        const code = /code=(\d{6})/.exec(HTML)?.[1];
+        if (code) return code;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  } finally {
+    await mailpit.dispose();
+  }
+  throw new Error(`no MFA email for ${email} arrived in Mailpit`);
+}
+
+/** Run the PKCE authorize request and return its redirect `Location`. */
+async function authorize(auth: APIRequestContext, challenge: string) {
+  const res = await auth.get("/api/oauth/authorize", {
+    params: {
+      response_type: "code",
+      client_id: OAUTH_CLIENT_ID,
+      redirect_uri: OAUTH_REDIRECT_URI,
+      scope: "openid profile email",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+    },
+    maxRedirects: 0,
+  });
+  const location = res.headers().location;
+  expect(location, "authorize should redirect").toBeTruthy();
+  return new URL(location ?? "", AUTH);
+}
+
+/** Sign `email` in to the auth app and mint an API access token for them. */
+async function mintAccessToken(email: string): Promise<string> {
+  const auth = await playwrightRequest.newContext({ baseURL: AUTH });
+  try {
+    const csrfRes = await auth.get("/api/auth/csrf");
+    expect(csrfRes.ok()).toBe(true);
+    const { csrfToken } = (await csrfRes.json()) as { csrfToken: string };
+
+    const code = await mfaCode(auth, email);
+    const signIn = await auth.post("/api/auth/callback/email-mfa", {
+      form: { csrfToken, email, code, json: "true" },
+      maxRedirects: 0,
+    });
+    expect(signIn.status(), `sign-in for ${email}`).toBeLessThan(400);
+
+    const verifier = base64url(randomBytes(48));
+    const challenge = base64url(createHash("sha256").update(verifier).digest());
+    let redirect = await authorize(auth, challenge);
+    if (redirect.pathname === "/onboarding") {
+      // Confirm the seeded profile as-is, which marks onboarding complete.
+      const profile = (await (await auth.get("/api/onboarding")).json()) as {
+        f3Name: string;
+        firstName: string;
+        lastName: string;
+      };
+      const onboarded = await auth.post("/api/onboarding", {
+        data: {
+          f3Name: profile.f3Name,
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+        },
+      });
+      expect(onboarded.ok(), `onboarding for ${email}`).toBe(true);
+      redirect = await authorize(auth, challenge);
+    }
+    const authCode = redirect.searchParams.get("code");
+    expect(authCode, `authorization code for ${email}`).toBeTruthy();
+
+    const tokenRes = await auth.post("/api/oauth/token", {
+      form: {
+        grant_type: "authorization_code",
+        code: authCode ?? "",
+        client_id: OAUTH_CLIENT_ID,
+        client_secret: OAUTH_CLIENT_SECRET,
+        redirect_uri: OAUTH_REDIRECT_URI,
+        code_verifier: verifier,
+      },
+    });
+    expect(tokenRes.ok(), `token exchange for ${email}`).toBe(true);
+    const { access_token } = (await tokenRes.json()) as {
+      access_token: string;
+    };
+    return access_token;
+  } finally {
+    await auth.dispose();
+  }
+}
+
+// One token per user per worker: each MFA send invalidates the last code.
+const tokens = new Map<string, Promise<string>>();
+async function userHeaders(email: string) {
+  let token = tokens.get(email);
+  if (!token) {
+    token = mintAccessToken(email);
+    tokens.set(email, token);
+  }
+  return { Authorization: `Bearer ${await token}` };
+}
+
+/** Request headers for a seeded user (by email) or API key. */
+const principalHeaders = async (principal: Principal) =>
+  "user" in principal ? userHeaders(principal.user) : keyHeaders(principal.key);
+
+type Principal = { user: string } | { key: string };
 
 const uniqueSuffix = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -104,7 +269,7 @@ async function resolveSeedRefs(request: APIRequestContext): Promise<SeedRefs> {
   const getRegionId = async (name: string) => {
     const res = await request.get(`${API}/v1/org`, {
       params: { orgTypes: "region", searchTerm: name },
-      headers: headers(KEYS.readOnly),
+      headers: keyHeaders(KEYS.roleless),
     });
     expect(res.ok()).toBe(true);
     const { orgs } = (await res.json()) as {
@@ -121,7 +286,7 @@ async function resolveSeedRefs(request: APIRequestContext): Promise<SeedRefs> {
   const getAoRefs = async (aoName: string) => {
     const res = await request.get(`${API}/v1/event`, {
       params: { searchTerm: `${aoName} Bootcamp` },
-      headers: headers(KEYS.readOnly),
+      headers: keyHeaders(KEYS.roleless),
     });
     expect(res.ok()).toBe(true);
     const { events } = (await res.json()) as {
@@ -141,7 +306,7 @@ async function resolveSeedRefs(request: APIRequestContext): Promise<SeedRefs> {
   };
 
   const eventTypesRes = await request.get(`${API}/v1/event-type`, {
-    headers: headers(KEYS.readOnly),
+    headers: keyHeaders(KEYS.roleless),
   });
   expect(eventTypesRes.ok()).toBe(true);
   const { eventTypes } = (await eventTypesRes.json()) as {
@@ -188,11 +353,11 @@ function createEventPayload(params: {
 
 async function submitCreateEvent(
   request: APIRequestContext,
-  key: string,
+  principal: Principal,
   payload: ReturnType<typeof createEventPayload>,
 ) {
   return request.post(`${API}/v1/request/create-event-request`, {
-    headers: headers(key),
+    headers: await principalHeaders(principal),
     data: payload,
   });
 }
@@ -200,7 +365,7 @@ async function submitCreateEvent(
 /** Read a request's status back with a principal that can always see it. */
 async function getRequestStatus(request: APIRequestContext, id: string) {
   const res = await request.get(`${API}/v1/request/id/${id}`, {
-    headers: headers(KEYS.nationAdmin),
+    headers: keyHeaders(KEYS.nationAdmin),
   });
   expect(res.ok()).toBe(true);
   const body = (await res.json()) as {
@@ -212,11 +377,11 @@ async function getRequestStatus(request: APIRequestContext, id: string) {
 
 async function rejectRequest(
   request: APIRequestContext,
-  key: string,
+  principal: Principal,
   id: string,
 ) {
   return request.post(`${API}/v1/request/reject-submission`, {
-    headers: headers(key),
+    headers: await principalHeaders(principal),
     data: { id },
   });
 }
@@ -225,7 +390,7 @@ async function rejectRequest(
 async function liveEventExists(request: APIRequestContext, name: string) {
   const res = await request.get(`${API}/v1/event`, {
     params: { searchTerm: name },
-    headers: headers(KEYS.readOnly),
+    headers: keyHeaders(KEYS.roleless),
   });
   expect(res.ok()).toBe(true);
   const { events } = (await res.json()) as { events: { name: string }[] };
@@ -240,7 +405,7 @@ test.describe("update-request RBAC (API)", () => {
     const eventName = `E2E RBAC pending ${uniqueSuffix()}`;
     const res = await submitCreateEvent(
       request,
-      KEYS.readOnly,
+      { user: USERS.nonEditor },
       createEventPayload({ refs, region: "charlotte", eventName }),
     );
     expect(res.status()).toBe(200);
@@ -263,7 +428,7 @@ test.describe("update-request RBAC (API)", () => {
     const eventName = `E2E RBAC applied ${uniqueSuffix()}`;
     const res = await submitCreateEvent(
       request,
-      KEYS.nationEditor,
+      { user: USERS.nationEditor },
       createEventPayload({ refs, region: "charlotte", eventName }),
     );
     expect(res.status()).toBe(200);
@@ -287,7 +452,7 @@ test.describe("update-request RBAC (API)", () => {
     const eventName = `E2E RBAC noreject ${uniqueSuffix()}`;
     const submitRes = await submitCreateEvent(
       request,
-      KEYS.readOnly,
+      { user: USERS.nonEditor },
       createEventPayload({ refs, region: "charlotte", eventName }),
     );
     expect(submitRes.status()).toBe(200);
@@ -298,7 +463,7 @@ test.describe("update-request RBAC (API)", () => {
     // editorProcedure denies principals without any editor/admin role.
     const rejectRes = await rejectRequest(
       request,
-      KEYS.readOnly,
+      { user: USERS.nonEditor },
       updateRequest.id,
     );
     expect(rejectRes.status()).toBe(401);
@@ -314,7 +479,7 @@ test.describe("update-request RBAC (API)", () => {
     const charlotteName = `E2E RBAC xregion ${uniqueSuffix()}`;
     const charlotteRes = await submitCreateEvent(
       request,
-      KEYS.readOnly,
+      { user: USERS.nonEditor },
       createEventPayload({
         refs,
         region: "charlotte",
@@ -329,7 +494,7 @@ test.describe("update-request RBAC (API)", () => {
     // …cannot be rejected by an editor scoped to the Boone region only.
     const denied = await rejectRequest(
       request,
-      KEYS.booneEditor,
+      { user: USERS.booneEditor },
       charlotteRequest.id,
     );
     expect(denied.status()).toBe(401);
@@ -337,11 +502,11 @@ test.describe("update-request RBAC (API)", () => {
       "pending",
     );
 
-    // Positive control: the same key CAN reject a Boone-region request.
+    // Positive control: the same editor CAN reject a Boone-region request.
     const booneName = `E2E RBAC boonereject ${uniqueSuffix()}`;
     const booneRes = await submitCreateEvent(
       request,
-      KEYS.readOnly,
+      { user: USERS.nonEditor },
       createEventPayload({ refs, region: "boone", eventName: booneName }),
     );
     expect(booneRes.status()).toBe(200);
@@ -351,7 +516,7 @@ test.describe("update-request RBAC (API)", () => {
 
     const allowed = await rejectRequest(
       request,
-      KEYS.booneEditor,
+      { user: USERS.booneEditor },
       booneRequest.id,
     );
     expect(allowed.status()).toBe(200);
@@ -371,10 +536,44 @@ test.describe("update-request RBAC (API)", () => {
     // unauthenticated principal).
     const res = await submitCreateEvent(
       request,
-      "not-a-real-key",
+      { key: "not-a-real-key" },
       createEventPayload({ refs, region: "charlotte", eventName }),
     );
     expect(res.status()).toBe(401);
     expect(await liveEventExists(request, eventName)).toBe(false);
+  });
+
+  test("API keys cannot submit or reject", async ({ request }) => {
+    const refs = await resolveSeedRefs(request);
+
+    // A role-less key resolves to no session at all.
+    const keyName = `E2E RBAC keysubmit ${uniqueSuffix()}`;
+    const keySubmit = await submitCreateEvent(
+      request,
+      { key: KEYS.roleless },
+      createEventPayload({ refs, region: "boone", eventName: keyName }),
+    );
+    expect(keySubmit.status()).toBe(401);
+    expect(await liveEventExists(request, keyName)).toBe(false);
+
+    // An editor key has the role but names no person, so it can't review.
+    const booneName = `E2E RBAC keyreject ${uniqueSuffix()}`;
+    const booneRes = await submitCreateEvent(
+      request,
+      { user: USERS.nonEditor },
+      createEventPayload({ refs, region: "boone", eventName: booneName }),
+    );
+    expect(booneRes.status()).toBe(200);
+    const booneRequest = (
+      (await booneRes.json()) as { updateRequest: { id: string } }
+    ).updateRequest;
+
+    const keyReject = await rejectRequest(
+      request,
+      { key: KEYS.booneEditor },
+      booneRequest.id,
+    );
+    expect(keyReject.status()).toBe(401);
+    expect(await getRequestStatus(request, booneRequest.id)).toBe("pending");
   });
 });

@@ -3,15 +3,23 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const logWarn = vi.hoisted(() => vi.fn());
+vi.mock("~/lib/logging", () => ({ logWarn }));
+
 const fetchSpy = vi
   .fn<(url: URL, init: RequestInit) => Promise<Response>>()
-  .mockResolvedValue(new Response("ok"));
+  // A fresh Response per call: the proxy takes its own reader on every body,
+  // which locks it, so a shared Response would fail on the next request.
+  .mockImplementation(() => Promise.resolve(new Response("ok")));
 vi.stubGlobal("fetch", fetchSpy);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("oRPC proxy route", () => {
   beforeEach(() => {
     vi.resetModules();
     fetchSpy.mockClear();
+    logWarn.mockClear();
     vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
     // CI exports a mock secret; each test sets the one it needs.
     vi.stubEnv("PROXY_CLIENT_IP_SECRET", undefined);
@@ -302,7 +310,7 @@ describe("oRPC proxy route", () => {
     }
   });
 
-  it("does not time out a slow body once the headers have arrived", async () => {
+  it("keeps a slow body that sends each chunk within the timeout", async () => {
     vi.useFakeTimers();
     try {
       let controller!: ReadableStreamDefaultController<Uint8Array>;
@@ -323,13 +331,84 @@ describe("oRPC proxy route", () => {
       const response = await GET(
         new NextRequest("http://localhost:3000/api/orpc/v1/ping"),
       );
-      // The body only starts arriving after the header timeout has elapsed.
-      await vi.advanceTimersByTimeAsync(60_000);
-      controller.enqueue(new TextEncoder().encode("late but whole"));
+      const text = response.text();
+      // 60s in all, but never 20s without a chunk.
+      for (const chunk of ["slow ", "but ", "whole"]) {
+        await vi.advanceTimersByTimeAsync(19_999);
+        controller.enqueue(new TextEncoder().encode(chunk));
+      }
       controller.close();
 
       expect(response.status).toBe(200);
-      expect(await response.text()).toBe("late but whole");
+      expect(await text).toBe("slow but whole");
+      expect(logWarn).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts the API request when the browser goes away mid-body, without logging a failure", async () => {
+    let upstreamSignal: AbortSignal | undefined;
+    fetchSpy.mockImplementationOnce((_url, init) => {
+      upstreamSignal = init.signal ?? undefined;
+      return Promise.resolve(
+        new Response(new ReadableStream<Uint8Array>(), {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+    });
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const response = await GET(
+      new NextRequest("http://localhost:3000/api/orpc/v1/ping"),
+    );
+    const reader = response.body!.getReader();
+    const pending = reader.read();
+    await sleep(10); // let the proxy start waiting on the API
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    expect(upstreamSignal?.aborted).toBe(true);
+    await sleep(10);
+    expect(logWarn).not.toHaveBeenCalled();
+  });
+
+  it("fails a body that stops arriving after the headers", async () => {
+    vi.useFakeTimers();
+    try {
+      let upstreamSignal: AbortSignal | undefined;
+      fetchSpy.mockImplementationOnce((_url, init) => {
+        upstreamSignal = init.signal ?? undefined;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"json":'));
+          },
+        });
+        return Promise.resolve(
+          new Response(body, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      });
+      const { GET } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      const response = await GET(
+        new NextRequest("http://localhost:3000/api/orpc/v1/ping"),
+      );
+      const text = response.text().catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(response.status).toBe(200);
+      expect(await text).toMatchObject({ name: "TimeoutError" });
+      expect(upstreamSignal?.aborted).toBe(true);
+      expect(logWarn).toHaveBeenCalledTimes(1);
+      expect(logWarn.mock.lastCall).toMatchObject([
+        "map.orpc_proxy.upstream_body_failed",
+        { path: "/v1/ping", err: { name: "TimeoutError" } },
+      ]);
     } finally {
       vi.useRealTimers();
     }
@@ -383,6 +462,11 @@ describe("oRPC proxy route", () => {
   });
 
   it("sets Cache-Control: no-store on a signed-in-only response", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response('{"ok":true}', {
+        headers: { "content-type": "application/json" },
+      }),
+    );
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");
 
@@ -397,7 +481,9 @@ describe("oRPC proxy route", () => {
 
     const response = await POST(request);
 
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe(
+      "no-store, no-transform",
+    );
   });
 
   it("also sets Cache-Control: no-store on a public response", async () => {
@@ -406,6 +492,11 @@ describe("oRPC proxy route", () => {
     // `onlyMine` for a signed-in editor -- a shared cache keyed on URL alone
     // can't tell that apart from the anonymous response for the same
     // path/query, so every response is uncached, not just SIGNED_IN_ONLY_PATHS.
+    fetchSpy.mockResolvedValueOnce(
+      new Response('{"ok":true}', {
+        headers: { "content-type": "application/json" },
+      }),
+    );
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
@@ -416,9 +507,7 @@ describe("oRPC proxy route", () => {
   });
 
   // fetch() decodes a compressed upstream body but keeps its headers; passing
-  // them on makes the browser try to decode plain bytes again. No
-  // accept-encoding here, so the proxy passes the body through as is and the
-  // upstream headers are the only way an encoding could appear.
+  // them on would make the browser try to decode plain bytes again.
   it.each(["/v1/ping", "/v1/request/canEditRegions"])(
     "drops upstream Content-Encoding and Content-Length on %s",
     async (path) => {
@@ -444,111 +533,333 @@ describe("oRPC proxy route", () => {
     },
   );
 
-  it("gzips an upstream-gzipped body exactly once when the caller accepts gzip", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response('{"ok":true}', {
-        headers: {
-          "content-type": "application/json",
-          "content-encoding": "gzip",
-        },
-      }),
-    );
-    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
-
-    const response = await GET(
-      new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
-        headers: { "accept-encoding": "gzip" },
-      }),
-    );
-
-    expect(response.headers.get("content-encoding")).toBe("gzip");
-    const text = await new Response(
-      response.body!.pipeThrough(new DecompressionStream("gzip")),
-    ).text();
-    expect(JSON.parse(text)).toEqual({ ok: true });
-  });
-
+  // Next.js (16.4.5 and later) drops a route handler's Content-Encoding on the
+  // way out, so the proxy must never encode a body itself.
+  // Next.js's server compresses instead, unless Cache-Control says
+  // no-transform.
   describe("compression", () => {
     const json = JSON.stringify({
       json: Array.from({ length: 500 }, (_, i) => [i, "AO name", null]),
     });
-    const upstream = (contentType = "application/json") =>
+    const upstream = (
+      contentType = "application/json",
+      extra: Record<string, string> = {},
+    ) =>
       fetchSpy.mockResolvedValueOnce(
-        new Response(json, { headers: { "content-type": contentType } }),
+        new Response(json, {
+          headers: { "content-type": contentType, ...extra },
+        }),
       );
-    const call = async (acceptEncoding?: string) => {
+    const call = async (path: string, acceptEncoding = "gzip, deflate, br") => {
       const { POST } =
         await import("../../../src/app/api/orpc/[[...rest]]/route");
       return POST(
-        new NextRequest(
-          "http://localhost:3000/api/orpc/v1/map/location/eventsAndLocations",
-          {
-            method: "POST",
-            body: "{}",
-            headers: acceptEncoding
-              ? { "accept-encoding": acceptEncoding }
-              : {},
-          },
-        ),
+        new NextRequest(`http://localhost:3000/api/orpc${path}`, {
+          method: "POST",
+          body: "{}",
+          headers: { "accept-encoding": acceptEncoding },
+        }),
       );
     };
-    const gunzip = async (res: Response) =>
-      new Response(
-        res.body!.pipeThrough(new DecompressionStream("gzip")),
-      ).text();
 
-    it("gzips a JSON response when the caller accepts gzip", async () => {
+    it("sends public JSON plain and leaves it compressible by Next.js", async () => {
       upstream();
-      const res = await call("gzip, deflate, br");
-      expect(res.headers.get("content-encoding")).toBe("gzip");
-      expect(res.headers.get("vary")).toMatch(/accept-encoding/i);
-      expect(await gunzip(res)).toBe(json);
+      const res = await call("/v1/map/location/eventsAndLocations");
+      expect(res.headers.get("content-encoding")).toBeNull();
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(await res.text()).toBe(json);
     });
 
-    it("never compresses a signed-in-only response", async () => {
-      upstream();
-      const { POST } =
-        await import("../../../src/app/api/orpc/[[...rest]]/route");
-      const res = await POST(
-        new NextRequest(
-          "http://localhost:3000/api/orpc/v1/request/canEditRegions",
-          {
-            method: "POST",
-            body: "{}",
-            headers: { "accept-encoding": "gzip" },
-          },
-        ),
-      );
+    it("sends a body fetch() already decoded plain, without its upstream encoding", async () => {
+      upstream("application/json", { "content-encoding": "gzip" });
+      const res = await call("/v1/map/location/eventsAndLocations");
       expect(res.headers.get("content-encoding")).toBeNull();
       expect(await res.text()).toBe(json);
     });
 
-    it("passes the body through when the caller doesn't accept gzip", async () => {
+    it("marks a signed-in-only response no-transform so it stays uncompressed", async () => {
       upstream();
-      const res = await call();
+      const res = await call("/v1/request/canEditRegions");
       expect(res.headers.get("content-encoding")).toBeNull();
+      expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
       expect(await res.text()).toBe(json);
     });
 
-    it("honors an explicit gzip;q=0, even with a wildcard", async () => {
-      upstream();
-      const res = await call("gzip;q=0, br");
-      expect(res.headers.get("content-encoding")).toBeNull();
-      upstream();
-      const wild = await call("gzip;q=0, *;q=1");
-      expect(wild.headers.get("content-encoding")).toBeNull();
-    });
-
-    it("accepts gzip through a wildcard when gzip isn't listed", async () => {
-      upstream();
-      const res = await call("br;q=1, *;q=0.5");
-      expect(res.headers.get("content-encoding")).toBe("gzip");
-    });
-
-    it("leaves non-JSON bodies (e.g. event streams) uncompressed", async () => {
+    it("marks non-JSON bodies (e.g. event streams) no-transform", async () => {
       upstream("text/event-stream");
-      const res = await call("gzip");
+      const res = await call("/v1/map/location/eventsAndLocations");
       expect(res.headers.get("content-encoding")).toBeNull();
+      expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     });
+
+    it("fails a body that stalls mid-body", async () => {
+      vi.useFakeTimers();
+      try {
+        let upstreamSignal: AbortSignal | undefined;
+        fetchSpy.mockImplementationOnce((_url, init) => {
+          upstreamSignal = init.signal ?? undefined;
+          const body = new ReadableStream<Uint8Array>({
+            start(c) {
+              c.enqueue(new TextEncoder().encode('{"json":'));
+            },
+          });
+          return Promise.resolve(
+            new Response(body, {
+              headers: { "content-type": "application/json" },
+            }),
+          );
+        });
+        const res = await call("/v1/map/location/eventsAndLocations");
+        const read = res.arrayBuffer().catch((err: unknown) => err);
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(await read).toMatchObject({ name: "TimeoutError" });
+        expect(upstreamSignal?.aborted).toBe(true);
+        expect(logWarn).toHaveBeenCalledWith(
+          "map.orpc_proxy.upstream_body_failed",
+          expect.objectContaining({
+            path: "/v1/map/location/eventsAndLocations",
+          }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("aborts the API request when the browser leaves the body", async () => {
+      let upstreamSignal: AbortSignal | undefined;
+      fetchSpy.mockImplementationOnce((_url, init) => {
+        upstreamSignal = init.signal ?? undefined;
+        return Promise.resolve(
+          new Response(new ReadableStream<Uint8Array>(), {
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      });
+      const res = await call("/v1/map/location/eventsAndLocations");
+      await res.body!.cancel("gone");
+      await vi.waitFor(() => expect(upstreamSignal?.aborted).toBe(true));
+      expect(logWarn).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("withStallTimeout", () => {
+  async function importWithStallTimeout() {
+    vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+    const { withStallTimeout } =
+      await import("../../../src/app/api/orpc/[[...rest]]/route");
+    return withStallTimeout;
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("doesn't count time spent waiting on a slow reader", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const chunks = ["a", "b", "c"].map((c) => new TextEncoder().encode(c));
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks.shift();
+        if (next) controller.enqueue(next);
+        else controller.close();
+      },
+    });
+    const onFailure = vi.fn();
+
+    const reader = withStallTimeout(source, 20, onFailure).getReader();
+    let text = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += new TextDecoder().decode(value);
+      await sleep(40);
+    }
+
+    expect(text).toBe("abc");
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("passes on an upstream read error", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new TypeError("terminated"));
+      },
+    });
+    const onFailure = vi.fn();
+
+    const reader = withStallTimeout(source, 1_000, onFailure).getReader();
+
+    await expect(reader.read()).rejects.toThrow("terminated");
+    expect(onFailure).toHaveBeenCalledWith(new TypeError("terminated"));
+  });
+
+  it("cancels the upstream body when the browser goes away", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const cancel = vi.fn();
+    const source = new ReadableStream<Uint8Array>({ cancel });
+
+    await withStallTimeout(source, 1_000, vi.fn()).cancel("gone");
+
+    expect(cancel).toHaveBeenCalledWith("gone");
+  });
+
+  it("doesn't report a failure when the browser goes away mid-read", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    // Never sends anything, so a read is still pending when the cancel lands.
+    const source = new ReadableStream<Uint8Array>();
+    const onFailure = vi.fn();
+    const reader = withStallTimeout(source, 1_000, onFailure).getReader();
+
+    const pending = reader.read();
+    await sleep(10); // let the pull start waiting on the API
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    await sleep(10);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("doesn't report a failure when cancelling makes the pending read reject", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    let rejectRead!: (err: unknown) => void;
+    const body = {
+      getReader: () => ({
+        read: () =>
+          new Promise((_, reject) => {
+            rejectRead = reject;
+          }),
+        cancel: () => {
+          rejectRead(new TypeError("aborted"));
+          return Promise.resolve();
+        },
+      }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const onFailure = vi.fn();
+    const reader = withStallTimeout(body, 60_000, onFailure).getReader();
+
+    const pending = reader.read();
+    await sleep(0);
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    await sleep(0);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("cancels the upstream body when it stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const cancel = vi.fn();
+      const source = new ReadableStream<Uint8Array>({ cancel });
+      const onFailure = vi.fn();
+      const read = withStallTimeout(source, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+      expect(cancel).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails a stalled tee branch without waiting for the other branch", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const [branch] = new ReadableStream<Uint8Array>().tee();
+      const onFailure = vi.fn();
+      const read = withStallTimeout(branch, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles cancel on a tee branch without waiting for the other branch", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const [branch] = new ReadableStream<Uint8Array>().tee();
+    const onCancel = vi.fn();
+    const cancelled = withStallTimeout(branch, 1_000, vi.fn(), onCancel).cancel(
+      "gone",
+    );
+
+    await expect(
+      Promise.race([cancelled.then(() => "settled"), sleep(50)]),
+    ).resolves.toBe("settled");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles a browser cancel even when the upstream cancel rejects", async () => {
+    const withStallTimeout = await importWithStallTimeout();
+    const source = new ReadableStream<Uint8Array>({
+      cancel() {
+        throw new TypeError("cancel failed");
+      },
+    });
+
+    await expect(
+      withStallTimeout(source, 1_000, vi.fn()).cancel("gone"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("reports the stall, not a rejected upstream cancel", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const source = new ReadableStream<Uint8Array>({
+        cancel() {
+          throw new TypeError("cancel failed");
+        },
+      });
+      const onFailure = vi.fn();
+      const read = withStallTimeout(source, 1_000, onFailure)
+        .getReader()
+        .read()
+        .catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await read).toMatchObject({ name: "TimeoutError" });
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "TimeoutError" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves no timer behind once a chunk arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const withStallTimeout = await importWithStallTimeout();
+      const chunks = ["a", "b", "c"].map((c) => new TextEncoder().encode(c));
+      const source = new ReadableStream<Uint8Array>({
+        pull(c) {
+          const next = chunks.shift();
+          if (next) c.enqueue(next);
+          else c.close();
+        },
+      });
+      expect(
+        await new Response(withStallTimeout(source, 20_000, vi.fn())).text(),
+      ).toBe("abc");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

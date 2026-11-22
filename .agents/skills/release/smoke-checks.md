@@ -27,6 +27,10 @@ Keep this list to 2–3 checks per app; edit it here when an app changes.
 - [ ] Sign in with F3 SSO. Your profile shows your name.
 - [ ] Edit **My F3 Why** and click **Save Changes**. Reload to confirm the edit saved with no error.
 
+## Region Pages
+
+- [ ] https://staging.regions.f3nation.com shows **Available Regions**. Open a region that has workouts: its page lists them, with no error page.
+
 ## Slackbot
 
 - [ ] In the Slack workspace connected to the Staging bot, run a slash command you know. The bot responds. If you don't have access to that workspace, leave this unchecked and say so in `#monorepo`.

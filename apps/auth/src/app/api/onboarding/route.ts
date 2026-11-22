@@ -8,6 +8,7 @@ import { orgs, users } from "@acme/db/schema/schema";
 
 import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
+import { rejectCrossSiteWrite } from "~/lib/same-origin";
 
 export async function GET() {
   const session = await getCurrentSession();
@@ -39,6 +40,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const rejected = rejectCrossSiteWrite(request, { requireJson: true });
+  if (rejected) return rejected;
+
   const session = await getCurrentSession();
   if (!session?.user.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

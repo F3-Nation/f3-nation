@@ -21,4 +21,15 @@ describe("getAuth", () => {
     const { getAuth } = await import("~/lib/better-auth");
     await expect(getAuth()).rejects.toThrow(/BETTER_AUTH_SECRET/);
   }, 15000);
+
+  it("builds the instance once BETTER_AUTH_SECRET is set, then reuses it", async () => {
+    const { env } = await import("~/env");
+    Object.assign(env, { BETTER_AUTH_SECRET: "test-only-not-a-real-secret" });
+    const { getAuth } = await import("~/lib/better-auth");
+
+    const auth = await getAuth();
+
+    expect(auth.options.baseURL).toBe("http://localhost:3999");
+    await expect(getAuth()).resolves.toBe(auth);
+  }, 15000);
 });

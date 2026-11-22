@@ -50,6 +50,7 @@ import {
   cleanup,
   createAdminSession,
   createEditorSession,
+  createNationAdminSession,
   getOrCreateF3NationOrg,
   mockAuthWithSession,
   uniqueId,
@@ -730,7 +731,7 @@ describe("User Router", () => {
       }
     });
 
-    it("should include PII when requester is an admin of an org the user has a role on outside their home region", async () => {
+    it("should not include PII when requester is an admin of an org the user has a role on outside their home region", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const [homeRegion, roleRegion] = await db
         .insert(schema.orgs)
@@ -785,8 +786,9 @@ describe("User Router", () => {
           includePii: true,
         });
 
-        expect(result.includePii).toBe(true);
-        expect(result.user?.email).toBe(testUser.email);
+        expect(result.includePii).toBe(false);
+        expect(result.user?.id).toBe(testUser.id);
+        expect(result.user?.email).toBeUndefined();
       } finally {
         await cleanup.user(testUser.id);
         await cleanup.org(homeRegion.id);
@@ -1507,7 +1509,7 @@ describe("User Router", () => {
         .where(eq(schema.orgs.id, regionB.id));
     });
 
-    it("should allow update when user has null home region but a role in the caller's region", async () => {
+    it("should reject update when user has null home region and only a role in the caller's region", async () => {
       const dbInstance = db;
 
       let [f3Nation] = await dbInstance
@@ -1586,19 +1588,22 @@ describe("User Router", () => {
 
       const client = createTestClient();
 
-      const result = await client.user.crupdate({
-        id: testUser.id,
-        f3Name: "Updated",
-        roles: [],
-      });
+      await expect(
+        client.user.crupdate({
+          id: testUser.id,
+          f3Name: "Updated",
+          roles: [],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
-      expect(result.id).toBe(testUser.id);
-      expect(result.f3Name).toBe("Updated");
+      const [after] = await dbInstance
+        .select({ f3Name: schema.users.f3Name })
+        .from(schema.users)
+        .where(eq(schema.users.id, testUser.id));
+      expect(after?.f3Name).toBe("NullHomeRegion");
 
       // Clean up
-      await dbInstance
-        .delete(schema.users)
-        .where(eq(schema.users.id, testUser.id));
+      await cleanup.user(testUser.id);
       await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
     });
 
@@ -1686,7 +1691,7 @@ describe("User Router", () => {
       await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
     });
 
-    it("should let an editor of the user's home region update the email of a user with no roles", async () => {
+    it("should reject an editor of the user's home region changing the email of a user with no roles", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const [region] = await db
         .insert(schema.orgs)
@@ -1715,18 +1720,23 @@ describe("User Router", () => {
         );
         const client = createTestClient();
 
-        await client.user.crupdate({
-          id: testUser.id,
-          f3Name: "HomeEditorCrupdate",
-          email: newEmail,
-          roles: [],
+        await expect(
+          client.user.crupdate({
+            id: testUser.id,
+            f3Name: "HomeEditorCrupdate",
+            email: newEmail,
+            roles: [],
+          }),
+        ).rejects.toMatchObject({
+          code: "UNAUTHORIZED",
+          message: ERRORS.MUST_BE_NATION_ADMIN_TO_CHANGE_EMAIL,
         });
 
         const [dbUser] = await db
           .select({ email: schema.users.email })
           .from(schema.users)
           .where(eq(schema.users.id, testUser.id));
-        expect(dbUser?.email).toBe(newEmail);
+        expect(dbUser?.email).toBe(testUser.email);
       } finally {
         await cleanup.user(testUser.id);
         await cleanup.org(region.id);
@@ -1745,7 +1755,7 @@ describe("User Router", () => {
       const newEmail = `crupdate-no-roles-new-${uniqueId()}@example.com`;
 
       try {
-        await mockAuthWithSession(await createAdminSession());
+        await mockAuthWithSession(await createNationAdminSession());
         const client = createTestClient();
 
         await client.user.crupdate({
@@ -1766,7 +1776,6 @@ describe("User Router", () => {
     });
 
     it.each([
-      ["email", `crupdate-denied-new-${uniqueId()}@example.com`],
       ["phone", "555-0100"],
       ["phone", null],
       ["emergencyContact", "New Contact"],
@@ -2490,9 +2499,10 @@ describe("User Router", () => {
     });
   });
 
-  describe("dormant password roles", () => {
-    // Rows created here are removed after each test, roles last, so a leftover
-    // password_* roles row never leaks into other tests (none exists in prod).
+  describe("several roles per org", () => {
+    // Rows created here are removed after each test, roles last, so a
+    // password_* roles row created here never leaks into other tests (the
+    // test seed doesn't create one).
     const created = {
       users: [] as number[],
       orgs: [] as number[],
@@ -2535,7 +2545,7 @@ describe("User Router", () => {
       const [region] = await db
         .insert(schema.orgs)
         .values({
-          name: `DormantRegion-${uniqueId()}`,
+          name: `MultiRoleRegion-${uniqueId()}`,
           orgType: "region",
           isActive: true,
           parentId: nation.id,
@@ -2550,7 +2560,7 @@ describe("User Router", () => {
       f3Name: string,
       assignments: { orgId: number; roleId: number }[] = [],
     ) => {
-      const email = `dormant-${uniqueId()}@example.com`;
+      const email = `multi-role-${uniqueId()}@example.com`;
       const [user] = await db
         .insert(schema.users)
         .values({ email, f3Name })
@@ -2575,35 +2585,32 @@ describe("User Router", () => {
           .where(eq(schema.rolesXUsersXOrg.userId, userId))
       ).sort((a, b) => a.orgId - b.orgId || a.roleId - b.roleId);
 
-    it("rejects granting a dormant (non-grantable) role", async () => {
+    it("rejects the same role twice on one org", async () => {
       const nation = await getOrCreateF3NationOrg();
-      // With a password_manager roles row present, only the input schema
-      // stands between this payload and a real grant.
+      const region = await createRegion();
       await getOrCreateRole("password_manager");
-      const user = await createUser("DormantGrant");
+      const user = await createUser("DuplicatePair");
       const payload = {
         id: user.id,
         email: user.email,
-        roles: [{ orgId: nation.id, roleName: "password_manager" }],
+        roles: [
+          { orgId: region.id, roleName: "password_manager" as const },
+          { orgId: region.id, roleName: "password_manager" as const },
+        ],
       };
 
       expect(CrupdateUserSchema.safeParse(payload).success).toBe(false);
 
       await mockAuthWithSession(nationAdminSession(nation));
       const client = createTestClient();
-      await expect(
-        // Cast past the narrowed input type to exercise runtime validation.
-        client.user.crupdate(
-          payload as Parameters<typeof client.user.crupdate>[0],
-        ),
-      ).rejects.toMatchObject({
+      await expect(client.user.crupdate(payload)).rejects.toMatchObject({
         code: "BAD_REQUEST",
         message: "Input validation failed",
       });
       expect(await roleRows(user.id)).toEqual([]);
     });
 
-    it("filters users by role, including role-less and dormant-role users", async () => {
+    it("filters users by role, including role-less and password-role users", async () => {
       const nation = await getOrCreateF3NationOrg();
       const [editorId, adminId, pmId, userRoleId] = await Promise.all([
         getOrCreateRole("editor"),
@@ -2654,97 +2661,52 @@ describe("User Router", () => {
       expect(await matching(["password_manager"])).toEqual(new Set([pm.id]));
     });
 
-    it("preserves dormant role assignments when crupdate omits them", async () => {
-      const nation = await getOrCreateF3NationOrg();
-      const pmId = await getOrCreateRole("password_manager");
-      const user = await createUser("PreserveMe", [
-        { orgId: nation.id, roleId: pmId },
-      ]);
-
-      await mockAuthWithSession(nationAdminSession(nation));
-      const client = createTestClient();
-      // The admin UI hides the dormant role, so crupdate submits none. The
-      // assignment must survive instead of being treated as "removed".
-      await client.user.crupdate({ id: user.id, email: user.email, roles: [] });
-
-      expect(await roleRows(user.id)).toEqual([
-        { orgId: nation.id, roleId: pmId },
-      ]);
-    });
-
-    it("grants a role on another org while keeping a dormant role", async () => {
-      const nation = await getOrCreateF3NationOrg();
-      const [regionA, regionB] = [await createRegion(), await createRegion()];
-      const [pmId, editorId] = [
-        await getOrCreateRole("password_manager"),
-        await getOrCreateRole("editor"),
-      ];
-      const user = await createUser("GrantElsewhere", [
-        { orgId: regionA.id, roleId: pmId },
-      ]);
-
-      await mockAuthWithSession(nationAdminSession(nation));
-      const client = createTestClient();
-      await client.user.crupdate({
-        id: user.id,
-        email: user.email,
-        roles: [{ orgId: regionB.id, roleName: "editor" }],
-      });
-
-      expect(await roleRows(user.id)).toEqual([
-        { orgId: regionA.id, roleId: pmId },
-        { orgId: regionB.id, roleId: editorId },
-      ]);
-    });
-
-    it("removes visible roles without requiring admin on a dormant role's org", async () => {
-      const [regionA, regionB] = [await createRegion(), await createRegion()];
-      const [pmId, editorId] = [
-        await getOrCreateRole("password_manager"),
-        await getOrCreateRole("editor"),
-      ];
-      const user = await createUser("RemoveVisible", [
-        { orgId: regionA.id, roleId: editorId },
-        { orgId: regionB.id, roleId: pmId },
-      ]);
-      const client = createTestClient();
-
-      // An editor on org A may not remove roles there.
-      await mockAuthWithSession(
-        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
-      );
-      await expect(
-        client.user.crupdate({ id: user.id, email: user.email, roles: [] }),
-      ).rejects.toMatchObject({
-        code: "UNAUTHORIZED",
-        message: ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
-      });
-
-      // An admin on org A only: the dormant role on org B is not a removal,
-      // so admin on B is not required.
-      await mockAuthWithSession(
-        createRegionAdminSession({ orgId: regionA.id, orgName: regionA.name }),
-      );
-      await client.user.crupdate({ id: user.id, email: user.email, roles: [] });
-
-      expect(await roleRows(user.id)).toEqual([
-        { orgId: regionB.id, roleId: pmId },
-      ]);
-    });
-
-    it("re-submits an existing role alongside a dormant role on the same org", async () => {
+    it("grants a password role alongside an existing role on the same org", async () => {
       const nation = await getOrCreateF3NationOrg();
       const region = await createRegion();
-      const [pmId, editorId] = [
+      const [adminId, pmId] = [
+        await getOrCreateRole("admin"),
         await getOrCreateRole("password_manager"),
-        await getOrCreateRole("editor"),
       ];
-      // Legacy data: two roles on one org, one of them dormant.
-      const user = await createUser("LegacyPair", [
-        { orgId: region.id, roleId: pmId },
-        { orgId: region.id, roleId: editorId },
+      const user = await createUser("AdminAndVault", [
+        { orgId: region.id, roleId: adminId },
       ]);
-      const before = await roleRows(user.id);
+
+      await mockAuthWithSession(nationAdminSession(nation));
+      const client = createTestClient();
+      const result = await client.user.crupdate({
+        id: user.id,
+        email: user.email,
+        roles: [
+          { orgId: region.id, roleName: "admin" },
+          { orgId: region.id, roleName: "password_manager" },
+        ],
+      });
+
+      expect(await roleRows(user.id)).toEqual(
+        [
+          { orgId: region.id, roleId: adminId },
+          { orgId: region.id, roleId: pmId },
+        ].sort((a, b) => a.roleId - b.roleId),
+      );
+      expect(
+        result.roles
+          .map((role) => role.roleName)
+          .sort((a, b) => (a ?? "").localeCompare(b ?? "")),
+      ).toEqual(["admin", "password_manager"]);
+    });
+
+    it("removes a password role the submitted list leaves out", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createRegion();
+      const [editorId, readerId] = [
+        await getOrCreateRole("editor"),
+        await getOrCreateRole("password_reader"),
+      ];
+      const user = await createUser("DropReader", [
+        { orgId: region.id, roleId: editorId },
+        { orgId: region.id, roleId: readerId },
+      ]);
 
       await mockAuthWithSession(nationAdminSession(nation));
       const client = createTestClient();
@@ -2754,34 +2716,147 @@ describe("User Router", () => {
         roles: [{ orgId: region.id, roleName: "editor" }],
       });
 
-      expect(await roleRows(user.id)).toEqual(before);
+      expect(await roleRows(user.id)).toEqual([
+        { orgId: region.id, roleId: editorId },
+      ]);
     });
 
-    it("rejects granting a role on an org where a hidden role is retained", async () => {
-      const nation = await getOrCreateF3NationOrg();
+    it("requires admin on the org to grant a password role", async () => {
+      const [region, otherRegion] = [
+        await createRegion(),
+        await createRegion(),
+      ];
       const pmId = await getOrCreateRole("password_manager");
-      const user = await createUser("ConflictMe", [
-        { orgId: nation.id, roleId: pmId },
+      const user = await createUser("VaultGrant");
+      const client = createTestClient();
+      const grant = () =>
+        client.user.crupdate({
+          id: user.id,
+          email: user.email,
+          roles: [{ orgId: region.id, roleName: "password_manager" }],
+        });
+
+      // An editor of the region may not grant roles there.
+      await mockAuthWithSession(
+        createEditorSession({ orgId: region.id, orgName: region.name }),
+      );
+      await expect(grant()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
+      });
+
+      // Holding a password role there gives no right to grant roles either.
+      const vaultRoles = [
+        {
+          orgId: region.id,
+          orgName: region.name,
+          roleName: "password_manager" as const,
+        },
+        {
+          orgId: otherRegion.id,
+          orgName: otherRegion.name,
+          roleName: "editor" as const,
+        },
+      ];
+      const editorSession = createEditorSession({
+        orgId: otherRegion.id,
+        orgName: otherRegion.name,
+      });
+      await mockAuthWithSession({
+        ...editorSession,
+        user: { ...editorSession.user, roles: vaultRoles },
+        roles: vaultRoles,
+      });
+      await expect(grant()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
+      });
+
+      // Neither may an admin of a different region.
+      await mockAuthWithSession(
+        createRegionAdminSession({
+          orgId: otherRegion.id,
+          orgName: otherRegion.name,
+        }),
+      );
+      await expect(grant()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
+      });
+      expect(await roleRows(user.id)).toEqual([]);
+
+      // An admin of the region may.
+      await mockAuthWithSession(
+        createRegionAdminSession({ orgId: region.id, orgName: region.name }),
+      );
+      await grant();
+      expect(await roleRows(user.id)).toEqual([
+        { orgId: region.id, roleId: pmId },
+      ]);
+    });
+
+    it.each(["password_manager", "password_reader"] as const)(
+      "refuses %s on an org that isn't a region",
+      async (roleName) => {
+        const nation = await getOrCreateF3NationOrg();
+        await getOrCreateRole(roleName);
+        const user = await createUser("VaultOnNation");
+
+        await mockAuthWithSession(nationAdminSession(nation));
+        const client = createTestClient();
+        await expect(
+          client.user.crupdate({
+            id: user.id,
+            email: user.email,
+            roles: [{ orgId: nation.id, roleName }],
+          }),
+        ).rejects.toMatchObject({
+          code: "BAD_REQUEST",
+          message: `The ${roleName} role can only be given on a region`,
+        });
+        expect(await roleRows(user.id)).toEqual([]);
+      },
+    );
+
+    it("keeps an existing password role on a non-region org when it is resubmitted", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const readerId = await getOrCreateRole("password_reader");
+      const user = await createUser("LegacyNationReader", [
+        { orgId: nation.id, roleId: readerId },
       ]);
 
       await mockAuthWithSession(nationAdminSession(nation));
       const client = createTestClient();
-      // The form hides password_manager, so the admin submits only editor
-      // on the same org. Saving it would leave the user with two roles on
-      // that org, so it must be rejected rather than silently created.
-      await expect(
-        client.user.crupdate({
-          id: user.id,
-          email: user.email,
-          roles: [{ orgId: nation.id, roleName: "editor" }],
-        }),
-      ).rejects.toMatchObject({
-        code: "BAD_REQUEST",
-        message: ERRORS.ROLE_CONFLICTS_WITH_HIDDEN_ROLE,
+      await client.user.crupdate({
+        id: user.id,
+        email: user.email,
+        roles: [{ orgId: nation.id, roleName: "password_reader" }],
       });
 
       expect(await roleRows(user.id)).toEqual([
-        { orgId: nation.id, roleId: pmId },
+        { orgId: nation.id, roleId: readerId },
+      ]);
+    });
+
+    it("requires admin on the org to remove a password role", async () => {
+      const region = await createRegion();
+      const readerId = await getOrCreateRole("password_reader");
+      const user = await createUser("VaultRevoke", [
+        { orgId: region.id, roleId: readerId },
+      ]);
+      const client = createTestClient();
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: region.id, orgName: region.name }),
+      );
+      await expect(
+        client.user.crupdate({ id: user.id, email: user.email, roles: [] }),
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
+      });
+      expect(await roleRows(user.id)).toEqual([
+        { orgId: region.id, roleId: readerId },
       ]);
     });
   });

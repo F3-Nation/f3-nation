@@ -34,8 +34,20 @@ const { GET, POST } = await import("../../../../src/app/api/onboarding/route");
 
 const profile = { f3Name: "Test PAX", firstName: "Test", lastName: "User" };
 
-function post(body: unknown): NextRequest {
-  return { json: async () => body } as unknown as NextRequest;
+function post(
+  body: unknown,
+  headers: Record<string, string> = {},
+): NextRequest {
+  return new Request("https://auth.f3nation.com/api/onboarding", {
+    method: "POST",
+    headers: {
+      host: "auth.f3nation.com",
+      "sec-fetch-site": "same-origin",
+      "content-type": "application/json",
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  }) as unknown as NextRequest;
 }
 
 // POST reads the active-region check first (when a region is sent), then the
@@ -94,6 +106,29 @@ describe("GET /api/onboarding", () => {
 });
 
 describe("POST /api/onboarding", () => {
+  it("rejects a cross-site request before reading the session", async () => {
+    const res = await POST(
+      post({ ...profile, homeRegionId: 7 }, { "sec-fetch-site": "cross-site" }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(getCurrentSession).not.toHaveBeenCalled();
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a text/plain body, which a cross-site form can send", async () => {
+    const res = await POST(
+      post(
+        { ...profile, homeRegionId: 7 },
+        { "content-type": "text/plain;charset=UTF-8" },
+      ),
+    );
+
+    expect(res.status).toBe(415);
+    expect(getCurrentSession).not.toHaveBeenCalled();
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
   it("requires a session", async () => {
     vi.mocked(getCurrentSession).mockResolvedValue(null);
 
