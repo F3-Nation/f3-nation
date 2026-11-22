@@ -250,34 +250,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Stands in for the scope of an authorize request that didn't ask for
- * `openid`. No client can be registered for it (registration only accepts
- * the provider's `scopes`), so the plugin rejects it with `invalid_scope`.
- */
-export const OPENID_REQUIRED_SCOPE = "openid_required";
-
-/**
- * auth3 is an OpenID Connect provider only, so an authorize request must
- * name its scopes and include `openid` (OIDC Core §3.1.2.1).
- */
-function requestsOpenId(scope: unknown): boolean {
-  return typeof scope === "string" && scope.split(" ").includes("openid");
-}
-
-/**
- * Fills the default resource, drops an empty nonce and enforces the
- * `openid` scope on one authorize parameter object. Edits in place: a
- * hook's returned context is merged with the original as defaults, so it
- * can't remove a key.
+ * Fills the default resource and drops an empty nonce on one authorize
+ * parameter object. Edits in place: a hook's returned context is merged
+ * with the original as defaults, so it can't remove a key.
  *
- * Without a scope the plugin grants every scope the client is registered
- * for, `offline_access` included, so a client would get a refresh token it
- * never asked for. Rather than answer here, the scope is replaced with
- * OPENID_REQUIRED_SCOPE: the plugin validates the client and redirect_uri
- * first, then sends `invalid_scope` back to the client with its `state`.
- * `offline_access` is therefore granted only when requested, and with every
- * client on skipConsent, a registered and requested `offline_access` is the
- * condition that permits it (OIDC Core §11).
+ * The `openid` scope itself is enforced by the plugin's requireOpenId
+ * option (see oauthProvider below).
  */
 function normalizeAuthorizeParams(
   params: Record<string, unknown>,
@@ -285,7 +263,6 @@ function normalizeAuthorizeParams(
 ) {
   params.resource ??= resource;
   if (params.nonce === "") delete params.nonce;
-  if (!requestsOpenId(params.scope)) params.scope = OPENID_REQUIRED_SCOPE;
 }
 
 async function findProfileForUser(
@@ -608,6 +585,16 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
             !(await findProfileForUser(options, user.id))?.onboardingCompleted,
         },
         scopes: [...SUPPORTED_OAUTH_SCOPES],
+        // auth3 is an OpenID Connect provider only (OIDC Core §3.1.2.1). Once
+        // the client and redirect_uri are validated, an authorize request
+        // without `openid`, or with no scope at all, goes back to the client
+        // as invalid_scope with its `state`. Without this, a request with no
+        // scope would be granted every scope the client is registered for,
+        // `offline_access` included, so a client would get a refresh token it
+        // never asked for. With every client on skipConsent, a registered and
+        // requested `offline_access` is the condition that permits it
+        // (OIDC Core §11).
+        requireOpenId: true,
         accessTokenExpiresIn: 3600, // matches ACCESS_TOKEN_TTL in apps/auth/src/lib/oauth.ts
         idTokenExpiresIn: 3600, // matches signIdToken's ACCESS_TOKEN_TTL lifetime in lib/oauth.ts
         // Merged over Better Auth's own claims, which read better_auth_user.
