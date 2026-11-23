@@ -459,8 +459,10 @@ def test_refresh_save_failure_is_logged_and_sanitized(isolated_postgres, rotator
     assert NEW_TOKEN not in chain and "gAAAA" not in chain
     assert raised.value.__cause__ is None and raised.value.__context__ is None
     failed = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
-    assert len(failed) == 1
-    assert failed[0].json_fields["error_type"] == "OperationalError"
+    # The first save and each retry of the rotated tokens.
+    assert len(failed) == 1 + refresh.ROTATED_SAVE_RETRIES
+    assert all(r.json_fields["error_type"] == "OperationalError" for r in failed)
+    assert len(_lost_rotations(caplog)) == 1
     assert all(NEW_TOKEN not in r.getMessage() and NEW_TOKEN not in str(r.json_fields) for r in failed)
     assert all(NEW_TOKEN not in r.getMessage() for r in caplog.records)
 
@@ -480,13 +482,13 @@ def test_save_bot_failure_is_logged_and_sanitized(isolated_postgres, caplog):
     assert all(NEW_TOKEN not in r.getMessage() for r in caplog.records)
 
 
-def test_refresh_commit_failure_is_reported_as_save_error(isolated_postgres, rotator, monkeypatch, caplog):
-    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
-    before = _row(isolated_postgres)
-    caplog.set_level(logging.INFO)
+def _fail_token_commits(patched, failures):
+    """Fail the commits of the next `failures` token writes, or of every one with None.
 
-    # Fail only the commit of the token write, not the unlocked read before it.
-    written = []
+    Commits with no token write pending, such as the unlocked read's, go through.
+    Returns the list of failed commits.
+    """
+    written, failed = [], []
     original_write, original_commit = refresh._write, Session.commit
 
     def recording_write(row, bot):
@@ -494,22 +496,85 @@ def test_refresh_commit_failure_is_reported_as_save_error(isolated_postgres, rot
         written.append(True)
 
     def failing_commit(self):
-        if written:
+        if written and (failures is None or len(failed) < failures):
             written.clear()
+            failed.append(True)
             raise OperationalError("COMMIT", {}, Exception("connection dropped"))
+        written.clear()
         original_commit(self)
 
+    patched.setattr(refresh, "_write", recording_write)
+    patched.setattr(Session, "commit", failing_commit)
+    return failed
+
+
+def _lost_rotations(caplog):
+    return [
+        r.json_fields
+        for r in caplog.records
+        if getattr(r, "json_fields", {}).get("event") == "slack.token.rotation_lost"
+    ]
+
+
+def test_refresh_commit_failure_every_time_reports_a_lost_rotation(isolated_postgres, rotator, monkeypatch, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    before = _row(isolated_postgres)
+    caplog.set_level(logging.INFO)
+
     with monkeypatch.context() as patched:
-        patched.setattr(refresh, "_write", recording_write)
-        patched.setattr(Session, "commit", failing_commit)
+        failed = _fail_token_commits(patched, failures=None)
         with pytest.raises(refresh.TokenSaveError) as raised:
             refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
 
+    assert rotator.calls == 1
+    assert len(failed) == 1 + refresh.ROTATED_SAVE_RETRIES
     assert raised.value.__cause__ is None and raised.value.__context__ is None
     assert _row(isolated_postgres) == before
     events = _events(caplog)
     assert "slack.token.refreshed" not in events
     assert "slack.token.refresh_failed" in events
+    assert _lost_rotations(caplog) == [{"event": "slack.token.rotation_lost", "team_id": TEAM_ID, "path": "test"}]
+    assert all(NEW_TOKEN not in r.getMessage() and NEW_REFRESH not in r.getMessage() for r in caplog.records)
+
+
+def test_refresh_commit_failure_once_is_saved_by_the_retry(isolated_postgres, rotator, monkeypatch, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    caplog.set_level(logging.INFO)
+
+    with monkeypatch.context() as patched:
+        failed = _fail_token_commits(patched, failures=1)
+        bot = refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    assert rotator.calls == 1
+    assert len(failed) == 1
+    assert bot.bot_token == NEW_TOKEN and bot.bot_refresh_token is None
+    row = _row(isolated_postgres)
+    assert row["bot_token"] == NEW_TOKEN
+    assert decrypt_refresh_token(row["bot_refresh_token_encrypted"]) == NEW_REFRESH
+    assert "slack.token.refreshed" in _events(caplog)
+    assert _lost_rotations(caplog) == []
+
+
+def test_refresh_save_retry_keeps_a_token_another_process_saved(isolated_postgres, rotator, monkeypatch, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    caplog.set_level(logging.INFO)
+    real_save = refresh.save_bot_locked
+
+    def save_after_another_process(bot, **kwargs):
+        with Session(isolated_postgres) as session:
+            session.execute(text("UPDATE slack_spaces SET bot_token = 'xoxb-other' WHERE team_id = :t"), {"t": TEAM_ID})
+            session.commit()
+        return real_save(bot, **kwargs)
+
+    with monkeypatch.context() as patched:
+        _fail_token_commits(patched, failures=1)
+        patched.setattr(refresh, "save_bot_locked", save_after_another_process)
+        bot = refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    assert bot.bot_token == "xoxb-other"
+    assert _row(isolated_postgres)["bot_token"] == "xoxb-other"
+    assert "slack.token.refreshed" not in _events(caplog)
+    assert _lost_rotations(caplog) == []
 
 
 class _ScriptedRotator(FakeRotator):

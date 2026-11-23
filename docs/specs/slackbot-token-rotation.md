@@ -289,6 +289,10 @@ values, refresh tokens or key material, only the team ID.
   `save_bot_locked` when an install or import save fails, and `install` when
   an OAuth install hits a lock timeout or an encryption-key error. Alert on any
   occurrence in the sweep.
+- `slack.token.rotation_lost`: team ID, path. Logged at ERROR when Slack
+  issued new tokens but neither the first save nor its retries in fresh
+  transactions stored them. Slack has revoked the stored tokens, so the
+  workspace needs a reinstall. Alert on any occurrence.
 - `slack.token.lock_timeout`: team ID, path.
 - `slack.token.sweep_complete`: counts of workspaces refreshed, skipped and
   failed by the hourly sweep; WARNING when any failed, INFO otherwise.
