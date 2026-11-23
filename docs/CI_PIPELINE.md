@@ -36,6 +36,8 @@ merge to main (ruleset "main": PR required, merge queue required, the eight
   └─ docker-cache-refresh per-app GHCR cache repair/refresh
   │
 release-please.yml ····· accumulates merges into per-app release PRs
+  │  └─ release-plan.yml ·· when a release PR merges, files the Staging
+  │                         test plan and release plan (Claude Code)
   │
 tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
        ├─ ci-gate ······· tag must be on main, then waits for the required

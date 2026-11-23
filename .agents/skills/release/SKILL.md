@@ -24,15 +24,16 @@ only a running changelog, so never plan from one.
 
 ## How it is run
 
-|                                          | Interactive (a person asked)                                   | Unattended (the prompt says so)                                                                                              |
-| ---------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Target PR                                | The most recently merged release PR, confirmed with the person | The PR number the prompt gives; no confirmation                                                                              |
-| Environment                              | Ask; Staging by default                                        | Staging only. Refuse Production: its plan follows a human go/no-go                                                           |
-| Timezone for times shown                 | Ask for an IANA name if unknown                                | The one the prompt gives, else UTC                                                                                           |
-| Live checks (`gcloud`, `psql`)           | Run the read-only ones the steps below ask for                 | Skip them; keep each step's own check so the person running it verifies                                                      |
-| Before filing                            | Show the drafts and wait for approval                          | File without asking                                                                                                          |
-| An issue for this release already exists | Ask whether to update it or stop, except as step 11 says       | Leave it untouched and report it, except as step 11 says                                                                     |
-| Final output                             | A summary in the conversation                                  | A summary as the final message. It may end up somewhere public, such as a CI log, so it follows the same rules as the issues |
+|                                          | Interactive (a person asked)                                   | Unattended (the prompt says so)                                                                                                           |
+| ---------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub pre-flight                        | The read check, then the write check before filing             | The read check only. The job token's `permissions:` decide what the run can write, and the write check may report that token as read-only |
+| Target PR                                | The most recently merged release PR, confirmed with the person | The PR number the prompt gives; no confirmation                                                                                           |
+| Environment                              | Ask; Staging by default                                        | Staging only. Refuse Production: its plan follows a human go/no-go                                                                        |
+| Timezone for times shown                 | Ask for an IANA name if unknown                                | The one the prompt gives, else UTC                                                                                                        |
+| Live checks (`gcloud`, `psql`)           | Run the read-only ones the steps below ask for                 | Skip them; keep each step's own check so the person running it verifies                                                                   |
+| Before filing                            | Show the drafts and wait for approval                          | File without asking                                                                                                                       |
+| An issue for this release already exists | Ask whether to update it or stop, except as step 11 says       | Leave it untouched and report it, except as step 11 says                                                                                  |
+| Final output                             | A summary in the conversation                                  | A summary as the final message. It may end up somewhere public, such as a CI log, so it follows the same rules as the issues              |
 
 The prompt says when a run is unattended. Otherwise treat it as interactive.
 
@@ -40,7 +41,7 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
 
 1. **Pre-flight.** Follow the repo's
    [GitHub write rules](../../../AGENTS.md#writing-to-github): run the read
-   check now and the write check before filing.
+   check now and, interactive, the write check before filing.
 
 2. **Pick the release PR.** Interactive: find the latest one and confirm it
    before reading anything else.
@@ -147,7 +148,7 @@ The prompt says when a run is unattended. Otherwise treat it as interactive.
    `{{PLACEHOLDER}}`, and renumber the steps.
 
 9. **Check the drafts.**
-   - Run `bash -n` on every shell block.
+   - Copy every shell block into one file and run `bash -n` on it.
    - Interactive, with read-only database access: run every SQL block
      against the nearest copy of the target database you can reach (Staging
      for either plan; for a Production plan, put `f3_staging` in

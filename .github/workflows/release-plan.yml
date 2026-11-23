@@ -1,0 +1,88 @@
+name: Release Plan
+
+# Files the Staging test plan and the Staging release plan for the latest
+# merged release PR by running the release skill (.agents/skills/release)
+# unattended. release-please.yml starts it after a push that cut releases;
+# run it from the Actions page to re-run, which files only what is missing.
+# Production plans follow a human go/no-go, so this never files one.
+on:
+  workflow_dispatch:
+    inputs:
+      merge_sha:
+        description: Merge commit of the release PR. Blank plans the latest merged release PR; a SHA that isn't its merge commit fails the run.
+        required: false
+        type: string
+
+permissions: {}
+
+jobs:
+  release-plan:
+    runs-on: ubuntu-latest
+    # Holds the Claude API key and accepts runs from main alone, so a workflow
+    # on another branch can't spend it.
+    environment: release-plan
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write # file and edit the plan issues
+      pull-requests: read # read the release PR and its changelog
+      actions: read # release-facts.sh reads deploy runs
+    concurrency:
+      group: release-plan
+      cancel-in-progress: false
+    steps:
+      # Plans only the latest merged release PR, so a stale or mistyped SHA
+      # can't file plans for the wrong release.
+      - name: Find the release PR
+        id: release-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MERGE_SHA: ${{ inputs.merge_sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$MERGE_SHA" && ! "$MERGE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::merge_sha must be a full 40-character commit SHA."
+            exit 1
+          fi
+          latest="$(gh pr list --repo "$REPO" --state merged --base main \
+            --author app/f3-nation-release-please \
+            --search "chore: release main in:title" --limit 100 \
+            --json number,mergedAt,mergeCommit \
+            --jq 'if length == 0 then empty else (sort_by(.mergedAt) | last | "\(.number) \(.mergeCommit.oid)") end')"
+          if [[ -z "$latest" ]]; then
+            echo "::error::No merged release PR found."
+            exit 1
+          fi
+          read -r number merge_commit <<<"$latest"
+          if [[ -n "$MERGE_SHA" && "$MERGE_SHA" != "$merge_commit" ]]; then
+            echo "::error::${MERGE_SHA} isn't the merge commit of the latest merged release PR (#${number}, ${merge_commit})."
+            exit 1
+          fi
+          echo "Planning release PR #${number}."
+          echo "number=${number}" >>"$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # release-facts.sh diffs back to the previous release commit.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Claude Code reads skills from .claude/skills/, which is generated.
+      - name: Sync agent skills
+        run: node .claude/scripts/sync-agent-skills.mjs
+
+      # The allowlist is the guardrail: --permission-mode default denies every
+      # tool call it doesn't cover, and the job token can only write issues.
+      - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        with:
+          anthropic_api_key: ${{ secrets.RELEASE_PLAN_ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Use the release skill. This is an unattended run for Staging.
+            Release PR: #${{ steps.release-pr.outputs.number }}
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 100
+            --permission-mode default
+            --allowedTools "Read,Glob,Grep,Write,Edit,Bash(bash scripts/gh-check.sh:*),Bash(bash .agents/skills/release/scripts/release-facts.sh:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api repos/${{ github.repository }}/collaborators/*/permission*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(mktemp:*),Bash(jq:*),Bash(bash -n:*)"

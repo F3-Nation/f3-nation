@@ -70,7 +70,9 @@ If multiple PRs are merged to `main` before the Release Please PR is merged, Rel
 
 The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `main`.
 
-After the release PR has merged and deployed to Staging, have an agent run the [`release`](../.agents/skills/release/SKILL.md) skill. For Staging it files the Staging test plan and the release plan that links it; after the Staging go/no-go, run it again for the Production release plan. It works only from a merged release PR, never an open one, which is only a running changelog.
+When the release PR merges, [`release-please.yml`](../.github/workflows/release-please.yml) starts [`release-plan.yml`](../.github/workflows/release-plan.yml), which runs the [`release`](../.agents/skills/release/SKILL.md) skill unattended with Claude Code. It files the Staging test plan and the release plan that links it. If the run fails, or a plan is missing, run **Release Plan** again from the Actions page: it plans only the latest merged release PR, and files only what that release doesn't have yet. After the Staging go/no-go, have an agent run the same skill for the Production release plan; nothing files that one automatically. The skill works only from a merged release PR, never an open one, which is only a running changelog.
+
+The workflow runs in the `release-plan` environment, which accepts runs from `main` alone and holds the `RELEASE_PLAN_ANTHROPIC_API_KEY` secret: a Claude API key from a workspace with a spend limit, used for nothing else. To rotate it, create a new key in that workspace, update the secret, then delete the old key. Claude Code can run only the commands listed in the workflow's `--allowedTools`, and the job's token can write only issues.
 
 ### 4. Release Please creates the tag
 
