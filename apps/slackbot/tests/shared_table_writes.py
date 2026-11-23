@@ -142,6 +142,20 @@ def _assignments(scope):
             bind(node.optional_vars, None)
         elif isinstance(node, ast.ExceptHandler) and node.name:
             values.setdefault(node.name, []).append(_UNKNOWN_VALUE)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.attr in {"append", "extend", "insert"}
+            and node.args
+        ):
+            # `records.append(User(...))` adds to what `records` can hold.
+            # `add` and `update` stay out: binding them would also catch
+            # `query.update(...)` receivers and lose their resolved targets.
+            added = node.args[-1]
+            if node.func.attr != "extend":
+                added = ast.List(elts=[added], ctx=ast.Load())
+            values.setdefault(node.func.value.id, []).append(added)
     return values
 
 
@@ -407,7 +421,7 @@ def scan(root):
         if any(part in SKIPPED_DIRS for part in parts[:-1]) or any(part.startswith(".") for part in parts):
             continue
         rel = "/".join(parts)
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         aliases = _import_aliases(tree)
         writes = []
         for scope, calls in _calls_by_scope(tree).items():

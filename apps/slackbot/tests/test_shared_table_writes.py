@@ -234,9 +234,11 @@ def test_a_write_statement_with_an_untraceable_target_is_counted(tmp_path):
         """
         from queries import statement
         from sqlalchemy import delete, insert
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         def remove(session, model, row_id):
             session.scalar(delete(model).where(model.id == row_id).returning(model.id))
+            session.scalar(pg_insert(model).values(name="x").returning(model.id))
             stmt = insert(model).values(name="x")
             session.scalars(stmt.returning(model.id)).all()
             session.scalar(insert(SlackSpace).values(team_id="T").returning(SlackSpace.id))
@@ -248,7 +250,7 @@ def test_a_write_statement_with_an_untraceable_target_is_counted(tmp_path):
         """,
     )
 
-    assert _tables(result) == [UNRESOLVED, UNRESOLVED, UNRESOLVED]
+    assert _tables(result) == [UNRESOLVED, UNRESOLVED, UNRESOLVED, UNRESOLVED]
 
 
 def test_unpacked_assignments_are_paired_with_their_values(tmp_path):
@@ -311,3 +313,25 @@ def test_bot_code_matches_the_committed_baseline():
     messages = compare(scan(SLACKBOT_DIR), load_baseline())
 
     assert messages == [], "\n".join(messages)
+
+
+def test_a_list_filled_in_a_loop_counts_the_rows_added_to_it(tmp_path):
+    result = _scan_source(
+        tmp_path,
+        """
+        from f3_data_models.utils import DbManager
+
+        def save_attendance(session, ids):
+            records = []
+            for i in ids:
+                records.append(Attendance(user_id=i))
+            session.add_all(records)
+
+        def save_events(ids):
+            new = []
+            new.extend(EventInstance(org_id=i) for i in ids)
+            DbManager.create_records(new)
+        """,
+    )
+
+    assert _tables(result) == ["attendance", "event_instances"]
