@@ -11,6 +11,7 @@ python_precommit_status=0
 turbo_scope_status=0
 mirror_postgres_image_status=0
 pr_triage_status=0
+my_work_status=0
 github_scripts_status=0
 prt_status=0
 issue_fields_status=0
@@ -34,6 +35,7 @@ bash scripts/python-precommit.test.sh || python_precommit_status=$?
 bash scripts/select-turbo-scope.test.sh || turbo_scope_status=$?
 bash scripts/mirror-postgres-image.test.sh || mirror_postgres_image_status=$?
 bash scripts/pr-triage.test.sh || pr_triage_status=$?
+bash scripts/my-work.test.sh || my_work_status=$?
 node --test .github/scripts/ || github_scripts_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
 bash .agents/skills/issue-triage/scripts/issue-fields.test.sh || issue_fields_status=$?
@@ -127,6 +129,10 @@ fi
 
 if [ "$github_scripts_status" -ne 0 ]; then
   exit "$github_scripts_status"
+fi
+
+if [ "$my_work_status" -ne 0 ]; then
+  exit "$my_work_status"
 fi
 
 exit "$pr_triage_status"

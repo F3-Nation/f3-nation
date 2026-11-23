@@ -3,7 +3,11 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 
 import { router } from "@acme/api";
 import { UserRole } from "@acme/shared/app/enums";
-import { Permission, roleHasPermission } from "@acme/shared/app/permissions";
+import {
+  Permission,
+  ROLE_ORG_TYPES,
+  roleHasPermission,
+} from "@acme/shared/app/permissions";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { getBaseUrl } from "~/lib/get-base-url";
@@ -44,8 +48,8 @@ interface OpenAPISpec {
 }
 
 /**
- * The docs' role and permission table, built from `Permission` and
- * `ROLE_PERMISSIONS`, so it always matches the role map.
+ * The docs' role and permission table, built from `Permission`,
+ * `ROLE_PERMISSIONS` and `ROLE_ORG_TYPES`, so it always matches the role map.
  */
 const rolesAndPermissionsMarkdown = (): string => {
   const header = `| Permission | What it allows | ${UserRole.join(" | ")} |`;
@@ -64,6 +68,12 @@ const rolesAndPermissionsMarkdown = (): string => {
     ...rows,
     "",
     "A permission is checked only by endpoints that list it in a **Required permission(s)** line in their description.",
+    "",
+    `Some roles can be given only on certain org types: ${Object.entries(
+      ROLE_ORG_TYPES,
+    )
+      .map(([role, orgTypes]) => `\`${role}\` (${orgTypes.join(", ")})`)
+      .join(", ")}.`,
   ].join("\n");
 };
 

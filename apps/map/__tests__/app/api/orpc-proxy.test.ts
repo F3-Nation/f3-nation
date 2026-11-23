@@ -29,6 +29,18 @@ describe("oRPC proxy route", () => {
     vi.unstubAllEnvs();
   });
 
+  it("overwrites a caller's client header with orpc", async () => {
+    const { GET } = await import("~/app/api/orpc/[[...rest]]/route");
+    await GET(
+      new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+        headers: { client: "scalar-api" },
+      }),
+    );
+    expect((fetchSpy.mock.calls[0]![1].headers as Headers).get("client")).toBe(
+      "orpc",
+    );
+  });
+
   it("forwards cookies to the upstream API for a signed-in-only path", async () => {
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");

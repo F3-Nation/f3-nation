@@ -1191,3 +1191,47 @@ INVITE_URL = "https://join.slack.com/t/f3boone/shared_invite/zt-abc"
 )
 def test_usable_invite_link_keeps_only_the_url(saved, expected):
     assert usable_invite_link(saved) == expected
+
+
+def _raise_through(depth: int) -> None:
+    if depth == 0:
+        raise ValueError("bob@example.com")
+    _raise_through(depth - 1)
+
+
+def _caught(depth: int) -> BaseException:
+    try:
+        _raise_through(depth)
+    except ValueError as exc:
+        return exc
+    raise AssertionError("expected ValueError")
+
+
+def test_error_stack_lists_innermost_frame_first_without_the_message():
+    def _inner():
+        raise ValueError("bob@example.com")
+
+    def _middle():
+        _inner()
+
+    def _outer():
+        _middle()
+
+    try:
+        _outer()
+    except ValueError as exc:
+        stack = helper_functions.error_stack(exc)
+
+    frames = [frame.rsplit(":", 1)[1] for frame in stack.split(" <- ")]
+    assert frames == ["_inner", "_middle", "_outer", "test_error_stack_lists_innermost_frame_first_without_the_message"]
+    assert all(frame.startswith("test_helper_functions.py:") for frame in stack.split(" <- "))
+    assert "bob@example.com" not in stack
+
+
+def test_error_stack_keeps_only_the_five_innermost_frames():
+    stack = helper_functions.error_stack(_caught(depth=10))
+
+    frames = [frame.rsplit(":", 1)[1] for frame in stack.split(" <- ")]
+    assert frames == ["_raise_through"] * 5
+    assert "_caught" not in stack
+    assert "bob@example.com" not in stack

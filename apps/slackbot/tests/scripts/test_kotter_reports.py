@@ -18,7 +18,6 @@ def settings(**overrides):
     values = {
         "team_id": "T1",
         "org_id": 1,
-        "bot_token": "xoxb-token",
         "kotter_report_recipient_users": ["UDEST"],
     }
     values.update(overrides)
@@ -30,7 +29,6 @@ def config(**overrides):
         "enabled": True,
         "org_id": 1,
         "team_id": "T1",
-        "bot_token": "xoxb-token",
         "recipient_users": [],
         "include_admins": False,
         "include_site_qs": False,
@@ -154,7 +152,6 @@ def test_get_kotter_config_enablement_and_legacy_ao_flag():
         settings(kotter_reports_enabled=True, kotter_report_split_site_qs=True)
     )
     assert split_cfg.include_site_qs is True
-    assert kotter_reports.get_kotter_config(settings(kotter_reports_enabled=True, bot_token=None)).enabled is False
     assert kotter_reports.get_kotter_config(settings(kotter_reports_enabled=True, org_id=None)).enabled is False
 
 
@@ -571,7 +568,7 @@ def test_send_kotter_reports_schedule_guard(monkeypatch):
     monkeypatch.setattr(
         kotter_reports, "_send_delivery", lambda *args, **kwargs: calls.__setitem__("sent", calls["sent"] + 1)
     )
-    monkeypatch.setattr(kotter_reports, "WebClient", lambda *args, **kwargs: object())
+    monkeypatch.setattr(kotter_reports, "slack_client_for_team", lambda *args, **kwargs: object())
 
     kotter_reports.send_kotter_reports(now_cst=datetime(2026, 7, 6, 9))
     assert calls == {"rows": 0, "sent": 0}
@@ -614,12 +611,12 @@ def test_send_kotter_reports_configures_rate_limit_retry_handler(monkeypatch):
     )
     monkeypatch.setattr(kotter_reports, "_send_delivery", lambda *args, **kwargs: None)
 
-    def capture_web_client(**kwargs):
+    def capture_web_client(team_id, **kwargs):
         client = SimpleNamespace(retry_handlers=kwargs["retry_handlers"])
         clients.append(client)
         return client
 
-    monkeypatch.setattr(kotter_reports, "WebClient", capture_web_client)
+    monkeypatch.setattr(kotter_reports, "slack_client_for_team", capture_web_client)
 
     kotter_reports.send_kotter_reports(sample_report=True)
 
@@ -660,7 +657,7 @@ def test_send_kotter_reports_sample_report_uses_sample_rows(monkeypatch):
         "_send_delivery",
         lambda client, delivery, stats_url, org_id: sent_titles.append(delivery.title),
     )
-    monkeypatch.setattr(kotter_reports, "WebClient", lambda *args, **kwargs: object())
+    monkeypatch.setattr(kotter_reports, "slack_client_for_team", lambda *args, **kwargs: object())
 
     kotter_reports.send_kotter_reports(sample_report=True, now_cst=datetime(2026, 7, 6, 9))
 
@@ -677,7 +674,7 @@ def test_send_kotter_reports_continues_after_unexpected_delivery_failure(monkeyp
     monkeypatch.setattr(kotter_reports.DbManager, "find_join_records3", lambda *args, **kwargs: [(None, org, slack)])
     monkeypatch.setattr(kotter_reports, "get_sample_kotter_rows", lambda *args, **kwargs: [row(1)])
     monkeypatch.setattr(kotter_reports, "resolve_kotter_deliveries", lambda cfg, rows: deliveries)
-    monkeypatch.setattr(kotter_reports, "WebClient", lambda *args, **kwargs: object())
+    monkeypatch.setattr(kotter_reports, "slack_client_for_team", lambda *args, **kwargs: object())
 
     def send_delivery(client, delivery, stats_url, org_id):
         attempted.append(delivery.destination)
@@ -792,3 +789,36 @@ def test_hourly_runner_calls_kotter_only_when_reporting(monkeypatch):
     assert kotter_calls == []
     hourly_runner.run_all_hourly_scripts(force=True, run_reporting=True, reporting_org_id=123)
     assert kotter_calls == [{"force": True, "run_org_id": 123}]
+
+
+def test_kotter_skips_uninstalled_workspace(monkeypatch):
+    org_one = SimpleNamespace(id=1, name="Uninstalled")
+    org_two = SimpleNamespace(id=2, name="Installed")
+    records = [
+        (
+            None,
+            org_one,
+            SimpleNamespace(settings=settings(team_id="T1", org_id=1, kotter_reports_enabled=True).__dict__),
+        ),
+        (
+            None,
+            org_two,
+            SimpleNamespace(settings=settings(team_id="T2", org_id=2, kotter_reports_enabled=True).__dict__),
+        ),
+    ]
+    monkeypatch.setattr(kotter_reports.DbManager, "find_join_records3", lambda *args, **kwargs: records)
+    monkeypatch.setattr(kotter_reports, "get_kotter_rows", lambda *args, **kwargs: [row(1)])
+    monkeypatch.setattr(
+        kotter_reports, "resolve_kotter_deliveries", lambda cfg, rows: [kotter_reports.Delivery("C1", rows)]
+    )
+    installed_client = object()
+    clients = {"T1": None, "T2": installed_client}
+    monkeypatch.setattr(kotter_reports, "slack_client_for_team", lambda team_id, **kwargs: clients[team_id])
+    sent = []
+    monkeypatch.setattr(
+        kotter_reports, "_send_delivery", lambda client, delivery, **kwargs: sent.append((client, kwargs["org_id"]))
+    )
+
+    kotter_reports.send_kotter_reports(force=True)
+
+    assert sent == [(installed_client, 2)]

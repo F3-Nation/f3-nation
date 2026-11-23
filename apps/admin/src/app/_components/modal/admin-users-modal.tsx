@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import type { UserRole } from "@acme/shared/app/enums";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
@@ -59,7 +58,8 @@ import {
 } from "~/orpc/react";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
-import { isAdminRoleName, toGrantableRoleEntries } from "~/lib/auth/session";
+import { isUserRole, toRoleAssignments } from "~/lib/roles";
+import { RoleBadges } from "~/app/_components/role-badges";
 import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
@@ -195,7 +195,7 @@ export default function UserModal({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: toGrantableRoleEntries(user?.roles),
+      roles: toRoleAssignments(user?.roles),
       homeRegionId: user?.homeRegionId ?? null,
       status: user?.status ?? "active",
     },
@@ -209,7 +209,7 @@ export default function UserModal({
         firstName: currentUser.firstName ?? "",
         lastName: currentUser.lastName ?? "",
         email: currentUser.email ?? "",
-        roles: toGrantableRoleEntries(currentUser.roles),
+        roles: toRoleAssignments(currentUser.roles),
         homeRegionId: currentUser.homeRegionId ?? null,
         status: currentUser.status ?? "active",
         phone: currentUser.phone ?? "",
@@ -226,20 +226,17 @@ export default function UserModal({
     orpc.user.crupdate.mutationOptions({
       onSuccess: async (data) => {
         await invalidateQueries("user");
-        const roles: AdminSessionRole[] = data.roles.flatMap((role) => {
-          if (!role.orgName || !isAdminRoleName(role.roleName)) return [];
-          return [
-            {
-              orgId: role.orgId,
-              orgName: role.orgName,
-              roleName: role.roleName,
-            },
-          ];
-        });
-        // Update the live session for self-edits even when the filtered
-        // visible-role list is now empty: if an admin edits themselves down to
-        // only dormant/hidden roles, the client must drop the stale visible
-        // grants it still holds rather than wait for a refetch.
+        const roles: AdminSessionRole[] = data.roles.flatMap((role) =>
+          role.orgName && isUserRole(role.roleName)
+            ? [
+                {
+                  orgId: role.orgId,
+                  orgName: role.orgName,
+                  roleName: role.roleName,
+                },
+              ]
+            : [],
+        );
         if (session?.id === data.id) {
           await update({ ...session, roles });
         }
@@ -633,45 +630,7 @@ export default function UserModal({
                           <p className="text-sm font-medium text-foreground">
                             Current Roles
                           </p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {user.roles.map(
-                              (role: {
-                                orgId: number;
-                                orgName: string;
-                                roleName: UserRole;
-                              }) => {
-                                const roleStyles = {
-                                  admin:
-                                    "bg-purple-100 text-purple-700 border-purple-200",
-                                  editor:
-                                    "bg-blue-100 text-blue-700 border-blue-200",
-                                  user: "bg-green-100 text-green-700 border-green-200",
-                                } as const;
-
-                                const roleLabels = {
-                                  admin: "Admin",
-                                  editor: "Editor",
-                                  user: "User",
-                                } as const;
-
-                                // Roles not surfaced in admin (e.g.
-                                // password_manager) are skipped.
-                                if (!isAdminRoleName(role.roleName))
-                                  return null;
-
-                                return (
-                                  <span
-                                    key={`${role.orgId}-${role.roleName}`}
-                                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-                                      roleStyles[role.roleName]
-                                    }`}
-                                  >
-                                    {role.orgName} ({roleLabels[role.roleName]})
-                                  </span>
-                                );
-                              },
-                            )}
-                          </div>
+                          <RoleBadges roles={user.roles} className="gap-2" />
                         </div>
                       )}
                       <Button

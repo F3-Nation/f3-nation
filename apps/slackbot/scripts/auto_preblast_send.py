@@ -23,13 +23,13 @@ from f3_data_models.models import (
     User,
 )
 from f3_data_models.utils import get_session
-from slack_sdk.web import WebClient
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import aliased
 
 from features.calendar import event_preblast
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import current_date_cst, safe_get
+from utilities.slack_tokens.client import slack_client_for_team
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,14 @@ def send_automated_preblasts(force: bool = False):
             continue
 
         try:
-            slack_client = WebClient(preblast.slack_settings.bot_token)
+            slack_client = slack_client_for_team(preblast.slack_settings.team_id)
+            if slack_client is None:
+                logger.error(
+                    "No Slack installation for team %s; preblast for event %s not sent",
+                    preblast.slack_settings.team_id,
+                    preblast.event.id,
+                )
+                continue
             event_preblast.send_preblast(
                 event_instance_id=preblast.event.id,
                 region_record=preblast.slack_settings,

@@ -489,3 +489,73 @@ def test_existing_backblast_preserves_inactive_historical_event_type(region_reco
     assert view["callback_id"] == actions.BACKBLAST_EDIT_CALLBACK_ID
     assert "submit" in view
     assert event_record.event_types == original_event_types
+
+
+def test_downrange_cross_post_continues_after_a_client_lookup_error(
+    region_record, submission_body, posting_context, monkeypatch
+):
+    event_record = SimpleNamespace(
+        id=42,
+        start_date=datetime.date(2026, 9, 30),
+        org=posting_context.ao_record,
+        event_types=[SimpleNamespace(id=12, name="Bootcamp", is_active=True, specific_org_id=None)],
+        location_id=None,
+        meta={},
+    )
+    submission_body["view"]["callback_id"] = actions.BACKBLAST_EDIT_CALLBACK_ID
+    submission_body["view"]["private_metadata"] = json.dumps(
+        {"event_instance_id": 42, "channel_id": "C_TEST", "message_ts": "123.456"}
+    )
+    for action in (actions.BACKBLAST_EVENT_TYPE, actions.BACKBLAST_AO, actions.BACKBLAST_DATE):
+        del submission_body["view"]["state"]["values"][action]
+
+    # Two PAX whose home regions (100, 200) both accept downrange cross-posts.
+    spaces = {
+        1: SimpleNamespace(
+            id=1,
+            team_id="T_FIRST",
+            settings={"team_id": "T_FIRST", "downrange_channel_posting": "enabled", "downrange_channel": "C_DR1"},
+        ),
+        2: SimpleNamespace(
+            id=2,
+            team_id="T_SECOND",
+            settings={"team_id": "T_SECOND", "downrange_channel_posting": "enabled", "downrange_channel": "C_DR2"},
+        ),
+    }
+    links = iter([SimpleNamespace(slack_space_id=1), SimpleNamespace(slack_space_id=2)])
+
+    def get_record(model, record_id, **kwargs):
+        if model is EventInstance:
+            return event_record
+        if model is Org:
+            return SimpleNamespace(id=10, name="Test Region")
+        return spaces[record_id]
+
+    def find_records(model, *args, **kwargs):
+        if getattr(model, "__name__", "") == "User":
+            return [
+                SimpleNamespace(id=1, home_region_id=100, f3_name="One"),
+                SimpleNamespace(id=2, home_region_id=200, f3_name="Two"),
+            ]
+        return []
+
+    db_manager = posting_context.db_manager
+    db_manager.get.side_effect = get_record
+    db_manager.find_records.side_effect = find_records
+    db_manager.find_first_record.side_effect = lambda *args, **kwargs: next(links)
+
+    second_client = MagicMock()
+    second_client.chat_postMessage.return_value = {"channel": "C_DR2", "ts": "999.000"}
+
+    def client_for_team(team_id):
+        if team_id == "T_FIRST":
+            raise RuntimeError("lookup failed")
+        return second_client
+
+    monkeypatch.setattr("features.backblast.slack_client_for_team", client_for_team)
+    monkeypatch.setattr("features.backblast.time.sleep", lambda seconds: None)
+
+    handle_backblast_post(submission_body, posting_context.client, MagicMock(), {}, region_record)
+
+    second_client.chat_postMessage.assert_called_once()
+    assert second_client.chat_postMessage.call_args.kwargs["channel"] == "C_DR2"

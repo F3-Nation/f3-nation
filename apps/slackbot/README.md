@@ -301,7 +301,7 @@ linking when email becomes available; it does not create placeholder F3 accounts
 Direct-email Downrange invitations require a usable email address. FNG creation
 can proceed without linking its optional battle buddy when the actor is unlinked.
 
-The disposable identity PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`.
+The disposable PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`.
 `SLACKBOT_POSTGRES_IMAGE` optionally overrides their pinned local PostgreSQL
 image; CI supplies the same mirrored image as its database service. Every test
 container is removed by its fixture.

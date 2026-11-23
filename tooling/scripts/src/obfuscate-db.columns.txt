@@ -291,6 +291,7 @@ public.api_keys.name:character varying
 public.api_keys.owner_id:integer
 public.api_keys.revoked_at:timestamp without time zone
 public.api_keys.updated:timestamp without time zone
+public.attendance.attendance_type:USER-DEFINED
 public.attendance.created:timestamp without time zone
 public.attendance.event_instance_id:integer
 public.attendance.id:integer
@@ -485,7 +486,12 @@ public.roles_x_permissions.role_id:integer
 public.roles_x_users_x_org.org_id:integer
 public.roles_x_users_x_org.role_id:integer
 public.roles_x_users_x_org.user_id:integer
+public.slack_spaces.bot_id:character varying
+public.slack_spaces.bot_refresh_token_encrypted:text
+public.slack_spaces.bot_scopes:character varying
 public.slack_spaces.bot_token:character varying
+public.slack_spaces.bot_token_expires_at:timestamp with time zone
+public.slack_spaces.bot_user_id:character varying
 public.slack_spaces.created:timestamp without time zone
 public.slack_spaces.id:integer
 public.slack_spaces.settings:jsonb

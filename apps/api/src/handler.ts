@@ -142,6 +142,8 @@ export async function handleRequest(request: Request): Promise<Response> {
   const isOrpcClient =
     request.headers.get(Header.Client) === Client.ORPC ||
     request.headers.get(Header.Client) === Client.ORPC_SSG ||
+    request.headers.get(Header.Client) === Client.F3_MAP ||
+    request.headers.get(Header.Client) === Client.F3_ADMIN ||
     request.headers.get(Header.Client) === Client.F3_ME ||
     request.headers.get(Header.Client) === Client.F3_REGION_PAGES;
 

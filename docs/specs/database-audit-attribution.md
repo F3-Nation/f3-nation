@@ -4,9 +4,10 @@
 
 ## 1. Summary
 
-Database history identifies the person responsible for a write made during an
-authenticated API request. Shared request middleware and the database client
-propagate identity to the existing history triggers, so individual handlers
+Database history identifies the person responsible for an API write when known,
+and records the originating app claimed by a recognized client header. Shared
+request middleware and the database client propagate actor and source to the
+existing history triggers, so individual handlers
 need no audit calls. Existing authorization and oRPC response contracts remain
 unchanged.
 
@@ -36,7 +37,7 @@ unchanged.
   positive integer user id, including when the session carries it as a numeric string.
 - **AC-2** — GIVEN an API-key, anonymous, Development Mode, development-mock
   or invalid-identity request WHEN it writes a tracked row THEN history records
-  NULL actor and NULL source. Accepted API actors are integers in `1..2147483647`; zero,
+  NULL actor and the normalized source from AC-19. Accepted API actors are integers in `1..2147483647`; zero,
   negative, fractional, nonfinite and out-of-range values are not actors.
   Session ids must be numbers or numeric strings; booleans, arrays and other
   input shapes are not actors.
@@ -85,27 +86,42 @@ unchanged.
   transaction paths run THEN regression coverage detects changes to the
   `unsafe`, `begin` and savepoint boundaries the hook relies on.
 - **AC-16** — GIVEN work created within a request WHEN its asynchronous write
-  executes after the procedure returns THEN it retains that request's actor.
+  executes after the procedure returns THEN it retains that request's actor and source.
   A new write through the shared client in `auditContext.exit(...)` has no
-  inherited actor.
+  inherited attribution.
 - **AC-17** — GIVEN the full change WHEN existing router and transport
-  characterization suites run THEN they pass without handler, router or
-  response-contract changes.
+  characterization suites run THEN existing procedure and response contracts
+  remain unchanged, and the client dispatch additions satisfy AC-20.
 - **AC-18** — GIVEN the approved Staging environment WHEN a user signs in
   through real email/OTP and edits a tracked entity through the UI THEN its
-  history records that user. A Development Mode sign-in records NULL instead.
+  history records that user and the normalized source from AC-19. A Development
+  Mode sign-in records NULL actor while retaining the normalized source.
+  Generic `orpc` requests, including interactive Map/Admin clients, record NULL source.
+- **AC-19** — GIVEN an API request WHEN its `client` header exactly matches a
+  recognized value in [the source normalizer](../../packages/api/src/audit-source.ts)
+  THEN its writes record that normalized source independently of actor eligibility.
+  Missing, unknown, generic `orpc` and wrong-case headers record NULL source.
+  A recognized header does not authenticate a caller or authorize a write.
+- **AC-20** — GIVEN a request with `client: f3-map` or `client: f3-admin` WHEN the
+  API selects its transport THEN it dispatches to RPC while keeping the Slackbot
+  and Scalar identifiers on REST. Generic `orpc` remains RPC-compatible and records
+  NULL source; static generation retains its existing session-resolution behavior.
+  A client must not begin sending a new identifier until every API revision it
+  can reach, including rollback targets, accepts that identifier as RPC.
 
 ## 5. Roles & authorization (RBAC)
 
 Existing procedure tiers and resource checks authorize source writes. Audit
 context supplies informational attribution; it grants no permission and does
-not make a supplied user id proof of authentication. History access continues
-to follow the database audit-history foundation's grants.
+not make a supplied user id proof of authentication. Any caller can send a
+recognized app header, so the recorded source is a claim, not proof. History
+access continues to follow the database audit-history foundation's grants.
 
 | Action                            | Allowed                                                                               | Explicitly denied                                                                                |
 | --------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Change a source row               | Callers authorized by the existing procedure and resource checks                      | Callers rejected by those checks                                                                 |
 | Attribute a personal API write    | Resolved personal sessions with a positive integer actor and no attribution exclusion | API-key, anonymous, Development Mode/mock, invalid and ambiguous legacy user-1 cookie identities |
+| Record a claimed app              | Recognized client header, with or without an eligible actor                           | Unknown or missing header as a claimed app; any source as authority to grant access              |
 | Read history                      | Roles with existing explicit history grants                                           | Roles without the required history grants                                                        |
 | Establish context outside the API | Trusted server code using the helper and a hooked client                              | Client input as an independent authority to choose an actor                                      |
 
@@ -113,9 +129,8 @@ to follow the database audit-history foundation's grants.
 
 - Database migrations, trigger changes, history backfill, new history endpoints
   or UI, and changes to authorization or oRPC response contracts.
-- Selecting an originating application: API middleware supplies NULL source.
-- Automatic attribution for Python, scripts, manual SQL, or independently
-  constructed clients. A non-oRPC caller must establish context and use a
+- Automatic attribution for Python or scripts that write directly to the
+  database, manual SQL, or independently constructed clients. Such callers must establish context and use a
   hooked client; exporting the helper does not modify other clients.
 - Complete SQL parsing. The detector recognizes the declared leading write
   forms: INSERT, UPDATE, DELETE and MERGE, optionally after WITH. Hidden writes
@@ -135,6 +150,9 @@ query boundaries without adding a history UI or test endpoint.
   connection reuse, including NULL attribution after commit and rollback.
 - Observed read statements, lazy once-only execution, native callback results,
   and invalid settings rejected before any statement.
+- Exact client-header normalization and RPC/REST dispatch for recognized apps.
+  Map/Admin proxies overwrite caller-supplied identifiers with generic `orpc`,
+  and Admin direct clients retain that identifier and their authentication behavior.
 - Real procedure middleware identity cases, an existing production-router
   mutation, overlapping contexts and detached work.
 - Approved Staging UI verification for the application acceptance criterion.
@@ -179,6 +197,12 @@ the client pool is unbounded. A configured server `statement_timeout` can
 bound server execution; it cannot bound that pool wait. Installing the timeout
 after the audit hook could reject a begin-backed write while it later commits,
 so that installation order is unsafe.
+
+Source-only contexts also activate the hook, including recognized API-key,
+anonymous, Development Mode, mock, ambiguous legacy and static-generation
+requests. Their standalone writes use native transactions and explicit
+transactions receive the settings round trip. Requests with neither actor nor source retain the original client
+path.
 
 Production rollout requires verification of the API role's effective
 `statement_timeout` and codeowner acceptance of its execution-timeout policy.
