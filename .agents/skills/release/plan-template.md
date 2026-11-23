@@ -44,18 +44,40 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 <!-- OPTIONAL (Staging only, when an app with a Staging service is in the release): -->
 
-- [ ] **Confirm Staging runs this release.** The plans are filed when the release is cut, so a deploy may still be running. Nothing below, and no test in the test plan, starts until every line prints `true`: the app's Staging service serves a ready revision of this release's image, with all its traffic. Owner: Release lead
+- [ ] **Confirm Staging runs this release.** The plans are filed when the release is cut, so a deploy may still be running or building. Nothing below, and no test in the test plan, starts until every app prints `serves: true` and `deploy in flight: false`: its Staging service serves a ready revision of this release's image with all its traffic, and no run of its deploy workflow can still replace it. Owner: Release lead
 
   ```bash
   for ROW in {{EACH_STAGING_SERVICE_ROW}}; do
-    read -r SERVICE PROJECT REGION VERSION <<<"$ROW"
-    OK=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json \
-      | jq --arg v ":$VERSION" '(.spec.template.spec.containers[0].image | endswith($v)) and .status.latestReadyRevisionName == .status.latestCreatedRevisionName and ([.status.traffic[] | select(.latestRevision == true) | .percent] | add // 0) == 100')
-    test "$OK" = true && echo "staging $SERVICE at $VERSION: true" || echo "staging $SERVICE at $VERSION: false"
+    read -r APP SERVICE PROJECT REGION VERSION <<<"$ROW"
+    if SVC=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json); then
+      SERVES=$(jq --arg v ":$VERSION" '.status.latestReadyRevisionName as $ready
+        | .status.observedGeneration == .metadata.generation
+        and (.spec.template.spec.containers[0].image | endswith($v))
+        and $ready == .status.latestCreatedRevisionName
+        and ([.status.traffic[] | select(.latestRevision == true or .revisionName == $ready) | .percent] | add // 0) == 100' <<<"$SVC")
+    else
+      SERVES="lookup failed"
+    fi
+    IN_FLIGHT=false
+    for STATUS in queued in_progress waiting; do
+      RUNS=$(gh run list -R F3-Nation/f3-nation --workflow "deploy-$APP.yml" --status "$STATUS" --json databaseId --jq '.[].databaseId') \
+        || { IN_FLIGHT="lookup failed"; break; }
+      for RUN in $RUNS; do
+        STAGING_PENDING=$(gh run view "$RUN" -R F3-Nation/f3-nation --json jobs \
+          --jq '[.jobs[] | select(.name | endswith("deploy-staging"))] | length == 0 or any(.status != "completed")') \
+          || STAGING_PENDING="lookup failed"
+        [ "$STAGING_PENDING" = false ] || IN_FLIGHT="$STAGING_PENDING"
+      done
+    done
+    echo "$APP serves $VERSION: $SERVES"
+    echo "$APP deploy in flight: $IN_FLIGHT"
   done
   ```
 
-  - **If a line prints `false`:** open the app's deploy workflow on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). A deploy of this release's tag still running: wait for its `deploy-staging` job (not the whole run, whose `deploy-prod` job waits for a Production approval), then run the check again. Otherwise (it failed, was cancelled, or a later deploy of another tag replaced it): run the app's deploy workflow from `main` with this release's tag, wait for its `deploy-staging` job, and run the check again. If that deploy fails too, post in `#monorepo` and stop.
+  - **`lookup failed`:** fix your access (`gcloud auth login`, `gh auth status`) and run the check again. Don't redeploy for this.
+  - **`deploy in flight: true`:** a run of the app's deploy workflow on the [Actions page](https://github.com/F3-Nation/f3-nation/actions) hasn't finished its `deploy-staging` job (or hasn't reached it). Wait for that job, not the whole run (its `deploy-prod` job waits for a Production approval), then run the check again.
+  - **`serves: false` with nothing in flight:** the deploy failed, was cancelled, or a deploy of another tag replaced it. Run the app's deploy workflow from `main` with this release's tag, wait for its `deploy-staging` job, and run the check again. If that deploy fails too, post in `#monorepo` and stop.
+  - **Until the go/no-go,** nobody deploys another tag of a released app to Staging; say so when announcing the start. If one is needed, post in `#monorepo` first and run this check again afterwards.
 
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 
