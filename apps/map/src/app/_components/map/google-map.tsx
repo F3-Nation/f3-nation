@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useSyncExternalStore } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import { APIProvider, ControlPosition, Map } from "@vis.gl/react-google-maps";
 
@@ -62,6 +62,10 @@ const MAP_CONFIGS: MapConfig[] = [
   },
 ];
 
+const subscribe = () => () => undefined;
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export const GoogleMapComponent = () => {
   const { initialCenter, initialZoom } = useInitialLocation();
   const { googleApiKey, status } = useRuntimeConfig();
@@ -116,8 +120,6 @@ const ProvidedGoogleMapComponent = memo(
 
     const [width, height] = useWindowSize();
 
-    // Memoize zoom control position to prevent object recreation
-    // Keep this memoized as Map component might optimize on prop changes
     const zoomControlOptions = useMemo(
       () => ({
         position: isMobileWidth
@@ -127,7 +129,6 @@ const ProvidedGoogleMapComponent = memo(
       [isMobileWidth],
     );
 
-    // Memoize onClick handler to prevent function recreation
     const handleMapClick = useCallback(
       (
         e: Parameters<
@@ -148,16 +149,16 @@ const ProvidedGoogleMapComponent = memo(
           closePanel();
         }
       },
-      [], // Stable dependencies - appStore and functions don't change
+      [],
     );
 
-    // Client-side mounting to prevent SSR mismatch
-    // We have to manage mounting the map otherwise there is a mismatch in rendered size
-    // Causing it to render as a blank screen. Not sure why "use client" isn't working
-    const [isMounted, setIsMounted] = useState(false);
-    useEffect(() => {
-      setIsMounted(true);
-    }, []);
+    // Keep the map hidden during SSR and the initial hydration render.
+    const isMounted = useSyncExternalStore(
+      subscribe,
+      getClientSnapshot,
+      getServerSnapshot,
+    );
+
     if (!isMounted) {
       return <div style={{ height: "100vh", width: "100%" }} />;
     }

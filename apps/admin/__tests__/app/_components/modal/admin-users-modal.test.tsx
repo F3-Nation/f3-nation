@@ -589,6 +589,40 @@ describe("AdminUsersModal", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
+  it("sends back every role the user holds when saving a profile", async () => {
+    const roles = [
+      { orgId: 10, orgName: "Source", roleName: "admin" },
+      { orgId: 10, orgName: "Source", roleName: "password_manager" },
+      { orgId: 1, orgName: "F3 Nation", roleName: "editor" },
+    ];
+    mocks.byId.mockResolvedValue({
+      user: {
+        ...roleLessUser,
+        homeRegionId: 10,
+        email: "member@example.com",
+        roles,
+      },
+      includePii: true,
+    });
+    render(withProviders(<AdminUsersModal data={{ id: 42 }} />));
+    await screen.findByDisplayValue("member@example.com");
+    await screen.findByRole("option", { name: "Destination" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(mocks.crupdate).toHaveBeenCalledTimes(1));
+    // user.crupdate removes any role left out, so a profile save must
+    // resubmit them all, password roles included.
+    expect(
+      (mocks.crupdate.mock.calls[0]?.[0] as { roles: unknown }).roles,
+    ).toEqual([
+      { orgId: 10, roleName: "admin" },
+      { orgId: 10, roleName: "password_manager" },
+      { orgId: 1, roleName: "editor" },
+    ]);
+    expect(screen.getByText("Source (Admin, Password Manager)")).toBeTruthy();
+  });
+
   it("creates a user without a correction confirmation", async () => {
     render(withProviders(<AdminUsersModal data={{}} />));
     fireEvent.change(screen.getByPlaceholderText("F3 Name"), {

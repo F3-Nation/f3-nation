@@ -11,6 +11,7 @@ python_precommit_status=0
 turbo_scope_status=0
 mirror_postgres_image_status=0
 pr_triage_status=0
+my_work_status=0
 github_scripts_status=0
 prt_status=0
 issue_fields_status=0
@@ -21,6 +22,7 @@ review_links_status=0
 skill_frontmatter_status=0
 gh_check_status=0
 release_protections_status=0
+dockerfile_installs_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
 pnpm run lint:ws || ws_status=$?
@@ -33,6 +35,7 @@ bash scripts/python-precommit.test.sh || python_precommit_status=$?
 bash scripts/select-turbo-scope.test.sh || turbo_scope_status=$?
 bash scripts/mirror-postgres-image.test.sh || mirror_postgres_image_status=$?
 bash scripts/pr-triage.test.sh || pr_triage_status=$?
+bash scripts/my-work.test.sh || my_work_status=$?
 node --test .github/scripts/ || github_scripts_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
 bash .agents/skills/issue-triage/scripts/issue-fields.test.sh || issue_fields_status=$?
@@ -45,6 +48,8 @@ node scripts/check-skill-frontmatter.mjs || skill_frontmatter_status=$?
 bash scripts/check-skill-frontmatter.test.sh || skill_frontmatter_status=$?
 bash scripts/gh-check.test.sh || gh_check_status=$?
 bash scripts/release-protections.test.sh || release_protections_status=$?
+node scripts/check-dockerfile-global-installs.mjs || dockerfile_installs_status=$?
+bash scripts/check-dockerfile-global-installs.test.sh || dockerfile_installs_status=$?
 
 if [ "$turbo_status" -ne 0 ]; then
   exit "$turbo_status"
@@ -118,8 +123,16 @@ if [ "$release_protections_status" -ne 0 ]; then
   exit "$release_protections_status"
 fi
 
+if [ "$dockerfile_installs_status" -ne 0 ]; then
+  exit "$dockerfile_installs_status"
+fi
+
 if [ "$github_scripts_status" -ne 0 ]; then
   exit "$github_scripts_status"
+fi
+
+if [ "$my_work_status" -ne 0 ]; then
+  exit "$my_work_status"
 fi
 
 exit "$pr_triage_status"

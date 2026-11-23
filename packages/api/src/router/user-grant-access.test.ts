@@ -336,6 +336,7 @@ describe("User Router - Grant Access", () => {
           email: `pii-byorgs-all-${uniqueId()}@example.com`,
           f3Name: "PiiByOrgsAllTest",
           phone: testPhone,
+          homeRegionId: adminRegion.id,
         })
         .returning();
       if (!user) {

@@ -175,18 +175,20 @@ describe("user.crupdate org scoping", () => {
     expect(after?.homeRegionId).toBeNull();
   });
 
-  it("writes the profile of a user with no home region who holds a role in the caller's org", async () => {
+  it("rejects a profile write to a user with no home region who holds a role in the caller's org", async () => {
     const target = await createUser({ homeRegionId: null });
     await grantRole(target.id, regionA.id, "editor");
     await mockAuthWithSession(editorOf(regionA));
 
-    await createTestClient().user.crupdate({
-      id: target.id,
-      f3Name: "Renamed",
-      roles: [{ orgId: regionA.id, roleName: "editor" }],
-    });
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        f3Name: "Renamed",
+        roles: [{ orgId: regionA.id, roleName: "editor" }],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
-    expect((await readUser(target.id))?.f3Name).toBe("Renamed");
+    expect((await readUser(target.id))?.f3Name).toBe("Original");
   });
 
   it("rejects moving a user's home region into an org the caller can't edit", async () => {

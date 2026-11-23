@@ -25,6 +25,7 @@ import {
 
 import {
   AchievementCadence,
+  AttendanceType,
   DayOfWeek,
   EventCadence,
   EventCategory,
@@ -63,6 +64,7 @@ export const achievementCadence = pgEnum(
   "achievement_cadence",
   AchievementCadence,
 );
+export const attendanceType = pgEnum("attendance_type", AttendanceType);
 
 export const citext = customType<{ data: string }>({
   fromDriver(value) {
@@ -373,6 +375,9 @@ export const attendance = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     eventInstanceId: integer("event_instance_id").notNull(),
+    // Kept in step with attendance_x_attendance_types by the
+    // sync_attendance_type trigger until every writer sets it directly.
+    attendanceType: attendanceType("attendance_type").default("pax").notNull(),
   },
   (table) => [
     index("idx_attendance_event_instance_id").using(
