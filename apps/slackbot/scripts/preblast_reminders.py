@@ -136,6 +136,13 @@ class PreblastList:
 
 
 def send_preblast_reminders(force: bool = False):
+    """
+    DM each Q a reminder to fill out tomorrow's preblast.
+
+    A workspace with no installation is skipped. A workspace whose token lookup raises is logged
+    and recorded, the remaining Qs are still reminded, and a ``RuntimeError`` afterward reports
+    how many workspaces failed so the hourly runner records the incomplete run.
+    """
     # get the current time in US/Central timezone
     current_time = datetime.now(pytz.timezone("US/Central"))
     preblast_list = PreblastList()
@@ -153,6 +160,7 @@ def send_preblast_reminders(force: bool = False):
     preblast_list.items = [item for item in preblast_list.items if item.q_name is not None]
     print(f"Found {len(preblast_list.items)} preblast reminders to send.")
 
+    failed_team_ids: set[str] = set()
     for preblast in preblast_list.items:
         # check per-region configured reminder hour, defaulting to 10am CST
         reminder_hour = preblast.slack_settings.preblast_reminder_hour_cst
@@ -179,6 +187,7 @@ def send_preblast_reminders(force: bool = False):
                 slack_client = slack_client_for_team(preblast.slack_settings.team_id)
             except Exception as e:
                 print(f"Error getting Slack client for team {preblast.slack_settings.team_id}: {type(e).__name__}")
+                failed_team_ids.add(preblast.slack_settings.team_id)
                 continue
         if slack_client:
             blocks: List[orm.BaseBlock] = [
@@ -200,6 +209,9 @@ def send_preblast_reminders(force: bool = False):
             except Exception as e:
                 print(f"Error sending preblast reminder to {preblast.q_name} ({preblast.slack_user_id}): {e}")
                 continue
+
+    if failed_team_ids:
+        raise RuntimeError(f"Preblast reminders skipped for {len(failed_team_ids)} workspace(s)")
 
 
 if __name__ == "__main__":

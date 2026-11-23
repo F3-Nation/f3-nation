@@ -71,6 +71,13 @@ def _build_dm_blocks(f3_name: str, home_region_name: str, other_region_name: str
 
 
 def send_home_region_nudges(force: bool = False):
+    """
+    DM users who mostly post outside their home region, offering to switch it.
+
+    A workspace with no installation is skipped. A workspace whose token lookup raises is logged
+    and recorded, the remaining users are still nudged, and a ``RuntimeError`` afterward reports
+    how many workspaces failed so the hourly runner records the incomplete run.
+    """
     current_time = datetime.now(pytz.timezone("US/Central"))
     if not force and (current_time.day != NUDGE_DAY or current_time.hour != NUDGE_HOUR):
         return
@@ -135,6 +142,7 @@ def send_home_region_nudges(force: bool = False):
 
     print(f"Found {len(user_rows)} users with recent activity. Checking qualification...")
     sent_count = 0
+    failed_team_ids: set[str] = set()
 
     for user_id, activity_rows in user_rows.items():
         home_region_id = activity_rows[0].home_region_id
@@ -200,6 +208,7 @@ def send_home_region_nudges(force: bool = False):
             client = slack_client_for_team(team_id)
         except Exception as e:
             print(f"Error getting Slack client for team {team_id}: {type(e).__name__}")
+            failed_team_ids.add(team_id)
             continue
         if client is None:
             print(f"No Slack installation for team {team_id}, skipping user {user_id}")
@@ -215,6 +224,8 @@ def send_home_region_nudges(force: bool = False):
             print(f"Error sending DM to user {user_id} ({slack_user.slack_id}): {e.response['error']}")
 
     print(f"Home region nudge complete. Sent {sent_count} DMs.")
+    if failed_team_ids:
+        raise RuntimeError(f"Home region nudges skipped for {len(failed_team_ids)} workspace(s)")
 
 
 def _get_user_from_body(body: dict) -> tuple[Optional[User], Optional[SlackUser]]:

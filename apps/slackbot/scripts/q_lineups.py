@@ -43,8 +43,16 @@ from utilities.slack_tokens.client import slack_client_for_team
 
 
 def send_lineups(force: bool = False):
+    """
+    Post next week's Q lineup for each region (or each AO) that has lineups scheduled now.
+
+    A send that raises, including a failed token lookup, is logged and recorded, the remaining
+    regions and AOs are still sent, and a ``RuntimeError`` afterward reports how many workspaces
+    failed so the hourly runner records the incomplete run.
+    """
     # get the current time in US/Central timezone
     current_time = datetime.now(pytz.timezone("US/Central"))
+    failed_team_ids: set[str] = set()
     slack_spaces = DbManager.find_records(SlackSpace, filters=[True])
     slack_settings_list: List[SlackSettings] = [
         SlackSettings(**s.settings) for s in slack_spaces if safe_get(s.settings, "org_id")
@@ -108,8 +116,9 @@ def send_lineups(force: bool = False):
                                 start_of_next_week,
                                 end_of_next_week,
                             )
-                        except Exception:
-                            print(f"Error sending Q lineup for AO {org_record.name} ({org_record.id})")
+                        except Exception as e:
+                            print(f"Error sending Q lineup for AO {org_record.id}: {type(e).__name__}")
+                            failed_team_ids.add(slack_settings.team_id)
                             continue
             elif slack_settings.send_q_lineups_method == "yes_for_all":
                 # Send combined for region
@@ -139,8 +148,12 @@ def send_lineups(force: bool = False):
                         end_of_next_week,
                     )
                 except Exception as e:
-                    print(f"Error sending Q lineup for region {region_record.name} ({region_record.id}): {e}")
+                    print(f"Error sending Q lineup for region {region_record.id}: {type(e).__name__}")
+                    failed_team_ids.add(slack_settings.team_id)
                     continue
+
+    if failed_team_ids:
+        raise RuntimeError(f"Q lineups skipped for {len(failed_team_ids)} workspace(s)")
 
 
 def build_lineup_blocks(org_events: List[PreblastItem], org: Org) -> List[dict]:
@@ -230,8 +243,10 @@ def send_q_lineup_message(
     try:
         slack_client = slack_client_for_team(slack_settings.team_id)
     except Exception as e:
+        # Re-raised so the scheduled run records the workspace as failed; a missing installation
+        # (None) is not an error and is skipped below.
         print(f"Error getting Slack client for team {slack_settings.team_id}: {type(e).__name__}")
-        return
+        raise
     if slack_client:
         if update_channel_id:
             channel_id = update_channel_id
