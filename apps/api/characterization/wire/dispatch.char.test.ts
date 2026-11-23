@@ -31,6 +31,18 @@ describe("handler dispatch", () => {
     ).toMatchFileSnapshot("../__snapshots__/dispatch-rpc-ping.golden.json");
   }, 20_000);
 
+  it.each(["f3-map", "f3-admin"])(
+    "serves RPC frames for %s",
+    async (clientHeader) => {
+      const res = await rpcResponse((client) => client.ping(), {
+        [Header.Client]: clientHeader,
+      });
+      expect(res.status).toBe(200);
+      const body: unknown = await res.json();
+      expect(body).toMatchObject({ json: { alive: true } });
+    },
+  );
+
   it("returns the OpenAPI body shape for the same procedure over REST", async () => {
     const res = await target.invoke(
       req("/v1/ping", { headers: { "x-forwarded-for": "10.90.0.2" } }),
@@ -103,6 +115,7 @@ describe("handler dispatch", () => {
       Client.SCALAR_API,
       "10.90.4.1",
     ],
+    ["the Slackbot REST client", Client.F3_SLACKBOT, "10.90.4.4"],
     ["an unrecognized Client value", "characterization", "10.90.4.2"],
     ["the right value in the wrong case", "ORPC", "10.90.4.3"],
   ])(
