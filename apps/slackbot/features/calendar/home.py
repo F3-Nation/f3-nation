@@ -51,8 +51,8 @@ from utilities.helper_functions import (
 from utilities.slack import actions, orm
 
 SLACK_MODAL_BLOCK_LIMIT = 100
-# Events requested per page. A page renders fewer when their blocks would pass the modal limit.
-HOME_PAGE_SIZE = 60
+# Events requested per page. A page renders fewer when they and their date headers would pass the modal limit.
+HOME_PAGE_SIZE = 90
 FILTER_ACTIONS = {
     actions.CALENDAR_HOME_AO_FILTER,
     actions.CALENDAR_HOME_EVENT_TYPE_FILTER,
@@ -69,9 +69,7 @@ OPTION_SUMMARIES = {
     actions.FILTER_MY_EVENTS: "My events only",
     actions.FILTER_SPECIAL_EVENTS: "Special events only",
 }
-LEGEND = ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast written · :star: special event"
-# Overflow actions that can instead be the row's visible button, with the button label for each.
-PRIMARY_ACTION_LABELS = {"Take Q": "Take Q", "HC": "HC", "Un-HC": ":white_check_mark: Going"}
+LEGEND = ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast · :star: special event"
 
 
 def _append_calendar_event_group(
@@ -94,86 +92,69 @@ def _append_calendar_event_group(
     return event_date, True
 
 
+def _event_types(event: CalendarHomeQuery) -> str:
+    return " / ".join(escape_mrkdwn(t.name) for t in event.event_types)
+
+
 def _event_title(event: CalendarHomeQuery) -> str:
+    """The start time as a code span, so times line up down a day, then the bold name and what it is."""
+    start_time = f"`{event.event.start_time or 'TBD'}`"
     ao_name = escape_mrkdwn(event.org.name)
-    start_time = event.event.start_time or "TBD"
+    if event.event.series_exception == Series_Exception.closed:
+        return f"{start_time} *{ao_name}* — {_event_types(event)}"
     if event.event.highlight:
-        return f":star: {escape_mrkdwn(event.event.name)} — {ao_name} @ {start_time}"
+        return f"{start_time} :star: *{escape_mrkdwn(event.event.name)}* — {ao_name}"
     if event.series and event.series.name and event.org.name not in event.series.name:
-        return f"{escape_mrkdwn(event.series.name)} — {ao_name} @ {start_time}"
-    event_types = " / ".join(escape_mrkdwn(t.name) for t in event.event_types)
-    return f"{ao_name} — {event_types} @ {start_time}"
+        return f"{start_time} *{escape_mrkdwn(event.series.name)}* — {ao_name}"
+    return f"{start_time} *{ao_name}* — {_event_types(event)}"
 
 
 def _event_option_names(event: CalendarHomeQuery, user_is_admin: bool) -> list[str]:
-    """Every action the viewer can take on an open event, in overflow-menu order."""
+    """Every action the viewer can take on an open event, most common first: Take Q and HC lead the menu."""
     option_names: list[str] = []
-    if not user_is_admin:
-        option_names.append("Edit Preblast" if event.user_q else "View Preblast")
     if not event.planned_qs:
         option_names.append("Take Q")
     option_names.append("Un-HC" if event.user_attending else "HC")
+    if not user_is_admin:
+        option_names.append("Edit Preblast" if event.user_q else "View Preblast")
     if user_is_admin:
         option_names.extend(["Assign Q", "Close Event"])
         option_names.append("Edit Preblast" if event.event.start_date > current_date_cst() else "Edit Backblast")
     return option_names
 
 
-def _primary_button(event_id: int, option_names: list[str]) -> orm.ButtonElement | None:
-    """The row's visible button: Take Q when the Q slot is open, otherwise HC or Going (Un-HC)."""
-    action = next((a for a in PRIMARY_ACTION_LABELS if a in option_names), None)
-    if action is None:
-        return None
-    button = orm.ButtonElement(
-        label=PRIMARY_ACTION_LABELS[action],
-        action=f"{actions.CALENDAR_HOME_EVENT}_{event_id}_button",
-        value=action,
-    )
-    if action == "Un-HC":
-        button.confirm = orm.ConfirmObject(
-            title="Remove your HC?", text="You'll no longer be listed as going.", confirm="Un-HC", deny="Keep HC"
-        )
-    else:
-        button.style = "primary"
-    return button
-
-
 def _event_blocks(event: CalendarHomeQuery, user_is_admin: bool) -> list[orm.BaseBlock]:
-    """A bold title line and a detail line, then the visible button and the overflow menu of other actions."""
-    overflow_action = f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}"
+    """One section per event: the title line, a detail line, and every action in its overflow menu."""
     if event.event.series_exception == Series_Exception.closed:
-        event_types = " / ".join(escape_mrkdwn(t.name) for t in event.event_types)
-        label = f"*{escape_mrkdwn(event.org.name)} — {event_types} @ {event.event.start_time or 'TBD'}*"
-        label += "\n:no_entry: Closed"
-        option = "Reopen Event" if user_is_admin else "Event Closed"
-        return [
-            orm.SectionBlock(
-                label=label,
-                element=orm.OverflowElement(action=overflow_action, options=orm.as_selector_options([option])),
-            )
+        details = ":no_entry: Closed"
+        option_names = ["Reopen Event" if user_is_admin else "Event Closed"]
+    else:
+        parts = [
+            f"Q: {escape_mrkdwn(event.planned_qs)}" if event.planned_qs else "Q: *Open!*",
+            f"{event.hc_count or 0} HC",
         ]
-
-    details = [f"Q: {escape_mrkdwn(event.planned_qs)}" if event.planned_qs else "Q: Open!", f"{event.hc_count or 0} HC"]
-    icons = " ".join(
-        icon
-        for icon, shown in [
-            (":muscle:", event.user_q),
-            (":white_check_mark:", event.user_attending),
-            (":pencil:", event.event.preblast_rich),
-        ]
-        if shown
-    )
-    if icons:
-        details.append(icons)
-    label = f"*{_event_title(event)}*\n{' · '.join(details)}"
-
-    option_names = _event_option_names(event, user_is_admin)
-    button = _primary_button(event.event.id, option_names)
-    other_options = [o for o in option_names if button is None or o != button.value]
-    elements: list = [button] if button else []
-    if other_options:
-        elements.append(orm.OverflowElement(action=overflow_action, options=orm.as_selector_options(other_options)))
-    return [orm.SectionBlock(label=label), orm.ActionsBlock(elements=elements)]
+        icons = " ".join(
+            icon
+            for icon, shown in [
+                (":muscle:", event.user_q),
+                (":white_check_mark:", event.user_attending),
+                (":pencil:", event.event.preblast_rich),
+            ]
+            if shown
+        )
+        if icons:
+            parts.append(icons)
+        details = " · ".join(parts)
+        option_names = _event_option_names(event, user_is_admin)
+    return [
+        orm.SectionBlock(
+            label=f"{_event_title(event)}\n{details}",
+            element=orm.OverflowElement(
+                action=f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}",
+                options=orm.as_selector_options(option_names),
+            ),
+        )
+    ]
 
 
 def _filter_summary(filter_data: dict, group_by_option: str, start_date_selected: datetime.date | None) -> list[str]:
@@ -387,14 +368,12 @@ def build_home_form(
         filter.append(EventInstance.highlight.is_(True))
 
     summary_parts = _filter_summary(existing_filter_data, group_by_option, start_date_selected)
+    showing = f"Showing: {' · '.join(summary_parts)}" if summary_parts else "Showing: all upcoming events"
     blocks: list[orm.BaseBlock] = [
         orm.ActionsBlock(
             elements=[
                 orm.ButtonElement(
                     ":calendar: Calendar Images", value="calendar", action=actions.OPEN_CALENDAR_IMAGE_BUTTON
-                ),
-                orm.ButtonElement(
-                    ":world_map: Nearby Special Events", value="nearby", action=actions.NEARBY_EVENTS_OPEN
                 ),
                 # Slack's collapsible container block isn't allowed in modals, so a button shows and hides the inputs.
                 orm.ButtonElement(
@@ -405,14 +384,7 @@ def build_home_form(
             ]
         ),
         *(filter_inputs if filters_open else []),
-        orm.ContextBlock(
-            element=orm.ContextElement(
-                initial_value=f"Showing: {' · '.join(summary_parts)}"
-                if summary_parts
-                else "Showing: all upcoming events"
-            )
-        ),
-        orm.ContextBlock(element=orm.ContextElement(initial_value=LEGEND)),
+        orm.ContextBlock(element=orm.ContextElement(initial_value=f"{showing}\n{LEGEND}")),
     ]
 
     # Run the query
@@ -761,8 +733,7 @@ def handle_assign_q_form(
 
 def handle_home_event(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     event_instance_id = safe_convert(safe_get(body, "actions", 0, "action_id").split("_")[1], int)
-    # The overflow menu sends the chosen option; the row's visible button sends the same action name as its value.
-    action = safe_get(body, "actions", 0, "selected_option", "value") or safe_get(body, "actions", 0, "value")
+    action = safe_get(body, "actions", 0, "selected_option", "value")
     user_id = get_user(
         safe_get(body, "user", "id"), region_record, client, logger, require_link=action != "View Preblast"
     ).user_id

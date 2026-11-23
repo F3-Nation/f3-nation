@@ -132,12 +132,20 @@ def _legend_index(view):
     return next(
         i
         for i, b in enumerate(view["blocks"])
-        if b["type"] == "context" and b["elements"][0]["text"].startswith(":muscle:")
+        if b["type"] == "context" and b["elements"][0]["text"].startswith("Showing:")
     )
 
 
+def _summary(view) -> str:
+    return view["blocks"][_legend_index(view)]["elements"][0]["text"].split("\n")[0]
+
+
+def _menu(block) -> list[str]:
+    return [o["value"] for o in block["accessory"]["options"]]
+
+
 def _event_blocks(view):
-    """Blocks after the fixed header area (top buttons, any filter inputs, summary, legend)."""
+    """Blocks after the fixed header area (top buttons, any filter inputs, summary and legend)."""
     return view["blocks"][_legend_index(view) + 1 :]
 
 
@@ -191,13 +199,13 @@ def _filter_body(state: dict, *, action_id: str, view_id="V_TEST", private_metad
 
 
 def test_new_date_group_is_not_partially_appended_when_it_would_exceed_limit():
-    blocks = [orm.DividerBlock() for _ in range(SLACK_MODAL_BLOCK_LIMIT - 2)]
+    blocks = [orm.DividerBlock() for _ in range(SLACK_MODAL_BLOCK_LIMIT - 1)]
     original_blocks = list(blocks)
     active_date = datetime.date(2026, 9, 6)
 
     returned_date, appended = _append_calendar_event_group(
         blocks=blocks,
-        event_blocks=[orm.SectionBlock(label="Next event"), orm.ActionsBlock()],
+        event_blocks=[orm.SectionBlock(label="Next event")],
         event_date=datetime.date(2026, 9, 7),
         active_date=active_date,
         block_limit=SLACK_MODAL_BLOCK_LIMIT,
@@ -209,12 +217,12 @@ def test_new_date_group_is_not_partially_appended_when_it_would_exceed_limit():
 
 
 def test_event_group_that_reaches_exact_limit_is_appended():
-    blocks = [orm.DividerBlock() for _ in range(SLACK_MODAL_BLOCK_LIMIT - 3)]
+    blocks = [orm.DividerBlock() for _ in range(SLACK_MODAL_BLOCK_LIMIT - 2)]
     event_date = datetime.date(2026, 9, 7)
 
     returned_date, appended = _append_calendar_event_group(
         blocks=blocks,
-        event_blocks=[orm.SectionBlock(label="Next event"), orm.ActionsBlock()],
+        event_blocks=[orm.SectionBlock(label="Next event")],
         event_date=event_date,
         active_date=datetime.date(2026, 9, 6),
         block_limit=SLACK_MODAL_BLOCK_LIMIT,
@@ -223,69 +231,64 @@ def test_event_group_that_reaches_exact_limit_is_appended():
     assert appended
     assert returned_date == event_date
     assert len(blocks) == SLACK_MODAL_BLOCK_LIMIT
-    assert isinstance(blocks[-3], orm.HeaderBlock)
-    assert isinstance(blocks[-2], orm.SectionBlock)
-    assert isinstance(blocks[-1], orm.ActionsBlock)
+    assert isinstance(blocks[-2], orm.HeaderBlock)
+    assert isinstance(blocks[-1], orm.SectionBlock)
 
 
-def test_event_row_has_bold_title_detail_line_and_hc_button():
+def test_event_is_one_section_with_time_first_title_details_and_menu():
     view, _ = _render([_calendar_event(7, FUTURE, preblast=True, hc_count=4, event_types=("Bootcamp", "Ruck"))])
 
-    header, section, buttons = _event_blocks(view)[:3]
+    header, section = _event_blocks(view)
     assert header == {
         "type": "header",
         "text": {"type": "plain_text", "text": ":calendar: Monday, September 07", "emoji": True},
     }
-    assert section["text"]["text"] == "*The Forge — Bootcamp / Ruck @ 0530*\nQ: Chip · 4 HC · :pencil:"
-    assert "accessory" not in section
-    hc_button, overflow = buttons["elements"]
-    assert hc_button["text"]["text"] == "HC"
-    assert hc_button["value"] == "HC"
-    assert hc_button["action_id"] == f"{actions.CALENDAR_HOME_EVENT}_7_button"
-    assert overflow["action_id"] == f"{actions.CALENDAR_HOME_EVENT}_7"
-    assert [o["value"] for o in overflow["options"]] == ["View Preblast"]
+    assert section["text"]["text"] == "`0530` *The Forge* — Bootcamp / Ruck\nQ: Chip · 4 HC · :pencil:"
+    assert section["accessory"]["action_id"] == f"{actions.CALENDAR_HOME_EVENT}_7"
+    assert _menu(section) == ["HC", "View Preblast"]
 
 
-def test_open_q_slot_makes_take_q_the_visible_button():
+def test_open_q_slot_is_bold_and_take_q_leads_the_menu():
     view, _ = _render([_calendar_event(7, FUTURE, planned_qs=None, hc_count=None)])
 
-    section, buttons = _event_blocks(view)[1:3]
-    assert section["text"]["text"] == "*The Forge — Bootcamp @ 0530*\nQ: Open! · 0 HC"
-    take_q, overflow = buttons["elements"]
-    assert (take_q["text"]["text"], take_q["value"], take_q["style"]) == ("Take Q", "Take Q", "primary")
-    assert [o["value"] for o in overflow["options"]] == ["View Preblast", "HC"]
+    section = _event_blocks(view)[1]
+    assert section["text"]["text"] == "`0530` *The Forge* — Bootcamp\nQ: *Open!* · 0 HC"
+    assert _menu(section) == ["Take Q", "HC", "View Preblast"]
 
 
-def test_going_button_un_hcs_only_after_confirmation():
+def test_going_and_q_show_icons_and_offer_un_hc_and_edit_preblast():
     view, _ = _render([_calendar_event(7, FUTURE, user_attending=True, user_q=True)])
 
-    section, buttons = _event_blocks(view)[1:3]
+    section = _event_blocks(view)[1]
     assert section["text"]["text"].endswith("Q: Chip · 3 HC · :muscle: :white_check_mark:")
-    going = buttons["elements"][0]
-    assert (going["text"]["text"], going["value"]) == (":white_check_mark: Going", "Un-HC")
-    assert going["confirm"]["confirm"]["text"] == "Un-HC"
+    assert _menu(section) == ["Un-HC", "Edit Preblast"]
 
 
-def test_admin_actions_stay_in_the_overflow_menu():
+def test_admin_menu_leads_with_hc_then_admin_actions():
     view, _ = _render([_calendar_event(7, FUTURE)], admin=True)
 
-    overflow = _event_blocks(view)[2]["elements"][1]
-    assert [o["value"] for o in overflow["options"]] == ["Assign Q", "Close Event", "Edit Preblast"]
+    assert _menu(_event_blocks(view)[1]) == ["HC", "Assign Q", "Close Event", "Edit Preblast"]
 
 
-def test_closed_event_is_one_block_with_its_menu():
+def test_closed_event_shows_closed_and_only_its_menu_option():
     view, _ = _render([_calendar_event(7, FUTURE, closed=True), _calendar_event(8, FUTURE)])
 
     closed, next_event = _event_blocks(view)[1:3]
-    assert closed["text"]["text"] == "*The Forge — Bootcamp @ 0530*\n:no_entry: Closed"
-    assert [o["value"] for o in closed["accessory"]["options"]] == ["Event Closed"]
-    assert next_event["text"]["text"].startswith("*The Forge — Bootcamp")
+    assert closed["text"]["text"] == "`0530` *The Forge* — Bootcamp\n:no_entry: Closed"
+    assert _menu(closed) == ["Event Closed"]
+    assert _menu(next_event) == ["HC", "View Preblast"]
 
 
-def test_special_event_title_leads_with_star_and_event_name():
+def test_admin_can_reopen_a_closed_event():
+    view, _ = _render([_calendar_event(7, FUTURE, closed=True)], admin=True)
+
+    assert _menu(_event_blocks(view)[1]) == ["Reopen Event"]
+
+
+def test_special_event_title_shows_star_and_event_name():
     view, _ = _render([_calendar_event(7, FUTURE, highlight=True)])
 
-    assert _event_blocks(view)[1]["text"]["text"].startswith("*:star: Event 7 — The Forge @ 0530*\n")
+    assert _event_blocks(view)[1]["text"]["text"].startswith("`0530` :star: *Event 7* — The Forge\n")
 
 
 def test_mrkdwn_in_org_supplied_names_is_escaped():
@@ -302,23 +305,22 @@ def test_mrkdwn_in_org_supplied_names_is_escaped():
 def test_days_are_separated_by_date_headers_without_dividers():
     view, _ = _render([_calendar_event(1, FUTURE), _calendar_event(2, FUTURE + datetime.timedelta(days=1))])
 
-    assert [b["type"] for b in _event_blocks(view)] == ["header", "section", "actions", "header", "section", "actions"]
+    assert [b["type"] for b in _event_blocks(view)] == ["header", "section", "header", "section"]
 
 
-def test_top_row_legend_and_hidden_filters_on_open():
+def test_top_row_summary_with_legend_and_hidden_filters_on_open():
     view, _ = _render([], update_view_id=None)
 
-    top, summary, legend = view["blocks"][:3]
+    top, summary = view["blocks"][:2]
     assert [e["action_id"] for e in top["elements"]] == [
         actions.OPEN_CALENDAR_IMAGE_BUTTON,
-        actions.NEARBY_EVENTS_OPEN,
         actions.CALENDAR_HOME_FILTERS,
     ]
     assert _filters_button(view)["text"]["text"] == ":gear: Filters"
     assert _filter_inputs(view) == []
-    assert summary["elements"][0]["text"] == "Showing: all upcoming events"
-    assert legend["elements"][0]["text"] == (
-        ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast written · :star: special event"
+    assert summary["elements"][0]["text"] == (
+        "Showing: all upcoming events\n"
+        ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast · :star: special event"
     )
     assert _event_blocks(view) == [
         {"type": "section", "text": {"type": "mrkdwn", "text": "No upcoming events match these filters."}}
@@ -352,7 +354,7 @@ def test_hiding_filters_keeps_them_applied_and_counts_them_on_the_button():
 
     assert _filter_inputs(view) == []
     assert _filters_button(view)["text"]["text"] == ":gear: Filters (1 active)"
-    assert view["blocks"][1]["elements"][0]["text"] == "Showing: Open Q only"
+    assert _summary(view) == "Showing: Open Q only"
     assert schedule_query.call_args.kwargs["open_q_only"] is True
 
 
@@ -381,8 +383,7 @@ def test_filters_stay_shown_and_count_active_filters_after_a_filter_change():
 
     assert [b["block_id"] for b in _filter_inputs(view)] == FILTER_BLOCK_IDS
     assert _filters_button(view)["text"]["text"] == ":gear: Hide filters"
-    summary = view["blocks"][_legend_index(view) - 1]
-    assert summary["elements"][0]["text"] == "Showing: 2 AOs · Open Q only · Special events only · from Mon, Sep 07"
+    assert _summary(view) == "Showing: 2 AOs · Open Q only · Special events only · from Mon, Sep 07"
     assert schedule_query.call_args.kwargs["open_q_only"] is True
     compiled = [str(f) for f in schedule_query.call_args.args[1]]
     assert any("event_instances.highlight" in f for f in compiled)
@@ -423,7 +424,7 @@ def test_full_page_stays_under_the_block_limit_and_offers_show_more():
     view, schedule_query = _render(_busy_schedule(HOME_PAGE_SIZE))
 
     assert _slack_block_count(view["blocks"]) <= SLACK_MODAL_BLOCK_LIMIT
-    rendered = [b for b in view["blocks"] if b["type"] == "section" and b["text"]["text"].startswith("*The Forge")]
+    rendered = [b for b in view["blocks"] if b["type"] == "section" and "accessory" in b]
     paging = view["blocks"][-1]
     assert [e["action_id"] for e in paging["elements"]] == [actions.CALENDAR_HOME_SHOW_MORE]
     assert paging["elements"][0]["value"] == str(len(rendered))
@@ -447,9 +448,7 @@ def client_metadata(view) -> str:
 
 
 def test_refresh_after_an_event_action_keeps_the_current_page():
-    body = _filter_body(
-        {}, action_id=f"{actions.CALENDAR_HOME_EVENT}_7_button", private_metadata='{"offset": 37}', value="HC"
-    )
+    body = _filter_body({}, action_id=f"{actions.CALENDAR_HOME_EVENT}_7", private_metadata='{"offset": 37}')
 
     _, schedule_query = _render(_busy_schedule(5), body)
 
@@ -476,34 +475,17 @@ def test_last_page_has_no_show_more_button():
     )
 
 
-def test_closed_events_take_one_block_each():
-    events = [_calendar_event(i, FUTURE, closed=True) for i in range(10)] + [_calendar_event(10, FUTURE)]
-
-    view, _ = _render(events)
-
-    assert [b["type"] for b in _event_blocks(view)] == ["header"] + ["section"] * 11 + ["actions"]
-    assert all("accessory" in b for b in _event_blocks(view)[1:11])
-
-
 def test_page_that_fills_the_limit_keeps_room_for_show_more():
-    # 3 fixed blocks (filters hidden) + 1 date header leaves an even number of blocks for two-block open events,
-    # so without the reserved block the last event would reach 100 and the paging row would be the 101st.
-    events = [_calendar_event(i, FUTURE) for i in range(50)]
+    # 2 fixed blocks (filters hidden) + 1 date header + 96 events reach 99, so without the reserved block a
+    # 97th event would reach 100 and the paging row would be the 101st.
+    events = [_calendar_event(i, FUTURE) for i in range(SLACK_MODAL_BLOCK_LIMIT)]
 
     view, _ = _render(events)
 
-    assert _slack_block_count(view["blocks"]) == SLACK_MODAL_BLOCK_LIMIT - 1
-    assert view["blocks"][-1]["elements"][-1]["action_id"] == actions.CALENDAR_HOME_SHOW_MORE
-
-
-def test_short_page_cut_by_the_block_limit_still_offers_show_more():
-    events = [_calendar_event(i, FUTURE) for i in range(50)]
-
-    view, _ = _render(events)
-
+    assert _slack_block_count(view["blocks"]) == SLACK_MODAL_BLOCK_LIMIT
     show_more = view["blocks"][-1]["elements"][-1]
     assert show_more["action_id"] == actions.CALENDAR_HOME_SHOW_MORE
-    assert show_more["value"] == "47"
+    assert show_more["value"] == str(SLACK_MODAL_BLOCK_LIMIT - 4)
 
 
 def test_back_to_start_returns_to_the_first_page():
@@ -516,7 +498,7 @@ def test_back_to_start_returns_to_the_first_page():
 
 def test_offset_saved_on_another_view_is_ignored():
     body = _filter_body(
-        {}, action_id=f"{actions.CALENDAR_HOME_EVENT}_7_button", view_id="V_OTHER", private_metadata='{"offset": 37}'
+        {}, action_id=f"{actions.CALENDAR_HOME_EVENT}_7", view_id="V_OTHER", private_metadata='{"offset": 37}'
     )
 
     _, schedule_query = _render(_busy_schedule(5), body)
@@ -559,19 +541,13 @@ def test_rejected_page_change_or_filters_toggle_reaches_the_dispatcher(action_id
         )
 
 
-def test_event_button_routes_to_the_calendar_event_handler():
-    from utilities.helper_functions import get_request_type
-
-    body = {"type": "block_actions", "actions": [{"action_id": f"{actions.CALENDAR_HOME_EVENT}_7_button"}]}
-
-    assert get_request_type(body) == ("block_actions", actions.CALENDAR_HOME_EVENT)
-
-
-@pytest.mark.parametrize(("button_value", "expected"), [("HC", "create"), ("Un-HC", "delete")])
-def test_event_button_runs_the_same_action_as_the_menu(button_value, expected):
+@pytest.mark.parametrize(("option", "expected"), [("HC", "create"), ("Un-HC", "delete")])
+def test_event_menu_hc_and_un_hc(option, expected):
     body = {
         "user": {"id": "U_TEST"},
-        "actions": [{"action_id": f"{actions.CALENDAR_HOME_EVENT}_7_button", "type": "button", "value": button_value}],
+        "actions": [
+            {"action_id": f"{actions.CALENDAR_HOME_EVENT}_7", "type": "overflow", "selected_option": {"value": option}}
+        ],
         "view": {"id": "V_TEST"},
     }
     with (
