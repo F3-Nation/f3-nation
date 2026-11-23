@@ -70,7 +70,7 @@ If multiple PRs are merged to `main` before the Release Please PR is merged, Rel
 
 The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `main`.
 
-After the release PR has merged and deployed to Staging, have an agent create a release-plan issue with the [`release-plan`](../.agents/skills/release-plan/SKILL.md) skill. That plan's test step creates the Staging test plan with the [`staging-test-plan`](../.agents/skills/staging-test-plan/SKILL.md) skill. Both skills target the most recently merged release PR and confirm its number with you first; they never plan from an open release PR, which is only a running changelog.
+After the release PR has merged and deployed to Staging, have an agent run the [`release`](../.agents/skills/release/SKILL.md) skill. For Staging it files the Staging test plan and the release plan that links it; after the Staging go/no-go, run it again for the Production release plan. It works only from a merged release PR, never an open one, which is only a running changelog.
 
 ### 4. Release Please creates the tag
 
@@ -124,8 +124,15 @@ What this does not guarantee:
   run shows as cancelled. A production job waiting for approval may hold its
   group until it is approved or rejected.
 
-The workflow-level `concurrency` in each `deploy-*.yml` is still keyed by tag;
-it only stops the same tag from building twice at once.
+The workflow-level `concurrency` in each Cloud Run `deploy-*.yml` caller is
+still keyed by tag; it only stops the same tag from building twice at once.
+
+The [Homepage workflow](../.github/workflows/deploy-homepage.yml) is the
+exception: it has no reusable deploy job, and its workflow-level group is the
+fixed name `deploy-homepage` rather than one keyed by tag. Every release tag
+publishes the same GitHub Pages site, so all Homepage runs, for any tag,
+queue in one group with `cancel-in-progress: false`. The two limits above
+apply to it as well.
 
 #### Who can release and approve
 

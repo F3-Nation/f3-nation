@@ -25,7 +25,7 @@ const createApiKeySchema = z.object({
       roleName: z.enum(["editor", "admin"]),
     })
     .array()
-    .optional(),
+    .min(1, { error: "An API key needs at least one role" }),
   expiresAt: z.iso.datetime().nullable().optional(),
 });
 
@@ -79,16 +79,16 @@ interface ManageableKey {
 /**
  * Decides which API keys the caller may see and manage. Nation admins manage
  * every key. Otherwise a key is manageable when the caller is admin on (or
- * above) every org the key holds a role on, or when it is a read-only key the
- * signed-in user owns.
+ * above) every org the key holds a role on, or, for a key with no roles, when
+ * the signed-in user owns it.
  *
  * Owners always see their own keys and may revoke them, even when the key
  * holds roles beyond the owner's (after a demotion, or a grant made directly
  * in the database). Restoring or purging such a key still needs full scope:
  * restore would hand the owner back roles they no longer hold.
  *
- * Ownership never counts for API-key sessions: their `session.id` is the key
- * owner, whose rights can be wider than the key's own roles.
+ * Ownership never counts for API-key sessions: a key acts only through its own
+ * roles, never as the user who owns it.
  */
 const getApiKeyAccess = async (
   ctx: Context,
@@ -288,7 +288,7 @@ export const apiKeyRouter = {
       tags: ["api-key"],
       summary: "Create API key",
       description:
-        "Generate a new API key for programmatic access. The key can be scoped to specific organizations with specific roles (editor or admin). Requires admin role for all assigned organizations.",
+        "Generate a new API key for programmatic access. The key needs at least one role (editor or admin) on a specific organization, and the caller must be admin on every organization assigned. Public reads need no key.",
     })
     .output(
       z.object({
@@ -314,44 +314,42 @@ export const apiKeyRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const roles = input.roles ?? [];
+      const { roles } = input;
       const expiresAt = input.expiresAt ?? null;
 
       // Check permissions for each org-role combination (one hierarchy query
       // per chunk of up to 10,000 orgs; the first denied role in request
       // order is reported).
-      if (roles.length > 0) {
-        const permissionChecks = await checkHasRolesOnOrgs({
-          session: ctx.session,
-          db: ctx.db,
-          checks: roles.map((role) => ({
-            orgId: role.orgId,
-            roleName: role.roleName,
-          })),
+      const permissionChecks = await checkHasRolesOnOrgs({
+        session: ctx.session,
+        db: ctx.db,
+        checks: roles.map((role) => ({
+          orgId: role.orgId,
+          roleName: role.roleName,
+        })),
+      });
+      const deniedIndex = permissionChecks.findIndex(
+        (permissionCheck) => !permissionCheck.success,
+      );
+      const deniedRole = roles[deniedIndex];
+      if (deniedRole) {
+        throw new ORPCError("FORBIDDEN", {
+          message: `You do not have permission to grant "${deniedRole.roleName}" role on organization ${deniedRole.orgId}`,
         });
-        const deniedIndex = permissionChecks.findIndex(
-          (permissionCheck) => !permissionCheck.success,
-        );
-        const deniedRole = roles[deniedIndex];
-        if (deniedRole) {
-          throw new ORPCError("FORBIDDEN", {
-            message: `You do not have permission to grant "${deniedRole.roleName}" role on organization ${deniedRole.orgId}`,
-          });
-        }
+      }
 
-        // Callers may only create keys they can also manage.
-        const { canManage } = await getApiKeyAccess(ctx);
-        if (
-          !canManage({
-            ownerId: ctx.session?.id ?? null,
-            roleOrgIds: roles.map((r) => r.orgId),
-          })
-        ) {
-          throw new ORPCError("FORBIDDEN", {
-            message:
-              "You can only create API keys for organizations you administer",
-          });
-        }
+      // Callers may only create keys they can also manage.
+      const { canManage } = await getApiKeyAccess(ctx);
+      if (
+        !canManage({
+          ownerId: ctx.session?.id ?? null,
+          roleOrgIds: roles.map((r) => r.orgId),
+        })
+      ) {
+        throw new ORPCError("FORBIDDEN", {
+          message:
+            "You can only create API keys for organizations you administer",
+        });
       }
 
       const generatedKey = buildApiKey();
@@ -374,33 +372,31 @@ export const apiKeyRouter = {
             });
           }
 
-          if (roles.length > 0) {
-            // Get role IDs for all unique role names
-            const roleNames = [...new Set(roles.map((r) => r.roleName))];
-            const roleRecords = await tx
-              .select({ id: schema.roles.id, name: schema.roles.name })
-              .from(schema.roles)
-              .where(inArray(schema.roles.name, roleNames));
+          // Get role IDs for all unique role names
+          const roleNames = [...new Set(roles.map((r) => r.roleName))];
+          const roleRecords = await tx
+            .select({ id: schema.roles.id, name: schema.roles.name })
+            .from(schema.roles)
+            .where(inArray(schema.roles.name, roleNames));
 
-            const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
+          const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
 
-            // Insert org associations with roles
-            await tx.insert(schema.rolesXApiKeysXOrg).values(
-              roles.map((role) => {
-                const roleId = roleMap.get(role.roleName);
-                if (roleId == null) {
-                  throw new ORPCError("INTERNAL_SERVER_ERROR", {
-                    message: `Role "${role.roleName}" not found`,
-                  });
-                }
-                return {
-                  roleId,
-                  apiKeyId: apiKey.id,
-                  orgId: role.orgId,
-                };
-              }),
-            );
-          }
+          // Insert org associations with roles
+          await tx.insert(schema.rolesXApiKeysXOrg).values(
+            roles.map((role) => {
+              const roleId = roleMap.get(role.roleName);
+              if (roleId == null) {
+                throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                  message: `Role "${role.roleName}" not found`,
+                });
+              }
+              return {
+                roleId,
+                apiKeyId: apiKey.id,
+                orgId: role.orgId,
+              };
+            }),
+          );
 
           return { ...apiKey, secret: generatedKey };
         });

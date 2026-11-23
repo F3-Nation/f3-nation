@@ -97,7 +97,7 @@ describe("NoAccess", () => {
       screen.getByRole("heading", { name: "Access Denied" }),
     ).toBeDefined();
     expect(screen.getByText(/Your roles:/).textContent).toBe(
-      "Your roles: Boone - editor, Watauga - admin",
+      "Your roles: Boone - Editor, Watauga - Admin",
     );
   });
 

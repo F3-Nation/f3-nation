@@ -5,10 +5,20 @@ const { createTransport, sendMail } = vi.hoisted(() => {
   return { createTransport: vi.fn(() => ({ sendMail })), sendMail };
 });
 
-const { recordEmailCode } = vi.hoisted(() => ({ recordEmailCode: vi.fn() }));
+const { EmailCodeRateLimitedError, recordEmailCode, logWarn } = vi.hoisted(
+  () => ({
+    EmailCodeRateLimitedError: class EmailCodeRateLimitedError extends Error {},
+    recordEmailCode: vi.fn(),
+    logWarn: vi.fn(),
+  }),
+);
 
 vi.mock("nodemailer", () => ({ createTransport }));
-vi.mock("~/lib/email-mfa", () => ({ recordEmailCode }));
+vi.mock("~/lib/email-mfa", () => ({
+  EmailCodeRateLimitedError,
+  recordEmailCode,
+}));
+vi.mock("~/lib/logging", () => ({ logWarn }));
 vi.mock("~/env", () => ({
   env: {
     EMAIL_SERVER: "smtp://localhost:1025",
@@ -74,18 +84,57 @@ describe("deliverBetterAuthOtp", () => {
     expect(recordEmailCode).toHaveBeenCalledExactlyOnceWith(
       "user@example.com",
       "123456",
+      { checkable: true },
     );
     expect(order).toEqual(["record", "send"]);
   });
 
-  it("only mails codes of other types", async () => {
+  it.each(["email-verification", "forget-password", "change-email"])(
+    "counts a %s code toward the send limit without making it checkable",
+    async (type) => {
+      await deliverBetterAuthOtp({
+        email: "user@example.com",
+        otp: "123456",
+        type,
+      });
+
+      expect(recordEmailCode).toHaveBeenCalledExactlyOnceWith(
+        "user@example.com",
+        "123456",
+        { checkable: false },
+      );
+      expect(sendMail).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("sends nothing once the address is over the send limit", async () => {
+    recordEmailCode.mockRejectedValueOnce(new EmailCodeRateLimitedError());
+
     await deliverBetterAuthOtp({
       email: "user@example.com",
       otp: "123456",
-      type: "email-verification",
+      type: "sign-in",
     });
 
-    expect(recordEmailCode).not.toHaveBeenCalled();
-    expect(sendMail).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(logWarn).toHaveBeenCalledExactlyOnceWith(
+      "auth.better_auth.otp_send_rate_limited",
+      { type: "sign-in" },
+    );
+  });
+
+  it("sends nothing and rethrows when recording fails for another reason", async () => {
+    const failure = new Error("db down");
+    recordEmailCode.mockRejectedValueOnce(failure);
+
+    await expect(
+      deliverBetterAuthOtp({
+        email: "user@example.com",
+        otp: "123456",
+        type: "sign-in",
+      }),
+    ).rejects.toBe(failure);
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(logWarn).not.toHaveBeenCalled();
   });
 });

@@ -12,7 +12,7 @@
  * from every integration, workflow tokens included. So this runs on a
  * codeowner's machine with their own gh login, through the
  * security-advisory-report agent skill, which posts the message to the
- * private #codeowners Slack channel as that person.
+ * private #security-managers Slack channel as that person.
  *
  *   node .github/scripts/security-advisory-report.cjs --check   # access checks only
  *   node .github/scripts/security-advisory-report.cjs           # checks, then the message
@@ -364,6 +364,7 @@ async function buildAdvisoryReport({
       repo: fork.split("/")[1],
       board: { ...board, prs },
       base: REPO,
+      approvalsFor: `${ghsa}'s fix PRs`,
     };
   });
 

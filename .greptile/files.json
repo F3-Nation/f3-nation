@@ -255,6 +255,11 @@
       "scope": ["apps/slackbot/**"]
     },
     {
+      "path": "docs/specs/slack-user-resolution.md",
+      "description": "Feature spec: Slack user resolution. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["packages/api/**"]
+    },
+    {
       "path": "docs/specs/slackbot-nonproduction-profile-privacy.md",
       "description": "Feature spec: Slackbot non-production profile privacy. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["apps/slackbot/**"]
@@ -288,6 +293,21 @@
         "packages/db/**",
         "packages/db-python/**",
         "tooling/scripts/**"
+      ]
+    },
+    {
+      "path": "docs/specs/user-profile-access.md",
+      "description": "Feature spec: User profile and PII access. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/admin/**", "packages/api/**"]
+    },
+    {
+      "path": "docs/specs/admin-region-password-vault.md",
+      "description": "Feature spec: Region password vault opt-in and multi-role access. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/shared/**",
+        "packages/validators/**"
       ]
     }
   ]

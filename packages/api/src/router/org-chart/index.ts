@@ -8,15 +8,25 @@ import {
   countDistinct,
   desc,
   eq,
+  exists,
   ilike,
   inArray,
   isNotNull,
+  ne,
   schema,
   sql,
 } from "@acme/db";
 import { OrgType } from "@acme/shared/app/enums";
 
-import { protectedProcedure } from "../../shared";
+import {
+  ancestorOrgsAreActive,
+  orgAndAncestorsAreActive,
+} from "../../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../../org-tree";
+import { publicReadProcedure } from "../../shared";
+
+/** Roles the directory lists: who to contact, not access grants. */
+const LEADERSHIP_ROLE_NAMES = ["admin", "editor"] as const;
 
 interface OrgRow {
   id: number;
@@ -43,7 +53,7 @@ interface RoleRow {
 }
 
 export const orgChartRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .route({
       method: "GET",
       path: "/",
@@ -92,6 +102,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const orgsPromise = ctx.db
         .select({
           id: schema.orgs.id,
@@ -121,6 +132,7 @@ export const orgChartRouter = {
           and(
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            orgAndAncestorsAreActive(schema.events.orgId),
           ),
         )
         .groupBy(schema.events.locationId);
@@ -140,6 +152,7 @@ export const orgChartRouter = {
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            orgAndAncestorsAreActive(schema.events.orgId),
           ),
         )
         .innerJoin(
@@ -269,7 +282,7 @@ export const orgChartRouter = {
       return { orgs: orgSummaries };
     }),
 
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         orgId: z.coerce
@@ -324,6 +337,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [org] = await ctx.db
         .select({
           id: schema.orgs.id,
@@ -337,7 +351,13 @@ export const orgChartRouter = {
           instagram: schema.orgs.instagram,
         })
         .from(schema.orgs)
-        .where(eq(schema.orgs.id, input.orgId));
+        // The chart lists only active orgs, so a retired one is not found.
+        .where(
+          and(
+            eq(schema.orgs.id, input.orgId),
+            orgAndAncestorsAreActive(schema.orgs.id),
+          ),
+        );
 
       if (!org) {
         throw new ORPCError("NOT_FOUND", {
@@ -381,9 +401,14 @@ export const orgChartRouter = {
           avatarUrl: schema.users.avatarUrl,
         })
         .from(schema.rolesXUsersXOrg)
+        // Only the contact roles: other grants (password access, plain user)
+        // are access rights, not directory contacts.
         .innerJoin(
           schema.roles,
-          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+          and(
+            eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+            inArray(schema.roles.name, LEADERSHIP_ROLE_NAMES),
+          ),
         )
         .innerJoin(
           schema.users,
@@ -422,7 +447,174 @@ export const orgChartRouter = {
       };
     }),
 
-  byLocation: protectedProcedure
+  leadership: publicReadProcedure
+    .route({
+      method: "GET",
+      path: "/leadership",
+      tags: ["Org Chart"],
+      summary: "List org chart leadership",
+      description:
+        "Return every active non-AO org whose ancestors are all active, with every position holder and admin/editor role holder at those orgs, in one response, for the directory's Table view. Unlike the org chart, orgs are listed whether or not they have active locations.",
+    })
+    .output(
+      z.object({
+        orgs: z.array(
+          z.object({
+            id: z.number().describe("Organization ID"),
+            name: z.string().nullable().describe("Organization name"),
+            orgType: z.enum(OrgType).describe("Organization type"),
+            parentId: z.number().nullable().describe("Parent organization ID"),
+          }),
+        ),
+        leaders: z.array(
+          z.object({
+            orgId: z.number().describe("Organization ID"),
+            kind: z
+              .enum(["position", "role"])
+              .describe("Whether this is a leadership position or a role"),
+            id: z.number().describe("Position or role ID"),
+            title: z.string().describe("Position or role title"),
+            userId: z.number().describe("User ID"),
+            f3Name: z.string().nullable().describe("User F3 name"),
+            avatarUrl: z.string().nullable().describe("User avatar URL"),
+            homeRegionName: z
+              .string()
+              .nullable()
+              .describe("Name of the user's home region, when active"),
+          }),
+        ),
+      }),
+    )
+    .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+      const orgFilter = and(
+        eq(schema.orgs.isActive, true),
+        ne(schema.orgs.orgType, "ao"),
+        ancestorOrgsAreActive(schema.orgs.id),
+      );
+
+      const orgs = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+          orgType: schema.orgs.orgType,
+          parentId: schema.orgs.parentId,
+        })
+        .from(schema.orgs)
+        .where(
+          and(
+            ne(schema.orgs.orgType, "ao"),
+            orgAndAncestorsAreActive(schema.orgs.id),
+          ),
+        );
+
+      const positionRows = await ctx.db
+        .select({
+          orgId: schema.positionsXOrgsXUsers.orgId,
+          id: schema.positions.id,
+          title: schema.positions.name,
+          userId: schema.users.id,
+          f3Name: schema.users.f3Name,
+          avatarUrl: schema.users.avatarUrl,
+          homeRegionId: schema.users.homeRegionId,
+        })
+        .from(schema.positionsXOrgsXUsers)
+        .innerJoin(
+          schema.orgs,
+          and(eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId), orgFilter),
+        )
+        .innerJoin(
+          schema.positions,
+          and(
+            eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
+            eq(schema.positions.isActive, true),
+          ),
+        )
+        .innerJoin(
+          schema.users,
+          and(
+            eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+            eq(schema.users.status, "active"),
+          ),
+        );
+
+      const roleRows = await ctx.db
+        .select({
+          orgId: schema.rolesXUsersXOrg.orgId,
+          id: schema.roles.id,
+          title: schema.roles.name,
+          userId: schema.users.id,
+          f3Name: schema.users.f3Name,
+          avatarUrl: schema.users.avatarUrl,
+          homeRegionId: schema.users.homeRegionId,
+        })
+        .from(schema.rolesXUsersXOrg)
+        .innerJoin(
+          schema.orgs,
+          and(eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId), orgFilter),
+        )
+        .innerJoin(
+          schema.roles,
+          and(
+            eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+            // Only the contact roles the directory shows; other roles are
+            // access grants and stay out of this bulk listing.
+            inArray(schema.roles.name, LEADERSHIP_ROLE_NAMES),
+          ),
+        )
+        .innerJoin(
+          schema.users,
+          and(
+            eq(schema.users.id, schema.rolesXUsersXOrg.userId),
+            eq(schema.users.status, "active"),
+          ),
+        );
+
+      const homeRegionIds = [
+        ...new Set(
+          [...positionRows, ...roleRows].flatMap((row) =>
+            row.homeRegionId == null ? [] : [row.homeRegionId],
+          ),
+        ),
+      ];
+      const homeRegions = homeRegionIds.length
+        ? await ctx.db
+            .select({ id: schema.orgs.id, name: schema.orgs.name })
+            .from(schema.orgs)
+            .where(
+              and(
+                inArray(schema.orgs.id, homeRegionIds),
+                eq(schema.orgs.isActive, true),
+                ancestorOrgsAreActive(schema.orgs.id),
+              ),
+            )
+        : [];
+      const regionName = new Map(homeRegions.map((r) => [r.id, r.name]));
+      const withRegion = <T extends { homeRegionId: number | null }>({
+        homeRegionId,
+        ...row
+      }: T) => ({
+        ...row,
+        homeRegionName:
+          homeRegionId == null ? null : (regionName.get(homeRegionId) ?? null),
+      });
+
+      return {
+        orgs,
+        leaders: [
+          ...positionRows.map((row) => ({
+            ...withRegion(row),
+            kind: "position" as const,
+          })),
+          ...roleRows.map((row) => ({
+            ...withRegion(row),
+            kind: "role" as const,
+          })),
+        ],
+      };
+    }),
+
+  byLocation: publicReadProcedure
     .input(
       z.object({
         locationId: z.coerce
@@ -469,6 +661,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [location] = await ctx.db
         .select({
           id: schema.locations.id,
@@ -481,6 +674,22 @@ export const orgChartRouter = {
           and(
             eq(schema.locations.id, input.locationId),
             eq(schema.locations.isActive, true),
+            orgAndAncestorsAreActive(schema.locations.orgId),
+            // A location is public only while it hosts a public workout, so a
+            // venue whose workouts are all private or retired stays hidden.
+            exists(
+              ctx.db
+                .select({ one: sql`1` })
+                .from(schema.events)
+                .where(
+                  and(
+                    eq(schema.events.locationId, schema.locations.id),
+                    eq(schema.events.isActive, true),
+                    eq(schema.events.isPrivate, false),
+                    orgAndAncestorsAreActive(schema.events.orgId),
+                  ),
+                ),
+            ),
           ),
         );
 
@@ -515,6 +724,7 @@ export const orgChartRouter = {
             eq(schema.events.locationId, input.locationId),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            orgAndAncestorsAreActive(schema.events.orgId),
           ),
         )
         .groupBy(
@@ -600,7 +810,7 @@ export const orgChartRouter = {
       };
     }),
 
-  aos: protectedProcedure
+  aos: publicReadProcedure
     .input(
       z.object({
         searchTerm: z
@@ -636,6 +846,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 
@@ -693,6 +904,8 @@ export const orgChartRouter = {
           and(
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            orgAndAncestorsAreActive(schema.events.orgId),
+            orgAndAncestorsAreActive(schema.locations.orgId),
             ilike(aoOrg.name, `%${input.searchTerm}%`),
           ),
         )

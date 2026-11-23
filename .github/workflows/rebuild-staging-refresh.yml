@@ -141,11 +141,9 @@ jobs:
         run: |
           # Same tag as setup.sh: the commit, so the job's image names its code.
           TAG="$(git rev-parse --short=12 HEAD)"
-          TURBO_VERSION="$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')"
           docker build \
             --platform=linux/amd64 \
             --file tooling/scripts/Dockerfile.staging-refresh \
-            --build-arg TURBO_VERSION="${TURBO_VERSION}" \
             --tag "${IMAGE_BASE}:${TAG}" \
             .
           docker push "${IMAGE_BASE}:${TAG}"

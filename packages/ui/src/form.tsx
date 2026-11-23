@@ -205,7 +205,10 @@ const ShadCNFormFactory = <TOutput, TInput extends FieldValues = FieldValues>(
   schema: ZodType<TOutput, TInput>,
 ) => {
   const useSchemaForm = (
-    props: Omit<UseFormProps<TInput, unknown, TOutput>, "resolver">,
+    props: Omit<
+      UseFormProps<TInput & FieldValues, unknown, TOutput>,
+      "resolver"
+    >,
   ) =>
     useForm({
       ...props,
