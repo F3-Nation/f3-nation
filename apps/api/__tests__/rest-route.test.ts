@@ -152,6 +152,8 @@ describe("handleRequest", () => {
     it.each([
       Client.ORPC,
       Client.ORPC_SSG,
+      Client.F3_MAP,
+      Client.F3_ADMIN,
       Client.F3_ME,
       Client.F3_REGION_PAGES,
     ])("routes the %s client header to the RPC handler", async (client) => {
@@ -187,6 +189,20 @@ describe("handleRequest", () => {
   });
 
   describe("non-oRPC requests use the OpenAPI handler", () => {
+    it.each(["scalar-api", "f3-nation-slack-bot", "unknown"])(
+      "routes %s to REST",
+      async (client) => {
+        const { handleRequest } = await importHandler();
+        const response = await handleRequest(
+          new Request("https://api.example.com/v1/ping", {
+            headers: { client },
+          }),
+        );
+        expect(await response.text()).toBe("rest");
+        expect(rpcHandle).not.toHaveBeenCalled();
+      },
+    );
+
     it("routes REST-style calls to the OpenAPI handler", async () => {
       const restResponse = new Response("rest-ok");
       openApiHandle.mockResolvedValue({ response: restResponse });

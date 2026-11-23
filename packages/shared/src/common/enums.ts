@@ -42,6 +42,9 @@ export enum TestId {
 }
 
 export enum Client {
+  F3_MAP = "f3-map",
+  F3_ADMIN = "f3-admin",
+  F3_SLACKBOT = "f3-nation-slack-bot",
   ORPC = "orpc",
   ORPC_SSG = "orpc-ssg",
   SCALAR_API = "scalar-api",
