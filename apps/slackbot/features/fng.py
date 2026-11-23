@@ -22,7 +22,7 @@ from utilities import constants
 from utilities.builders import update_submission_wait_view
 from utilities.constants import AlertLevel
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import get_user, safe_convert, safe_get, usable_invite_link
+from utilities.helper_functions import error_stack, get_user, safe_convert, safe_get, usable_invite_link
 from utilities.sendmail import send_via_sendgrid
 from utilities.slack import actions
 from utilities.slack.orm import (
@@ -158,8 +158,13 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
             logger.error(
                 "fng.create_user_failed error_type=%s",
                 type(exc).__name__,
-                exc_info=exc,
-                extra={"json_fields": {"event": "fng.create_user_failed", "error_type": type(exc).__name__}},
+                extra={
+                    "json_fields": {
+                        "event": "fng.create_user_failed",
+                        "error_type": type(exc).__name__,
+                        "error_stack": error_stack(exc),
+                    }
+                },
             )
             done(AlertLevel.ERROR, "I couldn't create his F3 Nation profile, so nothing was sent. Please try again.")
             return
