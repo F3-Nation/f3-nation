@@ -2,9 +2,8 @@ import os
 import sys
 from datetime import timedelta
 
-from slack_sdk import WebClient
-
 from utilities.helper_functions import current_date_cst
+from utilities.slack_tokens.client import slack_client_for_team
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -71,11 +70,17 @@ def update_special_events():
             )
             if events and slack_settings.special_events_channel:
                 blocks = create_special_events_blocks(events, slack_settings)
-                WebClient(token=slack_settings.bot_token).chat_postMessage(
-                    channel=slack_settings.special_events_channel,
-                    text=f"Upcoming events for {region.name}:",
-                    blocks=blocks,
-                )
+                try:
+                    client = slack_client_for_team(slack_settings.team_id)
+                    if client is None:
+                        continue
+                    client.chat_postMessage(
+                        channel=slack_settings.special_events_channel,
+                        text=f"Upcoming events for {region.name}:",
+                        blocks=blocks,
+                    )
+                except Exception as e:
+                    print(f"Error posting special events for {region.name}: {type(e).__name__}")
 
 
 if __name__ == "__main__":

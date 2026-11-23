@@ -34,6 +34,7 @@ from sqlalchemy import and_, func
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from utilities.database.orm import SlackSettings
+from utilities.slack_tokens.client import slack_client_for_team
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,6 @@ class F3versaryConfig:
     enabled: bool
     org_id: int
     team_id: str
-    bot_token: str | None
     channel: str | None
     lead_days: int
     last_processed_date: date | None
@@ -140,7 +140,6 @@ def _load_settings(
         enabled=belongs_to_org and bool(settings.f3versary_announcements_enabled),
         org_id=org.id,
         team_id=slack_space.team_id,
-        bot_token=slack_space.bot_token,
         channel=settings.f3versary_announcements_channel if belongs_to_org else None,
         lead_days=lead_days,
         last_processed_date=_parse_date(settings.f3versary_announcements_last_processed_date),
@@ -448,7 +447,6 @@ def _config_matches(original: F3versaryConfig, current: F3versaryConfig) -> bool
         and original.team_id == current.team_id
         and original.channel == current.channel
         and original.lead_days == current.lead_days
-        and original.bot_token == current.bot_token
     )
 
 
@@ -554,15 +552,19 @@ def _record_sent_page(claim: ClaimedPage, slack_ts: str | None) -> None:
         session.commit()
 
 
+def _slack_client(config: F3versaryConfig) -> WebClient | None:
+    return slack_client_for_team(config.team_id, timeout=SLACK_HTTP_TIMEOUT_SECONDS, retry_handlers=[])
+
+
 def _deliver_pages(
     run_id: int,
     org: Org,
     config: F3versaryConfig,
     processing_date: date,
+    client: WebClient,
     check_real_clock: bool = False,
 ) -> None:
     """No DB connection or lock remains open during any Slack HTTP request."""
-    client = WebClient(token=config.bot_token, timeout=SLACK_HTTP_TIMEOUT_SECONDS, retry_handlers=[])
     while True:
         claim = _claim_next_page(run_id, org, config, processing_date, check_real_clock)
         if claim is None:
@@ -621,10 +623,11 @@ def send_f3versary_announcements(
                             org.id,
                         )
                         continue
-                    if not config.bot_token:
-                        logger.warning("Skipping F3versary Announcements for org_id=%s: no bot token available", org.id)
+                    client = _slack_client(config)
+                    if client is None:
+                        logger.warning("Skipping F3versary Announcements for org_id=%s: no Slack installation", org.id)
                         continue
-                    _deliver_pages(run.id, org, config, processing_date, check_real_clock=now_cst is None)
+                    _deliver_pages(run.id, org, config, processing_date, client, check_real_clock=now_cst is None)
                     continue
                 if (current_slack_space.settings or {}).get(DELIVERY_PLAN_SETTING) is not None:
                     logger.warning(
@@ -649,12 +652,13 @@ def send_f3versary_announcements(
                 for page_number, (page_text, _) in enumerate(messages, start=1):
                     print(f"F3versary dry run for org {org.name} ({org.id}), page {page_number}\n{page_text}")
                 continue
-            if messages and not config.bot_token:
-                logger.warning("Skipping F3versary Announcements for org_id=%s: no bot token available", org.id)
+            client = _slack_client(config) if messages else None
+            if messages and client is None:
+                logger.warning("Skipping F3versary Announcements for org_id=%s: no Slack installation", org.id)
                 continue
             run_id = _create_run(org, slack_space.id, config, processing_date, target_date, messages)
             if run_id is not None and messages:
-                _deliver_pages(run_id, org, config, processing_date, check_real_clock=now_cst is None)
+                _deliver_pages(run_id, org, config, processing_date, client, check_real_clock=now_cst is None)
         except SlackApiError as error:
             logger.error(
                 "Slack error posting F3versary Announcements (org_id=%s, error=%s)",

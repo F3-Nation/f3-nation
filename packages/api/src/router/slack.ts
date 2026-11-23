@@ -349,10 +349,17 @@ export const callSlackWebApi = async ({
   url,
   botToken,
   payload,
+  reloadBotToken,
 }: {
   url: string;
   botToken: string;
   payload: SlackMessagePayload;
+  /**
+   * Re-reads the stored token. The Slackbot rotates tokens, and a refresh
+   * revokes the token this request was sent with, so on `token_revoked` the
+   * request is repeated once if the stored token has changed.
+   */
+  reloadBotToken?: () => Promise<string>;
 }): Promise<NormalizedSlackWebApiSuccess> => {
   let response: Response;
   let body: string;
@@ -415,6 +422,18 @@ export const callSlackWebApi = async ({
 
   if (!data.ok) {
     const slackError = data.error ?? "unknown_error";
+    if (slackError === "token_revoked" && reloadBotToken) {
+      let reloaded: string | undefined;
+      try {
+        reloaded = await reloadBotToken();
+      } catch (err) {
+        // Fall through to report the original Slack error.
+        logError("api.slack.token_reload_failed", {}, err);
+      }
+      if (reloaded && reloaded !== botToken) {
+        return callSlackWebApi({ url, botToken: reloaded, payload });
+      }
+    }
     reportSlackError(slackError);
     throw mapSlackError(slackError);
   }
@@ -503,6 +522,7 @@ export const slackRouter = {
       const response = await callSlackWebApi({
         url: "https://slack.com/api/chat.postMessage",
         botToken,
+        reloadBotToken: () => getSlackBotTokenForOrg(ctx.db, input.regionOrgId),
         payload: {
           channel: input.slackChannelId,
           text: input.text,
@@ -542,6 +562,7 @@ export const slackRouter = {
       const response = await callSlackWebApi({
         url: "https://slack.com/api/chat.update",
         botToken,
+        reloadBotToken: () => getSlackBotTokenForOrg(ctx.db, input.regionOrgId),
         payload: {
           channel: input.slackChannelId,
           ts: input.ts,

@@ -270,6 +270,11 @@
       "scope": ["apps/slackbot/**"]
     },
     {
+      "path": "docs/specs/slackbot-token-rotation.md",
+      "description": "Feature spec: Slackbot token rotation. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
       "path": "docs/specs/slackbot-workspace-identities.md",
       "description": "Feature spec: Slack identities within a workspace, concurrent creation and scheduled workout messages. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["apps/slackbot/**", "packages/db/**", "packages/db-python/**"]
@@ -299,6 +304,16 @@
       "path": "docs/specs/user-profile-access.md",
       "description": "Feature spec: User profile and PII access. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["apps/admin/**", "packages/api/**"]
+    },
+    {
+      "path": "docs/specs/admin-region-password-vault.md",
+      "description": "Feature spec: Region password vault opt-in and multi-role access. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/shared/**",
+        "packages/validators/**"
+      ]
     }
   ]
 }

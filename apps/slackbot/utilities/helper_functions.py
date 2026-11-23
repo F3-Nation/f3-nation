@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import traceback
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -29,7 +30,6 @@ from f3_data_models.models import (
 from f3_data_models.utils import DbManager, session_scope
 from slack_bolt.oauth.oauth_settings import OAuthSettings
 from slack_sdk.errors import SlackApiError
-from slack_sdk.oauth.installation_store import FileInstallationStore
 from slack_sdk.oauth.state_store import FileOAuthStateStore
 from slack_sdk.web import SlackResponse, WebClient
 from sqlalchemy import select, text
@@ -38,6 +38,7 @@ from sqlalchemy.dialects.postgresql import insert
 from utilities import constants, storage
 from utilities.constants import LOCAL_DEVELOPMENT
 from utilities.database.orm import SlackSettings
+from utilities.slack_tokens.store import SlackSpaceInstallationStore
 
 REGION_RECORDS: Dict[str, SlackSettings] = {}
 SLACK_USERS: Dict[tuple[str, str], SlackUser] = {}
@@ -126,7 +127,8 @@ def get_oauth_settings():
             client_id=os.environ[constants.SLACK_CLIENT_ID],
             client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
             scopes=os.environ[constants.SLACK_SCOPES].split(","),
-            installation_store=FileInstallationStore(base_dir="/mnt/oauth_installations"),
+            installation_store=SlackSpaceInstallationStore(),
+            installation_store_bot_only=True,
             state_store=FileOAuthStateStore(expiration_seconds=600, base_dir="/mnt/oauth_states"),
         )
 
@@ -516,6 +518,35 @@ def update_local_slack_users(slack_user: SlackUser = None) -> None:
     SLACK_USERS.update(selected)
 
 
+def _parse_stored_settings(slack_space: SlackSpace | None, team_id: str) -> SlackSettings | None:
+    """The workspace's stored settings, or None if the row has none or they are invalid.
+
+    Invalid settings are logged at ERROR (`slack.settings.invalid`) for an
+    operator to repair; the caller runs the workspace on starter settings.
+    """
+    settings = safe_get(slack_space, "settings")
+    if settings is None:
+        return None
+    error_type = None
+    if isinstance(settings, str):
+        try:
+            settings = json.loads(settings)
+        except (TypeError, json.JSONDecodeError) as e:
+            error_type = type(e).__name__
+    if error_type is None and (not isinstance(settings, Mapping) or settings.get("team_id") != team_id):
+        error_type = "team_id_mismatch" if isinstance(settings, Mapping) else "not_an_object"
+    if error_type is None:
+        try:
+            return SlackSettings(**settings)
+        except (TypeError, ValueError) as e:
+            error_type = type(e).__name__
+    event = "slack.settings.invalid"
+    logging.getLogger(__name__).error(
+        event, extra={"json_fields": {"event": event, "team_id": team_id, "error_type": error_type}}
+    )
+    return None
+
+
 def get_region_record(team_id: str, body, context, client, logger) -> SlackSettings:
     if not REGION_RECORDS:
         update_local_region_records()
@@ -524,6 +555,16 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
     team_domain = safe_get(body, "team", "domain")
 
     if not region_record:
+        slack_space_record: SlackSpace | None = DbManager.find_first_record(
+            SlackSpace, filters=[SlackSpace.team_id == team_id]
+        )
+        # Another process may have configured this workspace after this one
+        # loaded its cache; its settings are the source of truth.
+        stored = _parse_stored_settings(slack_space_record, team_id)
+        if stored:
+            REGION_RECORDS[team_id] = stored
+            return stored
+
         try:
             team_info = client.team_info()
             team_name = team_info["team"]["name"]
@@ -536,7 +577,6 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
         settings_starters = {
             "team_id": team_id,
-            "bot_token": context["bot_token"],
             "workspace_name": team_name,
         }
         region_record = SlackSettings(**settings_starters)
@@ -544,13 +584,18 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
             settings_starters.update({"org_id": org_record.id})
             region_record = SlackSettings(**settings_starters)
 
-        slack_space_record = SlackSpace(
-            team_id=team_id,
-            workspace_name=team_name,
-            bot_token=context["bot_token"],
-            settings=region_record.__dict__,
-        )
-        slack_space_record: SlackSpace = DbManager.create_record(slack_space_record)
+        # The installation store creates the row (with its token) at install time,
+        # so normally this only fills in the settings; the token is never written here.
+        # Settings that exist but failed to parse are left for an operator to repair.
+        if slack_space_record:
+            if slack_space_record.settings is None:
+                DbManager.update_record(
+                    SlackSpace, slack_space_record.id, {SlackSpace.settings: region_record.__dict__}
+                )
+        else:
+            slack_space_record = DbManager.create_record(
+                SlackSpace(team_id=team_id, workspace_name=team_name, settings=region_record.__dict__)
+            )
 
         if org_record and LOCAL_DEVELOPMENT:
             # Connect the org to the slack space
@@ -577,17 +622,6 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
         org_id = org_record.id if org_record else None
         populate_users(client, team_id, org_id)
-
-    else:
-        # Update the bot token if it has changed
-        if context.get("bot_token") and context.get("bot_token") != region_record.bot_token:
-            region_record.bot_token = context["bot_token"]
-            DbManager.update_record(
-                SlackSpace,
-                safe_get(DbManager.find_first_record(SlackSpace, filters=[SlackSpace.team_id == team_id]), "id"),
-                {SlackSpace.settings: region_record.__dict__, SlackSpace.bot_token: context["bot_token"]},
-            )
-            REGION_RECORDS[team_id] = region_record
 
     return region_record
 
@@ -1184,3 +1218,14 @@ def extract_state_values(body: dict) -> dict[str, Any]:
             elif element_type == "file_input":
                 form_data[block_id] = state.get("files")
     return form_data
+
+
+def error_stack(exc: BaseException) -> str:
+    """The five innermost frames as file:line:function, innermost first so `a <- b` reads "a was called from b".
+
+    Never the message: it can carry emails or SQL parameters.
+    """
+    return " <- ".join(
+        f"{os.path.basename(f.filename)}:{f.lineno}:{f.name}"
+        for f in reversed(traceback.extract_tb(exc.__traceback__)[-5:])
+    )

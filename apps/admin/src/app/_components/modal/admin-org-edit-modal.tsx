@@ -44,6 +44,7 @@ import { DebouncedImage } from "../debounced-image";
 import gte from "lodash/gte";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { orgEditorConfig, orgEditorSchema } from "./org-editor-config";
+import { PasswordVaultField } from "./password-vault-field";
 import type { EditableOrgType } from "./org-editor-config";
 import {
   invalidateQueries,
@@ -836,6 +837,26 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                             value={field.value ?? ""}
                           />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+              {config.passwordVault && (
+                <div className="mb-4 w-full px-2">
+                  <FormField
+                    control={form.control}
+                    name="meta.password_vault_enabled"
+                    render={({ field }) => (
+                      <FormItem>
+                        <PasswordVaultField
+                          checked={field.value === true}
+                          savedEnabled={
+                            org?.meta?.password_vault_enabled === true
+                          }
+                          onChange={field.onChange}
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
