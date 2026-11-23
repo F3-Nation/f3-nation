@@ -55,7 +55,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   done
   ```
 
-  - **Then check for redeploys started by hand,** whatever the check printed: they run from `main` with the tag as an input, so the check can't see them. On each app's deploy workflow in the [Actions page](https://github.com/F3-Nation/f3-nation/actions), look for a run started from `main` after the tag's run. Still running: wait for it. Its `deploy-staging` job succeeded: that tag is done, even if its line printed `false`. Failed: post in `#monorepo` and stop.
+  - **Then check for redeploys started by hand,** whatever the check printed: they run from `main` with the tag as an input, so the check can't see them. On each app's deploy workflow in the [Actions page](https://github.com/F3-Nation/f3-nation/actions), look for a run started from `main` after the tag's run. Count it only if it deployed this tag: its `ci-gate` job shows the tag as `REF` in the "Validate deploy ref is an existing release tag" step. Ignore runs for other tags. Still running: wait for it. Its `deploy-staging` job succeeded: that tag is done, even if its line printed `false`. Failed: post in `#monorepo` and stop.
   - **If a line prints `false` and no redeploy succeeded:** open the tag's run. Still running: wait and run the check again. Failed: post in `#monorepo` and stop.
 
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
