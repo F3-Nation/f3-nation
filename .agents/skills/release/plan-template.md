@@ -42,25 +42,20 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 - [ ] **Confirm it's a go.** The Staging plan (#{{STAGING_PLAN_ISSUE}}) has a **Go** comment{{AND_ANY_ROLLOUT_GATES}}. Owner: Release lead
   - **Stop if:** it doesn't.
 
-<!-- OPTIONAL (Staging only, when an app with a Staging deploy is in the release): -->
+<!-- OPTIONAL (Staging only, when an app with a Staging service is in the release): -->
 
-- [ ] **Confirm the Staging deploys finished.** The plans are filed when the release is cut, so a deploy may still be running. Nothing below, and no test in the test plan, starts until Staging runs each tag: the newest successful `deploy-staging` job for the app deployed it. The check prints `true` when the tag's own run's `deploy-staging` job succeeded. Owner: Release lead
+- [ ] **Confirm Staging runs this release.** The plans are filed when the release is cut, so a deploy may still be running. Nothing below, and no test in the test plan, starts until every line prints `true`: the app's Staging service serves a ready revision of this release's image, with all its traffic. Owner: Release lead
 
   ```bash
-  for TAG in {{EACH_STAGING_DEPLOY_TAG}}; do
-    RUN=$(gh run list -R F3-Nation/f3-nation --workflow "deploy-${TAG%@*}.yml" --branch "$TAG" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-    OK=$(test -n "$RUN" && gh run view "$RUN" -R F3-Nation/f3-nation --json jobs \
-      --jq '[.jobs[] | select(.name | endswith("deploy-staging"))] | length > 0 and all(.conclusion == "success")')
-    test "$OK" = true && echo "staging $TAG: true" || echo "staging $TAG: false"
+  for ROW in {{EACH_STAGING_SERVICE_ROW}}; do
+    read -r SERVICE PROJECT REGION VERSION <<<"$ROW"
+    OK=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json \
+      | jq --arg v ":$VERSION" '(.spec.template.spec.containers[0].image | endswith($v)) and .status.latestReadyRevisionName == .status.latestCreatedRevisionName and ([.status.traffic[] | select(.latestRevision == true) | .percent] | add // 0) == 100')
+    test "$OK" = true && echo "staging $SERVICE at $VERSION: true" || echo "staging $SERVICE at $VERSION: false"
   done
   ```
 
-  - **Then check for deploys started by hand,** whatever the check printed: they run from `main` with the tag as an input, so the check can't see them. On each app's deploy workflow in the [Actions page](https://github.com/F3-Nation/f3-nation/actions), look at runs started from `main` after the tag's run. Each shows the tag it deploys as `REF` in its `ci-gate` job's "Validate deploy ref is an existing release tag" step. Staging runs the tag of the newest successful `deploy-staging` job, so:
-    - **One for this tag is running:** wait for its `deploy-staging` job, not the whole run (its `deploy-prod` job waits for a Production approval).
-    - **The newest successful one deployed this tag:** that tag is done, even if its line printed `false`.
-    - **The newest successful one deployed another tag:** Staging runs that tag now. Run the app's deploy workflow from `main` with this release's tag, and wait for its `deploy-staging` job to succeed.
-    - **One for this tag failed in `deploy-staging`:** post in `#monorepo` and stop.
-  - **If a line prints `false` and no deploy started by hand covers it:** open the tag's run. Its `deploy-staging` job still running: wait and run the check again. Failed: post in `#monorepo` and stop.
+  - **If a line prints `false`:** open the app's deploy workflow on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). A deploy of this release's tag still running: wait for its `deploy-staging` job (not the whole run, whose `deploy-prod` job waits for a Production approval), then run the check again. Otherwise (it failed, was cancelled, or a later deploy of another tag replaced it): run the app's deploy workflow from `main` with this release's tag, wait for its `deploy-staging` job, and run the check again. If that deploy fails too, post in `#monorepo` and stop.
 
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 
