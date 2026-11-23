@@ -53,6 +53,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
     if SVC=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json); then
       SERVES=$(jq --arg image "$IMAGE" '.status.latestReadyRevisionName as $ready
         | .status.observedGeneration == .metadata.generation
+        and any(.status.conditions[]?; .type == "Ready" and .status == "True")
         and .spec.template.spec.containers[0].image == $image
         and $ready == .status.latestCreatedRevisionName
         and ([.status.traffic[] | select(.latestRevision == true or .revisionName == $ready) | .percent] | add // 0) == 100' <<<"$SVC")
