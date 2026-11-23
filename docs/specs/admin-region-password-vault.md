@@ -63,8 +63,9 @@ Vault opt-in (region editor):
 - **AC-6** — GIVEN an unsaved change to the box WHEN the editor changes it
   back to the saved value THEN no confirmation is shown.
 - **AC-15** — GIVEN `org.crupdate` WHEN the submitted `meta` holds a
-  `password_vault_enabled` other than `true` or `false` THEN it is refused
-  with `BAD_REQUEST` and nothing is saved.
+  `password_vault_enabled` other than `true`, `false` or `null` THEN it is
+  refused with `BAD_REQUEST` and nothing is saved. `null`, like a missing key,
+  means off.
 
 Roles (Manage Access and the user edit page):
 

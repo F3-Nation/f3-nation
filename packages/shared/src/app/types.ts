@@ -335,7 +335,7 @@ export type OrgMeta = {
    * repository) reads this key by name and treats only `true` as enabled, so
    * renaming it or storing another truthy value turns the vault off.
    */
-  password_vault_enabled?: boolean;
+  password_vault_enabled?: boolean | null;
 } & Record<string, unknown>;
 
 // The original/new id fields an update request carries as `meta` when it

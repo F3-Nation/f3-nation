@@ -1063,7 +1063,7 @@ describe("Org Router", () => {
       ).not.toBe(true);
     });
 
-    it("saves the region password vault opt-in as sent and refuses non-booleans", async () => {
+    it("saves the region password vault opt-in as sent and refuses anything but a boolean or null", async () => {
       await mockAuthWithSession(await createAdminSession());
       const client = createTestClient();
       const nation = await getOrCreateF3NationOrg();
@@ -1111,15 +1111,18 @@ describe("Org Router", () => {
       });
       await update({ keepMe: "changed" });
       expect(await storedMeta()).toEqual({ keepMe: "changed" });
+      // Null is accepted and means off, like a missing key.
+      await update({ password_vault_enabled: null });
+      expect(await storedMeta()).toEqual({ password_vault_enabled: null });
       await update({ password_vault_enabled: true });
       expect(await storedMeta()).toEqual({ password_vault_enabled: true });
 
-      // Anything but a boolean is refused, not stored as "off".
+      // Anything else is refused, not stored as "off".
       await expect(
         update({ password_vault_enabled: "false" }),
       ).rejects.toMatchObject({
         code: "BAD_REQUEST",
-        message: "meta.password_vault_enabled must be true or false",
+        message: "meta.password_vault_enabled must be true, false or null",
       });
       expect(await storedMeta()).toEqual({ password_vault_enabled: true });
     });

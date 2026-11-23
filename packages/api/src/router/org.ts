@@ -843,14 +843,16 @@ export const orgRouter = {
         });
       }
       // The vault sync treats only a literal true as enabled, so a string or
-      // number here would turn the vault off while looking like a yes.
+      // number here would turn the vault off while looking like a yes. Null,
+      // like a missing key, means off.
       if (
         input.meta &&
         Object.hasOwn(input.meta, "password_vault_enabled") &&
+        input.meta.password_vault_enabled !== null &&
         typeof input.meta.password_vault_enabled !== "boolean"
       ) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "meta.password_vault_enabled must be true or false",
+          message: "meta.password_vault_enabled must be true, false or null",
         });
       }
 

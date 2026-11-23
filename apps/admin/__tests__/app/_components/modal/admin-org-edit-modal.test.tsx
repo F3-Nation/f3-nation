@@ -802,6 +802,27 @@ describe("Region Area or Territory parent selection", () => {
     },
   );
 
+  it("saves an untouched, unchecked vault on a region that never stored it", async () => {
+    mocks.byId.mockResolvedValue({
+      org: { ...record, parentId: 2, meta: { keepMe: "present" } },
+    });
+    mount("region", record.id);
+    await waitFor(() => expect(parentSelect().value).toBe("2"));
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Password vault" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+
+    save();
+
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
+    const meta = mocks.save.mock.calls[0]![0].meta as Record<string, unknown>;
+    expect(meta.keepMe).toBe("present");
+    expect(meta.password_vault_enabled ?? null).toBeNull();
+    expect(mocks.error).not.toHaveBeenCalled();
+  });
+
   it("leaves the password vault unchanged when the confirmation is cancelled", async () => {
     mocks.byId.mockResolvedValue({ org: { ...record, parentId: 2 } });
     mount("region", record.id);
