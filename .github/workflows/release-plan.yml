@@ -3,13 +3,14 @@ name: Release Plan
 # Files the Staging test plan and the Staging release plan for the latest
 # merged release PR by running the release skill (.agents/skills/release)
 # unattended. release-please.yml starts it after a push that cut releases;
-# run it from the Actions page to re-run, which files only what is missing.
+# run it from the Actions page to re-run, which never refiles a plan the
+# release already has.
 # Production plans follow a human go/no-go, so this never files one.
 on:
   workflow_dispatch:
     inputs:
       merge_sha:
-        description: Merge commit of the release PR. Blank plans the latest merged release PR; a SHA that isn't its merge commit fails the run.
+        description: A commit at or after the release PR's merge commit. Blank plans the latest merged release PR; a commit before its merge fails the run.
         required: false
         type: string
 
@@ -24,15 +25,17 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      issues: write # file and edit the plan issues
+      issues: write # file and edit the plan issues; comment on the release PR when the run fails
       pull-requests: read # read the release PR and its changelog
       actions: read # release-facts.sh reads deploy runs
     concurrency:
       group: release-plan
       cancel-in-progress: false
     steps:
-      # Plans only the latest merged release PR, so a stale or mistyped SHA
-      # can't file plans for the wrong release.
+      # Plans only the latest merged release PR. A merge-queue batch can land
+      # other PRs after it in the same push, so the pushed commit may come
+      # after its merge commit; a commit before it means a newer release
+      # replaced the one the caller meant.
       - name: Find the release PR
         id: release-pr
         env:
@@ -55,9 +58,12 @@ jobs:
             exit 1
           fi
           read -r number merge_commit <<<"$latest"
-          if [[ -n "$MERGE_SHA" && "$MERGE_SHA" != "$merge_commit" ]]; then
-            echo "::error::${MERGE_SHA} isn't the merge commit of the latest merged release PR (#${number}, ${merge_commit})."
-            exit 1
+          if [[ -n "$MERGE_SHA" ]]; then
+            status="$(gh api "repos/${REPO}/compare/${merge_commit}...${MERGE_SHA}" --jq '.status')"
+            if [[ "$status" != "identical" && "$status" != "ahead" ]]; then
+              echo "::error::${MERGE_SHA} isn't at or after the merge commit of the latest merged release PR (#${number}, ${merge_commit})."
+              exit 1
+            fi
           fi
           echo "Planning release PR #${number}."
           echo "number=${number}" >>"$GITHUB_OUTPUT"
@@ -68,21 +74,79 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Runs the repo's scripts here, outside the agent, so the agent never
+      # needs permission to run a file it could also edit.
+      - name: Check GitHub access and collect the release facts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.release-pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          bash scripts/gh-check.sh
+          bash .agents/skills/release/scripts/release-facts.sh --pr "$PR_NUMBER" >"$RUNNER_TEMP/release-facts.json"
+
       # Claude Code reads skills from .claude/skills/, which is generated.
       - name: Sync agent skills
         run: node .claude/scripts/sync-agent-skills.mjs
 
-      # The allowlist is the guardrail: --permission-mode default denies every
-      # tool call it doesn't cover, and the job token can only write issues.
+      # The run reads changelog and PR text that contributors wrote, so it
+      # gets only what filing needs:
+      # - --permission-mode default denies every tool call the allowlist
+      #   doesn't cover;
+      # - file writes are limited to /tmp, and no allowed command runs a file;
+      # - the /proc denies keep the API key in the process environment out of
+      #   reach of Read and of every command;
+      # - the job token can write only issues.
       - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        id: claude
         with:
           anthropic_api_key: ${{ secrets.RELEASE_PLAN_ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
           prompt: |
             Use the release skill. This is an unattended run for Staging.
             Release PR: #${{ steps.release-pr.outputs.number }}
+            The GitHub read check has already run. The release facts are in ${{ runner.temp }}/release-facts.json.
           claude_args: >-
             --model claude-sonnet-5-5
             --max-turns 100
             --permission-mode default
-            --allowedTools "Read,Glob,Grep,Write,Edit,Bash(bash scripts/gh-check.sh:*),Bash(bash .agents/skills/release/scripts/release-facts.sh:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api repos/${{ github.repository }}/collaborators/*/permission*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(mktemp:*),Bash(jq:*),Bash(bash -n:*)"
+            --allowedTools "Read,Glob,Grep,Edit(//tmp/**),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api repos/${{ github.repository }}/collaborators/*/permission*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(mktemp:*),Bash(bash -n:*)"
+            --disallowedTools "Read(//proc/**),Bash(*/proc/*)"
+
+      # The skill ends without error when it stops on purpose (a step that
+      # needs a human run, a failed command), so the run's result is the
+      # release plan existing, not the agent's exit status.
+      - name: Check the release plan was filed
+        if: always() && steps.release-pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.release-pr.outputs.number }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$EXECUTION_FILE" && -f "$EXECUTION_FILE" ]]; then
+            echo "Agent summary:"
+            jq -r '[.[] | select(.type == "result")] | last | .result // "(none)"' "$EXECUTION_FILE"
+          fi
+          titles="$(gh issue list --repo "$REPO" --state all --limit 100 \
+            --search "\"(#${PR_NUMBER})\" in:title" --json title --jq '.[].title')"
+          printf 'Issues for #%s:\n%s\n' "$PR_NUMBER" "$titles"
+          if ! grep -qE "^Release plan: .* to Staging \(#${PR_NUMBER}\)$" <<<"$titles"; then
+            echo "::error::No Staging release plan exists for #${PR_NUMBER}."
+            exit 1
+          fi
+
+      # A dispatched run notifies nobody when it fails; the release PR's
+      # subscribers see this comment.
+      - name: Report the failure on the release PR
+        if: failure() && steps.release-pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.release-pr.outputs.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --silent \
+            -f body="The Release Plan run didn't file the Staging plans for this release: ${RUN_URL}. Fix the cause, then run **Release Plan** again from the Actions page."
