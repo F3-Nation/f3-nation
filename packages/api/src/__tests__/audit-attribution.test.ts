@@ -268,6 +268,15 @@ describe("API request audit attribution", () => {
     expect(process.env.NODE_ENV).toBe("test");
   });
 
+  it("ignores a resolvable session on an SSG request while retaining its source", async () => {
+    sessions.set("ssg-person", sessionWithId(42));
+    const id = await probeClient("ssg-person", undefined, "orpc-ssg").write();
+    expect(getSessionFromHeaders).not.toHaveBeenCalled();
+    expect(await tagHistory(id)).toEqual([
+      { changed_by: null, changed_via: "map-ssg" },
+    ]);
+  });
+
   it("does not authorize an anonymous caller from a recognized app header", async () => {
     vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "false");
     const name = `audit-denied-${randomUUID()}`;
@@ -382,7 +391,10 @@ describe("API request audit attribution", () => {
       },
       {
         context: {
-          reqHeaders: new Headers({ "x-audit-request": "background" }),
+          reqHeaders: new Headers({
+            "x-audit-request": "background",
+            client: "f3-me",
+          }),
         },
       },
     );
@@ -393,7 +405,7 @@ describe("API request audit attribution", () => {
       expect(optedOut).toBeDefined();
       const [inheritedId, exitedId] = await Promise.all([detached!, optedOut!]);
       expect(await tagHistory(inheritedId)).toEqual([
-        { changed_by: 81, changed_via: null },
+        { changed_by: 81, changed_via: "me" },
       ]);
       expect(await tagHistory(exitedId)).toEqual([
         { changed_by: null, changed_via: null },

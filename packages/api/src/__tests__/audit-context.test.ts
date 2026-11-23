@@ -131,6 +131,16 @@ describe("database audit attribution", () => {
     await runWithAuditContext({ userId: null, source: "job" }, async () =>
       production.db.insert(table).values({ type: name("source-only") }),
     );
+    await runWithAuditContext({ userId: null, source: "admin" }, () =>
+      production.db.transaction(async (tx) => {
+        await tx
+          .insert(table)
+          .values({ type: name("source-only-transaction") });
+      }),
+    );
+    expect(await history("source-only-transaction")).toEqual([
+      { op: "I", changed_by: null, changed_via: "admin" },
+    ]);
     await runWithAuditContext(actor, () =>
       production.db.transaction(async (tx) => {
         await runWithAuditContext({ userId: 99, source: "other" }, async () =>

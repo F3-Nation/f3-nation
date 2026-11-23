@@ -5,8 +5,9 @@
 ## 1. Summary
 
 Database history identifies the person responsible for an API write when known,
-and records the originating app claimed by a recognized client header. Shared request middleware and the database client
-propagate identity to the existing history triggers, so individual handlers
+and records the originating app claimed by a recognized client header. Shared
+request middleware and the database client propagate actor and source to the
+existing history triggers, so individual handlers
 need no audit calls. Existing authorization and oRPC response contracts remain
 unchanged.
 
@@ -85,16 +86,16 @@ unchanged.
   transaction paths run THEN regression coverage detects changes to the
   `unsafe`, `begin` and savepoint boundaries the hook relies on.
 - **AC-16** — GIVEN work created within a request WHEN its asynchronous write
-  executes after the procedure returns THEN it retains that request's actor.
+  executes after the procedure returns THEN it retains that request's actor and source.
   A new write through the shared client in `auditContext.exit(...)` has no
-  inherited actor.
+  inherited attribution.
 - **AC-17** — GIVEN the full change WHEN existing router and transport
-  characterization suites run THEN they pass without handler, router or
-  response-contract changes.
+  characterization suites run THEN existing procedure and response contracts
+  remain unchanged, and the client dispatch additions satisfy AC-20.
 - **AC-18** — GIVEN the approved Staging environment WHEN a user signs in
   through real email/OTP and edits a tracked entity through the UI THEN its
-  history records that user. A Development Mode sign-in records NULL actor instead.
-
+  history records that user and the normalized source from AC-19. A Development
+  Mode sign-in records NULL actor while retaining the normalized source.
 - **AC-19** — GIVEN an API request WHEN its `client` header exactly matches a
   recognized value in [the source normalizer](../../packages/api/src/audit-source.ts)
   THEN its writes record that normalized source independently of actor eligibility.
@@ -110,9 +111,9 @@ unchanged.
 
 Existing procedure tiers and resource checks authorize source writes. Audit
 context supplies informational attribution; it grants no permission and does
-not make a supplied user id proof of authentication. The app header is caller-controlled; recognized values restrict the vocabulary,
-not impersonation. History access continues
-to follow the database audit-history foundation's grants.
+not make a supplied user id proof of authentication. Any caller can send a
+recognized app header, so the recorded source is a claim, not proof. History
+access continues to follow the database audit-history foundation's grants.
 
 | Action                            | Allowed                                                                               | Explicitly denied                                                                                |
 | --------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -126,8 +127,8 @@ to follow the database audit-history foundation's grants.
 
 - Database migrations, trigger changes, history backfill, new history endpoints
   or UI, and changes to authorization or oRPC response contracts.
-- Automatic attribution for Python, scripts, manual SQL, or independently
-  constructed clients. A non-oRPC caller must establish context and use a
+- Automatic attribution for Python or scripts that write directly to the
+  database, manual SQL, or independently constructed clients. Such callers must establish context and use a
   hooked client; exporting the helper does not modify other clients.
 - Complete SQL parsing. The detector recognizes the declared leading write
   forms: INSERT, UPDATE, DELETE and MERGE, optionally after WITH. Hidden writes
@@ -194,9 +195,10 @@ bound server execution; it cannot bound that pool wait. Installing the timeout
 after the audit hook could reject a begin-backed write while it later commits,
 so that installation order is unsafe.
 
-Source-only contexts also activate the hook: recognized API-key and anonymous
-writes use native transactions and explicit transactions receive the settings
-round trip. Requests with neither actor nor source retain the original client
+Source-only contexts also activate the hook, including recognized API-key,
+anonymous, Development Mode, mock, ambiguous legacy and static-generation
+requests. Their standalone writes use native transactions and explicit
+transactions receive the settings round trip. Requests with neither actor nor source retain the original client
 path.
 
 Production rollout requires verification of the API role's effective
