@@ -63,9 +63,6 @@ const config: KnipConfig = {
       entry: ["scripts/smoke.mjs"],
     },
     "apps/auth": {
-      // knip parses `dotenv run -q --` as a binary named `run`; `dotenv` is
-      // the CLI shipped by the `dotenv` package itself.
-      ignoreBinaries: ["run"],
       ignoreDependencies: tailwindLintDeps,
     },
     "apps/admin": {
