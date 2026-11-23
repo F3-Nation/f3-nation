@@ -44,15 +44,16 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 <!-- OPTIONAL (Staging only, when an app with a Staging service is in the release): -->
 
-- [ ] **Confirm Staging runs this release.** The plans are filed when the release is cut, so a deploy may still be running or building. Nothing below, and no test in the test plan, starts until every app prints `serves: true` and `deploy in flight: false`: its Staging service serves a ready revision of this release's image with all its traffic, and no run of its deploy workflow can still replace it. Owner: Release lead
+- [ ] **Confirm Staging runs this release.** The plans are filed when the release is cut, so a deploy may still be running or building. Nothing below, and no test in the test plan, starts until every app prints `serves: true` and `deploy in flight: false`: its Staging service serves a ready revision of this release's exact image with all its traffic, and no run of its deploy workflow can still replace it. Owner: Release lead
 
   ```bash
   for ROW in {{EACH_STAGING_SERVICE_ROW}}; do
-    read -r APP SERVICE PROJECT REGION VERSION <<<"$ROW"
+    read -r APP SERVICE PROJECT REGION IMAGE <<<"$ROW"
+    VERSION="${IMAGE##*:}"
     if SVC=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json); then
-      SERVES=$(jq --arg v ":$VERSION" '.status.latestReadyRevisionName as $ready
+      SERVES=$(jq --arg image "$IMAGE" '.status.latestReadyRevisionName as $ready
         | .status.observedGeneration == .metadata.generation
-        and (.spec.template.spec.containers[0].image | endswith($v))
+        and .spec.template.spec.containers[0].image == $image
         and $ready == .status.latestCreatedRevisionName
         and ([.status.traffic[] | select(.latestRevision == true or .revisionName == $ready) | .percent] | add // 0) == 100' <<<"$SVC")
     else
