@@ -1,7 +1,7 @@
 ---
 name: implement-issue
 description: 'Use when the user gives a GitHub issue number or URL to build ("implement issue 42", "work on #42", "pick up this issue") — takes the issue from pre-flight checks through codebase exploration, an approved approach, test-first implementation, a draft PR and a self-review of it. Not for reviewing someone else''s PR (pr-review-inline) or answering review feedback (address-pr-comments).'
-compatibility: macOS, Linux, or WSL 2 with bash, git, gh (authenticated) and jq. Works in any agent; steps that use subagents say what to do without them.
+compatibility: macOS, Linux, or WSL 2 with bash, git and gh (authenticated). Works in any agent; steps that use subagents say what to do without them.
 ---
 
 # Implement a GitHub issue
@@ -31,9 +31,7 @@ or `WT`, note the literal value and write it into later commands.
 
 ## Step 1: Pre-flight
 
-1. Run `bash scripts/gh-check.sh`. If it fails, show its message and stop. Check that `jq` is
-   installed (`command -v jq`); the Step 8 review needs it. If it is missing, stop and give the
-   install hint: `brew install jq` (macOS) or `sudo apt install jq` (WSL/Linux).
+1. Run `bash scripts/gh-check.sh`. If it fails, show its message and stop.
 2. Fetch the issue. Accept only a number (`42` or `#42`) or an issue URL of the form
    `https://github.com/<owner>/<repo>/issues/<number>`. Stop on anything else, before running a
    command: a quote in the argument would end the shell string. First find the repository the

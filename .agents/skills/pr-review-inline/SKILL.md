@@ -31,8 +31,8 @@ Conventions:
   branch, or edit its title or description, unless the user explicitly asks for that change on
   this PR. The fix goes in the comment for the author to make.
 - **The same review in every agent.** The prompts, the reviewer roster and the depth come from
-  this skill's own files and the diff. Nothing installed on the reviewer's machine and nothing
-  in how the request was worded changes them.
+  this skill's own files and the diff. Nothing installed on the reviewer's machine changes them,
+  and the request can only add the options and focus aspects listed below.
 
 Options the user may pass: `--dry-run` (draft comments, post nothing), `--rereview` (only the
 commits since this skill's last review), and review aspects to focus on. How deep the review
@@ -68,7 +68,7 @@ gh repo view --json owner,name
 # If a PR number/URL was given, use it; otherwise the current branch's PR:
 gh pr view <pr-or-omit> --json number,headRefName,headRefOid,url,baseRefName,state,author,assignees
 
-# Outside-contributor signal, used by Step 3's safety checklist and Step 5's depth choice
+# Outside-contributor signal: decides whether the PR is gated (see "Gated PR" below)
 gh api repos/{owner}/{name}/pulls/<n> --jq '{assoc: .author_association, fork: .head.repo.fork}'
 ```
 
@@ -194,7 +194,8 @@ in the summary.
 4. **Mechanical changes** — pure renames, file moves, formatting, generated files, lockfiles.
    Named here and set aside, so they do not inflate parts 1–3.
 
-**Size and kind, for Step 5.** Record the changed lines and the changed files, each counted
+**Size and kind, for Step 5.** Record the changed lines (insertions plus deletions, as
+`git diff --shortstat` reports them) and the changed files, each counted
 without the mechanical changes in part 4, and whether any changed file is something other than
 prose. Prose is Markdown or plain text that no agent follows. Agent instructions are not prose,
 whatever their extension: anything under `.agents/`, `.claude/` or `.github/`, any `AGENTS.md`,
@@ -264,8 +265,11 @@ review is full:
 - at most 50 changed lines in at most 5 files, counted as Step 3 records them;
 - no changed file is agent instructions or an item on Step 3's safety checklist;
 - the diff touches no sign-in, session, permission, token or API-key code; no API procedure,
-  route handler, proxy, server action or scheduled job; no database schema, migration or SQL;
-  and no environment variable or `env.ts`;
+  route handler, Slack bot handler, proxy, server action or scheduled job; no database schema,
+  migration, query or SQL; no log line or error message that carries user or request data; no
+  code that puts outside input into HTML, a URL, a shell command or a file path; no browser
+  storage; and no environment variable or `env.ts`;
+- the PR isn't in a private security-advisory repository (the cross-repo case in Step 1);
 - a search of the worktree (`git grep`) for each function, component, type or export the diff
   changes finds no caller or consumer outside the changed files; a symbol you can't search for
   counts as doubt.
@@ -310,8 +314,9 @@ it judges only the code.
 - **No sub-agent tool:** run each lane yourself as its own pass, in the order the seats are
   listed. Work from the filled brief as if it were your whole prompt: read the lens again at
   the start of each pass, and write down that lane's findings in the brief's output format
-  before starting the next. This session hasn't read the PR's title or body yet (Step 7), so
-  don't fetch or open them before Step 7.
+  before starting the next. Don't fetch or open the PR's title or body before Step 7. If this
+  session already has them in context (it wrote the PR, or the request quoted them), say so in
+  the report.
 - A seat that fails or returns nothing is run again once. If it fails twice, the report says
   that lane was not reviewed; never fill it in from another seat's output. A run with an
   unreviewed lane is not a checkpoint for `--rereview` (Steps 9 and 10).
@@ -491,8 +496,8 @@ Then give the user the final report in the conversation, in the order and with t
 
 ## Changing this skill
 
-A change to this file, to `reviewer-brief.md`, to `comment-format.md` or to a lens changes what
-every later review finds, and nothing fails when it gets worse. The pull request that makes such
+A change to any file in this skill that shapes what reviewers look for or what gets posted
+changes what every later review finds, and nothing fails when it gets worse. The pull request that makes such
 a change says which findings it should add or stop producing, and why the change shouldn't
 cost the review a defect it catches today.
 

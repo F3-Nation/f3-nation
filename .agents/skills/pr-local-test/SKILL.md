@@ -351,7 +351,8 @@ When the user's 🙋 results arrive, work out the verdict again and show it agai
 
 - **Inline comments:** only for problems traced to the diff. Use pr-review-inline's comment
   body format ([`comment-format.md`](../pr-review-inline/comment-format.md): dual audience,
-  severity label) and its dedup rules (its Steps 4 and 8). Save them
+  severity label) and its dedup rules (its "Fetch existing feedback for dedup" and "Dedup, then
+  verify" steps). Save them
   as `$RUN/comments.json`: an array of `{path, line, side, body}`, plus `start_line` and
   `start_side` for multi-line spans. Put `<!-- pr-local-test -->` on the line just above each
   body's signature, **not** pr-review-inline's `<!-- pr-review-inline -->` marker.

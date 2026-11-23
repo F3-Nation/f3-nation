@@ -1,13 +1,13 @@
 # Final report
 
 What pr-review-inline tells the user in the conversation at the end of a run. Nothing in it
-goes to GitHub. Step numbers refer to [`SKILL.md`](SKILL.md).
+goes to GitHub. The steps named here are the steps of [`SKILL.md`](SKILL.md).
 
 Write these sections in this order:
 
-1. **What this PR actually does** — the Step 3 summary, verbatim: what changed, change
+1. **What this PR actually does** — the summary from "Characterize the diff on its own terms", verbatim: what changed, change
    inventory, blast radius, mechanical changes.
-2. **Description accuracy** — the Step 7 block: unsupported claims, undocumented changes,
+2. **Description accuracy** — the block from "Compare the diff against the PR's stated intent": unsupported claims, undocumented changes,
    contradictions.
 3. **Comments posted** — count by severity, with links from each API response's `html_url`
    (or, for `--dry-run`, the drafts in full with their `path:line`). For a clean review, the
@@ -18,12 +18,12 @@ Write these sections in this order:
 5. **Branch currency** — how many commits the PR is behind its base (`BEHIND`), and any
    conflicting files. Never call the PR ready to merge while it is behind or conflicting; say
    the author should update the branch first.
-6. **Safety checklist** (gated PRs only) — one line per Step 3 checklist item the diff touches,
+6. **Safety checklist** (gated PRs only) — one line per safety-checklist item the diff touches,
    or "none touched". If the gated lookup failed, say the PR was treated as gated for that
    reason.
 7. **Provenance** — what actually ran and what didn't, so the user can judge how much the
    review covers:
-   - the agent tool and model that ran the review; the depth (full or light) and the Step 5
+   - the agent tool and model that ran the review; the depth (full or light) and the "Pick the depth"
      condition that decided it; which seats ran (by lens); whether each was a sub-agent or a
      pass in this session; the sub-agents' model, or that the tool didn't show it; any lane
      that was not reviewed; and, for `--rereview`, the checkpoint commit the diff started from
