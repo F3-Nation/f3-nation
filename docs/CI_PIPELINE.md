@@ -193,7 +193,7 @@ that app's thin `deploy-<app>.yml` caller into the shared
    [`_deploy-cloudrun-job.yml`](../.github/workflows/_deploy-cloudrun-job.yml)
    and [`deploy-homepage.yml`](../.github/workflows/deploy-homepage.yml), and
    is maintained separately from the `main` ruleset; see
-   [GitHub Actions Conventions](../AGENTS.md#github-actions-conventions) for
+   [workflow conventions](../.github/AGENTS.md#workflow-conventions) for
    keeping them in step.
 2. **`build`** — the deploy image is built once and pushed to Artifact
    Registry.

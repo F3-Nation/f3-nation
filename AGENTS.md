@@ -167,13 +167,11 @@ follow
   reference), [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data)
   (what counts as sensitive).
 
-## GitHub Actions Conventions
+## Docker build platform
 
-- **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
-- Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
+Workflow conventions (action pinning, `.nvmrc`, the setup action, `check-regexp` upkeep) live in [`.github/AGENTS.md`](.github/AGENTS.md).
+
 - **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
-- Share toolchain setup through the composite action [`.github/actions/setup`](.github/actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
-- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. Every required check except `lint-title` belongs in each deploy workflow's `check-regexp` — `lint-title` is deliberately excluded from the deploy gate because it never runs on `push` (`pr-title.yml` triggers only on `pull_request` and `merge_group`), so a commit that reached `main` outside the merge queue has no `lint-title` check-run, and waiting on one that will never exist would hang the gate rather than deploy.
 
 ## Scripts and operator CLIs
 

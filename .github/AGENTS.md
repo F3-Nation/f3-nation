@@ -1,8 +1,14 @@
 # .github (workflows, actions, scripts)
 
-Root [`AGENTS.md`](../AGENTS.md) § GitHub Actions Conventions covers SHA
-pinning, `.nvmrc`, the build platform, the setup action and `check-regexp`
-upkeep. These rules apply to new and changed workflows.
+These rules apply to new and changed workflows. The Docker build-platform
+rule lives in root [`AGENTS.md`](../AGENTS.md#docker-build-platform).
+
+## Workflow conventions
+
+- **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
+- Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
+- Share toolchain setup through the composite action [`.github/actions/setup`](actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
+- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. Every required check except `lint-title` belongs in each deploy workflow's `check-regexp` — `lint-title` is deliberately excluded from the deploy gate because it never runs on `push` (`pr-title.yml` triggers only on `pull_request` and `merge_group`), so a commit that reached `main` outside the merge queue has no `lint-title` check-run, and waiting on one that will never exist would hang the gate rather than deploy.
 
 ## Security
 
