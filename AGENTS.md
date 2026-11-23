@@ -260,7 +260,7 @@ These rules cover everything an AI assistant writes to GitHub — issues, pull r
 - **Pre-flight:** run `bash scripts/gh-check.sh` before reading through `gh`, and `bash scripts/gh-check.sh --require-write` before writing. It confirms `gh` is signed in and can reach the repository with the access needed; set `GH_REPO=<owner>/<name>` to check a repository other than the current checkout. If it fails, show the user its message and stop.
 - **Signature:** end every issue body, PR body, and comment with `_written by <model_name>_`, exactly once, as its final line. Name the actual model or agent (`Claude Opus 5.5`, `Codex`), not a generic label like `AI`. A footer your tool adds on its own goes above it.
 - **Draft PRs:** open pull requests with `gh pr create --draft`; the author marks them ready for review. The hosted review apps skip drafts and start once a PR is marked ready, so work in progress doesn't use up their review runs.
-- **Never resolve review threads.** Resolving them is the PR author's responsibility, once they have read the replies; see [`docs/PR_REVIEW_PROCESS.md`](docs/PR_REVIEW_PROCESS.md#addressing-feedback).
+- **Never resolve review threads.** Resolving them is the PR author's responsibility, once they have read the replies; see [`docs/PR_REVIEW_PROCESS.md`](docs/PR_REVIEW_PROCESS.md#addressing-feedback). This rule binds assistants that act through a person's GitHub account. A hosted review app posting as its own `[bot]` account may resolve the threads it opened, once a reply or a later commit settles them.
 - **Reply to every review comment you act on**, in its thread, whether you changed code or decided not to, saying what you did and why.
 
 ## Filing Issues
@@ -281,7 +281,7 @@ These apply to every issue an agent opens, for any reason. The full rule and its
   - Never include secrets.
 - Keep PRs small enough to review in one sitting (review bots skip very large PRs), with mechanical sweeps (lint, renames, dependency bumps) separate from behavior changes.
 - Before opening a pull request, run `pnpm ci:local` (at minimum `pnpm lint` and `pnpm format`) and commit any coverage-threshold rewrite.
-- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI agents never resolve threads and sign what they write `_written by <model>_` (see [Writing to GitHub](#writing-to-github)).
+- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI assistants acting through a person's account never resolve threads and sign what they write `_written by <model>_` (see [Writing to GitHub](#writing-to-github)).
 - File pre-existing bugs found along the way as separate issues (see [Filing Issues](#filing-issues)), not PR scope creep.
 
 ## Security & Environment
