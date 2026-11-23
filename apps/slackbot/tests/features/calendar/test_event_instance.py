@@ -20,6 +20,7 @@ from features.calendar.event_instance import (
     CALENDAR_ADD_EVENT_INSTANCE_START_DATE,
     CALENDAR_ADD_EVENT_INSTANCE_START_TIME,
     CALENDAR_ADD_EVENT_INSTANCE_TYPE,
+    CLEAR_LOCATION_OPTION_VALUE,
     META_PREBLAST_CHANNEL_ID,
     _build_event_instance_service,
     build_event_instance_add_form,
@@ -791,12 +792,21 @@ class EventInstancePreblastChannelTest(unittest.TestCase):
         )
         self.assertEqual(channel_block["element"]["type"], "channels_select")
         self.assertTrue(channel_block["optional"])
+        location_block = next(
+            b for b in view["blocks"] if b.get("block_id") == CALENDAR_ADD_EVENT_INSTANCE_LOCATION
+        )
+        clear_option = next(
+            option
+            for option in location_block["element"]["options"]
+            if option["value"] == CLEAR_LOCATION_OPTION_VALUE
+        )
+        self.assertEqual(clear_option["text"]["text"], "Clear selection")
 
     @patch("features.calendar.event_instance.event_preblast.send_preblast")
     @patch("features.calendar.event_instance.get_user")
     @patch("features.calendar.event_instance.DbManager.create_record")
     @patch("features.calendar.event_instance._build_event_instance_service")
-    def test_unscheduled_preblast_channel_saved_to_meta(
+    def test_unscheduled_preblast_channel_saved_and_location_can_be_cleared(
         self,
         mock_build_service,
         mock_create_record,
@@ -874,9 +884,20 @@ class EventInstancePreblastChannelTest(unittest.TestCase):
             service.create_instance.call_args.kwargs["meta"],
             {META_PREBLAST_CHANNEL_ID: "CSELECTED"},
         )
+        self.assertEqual(service.create_instance.call_args.kwargs["location_id"], 20)
         mock_create_record.assert_called_once()
         self.assertEqual(mock_create_record.call_args.args[0].user_id, 99)
         mock_send_preblast.assert_called_once()
+
+        service.reset_mock()
+        mock_create_record.reset_mock()
+        mock_send_preblast.reset_mock()
+        body["view"]["blocks"][0]["element"]["initial_option"] = {"value": "20"}
+        body["view"]["state"]["values"][CALENDAR_ADD_EVENT_INSTANCE_LOCATION][
+            CALENDAR_ADD_EVENT_INSTANCE_LOCATION
+        ]["selected_option"] = {"value": CLEAR_LOCATION_OPTION_VALUE}
+        handle_event_instance_add(body, MagicMock(), MagicMock(), {}, self._region_record())
+        self.assertIsNone(service.create_instance.call_args.kwargs["location_id"])
 
         service.reset_mock()
         mock_create_record.reset_mock()
