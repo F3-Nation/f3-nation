@@ -174,6 +174,10 @@ def test_reads_are_not_counted_but_an_untraceable_statement_is(tmp_path):
 
         def load(session, statement):
             session.execute(select(User).where(User.id == 1)).all()
+            stmt = select(User)
+            alias = stmt
+            stmt = alias.where(User.id == 1)
+            session.execute(alias)
             query = select(Org)
             query = query.where(Org.id == 1)
             session.execute(query)
@@ -334,7 +338,19 @@ def test_a_list_filled_in_a_loop_counts_the_rows_added_to_it(tmp_path):
             new = []
             new.extend(EventInstance(org_id=i) for i in ids)
             DbManager.create_records(new)
+
+        def save_through_alias(session):
+            records = []
+            pending = records
+            pending.append(User())
+            session.add_all(records)
+
+        def save_bot_rows_through_alias(session):
+            records = []
+            pending = records
+            pending.append(SlackSpace(team_id="T"))
+            session.add_all(records)
         """,
     )
 
-    assert _tables(result) == ["attendance", "event_instances"]
+    assert _tables(result) == ["attendance", "event_instances", "users"]

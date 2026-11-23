@@ -106,6 +106,7 @@ _UNKNOWN_VALUE = ast.Constant(value=...)
 def _assignments(scope):
     """Map each variable name in a function to every value bound to it."""
     values = {}
+    mutations = []
 
     def bind(target, value):
         # `stmt, n = insert(User), 1` pairs each name with its own value.
@@ -155,8 +156,52 @@ def _assignments(scope):
             added = node.args[-1]
             if node.func.attr != "extend":
                 added = ast.List(elts=[added], ctx=ast.Load())
-            values.setdefault(node.func.value.id, []).append(added)
+            mutations.append((node.func.value.id, added))
+    # After `pending = records`, both names hold one list, so a value added
+    # through either is a value of every name bound to it.
+    for name, added in mutations:
+        for other in _alias_group(name, values):
+            values.setdefault(other, []).append(added)
     return values
+
+
+def _alias_group(name, values):
+    """Every variable linked to `name` by plain `a = b` assignments, either way."""
+    group, pending = {name}, [name]
+    while pending:
+        current = pending.pop()
+        linked = {v.id for v in values.get(current, []) if isinstance(v, ast.Name)}
+        linked |= {
+            other for other, vs in values.items() if any(isinstance(v, ast.Name) and v.id == current for v in vs)
+        }
+        for other in linked - group:
+            group.add(other)
+            pending.append(other)
+    return group
+
+
+def _grounded(assignments):
+    """Variables with some assignment that bottoms out outside any cycle.
+
+    A variable is grounded when one of its values refers only to grounded
+    variables (or to none), so `stmt = select(User); alias = stmt;
+    stmt = alias.where(...)` grounds both names through `select(User)`, while
+    `statement = statement.where(...)` alone never is.
+    """
+
+    def referenced(value):
+        return {n.id for n in ast.walk(value) if isinstance(n, ast.Name) and n.id in assignments}
+
+    refs = {name: [referenced(value) for value in values] for name, values in assignments.items()}
+    grounded = set()
+    changed = True
+    while changed:
+        changed = False
+        for name, value_refs in refs.items():
+            if name not in grounded and any(r <= grounded for r in value_refs):
+                grounded.add(name)
+                changed = True
+    return grounded
 
 
 class _Resolver:
@@ -170,7 +215,7 @@ class _Resolver:
         self.assignments = assignments
         self.aliases = aliases
         self.visiting = set()
-        self.looped = set()
+        self.grounded = _grounded(assignments)
 
     def tables(self, node):
         """Tables of the rows an expression evaluates to."""
@@ -205,24 +250,16 @@ class _Resolver:
         if not values:
             return None
         # `query = query.where(...)` refers back to the variable's other assignments,
-        # so it resolves only when some assignment resolves without looping back.
+        # so a revisit adds nothing; the variable resolves only if it is grounded.
         if name in self.visiting:
-            self.looped.add(name)
             return set()
+        if name not in self.grounded:
+            return None
         self.visiting.add(name)
         try:
-            found, seeded = set(), False
-            for value in values:
-                self.looped.discard(name)
-                tables = resolve(value)
-                if tables is None:
-                    return None
-                found |= tables
-                seeded = seeded or name not in self.looped
-            return found if seeded else None
+            return self._all(values, resolve)
         finally:
             self.visiting.discard(name)
-            self.looped.discard(name)
 
     def is_write_statement(self, node):
         """Whether a statement is an insert/update/delete, whatever its target."""
