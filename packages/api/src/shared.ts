@@ -29,6 +29,7 @@ import { isDevelopment } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { checkHasPermissionsOnOrg } from "./check-has-role-on-org";
+import { toAuditSource } from "./audit-source";
 import { jwksFetchFailure } from "./jwks-failure";
 import { logError, logInfo, logWarn } from "./logger";
 import { getProxiedClientIp } from "./proxied-client-ip";
@@ -193,7 +194,7 @@ const withSessionAndDb = base.use(async ({ context, next }) => {
         session?.apiKey || session?.devMode || ambiguousLegacyIdentity
           ? null
           : userId,
-      source: null,
+      source: toAuditSource(context.reqHeaders?.get(Header.Client)),
     },
     () => next({ context: newContext }),
   );

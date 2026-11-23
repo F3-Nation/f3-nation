@@ -122,8 +122,16 @@ class BackblastList:
 
 
 def send_backblast_reminders(force=False):
+    """
+    DM each Q a reminder to post a backblast for a recent event.
+
+    A workspace with no installation is skipped. A workspace whose token lookup raises is logged
+    and recorded, the remaining Qs are still reminded, and a ``RuntimeError`` afterward reports
+    how many workspaces failed so the hourly runner records the incomplete run.
+    """
     # get the current time in US/Central timezone
     current_time = datetime.now(pytz.timezone("US/Central"))
+    failed_team_ids: set[str] = set()
     # check if the current time is between 5:00 PM and 6:00 PM, eventually configurable
     if current_time.hour == 17 or force:
         backblast_list = BackblastList()
@@ -156,6 +164,7 @@ def send_backblast_reminders(force=False):
                     except Exception as e:
                         team_id = backblast.slack_settings.team_id
                         print(f"Error getting Slack client for team {team_id}: {type(e).__name__}")
+                        failed_team_ids.add(team_id)
                         continue
                     if slack_client is None:
                         continue
@@ -183,6 +192,9 @@ def send_backblast_reminders(force=False):
                     except Exception as e:
                         print(f"Error sending backblast reminder to {backblast.slack_user_id}: {e}")
                         continue
+
+    if failed_team_ids:
+        raise RuntimeError(f"Backblast reminders skipped for {len(failed_team_ids)} workspace(s)")
 
 
 def handle_backblast_reminder_dismiss(

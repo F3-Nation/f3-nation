@@ -178,8 +178,10 @@ def upload_files_to_slack(file_paths: List[str], settings: SlackSettings, text: 
     try:
         client = slack_client_for_team(settings.team_id)
     except Exception as e:
+        # Re-raised so the scheduled run records the region as failed; a missing installation
+        # (None) is not an error and is skipped below.
         print(f"Error getting Slack client for team {settings.team_id}: {type(e).__name__}")
-        return
+        raise
     if client is None:
         print(f"No Slack installation for team {settings.team_id}; skipping upload")
         return
@@ -251,7 +253,15 @@ def run_reporting_single_org(body: dict, client: WebClient, logger: any, context
 
 
 def cycle_all_orgs(run_org_id: int = None):
+    """
+    Post monthly summary charts for every region, and its AOs when enabled.
+
+    A region that raises, including a failed token lookup, is logged and recorded, the remaining
+    regions still get their reports, and a ``RuntimeError`` afterward reports how many regions
+    failed so the hourly runner records the incomplete run.
+    """
     current_time = datetime.now(pytz.timezone("US/Central"))
+    failed_org_ids: list[int] = []
     if run_org_id or (current_time.day == 2 and current_time.hour == 20):
         records = DbManager.find_join_records3(Org_x_SlackSpace, Org, SlackSpace, filters=[Org.is_active])
         region_orgs: List[Org] = [r[1] for r in records]
@@ -297,8 +307,12 @@ def cycle_all_orgs(run_org_id: int = None):
                                 channel=channel,
                             )
                 except Exception as e:
-                    print(f"Error processing org {org.name} ({org.id}): {e}")
+                    print(f"Error processing org {org.id}: {type(e).__name__}")
+                    failed_org_ids.append(org.id)
                     continue
+
+    if failed_org_ids:
+        raise RuntimeError(f"Monthly reports skipped for {len(failed_org_ids)} region(s)")
 
 
 def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:

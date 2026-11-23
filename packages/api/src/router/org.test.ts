@@ -1063,6 +1063,69 @@ describe("Org Router", () => {
       ).not.toBe(true);
     });
 
+    it("saves the region password vault opt-in as sent and refuses anything but a boolean or null", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Vault region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+          meta: { password_vault_enabled: true, keepMe: "present" },
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create region");
+      createdOrgIds.push(region.id);
+
+      const update = (meta: Record<string, unknown> | null) =>
+        client.org.crupdate({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+          meta,
+        });
+      const storedMeta = async () =>
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta;
+
+      // The submitted meta replaces the stored one, the vault key included.
+      await update({ keepMe: "changed", password_vault_enabled: false });
+      expect(await storedMeta()).toEqual({
+        keepMe: "changed",
+        password_vault_enabled: false,
+      });
+      await update({ keepMe: "changed" });
+      expect(await storedMeta()).toEqual({ keepMe: "changed" });
+      // Null is accepted and means off, like a missing key.
+      await update({ password_vault_enabled: null });
+      expect(await storedMeta()).toEqual({ password_vault_enabled: null });
+      await update({ password_vault_enabled: true });
+      expect(await storedMeta()).toEqual({ password_vault_enabled: true });
+
+      // Anything else is refused, not stored as "off".
+      await expect(
+        update({ password_vault_enabled: "false" }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "meta.password_vault_enabled must be true, false or null",
+      });
+      expect(await storedMeta()).toEqual({ password_vault_enabled: true });
+    });
     it("rejects an update when the org hierarchy changes before its row lock", async () => {
       const nation = await getOrCreateF3NationOrg();
       await mockAuthWithSession(await createAdminSession());
