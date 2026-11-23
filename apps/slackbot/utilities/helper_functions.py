@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import traceback
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -1217,3 +1218,14 @@ def extract_state_values(body: dict) -> dict[str, Any]:
             elif element_type == "file_input":
                 form_data[block_id] = state.get("files")
     return form_data
+
+
+def error_stack(exc: BaseException) -> str:
+    """The five innermost frames as file:line:function, innermost first so `a <- b` reads "a was called from b".
+
+    Never the message: it can carry emails or SQL parameters.
+    """
+    return " <- ".join(
+        f"{os.path.basename(f.filename)}:{f.lineno}:{f.name}"
+        for f in reversed(traceback.extract_tb(exc.__traceback__)[-5:])
+    )

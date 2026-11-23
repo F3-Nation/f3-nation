@@ -2,7 +2,7 @@
 # Node 25+ images no longer bundle Corepack; install it so pnpm comes from
 # the root packageManager pin (version and hash).
 ARG COREPACK_VERSION=0.36.0
-FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS builder
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS builder
 
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
@@ -21,7 +21,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts --filter=f3-nation && \
     node_modules/.bin/turbo prune f3-auth --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS installer
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS installer
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -67,7 +67,7 @@ RUN pnpm turbo build --filter=f3-auth
 RUN test -n "$(find apps/auth/.next/standalone -name 'libvips-cpp*')"
 
 # ---------- Stage 3: Production runner ----------
-FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS runner
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
