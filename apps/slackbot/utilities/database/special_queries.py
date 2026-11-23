@@ -22,7 +22,7 @@ from f3_data_models.models import (
     User,
 )
 from f3_data_models.utils import _joinedloads, get_session
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, nulls_last, or_, select
 from sqlalchemy.orm import joinedload
 
 from utilities.constants import ALL_PERMISSIONS, PERMISSIONS
@@ -98,7 +98,8 @@ def home_schedule_query(
     `filters` may reference `EventInstance` and its `Org`. Filter event types with
     `EventInstance.event_types.any(...)`: joining event types directly would repeat an event once per type.
     """
-    order_by = (EventInstance.start_date, EventInstance.id, Org.name, EventInstance.start_time)
+    # Each day runs latest start first, then by AO name; the id keeps ties in a fixed order so pages never overlap.
+    order_by = (EventInstance.start_date, nulls_last(EventInstance.start_time.desc()), Org.name, EventInstance.id)
     # Events with no event type are left off the schedule, as they were when types were joined in directly.
     base_filters = [*filters, EventInstance.event_types.any()]
     filtered_ids = select(EventInstance.id).join(Org, Org.id == EventInstance.org_id).filter(*base_filters)

@@ -163,6 +163,34 @@ def test_event_with_two_types_is_listed_once_with_both_types(schedule):
     assert sorted(t.name for t in two_type_event.event_types) == ["Bootcamp", "Ruck"]
 
 
+def test_a_days_events_are_latest_start_first_then_by_ao_name(schedule):
+    """Ids run against the expected order, and the time-less event sorts after the timed ones."""
+    day = START + datetime.timedelta(days=4)
+    with Session(schedule) as session:
+        session.add(Org(id=11, parent_id=100, org_type=Org_Type.ao, name="Brickyard", is_active=True))
+        session.flush()
+        for event_id, org_id, start_time in [(7, 10, "0600"), (8, 11, "0515"), (9, 10, "0515"), (10, 11, "0600"),
+                                             (11, 11, None)]:  # fmt: skip
+            session.add(
+                EventInstance(
+                    id=event_id,
+                    org_id=org_id,
+                    name=f"Event {event_id}",
+                    start_date=day,
+                    start_time=start_time,
+                    is_active=True,
+                    highlight=False,
+                )
+            )
+            session.flush()
+            session.add(EventType_x_EventInstance(event_instance_id=event_id, event_type_id=1))
+        session.commit()
+
+    results = special_queries.home_schedule_query(1, [*_base_filters(), EventInstance.start_date == day], limit=10)
+
+    assert [r.event.id for r in results] == [10, 7, 8, 9, 11]
+
+
 def test_event_type_filter_matches_any_of_an_events_types(schedule):
     filters = [*_base_filters(), EventInstance.event_types.any(EventType.id.in_([2]))]
 
