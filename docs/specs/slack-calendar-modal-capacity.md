@@ -7,9 +7,9 @@
 The interactive Slack calendar (Calendar Home) shows the region's upcoming
 events one page at a time. Filter inputs stay hidden behind a Filters button so
 the schedule starts near the top; Slack does not allow its collapsible container
-block in modals. Each event shows a bold title line, a detail line and its
-most likely action as a visible button. A page renders chronologically ordered
-events until the next complete event group would exceed Slack's 100-block
+block in modals. Each event is one section: a title line, a detail line and
+an overflow menu of its actions, Take Q and HC first. A page renders events by
+date, latest start first within a day, until the next complete event group would exceed Slack's 100-block
 modal limit, less one block kept free for the paging row, and "Show more"
 continues from there. Rendering counts fixed
 controls, any filter inputs on screen, date headers and every
@@ -30,11 +30,11 @@ must not leave the user indefinitely on a loading view.
 ## 3. User stories
 
 - As a Slack workspace member, I want the calendar to display every
-  chronological event that fits so that a dense schedule does not prevent the
+  upcoming event that fits so that a dense schedule does not prevent the
   calendar from loading.
 - As a Slack workspace member, I want the schedule near the top of the modal
-  and each event's main action one tap away, so I can HC or take a Q without
-  opening a menu.
+  and each event's main actions first in its menu, so I can HC or take a Q
+  quickly.
 - As a Slack workspace member, I want to page past the first screen of events
   so that a busy schedule is not cut off.
 - As a Slack workspace member, I want a clear failure response if Slack rejects
@@ -49,13 +49,12 @@ must not leave the user indefinitely on a loading view.
   each filter input on screen.
 - **AC-2** — GIVEN an event on a date that is not yet rendered WHEN its date
   header and event blocks would exceed the limit THEN none of them is appended.
-- **AC-3** — GIVEN a closed event WHEN capacity is evaluated THEN it consumes
-  one block (title, detail and menu in one section) under the same capacity
-  rule as an open event, which consumes two (a section and a row of actions).
+- **AC-3** — GIVEN an open or closed event WHEN capacity is evaluated THEN it
+  consumes one block (title, detail and menu in one section).
 - **AC-4** — GIVEN an event group that brings the modal to exactly 99 blocks
   (100 less the block kept for the paging row) WHEN capacity is evaluated THEN
   the complete group is appended, and the paging row still fits.
-- **AC-5** — GIVEN additional chronological events after the page reaches
+- **AC-5** — GIVEN additional events after the page reaches
   capacity WHEN rendering continues THEN no later event is appended and a
   "Show more" button continues from the first event not shown.
 - **AC-6** — GIVEN Slack rejects `views.update` WHEN a modal is updated THEN the
@@ -76,10 +75,10 @@ must not leave the user indefinitely on a loading view.
   filters keep applying, including across pages.
 - **AC-10** — GIVEN the user changes a filter WHEN the calendar re-renders THEN
   the filter inputs stay shown and the first page of results is shown.
-- **AC-11** — GIVEN an open event WHEN its row renders THEN the visible button
-  is Take Q when the Q slot is open, otherwise HC, or Going when the user has
-  already HC'd; Going removes the HC only after a confirmation. Every other
-  action the user may take stays in the overflow menu.
+- **AC-11** — GIVEN an open event WHEN its row renders THEN its overflow menu
+  lists Take Q first when the Q slot is open, then HC (or Un-HC when the user
+  has already HC'd), then every other action the user may take. A closed event's
+  menu holds only Reopen Event for admins, or Event Closed for everyone else.
 - **AC-12** — GIVEN an event with more than one event type WHEN the schedule is
   queried THEN it is listed once, with all of its types, and an event-type
   filter matches it when any of its types is selected. Events with no event
@@ -91,6 +90,10 @@ must not leave the user indefinitely on a loading view.
   says so and points back to the first page.
 - **AC-14** — GIVEN "Special events only" is selected WHEN the schedule is
   queried THEN only highlighted events are listed.
+- **AC-15** — GIVEN events on the same date WHEN the schedule is queried THEN
+  they are listed latest start time first, events with no start time last, then
+  by AO name, with the event id breaking any remaining tie so pages never
+  overlap.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -108,7 +111,7 @@ permissions continue to determine which event actions are available.
 - Showing other regions' events, and saving a user's default filters.
 - Establishing a fixed calendar date range shared by every region.
 - Increasing Slack's 100-block platform limit.
-- Changing event ordering or authorization.
+- Changing authorization.
 
 ## 7. Critical-path test cases
 
@@ -126,10 +129,11 @@ permissions continue to determine which event actions are available.
    active filters; a filter change keeps them shown and resets to the first
    page; no block type outside those Slack allows in modals is sent
    (AC-9/AC-10).
-6. Each row type renders its visible button and menu (AC-11).
+6. Each row type renders its title, detail line and menu order (AC-11).
 7. Against Postgres, a two-type event is listed once, the type filter matches
    it, an untyped event is left out, and offsets page through events without
-   gaps or repeats (AC-12).
+   gaps or repeats (AC-12), and a day's events come latest start first, then by
+   AO name (AC-15).
 8. Show more, Back to start, a refresh from the same view and one from a
    stacked modal each land on the right page (AC-13).
 

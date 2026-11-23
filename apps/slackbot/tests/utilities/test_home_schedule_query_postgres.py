@@ -113,6 +113,7 @@ def schedule(engine):
                 User(id=1, f3_name="Viewer", email="viewer@example.invalid"),
                 User(id=2, f3_name="Chip", email="chip@example.invalid"),
                 User(id=3, f3_name="Dale", email="dale@example.invalid"),
+                User(id=4, f3_name="Pickle", email="pickle@example.invalid"),
             ]
         )
         session.flush()
@@ -141,8 +142,15 @@ def schedule(engine):
         # Event 3 has two event types: it must still come back as one schedule entry.
         session.add(EventType_x_EventInstance(event_instance_id=3, event_type_id=2))
         session.flush()
-        for attendance_id, user_id, types in [(1, 2, [Q]), (2, 1, [HC]), (3, 3, [HC])]:
-            session.add(Attendance(id=attendance_id, event_instance_id=3, user_id=user_id, is_planned=True))
+        # Chip HC'd and then took the Q, so one attendance carries both types; Pickle's attendance is a backblast
+        # record, not a planned HC. Neither may change the headcount of 3.
+        for attendance_id, user_id, types, is_planned in [
+            (1, 2, [HC, Q], True),
+            (2, 1, [HC], True),
+            (3, 3, [HC], True),
+            (4, 4, [HC], False),
+        ]:
+            session.add(Attendance(id=attendance_id, event_instance_id=3, user_id=user_id, is_planned=is_planned))
             session.flush()
             session.add_all(
                 [Attendance_x_AttendanceType(attendance_id=attendance_id, attendance_type_id=t) for t in types]
@@ -217,6 +225,12 @@ def test_attendance_counts_and_viewer_flags(schedule):
     assert not by_id[4].hc_count
 
 
+def test_viewer_who_is_q_is_flagged(schedule):
+    results = special_queries.home_schedule_query(2, _base_filters(), limit=10)
+
+    assert next(r for r in results if r.event.id == 3).user_q == 1
+
+
 @pytest.mark.parametrize(
     ("kwargs", "expected_ids"),
     [({"only_users_events": True}, [3]), ({"open_q_only": True}, [5, 4, 1, 2])],
@@ -227,6 +241,8 @@ def test_attendance_filters_list_each_event_once(schedule, kwargs, expected_ids)
     assert [r.event.id for r in results] == expected_ids
     if 3 in expected_ids:
         assert sorted(t.name for t in results[0].event_types) == ["Bootcamp", "Ruck"]
+        # This path carries the attendance summary through the page, so it must match the unfiltered path.
+        assert (results[0].hc_count, results[0].planned_qs, results[0].user_attending) == (3, "Chip", 1)
 
 
 def test_attendance_filters_page_with_offset(schedule):

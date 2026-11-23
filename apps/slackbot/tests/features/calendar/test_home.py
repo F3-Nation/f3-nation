@@ -302,6 +302,23 @@ def test_mrkdwn_in_org_supplied_names_is_escaped():
     assert "&lt;@U123&gt;" in text and "&lt;!channel&gt;" in text
 
 
+def test_mrkdwn_in_event_series_and_type_names_is_escaped():
+    special = _calendar_event(1, FUTURE, highlight=True)
+    special.event.name = "<!channel> Convergence"
+    series = _calendar_event(2, FUTURE)
+    series.series = SimpleNamespace(name="<!here> Ruck Club")
+    typed = _calendar_event(3, FUTURE, event_types=("<!everyone>",))
+
+    view, _ = _render([special, series, typed])
+
+    titles = [b["text"]["text"].split("\n")[0] for b in _event_blocks(view)[1:]]
+    assert titles == [
+        "`0530` :star: *&lt;!channel&gt; Convergence* — The Forge",
+        "`0530` *&lt;!here&gt; Ruck Club* — The Forge",
+        "`0530` *The Forge* — &lt;!everyone&gt;",
+    ]
+
+
 def test_days_are_separated_by_date_headers_without_dividers():
     view, _ = _render([_calendar_event(1, FUTURE), _calendar_event(2, FUTURE + datetime.timedelta(days=1))])
 
@@ -358,6 +375,51 @@ def test_hiding_filters_keeps_them_applied_and_counts_them_on_the_button():
     assert schedule_query.call_args.kwargs["open_q_only"] is True
 
 
+def test_filters_button_hides_inputs_that_metadata_says_are_shown():
+    """The stored flag alone marks the inputs as on screen, as when no input has a value in the view state yet."""
+    body = _filter_body({}, action_id=actions.CALENDAR_HOME_FILTERS, private_metadata='{"filters_open": true}')
+
+    view, _ = _render([], body)
+
+    assert _filter_inputs(view) == []
+
+
+def test_filters_button_hides_inputs_that_the_view_state_shows():
+    """Filter values in the view state alone mark the inputs as on screen, as when the stored flag is missing."""
+    body = _filter_body(
+        {actions.CALENDAR_HOME_Q_FILTER: [actions.FILTER_OPEN_Q]}, action_id=actions.CALENDAR_HOME_FILTERS
+    )
+
+    view, schedule_query = _render([], body)
+
+    assert _filter_inputs(view) == []
+    assert schedule_query.call_args.kwargs["open_q_only"] is True
+
+
+def test_hidden_filters_carry_through_show_more_and_refill_the_inputs_when_shown_again():
+    """Each step feeds the previous render's private_metadata into the next action, as Slack does."""
+    hide = _filter_body(
+        {actions.CALENDAR_HOME_Q_FILTER: [actions.FILTER_OPEN_Q], actions.CALENDAR_HOME_DATE_FILTER: "2099-09-07"},
+        action_id=actions.CALENDAR_HOME_FILTERS,
+        private_metadata='{"filters_open": true}',
+    )
+    hidden_view, _ = _render([], hide)
+    assert _filter_inputs(hidden_view) == []
+
+    more = _filter_body(
+        {}, action_id=actions.CALENDAR_HOME_SHOW_MORE, value="5", private_metadata=hidden_view["private_metadata"]
+    )
+    paged_view, schedule_query = _render(_busy_schedule(5), more)
+    assert schedule_query.call_args.kwargs["open_q_only"] is True
+    assert _summary(paged_view) == "Showing: Open Q only · from Mon, Sep 07"
+
+    show = _filter_body({}, action_id=actions.CALENDAR_HOME_FILTERS, private_metadata=paged_view["private_metadata"])
+    shown_view, _ = _render([], show)
+    inputs = {b["block_id"]: b["element"] for b in _filter_inputs(shown_view)}
+    assert [o["value"] for o in inputs[actions.CALENDAR_HOME_Q_FILTER]["initial_options"]] == [actions.FILTER_OPEN_Q]
+    assert inputs[actions.CALENDAR_HOME_DATE_FILTER]["initial_date"] == "2099-09-07"
+
+
 def test_hidden_filters_still_apply_on_show_more():
     metadata = json.dumps({"filters_open": False, "filters": {actions.CALENDAR_HOME_Q_FILTER: [actions.FILTER_OPEN_Q]}})
     body = _filter_body({}, action_id=actions.CALENDAR_HOME_SHOW_MORE, value="37", private_metadata=metadata)
@@ -386,7 +448,7 @@ def test_filters_stay_shown_and_count_active_filters_after_a_filter_change():
     assert _summary(view) == "Showing: 2 AOs · Open Q only · Special events only · from Mon, Sep 07"
     assert schedule_query.call_args.kwargs["open_q_only"] is True
     compiled = [str(f) for f in schedule_query.call_args.args[1]]
-    assert any("event_instances.highlight" in f for f in compiled)
+    assert "event_instances.highlight IS true" in compiled
 
 
 def test_other_options_offer_special_events_and_not_nearby_regions():
@@ -430,6 +492,29 @@ def test_full_page_stays_under_the_block_limit_and_offers_show_more():
     assert paging["elements"][0]["value"] == str(len(rendered))
     assert schedule_query.call_args.kwargs["limit"] == HOME_PAGE_SIZE
     assert schedule_query.call_args.kwargs["offset"] == 0
+
+
+def test_full_page_that_fits_still_offers_show_more():
+    """A page of HOME_PAGE_SIZE events that all fit may not be the last one, so Show more is still offered."""
+    view, _ = _render([_calendar_event(i, FUTURE) for i in range(HOME_PAGE_SIZE)])
+
+    rendered = [b for b in view["blocks"] if b["type"] == "section" and "accessory" in b]
+    assert len(rendered) == HOME_PAGE_SIZE
+    show_more = view["blocks"][-1]["elements"][-1]
+    assert show_more["action_id"] == actions.CALENDAR_HOME_SHOW_MORE
+    assert show_more["value"] == str(HOME_PAGE_SIZE)
+
+
+def test_show_more_on_a_later_page_continues_from_that_page():
+    body = _filter_body({}, action_id=actions.CALENDAR_HOME_SHOW_MORE, value="90")
+
+    view, _ = _render(_busy_schedule(HOME_PAGE_SIZE), body)
+
+    rendered = [b for b in view["blocks"] if b["type"] == "section" and "accessory" in b]
+    assert 0 < len(rendered) < HOME_PAGE_SIZE
+    show_more = view["blocks"][-1]["elements"][-1]
+    assert show_more["action_id"] == actions.CALENDAR_HOME_SHOW_MORE
+    assert show_more["value"] == str(90 + len(rendered))
 
 
 def test_show_more_loads_the_next_page_and_offers_back_to_start():
@@ -516,9 +601,17 @@ def test_empty_later_page_points_back_to_the_first_page():
 
 
 @pytest.mark.parametrize(
-    "action_id", [actions.CALENDAR_HOME_SHOW_MORE, actions.CALENDAR_HOME_SHOW_FIRST, actions.CALENDAR_HOME_FILTERS]
+    "action_id",
+    [
+        actions.CALENDAR_HOME_SHOW_MORE,
+        actions.CALENDAR_HOME_SHOW_FIRST,
+        actions.CALENDAR_HOME_FILTERS,
+        actions.CALENDAR_HOME_AO_FILTER,
+        actions.CALENDAR_HOME_EVENT_TYPE_FILTER,
+        actions.CALENDAR_HOME_Q_FILTER,
+    ],
 )
-def test_rejected_page_change_or_filters_toggle_reaches_the_dispatcher(action_id):
+def test_rejected_in_place_redraw_reaches_the_dispatcher(action_id):
     client = MagicMock()
     client.views_update.side_effect = SlackApiError("Slack rejected modal", {"error": "invalid_blocks"})
     body = _filter_body({}, action_id=action_id, value="45")

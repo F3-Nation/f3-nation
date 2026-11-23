@@ -59,6 +59,12 @@ FILTER_ACTIONS = {
     actions.CALENDAR_HOME_DATE_FILTER,
     actions.CALENDAR_HOME_Q_FILTER,
 }
+# Actions that redraw the calendar in place, with no loading view behind them.
+IN_PLACE_ACTIONS = FILTER_ACTIONS | {
+    actions.CALENDAR_HOME_SHOW_MORE,
+    actions.CALENDAR_HOME_SHOW_FIRST,
+    actions.CALENDAR_HOME_FILTERS,
+}
 OPTION_LABELS = {
     actions.FILTER_OPEN_Q: "Show only open Q slots",
     actions.FILTER_MY_EVENTS: "Show only my events",
@@ -452,11 +458,9 @@ def build_home_form(
             callback_id=actions.CALENDAR_HOME_CALLBACK_ID,
             submit_button_text="None",
             parent_metadata=metadata,
-            # Paging and the Filters button have no loading view to fall back on, so a rejected update must reach
-            # the dispatcher.
-            raise_on_error=view_id == safe_get(body, actions.LOADING_ID)
-            or action_id
-            in (actions.CALENDAR_HOME_SHOW_MORE, actions.CALENDAR_HOME_SHOW_FIRST, actions.CALENDAR_HOME_FILTERS),
+            # Paging, the Filters button and filter changes have no loading view to fall back on, so a rejected update
+            # must reach the dispatcher.
+            raise_on_error=view_id == safe_get(body, actions.LOADING_ID) or action_id in IN_PLACE_ACTIONS,
         )
     else:
         form.post_modal(

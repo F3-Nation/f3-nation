@@ -100,7 +100,7 @@ def home_schedule_query(
     """
     # Each day runs latest start first, then by AO name; the id keeps ties in a fixed order so pages never overlap.
     order_by = (EventInstance.start_date, nulls_last(EventInstance.start_time.desc()), Org.name, EventInstance.id)
-    # Events with no event type are left off the schedule, as they were when types were joined in directly.
+    # Events with no event type are left off the schedule (spec AC-12).
     base_filters = [*filters, EventInstance.event_types.any()]
     filtered_ids = select(EventInstance.id).join(Org, Org.id == EventInstance.org_id).filter(*base_filters)
     summary_columns = ("planned_qs", "user_attending", "user_q", "hc_count")
