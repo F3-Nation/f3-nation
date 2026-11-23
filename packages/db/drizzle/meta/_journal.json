@@ -281,6 +281,13 @@
       "when": 1795099944147,
       "tag": "0039_attendance_type_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795435728224,
+      "tag": "0040_slack_token_rotation",
+      "breakpoints": true
     }
   ]
 }

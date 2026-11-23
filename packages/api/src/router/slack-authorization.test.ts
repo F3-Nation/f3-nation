@@ -212,4 +212,42 @@ describe("Slack message authorization", () => {
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  describe("after Slack revokes the token mid-request", () => {
+    const setBotToken = (botToken: string) =>
+      db
+        .update(schema.slackSpaces)
+        .set({ botToken })
+        .where(eq(schema.slackSpaces.id, slackSpaceId));
+
+    afterEach(async () => {
+      await setBotToken("xoxb-test-token");
+    });
+
+    it.each([
+      ["postMessage", post],
+      ["updateMessage", update],
+    ] as const)(
+      "%s retries once with the token stored after a refresh",
+      async (_name, send) => {
+        await mockAuthWithSession(sessionWithRole(regionId, "admin"));
+        // The first call sees a token another process just refreshed and revoked.
+        fetchSpy.mockImplementationOnce(async () => {
+          await setBotToken("xoxb-refreshed-token");
+          return new Response(
+            JSON.stringify({ ok: false, error: "token_revoked" }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        });
+
+        await expect(send()).resolves.toMatchObject({ ok: true });
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        const retryHeaders = new Headers(fetchSpy.mock.calls[1]?.[1]?.headers);
+        expect(retryHeaders.get("Authorization")).toBe(
+          "Bearer xoxb-refreshed-token",
+        );
+      },
+    );
+  });
 });
