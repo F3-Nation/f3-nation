@@ -137,7 +137,7 @@ The [`address-pr-comments`](../.agents/skills/address-pr-comments/SKILL.md) skil
 
 ## PRs waiting on their author
 
-A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a PR is waiting on them, and closes the PR if it keeps waiting. A draft is always waiting on its author: reviewers and review bots skip drafts, so only the author can move one forward. A PR that is ready for review is waiting on its author when any of these is true:
+A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a PR is waiting on them, and closes the PR if it keeps waiting. A draft is always waiting on its author: reviewers and review bots skip drafts, so it waits until someone pushes to it or marks it ready for review. A PR that is ready for review is waiting on its author when any of these is true:
 
 - A required check is failing.
 - It has a merge conflict with its base branch.

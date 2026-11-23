@@ -8,9 +8,9 @@
  * required check is failing, it conflicts with its base, a team member or a
  * bot has commented in an unresolved review thread since the author's last
  * reply, or a team member or a bot requested changes and nothing has been
- * pushed since. A draft is always the author's turn: no reviewer works on a
- * draft, so only the author can move it forward. While a ready PR waits on
- * bots or codeowners the clock doesn't run; it restarts from the earliest
+ * pushed since. A draft is always the author's turn: reviewers don't pick up
+ * a draft until it's marked ready. While a ready PR waits on bots or
+ * codeowners the clock doesn't run; it restarts from the earliest
  * open item (or the author's last activity, if later). Any push, author
  * comment, ready-for-review or reopen resets it. Bot comments and reviewer
  * pings don't.
