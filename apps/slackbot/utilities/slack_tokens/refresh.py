@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 
 STORE_WINDOW_MINUTES = 120
 SWEEP_WINDOW_MINUTES = 180
+# Fresh-transaction save attempts after the first save of newly rotated tokens fails.
+ROTATED_SAVE_RETRIES = 2
 
 _LOCK_TIMEOUT_PGCODE = "55P03"
 
@@ -249,12 +251,15 @@ def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str
     process that waited on the lock sees the token the other one saved and
     doesn't call Slack again.
 
-    Raises `TokenSaveError` if saving the refreshed token fails. Slack has
-    already issued the new token by then, and it is lost with the rollback.
+    Slack revokes the stored tokens when it issues new ones, so a failed save
+    of the new ones is retried in fresh transactions (`_save_rotated`). Raises
+    `TokenSaveError` if every save fails, after logging
+    `slack.token.rotation_lost`.
     """
     unlocked = load_bot(team_id)
     if unlocked is None or not _due(unlocked, minutes_before_expiration):
         return unlocked
+    unsaved: Optional[Tuple[Bot, str]] = None
     try:
         with _locked(team_id) as (session, row):
             if row is None or not row.bot_token:
@@ -287,6 +292,9 @@ def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str
             if not _guard_allows(row, rotated):
                 _log(logging.WARNING, "slack.token.save_refused", team_id, path=path)
                 return stored
+            # Slack has issued new tokens and revoked the stored ones, so a failed save
+            # is retried below, once this transaction has rolled back and released the lock.
+            unsaved = (rotated, row.bot_token)
             _write(row, rotated)
             _flush(session, team_id, path)
             result = _bot_from_row(row)
@@ -298,3 +306,35 @@ def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str
     except TokenLockTimeout:
         _log(logging.WARNING, "slack.token.lock_timeout", team_id, path=path)
         return load_bot(team_id)
+    except TokenSaveError:
+        if unsaved is None:
+            raise
+    # Outside the `except`, so a final `TokenSaveError` carries no context.
+    return _save_rotated(team_id, *unsaved, path=path)
+
+
+def _save_rotated(team_id: str, rotated: Bot, old_token: str, *, path: str) -> Optional[Bot]:
+    """Retry saving tokens Slack issued whose first save failed, each in a fresh transaction.
+
+    Saves only while the row still holds `old_token`; if another process has
+    saved since, its token is kept. If every retry fails, logs
+    `slack.token.rotation_lost`: the stored tokens are revoked, so the
+    workspace needs a reinstall. Raises `TokenSaveError` then.
+    """
+    for _ in range(ROTATED_SAVE_RETRIES):
+        try:
+            saved = save_bot_locked(rotated, team_id=team_id, expected_token=old_token)
+        except TokenChanged:
+            return load_bot(team_id)
+        except (TokenSaveError, TokenLockTimeout) as e:
+            # `save_bot_locked` already logged a save failure; a lock timeout isn't logged there.
+            if isinstance(e, TokenLockTimeout):
+                _log(logging.WARNING, "slack.token.lock_timeout", team_id, path=path)
+            continue
+        if not saved:
+            # The guard refused it: the row holds a token expiring later, saved by another process.
+            return load_bot(team_id)
+        _log(logging.INFO, "slack.token.refreshed", team_id, path=path)
+        return load_bot(team_id)
+    _log(logging.ERROR, "slack.token.rotation_lost", team_id, path=path)
+    raise TokenSaveError("saving the rotated bot token failed")
