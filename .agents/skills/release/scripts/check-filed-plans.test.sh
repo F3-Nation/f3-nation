@@ -83,16 +83,20 @@ export PATH="$tmp_dir/bin:$PATH"
 # tailwind-config don't; a later commit adds one for tailwind-config.
 repo="$tmp_dir/repo"
 git -C "$repo" init -q
-mkdir -p "$repo/.github/workflows"
+git -C "$repo" config user.name test
+git -C "$repo" config user.email test@example.invalid
+git -C "$repo" config commit.gpgsign false
+mkdir -p "$repo/.github/workflows" "$repo/apps/map"
 for app in map analytics; do
   : >"$repo/.github/workflows/deploy-${app}.yml"
 done
+: >"$repo/apps/map/.keep"
 git -C "$repo" add -A
-git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm release
+git -C "$repo" commit -qm release
 release_sha="$(git -C "$repo" rev-parse HEAD)"
 : >"$repo/.github/workflows/deploy-tailwind-config.yml"
 git -C "$repo" add -A
-git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm later
+git -C "$repo" commit -qm later
 
 app_facts="$tmp_dir/app-facts.json"
 jq -n --arg sha "$release_sha" '{release_sha: $sha, components: ["map", "pkg-ui", "analytics"]}' >"$app_facts"
@@ -127,6 +131,8 @@ assert_eq "linked plans filed by the workflow pass" 0 "$(run_check "$app_facts")
 
 set_issues "$(issue 102 "$release_plan" "$bot" "Work through the Staging test plan, #101.")"
 assert_eq "an app release with no test plan fails" 1 "$(run_check "$app_facts")"
+assert_eq "an app release with no test plan fails when run from a subdirectory" 1 \
+  "$(cd "$repo/apps/map" && bash "$check" --pr 42 --facts "$app_facts" --delay 0 >/dev/null 2>&1; echo $?)"
 
 set_issues "$(issue 102 "$release_plan" "$bot" "No app ships.")"
 assert_eq "a release of only packages, tooling and Analytics passes on the release plan alone, even with a deploy workflow added after the release" 0 "$(run_check "$no_app_facts")"

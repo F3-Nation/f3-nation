@@ -75,7 +75,7 @@ esac
 release_sha="$(jq -r '.release_sha // empty' "$facts")" || usage_error "can't read $facts"
 [ -n "$release_sha" ] || usage_error "$facts has no release_sha"
 components="$(jq -r '.components[]' "$facts")" || usage_error "can't read components from $facts"
-workflows="$(git ls-tree --name-only "$release_sha" -- .github/workflows/)" \
+workflows="$(git ls-tree --full-tree --name-only "$release_sha" -- .github/workflows/)" \
   || usage_error "can't read the workflows at ${release_sha}; run from a checkout that has it"
 needs_test_plan=false
 for component in $components; do

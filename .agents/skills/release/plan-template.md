@@ -44,7 +44,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 <!-- OPTIONAL (Staging only, when an app with a Staging deploy is in the release): -->
 
-- [ ] **Confirm the Staging deploys finished.** The plans are filed when the release is cut, so a deploy may still be running. Nothing below, and no test in the test plan, starts until each line prints `true`. Owner: Release lead
+- [ ] **Confirm the Staging deploys finished.** The plans are filed when the release is cut, so a deploy may still be running. Nothing below, and no test in the test plan, starts until each tag's newest Staging deploy has succeeded. The check prints `true` when the tag's own run did. Owner: Release lead
 
   ```bash
   for TAG in {{EACH_STAGING_DEPLOY_TAG}}; do
@@ -55,7 +55,8 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   done
   ```
 
-  - **If a line prints `false`:** open the app's deploy workflow on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). Still running: wait and run the check again. Failed: post in `#monorepo` and stop. A redeploy started by hand runs from `main` with the tag as an input, so the check can't see it: if one ran for this tag, confirm its `deploy-staging` job succeeded.
+  - **Then check for redeploys started by hand,** whatever the check printed: they run from `main` with the tag as an input, so the check can't see them. On each app's deploy workflow in the [Actions page](https://github.com/F3-Nation/f3-nation/actions), look for a run started from `main` after the tag's run. Still running: wait for it. Its `deploy-staging` job succeeded: that tag is done, even if its line printed `false`. Failed: post in `#monorepo` and stop.
+  - **If a line prints `false` and no redeploy succeeded:** open the tag's run. Still running: wait and run the check again. Failed: post in `#monorepo` and stop.
 
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 
