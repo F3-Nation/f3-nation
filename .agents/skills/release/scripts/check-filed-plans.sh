@@ -5,17 +5,21 @@
 # stdout) when they aren't, and 2 on a usage error.
 #
 #   check-filed-plans.sh --pr <number> --facts <release-facts.json>
-#                        [--attempts <n>] [--delay <seconds>] [--workflows-dir <dir>]
+#                        [--attempts <n>] [--delay <seconds>]
 #
-# The facts file is release-facts.sh's output for the same PR. A Staging test
-# plan is required when the release ships an app: a component with a
-# deploy-<component>.yml workflow in --workflows-dir (default: this checkout's
-# .github/workflows), other than analytics, which the release skill leaves out
-# of both plans. A plan counts when GitHub Actions opened it (the Release Plan
-# workflow files with its job token) or its author has write access, as in the
-# skill's step 11. Search can lag an issue filed seconds ago, so an incomplete
-# result is checked again up to --attempts times (default 1), --delay seconds
-# apart (default 15). gh calls use GH_REPO (owner/name). Needs gh, git and jq.
+# Run it from a checkout that has the release commit. The facts file is
+# release-facts.sh's output for the same PR. A Staging test plan is required
+# when the release ships an app: a component with a deploy-<component>.yml
+# workflow at the facts' release_sha, other than analytics, which the release
+# skill leaves out of both plans. A plan counts when GitHub Actions opened it
+# (the Release Plan workflow files with its job token) or its author has write
+# access, as in the skill's step 11. The plans link to each other with the
+# templates' own wording: the release plan's "Staging test plan, #<n>"
+# (plan-template.md) and the test plan's "go/no-go in #<n>"
+# (test-plan-template.md); change both files together. Search can lag an issue
+# filed seconds ago, so an incomplete result is checked again up to --attempts
+# times (default 1), --delay seconds apart (default 15). gh calls use GH_REPO
+# (owner/name). Needs gh, git and jq.
 set -euo pipefail
 
 usage_error() {
@@ -32,7 +36,6 @@ pr=""
 facts=""
 attempts=1
 delay=15
-workflows_dir=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --pr)
@@ -55,11 +58,6 @@ while [ $# -gt 0 ]; do
       delay="$2"
       shift 2
       ;;
-    --workflows-dir)
-      [ $# -ge 2 ] || usage_error "--workflows-dir needs a directory"
-      workflows_dir="$2"
-      shift 2
-      ;;
     *) usage_error "unknown argument: $1" ;;
   esac
 done
@@ -74,16 +72,14 @@ case "$delay" in
 esac
 [ -f "$facts" ] || usage_error "facts file not found: $facts"
 [ -n "${GH_REPO:-}" ] || usage_error "set GH_REPO to owner/name"
-if [ -z "$workflows_dir" ]; then
-  workflows_dir="$(git rev-parse --show-toplevel)/.github/workflows" \
-    || usage_error "run from a checkout of the repo, or pass --workflows-dir"
-fi
-[ -d "$workflows_dir" ] || usage_error "workflows directory not found: $workflows_dir"
-
+release_sha="$(jq -r '.release_sha // empty' "$facts")" || usage_error "can't read $facts"
+[ -n "$release_sha" ] || usage_error "$facts has no release_sha"
 components="$(jq -r '.components[]' "$facts")" || usage_error "can't read components from $facts"
+workflows="$(git ls-tree --name-only "$release_sha" -- .github/workflows/)" \
+  || usage_error "can't read the workflows at ${release_sha}; run from a checkout that has it"
 needs_test_plan=false
 for component in $components; do
-  if [ "$component" != "analytics" ] && [ -f "${workflows_dir}/deploy-${component}.yml" ]; then
+  if [ "$component" != "analytics" ] && grep -qxF ".github/workflows/deploy-${component}.yml" <<<"$workflows"; then
     needs_test_plan=true
   fi
 done
@@ -106,11 +102,11 @@ trusted_numbers() {
     done
 }
 
-# Succeeds when issue $1's body mentions issue #$2.
-mentions() {
+# Succeeds when issue $1's body has the link phrase $2 followed by #$3.
+links_to() {
   local body
   body="$(jq -r --argjson n "$1" '.[] | select(.number == $n) | .body' <<<"$issues")"
-  grep -qE "#${2}([^0-9]|\$)" <<<"$body"
+  grep -qE "${2} #${3}([^0-9]|\$)" <<<"$body"
 }
 
 # Checks the plans once: prints the result and returns 0 when they're
@@ -142,7 +138,8 @@ check_once() {
 
   for release_plan in $release_plans; do
     for test_plan in $test_plans; do
-      if mentions "$release_plan" "$test_plan" && mentions "$test_plan" "$release_plan"; then
+      if links_to "$release_plan" "Staging test plan," "$test_plan" \
+        && links_to "$test_plan" "go/no-go in" "$release_plan"; then
         echo "OK: Staging release plan #${release_plan} and test plan #${test_plan} link to each other"
         return 0
       fi

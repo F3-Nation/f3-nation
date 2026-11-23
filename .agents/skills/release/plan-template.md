@@ -196,6 +196,8 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 ### Step 4: Test
 
+<!-- scripts/check-filed-plans.sh finds the link by "Staging test plan, #<n>"; change both together. -->
+
 - [ ] **Work through the Staging test plan, #{{TEST_PLAN_ISSUE}}.** Owner: Monitor
   - **Watch** (Monitor): keep the app error logs streaming. Post any new error not on the [known-noise list](#known-noise-ignore-these) in `#monorepo` with the time and what you were doing. {{ANYTHING_ELSE_TO_WATCH}}
 

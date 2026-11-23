@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# Regression tests for check-filed-plans.sh, run against a fake `gh` that
-# answers from fixtures and logs every call, so the tests can assert the script
-# never writes to GitHub.
+# Regression tests for check-filed-plans.sh, run against a throwaway git repo
+# and a fake `gh` that answers from fixtures and logs every call, so the tests
+# can assert the script never writes to GitHub.
 # Run directly: bash .agents/skills/release/scripts/check-filed-plans.test.sh
 set -uo pipefail
 
-if ! command -v jq >/dev/null 2>&1; then
-  if [ -n "${CI:-}" ]; then
-    echo "FAIL: check-filed-plans tests need jq, which CI must provide"
-    exit 1
+for tool in git jq; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    if [ -n "${CI:-}" ]; then
+      echo "FAIL: check-filed-plans tests need ${tool}, which CI must provide"
+      exit 1
+    fi
+    echo "SKIP: check-filed-plans tests need ${tool}, which isn't installed"
+    exit 0
   fi
-  echo "SKIP: check-filed-plans tests need jq, which isn't installed"
-  exit 0
-fi
+done
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 check="${script_dir}/check-filed-plans.sh"
@@ -33,7 +35,7 @@ assert_eq() {
 tmp_dir=""
 trap 'if [ -n "$tmp_dir" ]; then rm -rf "$tmp_dir"; fi' EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-filed-plans-test.XXXXXX")" || exit 1
-mkdir "$tmp_dir/bin" "$tmp_dir/perm" "$tmp_dir/workflows" || exit 1
+mkdir "$tmp_dir/bin" "$tmp_dir/perm" "$tmp_dir/repo" || exit 1
 export ISSUES_FILE="$tmp_dir/issues.json"
 export PERM_DIR="$tmp_dir/perm"
 export CALL_LOG="$tmp_dir/calls.log"
@@ -70,14 +72,25 @@ GH
 chmod +x "$tmp_dir/bin/gh"
 export PATH="$tmp_dir/bin:$PATH"
 
-# Apps have a deploy-<component>.yml; packages and tailwind-config don't.
+# At the release commit, apps have a deploy-<component>.yml and packages and
+# tailwind-config don't; a later commit adds one for tailwind-config.
+repo="$tmp_dir/repo"
+git -C "$repo" init -q
+mkdir -p "$repo/.github/workflows"
 for app in map analytics; do
-  : >"$tmp_dir/workflows/deploy-${app}.yml"
+  : >"$repo/.github/workflows/deploy-${app}.yml"
 done
+git -C "$repo" add -A
+git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm release
+release_sha="$(git -C "$repo" rev-parse HEAD)"
+: >"$repo/.github/workflows/deploy-tailwind-config.yml"
+git -C "$repo" add -A
+git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm later
+
 app_facts="$tmp_dir/app-facts.json"
-echo '{"components":["map","pkg-ui","analytics"]}' >"$app_facts"
+jq -n --arg sha "$release_sha" '{release_sha: $sha, components: ["map", "pkg-ui", "analytics"]}' >"$app_facts"
 no_app_facts="$tmp_dir/no-app-facts.json"
-echo '{"components":["analytics","pkg-db","tailwind-config"]}' >"$no_app_facts"
+jq -n --arg sha "$release_sha" '{release_sha: $sha, components: ["analytics", "pkg-db", "tailwind-config"]}' >"$no_app_facts"
 
 echo write >"$PERM_DIR/writer"
 echo read >"$PERM_DIR/reader"
@@ -92,7 +105,7 @@ set_issues() {
 }
 run_check() {
   rm -f "$LIST_COUNT"
-  bash "$check" --pr 42 --facts "$1" --workflows-dir "$tmp_dir/workflows" --delay 0 "${@:2}" >/dev/null 2>&1
+  (cd "$repo" && bash "$check" --pr 42 --facts "$1" --delay 0 "${@:2}" >/dev/null 2>&1)
   echo $?
 }
 
@@ -109,7 +122,7 @@ set_issues "$(issue 102 "$release_plan" "$bot" "Work through the Staging test pl
 assert_eq "an app release with no test plan fails" 1 "$(run_check "$app_facts")"
 
 set_issues "$(issue 102 "$release_plan" "$bot" "No app ships.")"
-assert_eq "a release of only packages, tooling and Analytics passes on the release plan alone" 0 "$(run_check "$no_app_facts")"
+assert_eq "a release of only packages, tooling and Analytics passes on the release plan alone, even with a deploy workflow added after the release" 0 "$(run_check "$no_app_facts")"
 
 set_issues "$(issue 101 "$test_plan" "$bot" "Report here.")"
 assert_eq "a test plan with no release plan fails" 1 "$(run_check "$app_facts")"
@@ -123,6 +136,16 @@ set_issues \
   "$(issue 101 "$test_plan" "$bot" "It blocks the go/no-go in #102.")" \
   "$(issue 102 "$release_plan" "$bot" "Work through the Staging test plan, #1010.")"
 assert_eq "a longer number that starts with the test plan's doesn't count as a link" 1 "$(run_check "$app_facts")"
+
+set_issues \
+  "$(issue 101 "$test_plan" "$bot" "Report here. See also #102.")" \
+  "$(issue 102 "$release_plan" "$bot" "Work through the Staging test plan, #101.")"
+assert_eq "a number outside the test plan's link phrase doesn't count as a link" 1 "$(run_check "$app_facts")"
+
+set_issues \
+  "$(issue 101 "$test_plan" "$bot" "It blocks the go/no-go in #102.")" \
+  "$(issue 102 "$release_plan" "$bot" "Work through the Staging test plan, #___. Related: #101.")"
+assert_eq "a number outside the release plan's link phrase doesn't count as a link" 1 "$(run_check "$app_facts")"
 
 set_issues \
   "$(issue 101 "$test_plan" "writer" "It blocks the go/no-go in #102.")" \
@@ -155,6 +178,9 @@ assert_eq "retries stop at --attempts" 3 "$(wc -l <"$LIST_COUNT" | tr -d ' ')"
 assert_eq "a missing --pr is a usage error" 2 "$(bash "$check" --facts "$app_facts" >/dev/null 2>&1; echo $?)"
 assert_eq "a non-numeric --pr is a usage error" 2 "$(bash "$check" --pr 4x --facts "$app_facts" >/dev/null 2>&1; echo $?)"
 assert_eq "a missing facts file is a usage error" 2 "$(bash "$check" --pr 42 --facts "$tmp_dir/none.json" >/dev/null 2>&1; echo $?)"
+unknown_sha_facts="$tmp_dir/unknown-sha-facts.json"
+jq -n '{release_sha: "0000000000000000000000000000000000000000", components: ["map"]}' >"$unknown_sha_facts"
+assert_eq "a release commit the checkout doesn't have is a usage error" 2 "$(run_check "$unknown_sha_facts")"
 assert_eq "zero --attempts is a usage error" 2 "$(run_check "$app_facts" --attempts 0)"
 
 writes="$(grep -cvE '^(issue list|api repos/Org/repo/collaborators/[^ ]+/permission --jq)' "$CALL_LOG")"

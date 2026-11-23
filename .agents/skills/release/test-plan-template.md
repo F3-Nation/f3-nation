@@ -16,7 +16,7 @@
 <!-- Keep only rows for apps in this release. -->
 
 **Need a test account?** Ask the Release lead by commenting here or in `#monorepo`; accounts are sent privately, never posted here.{{OPTIONAL: the roles a story needs}}
-**Found a problem?** Comment on this issue (or post in `#monorepo`) with the time, the app, and what you did.<!-- Added by an edit once the release plan is filed: " It blocks the go/no-go in #{{RELEASE_PLAN_ISSUE}}." -->
+**Found a problem?** Comment on this issue (or post in `#monorepo`) with the time, the app, and what you did.<!-- Added by an edit once the release plan is filed: " It blocks the go/no-go in #{{RELEASE_PLAN_ISSUE}}." scripts/check-filed-plans.sh finds the link by "go/no-go in #<n>"; change both together. -->
 <!-- OPTIONAL (when the release has a migration): -->
 
 **Start after the database migration:** begin only once the migration step in this release's release plan is checked off.
