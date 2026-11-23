@@ -35,8 +35,8 @@ jobs:
       # Plans only the latest merged release PR. A merge-queue batch can land
       # other PRs after it in the same push, so the pushed commit may come
       # after its merge commit; a commit before it means a newer release
-      # replaced the one the caller meant. Reads the pulls list, not search,
-      # whose index can lag a PR merged seconds ago.
+      # replaced the one the caller meant. Reads every release PR from the
+      # pulls list, not search, whose index can lag a PR merged seconds ago.
       - name: Find the release PR
         id: release-pr
         env:
@@ -49,8 +49,9 @@ jobs:
             echo "::error::merge_sha must be a full 40-character commit SHA."
             exit 1
           fi
-          latest="$(gh api "repos/${REPO}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=100" \
-            --jq '[.[] | select(.merged_at != null and .user.login == "f3-nation-release-please[bot]" and (.title | startswith("chore: release main")))]
+          latest="$(gh api --paginate --slurp \
+            "repos/${REPO}/pulls?state=closed&base=main&head=${REPO%%/*}:release-please--branches--main&per_page=100" \
+            | jq -r '[add[] | select(.merged_at != null and .user.login == "f3-nation-release-please[bot]" and (.title | startswith("chore: release main")))]
               | if length == 0 then empty else (sort_by(.merged_at) | last | "\(.number) \(.merge_commit_sha)") end')"
           if [[ -z "$latest" ]]; then
             echo "::error::No merged release PR found."
@@ -119,6 +120,9 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.RELEASE_PLAN_ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
+          # release-please.yml starts this run with the job token, so its actor
+          # is github-actions[bot]; the action refuses bot actors not listed.
+          allowed_bots: github-actions[bot]
           prompt: |
             Use the release skill. This is an unattended run for Staging.
             Release PR: #${{ steps.release-pr.outputs.number }}
@@ -131,14 +135,15 @@ jobs:
             --disallowedTools "Read(//proc/**),Bash(*/proc/*)"
 
       # The skill ends without error when it stops on purpose (a step that
-      # needs a human run, a failed command), so the run's result is the
-      # release plan existing, not the agent's exit status. Search can lag an
-      # issue filed seconds ago, so a miss is retried before the run fails.
-      - name: Check the release plan was filed
+      # needs a human run, a failed command), so the run's result is the plans
+      # existing, trusted and linked, not the agent's exit status. Search can
+      # lag an issue filed seconds ago, so a miss is retried before the run
+      # fails.
+      - name: Check the plans were filed
         if: always() && steps.release-pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.release-pr.outputs.number }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: |
@@ -148,19 +153,18 @@ jobs:
             jq -r '[.[] | select(.type == "result")] | last | .result // "(none)"' "$EXECUTION_FILE"
           fi
           for attempt in 1 2 3 4 5 6; do
-            titles="$(gh issue list --repo "$REPO" --state all --limit 100 \
-              --search "\"(#${PR_NUMBER})\" in:title" --json title --jq '.[].title')"
-            if grep -qE "^Release plan: .* to Staging \(#${PR_NUMBER}\)$" <<<"$titles"; then
-              printf 'Issues for #%s:\n%s\n' "$PR_NUMBER" "$titles"
+            status=0
+            bash .agents/skills/release/scripts/check-filed-plans.sh \
+              --pr "$PR_NUMBER" --facts "$RUNNER_TEMP/release-facts.json" || status=$?
+            if [[ "$status" -eq 0 ]]; then
               exit 0
             fi
-            if [[ "$attempt" -lt 6 ]]; then
-              sleep 15
+            if [[ "$status" -ne 1 || "$attempt" -eq 6 ]]; then
+              echo "::error::The Staging plans for #${PR_NUMBER} aren't complete."
+              exit 1
             fi
+            sleep 15
           done
-          printf 'Issues for #%s:\n%s\n' "$PR_NUMBER" "$titles"
-          echo "::error::No Staging release plan exists for #${PR_NUMBER}."
-          exit 1
 
       # A dispatched run notifies nobody when it fails; the release PR's
       # subscribers see this comment.

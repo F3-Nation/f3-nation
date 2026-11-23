@@ -16,6 +16,7 @@ github_scripts_status=0
 prt_status=0
 issue_fields_status=0
 release_facts_status=0
+filed_plans_status=0
 lint_fix_status=0
 local_ports_status=0
 review_links_status=0
@@ -40,6 +41,7 @@ node --test .github/scripts/ || github_scripts_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
 bash .agents/skills/issue-triage/scripts/issue-fields.test.sh || issue_fields_status=$?
 bash .agents/skills/release/scripts/release-facts.test.sh || release_facts_status=$?
+bash .agents/skills/release/scripts/check-filed-plans.test.sh || filed_plans_status=$?
 bash scripts/lint-fix.test.sh || lint_fix_status=$?
 bash scripts/local-ports.test.sh || local_ports_status=$?
 node scripts/check-review-links.mjs || review_links_status=$?
@@ -97,6 +99,10 @@ fi
 
 if [ "$release_facts_status" -ne 0 ]; then
   exit "$release_facts_status"
+fi
+
+if [ "$filed_plans_status" -ne 0 ]; then
+  exit "$filed_plans_status"
 fi
 
 if [ "$lint_fix_status" -ne 0 ]; then

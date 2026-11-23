@@ -42,6 +42,21 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 - [ ] **Confirm it's a go.** The Staging plan (#{{STAGING_PLAN_ISSUE}}) has a **Go** comment{{AND_ANY_ROLLOUT_GATES}}. Owner: Release lead
   - **Stop if:** it doesn't.
 
+<!-- OPTIONAL (Staging only, when an app with a Staging deploy is in the release): -->
+
+- [ ] **Confirm the Staging deploys finished.** The plans are filed when the release is cut, so a deploy may still be running. Nothing below, and no test in the test plan, starts until each line prints `true`. Owner: Release lead
+
+  ```bash
+  for TAG in {{EACH_STAGING_DEPLOY_TAG}}; do
+    RUN=$(gh run list -R F3-Nation/f3-nation --branch "$TAG" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+    OK=$(test -n "$RUN" && gh run view "$RUN" -R F3-Nation/f3-nation --json jobs \
+      --jq '[.jobs[] | select(.name | endswith("deploy-staging"))] | length > 0 and all(.conclusion == "success")')
+    test "$OK" = true && echo "staging $TAG: true" || echo "staging $TAG: false"
+  done
+  ```
+
+  - **If a line prints `false`:** open the tag's run on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). Still running: wait and run the check again. Failed: post in `#monorepo` and stop.
+
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 
 <!-- OPTIONAL (only if there is a migration): -->
