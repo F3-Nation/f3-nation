@@ -96,16 +96,18 @@ unchanged.
   through real email/OTP and edits a tracked entity through the UI THEN its
   history records that user and the normalized source from AC-19. A Development
   Mode sign-in records NULL actor while retaining the normalized source.
+  Generic `orpc` requests, including interactive Map/Admin clients, record NULL source.
 - **AC-19** — GIVEN an API request WHEN its `client` header exactly matches a
   recognized value in [the source normalizer](../../packages/api/src/audit-source.ts)
   THEN its writes record that normalized source independently of actor eligibility.
   Missing, unknown, generic `orpc` and wrong-case headers record NULL source.
   A recognized header does not authenticate a caller or authorize a write.
-- **AC-20** — GIVEN Map or Admin browser traffic WHEN its proxy forwards the
-  request THEN it overwrites the client header with its app-specific identifier.
-  Admin's direct clients also identify Admin. The API dispatches those identifiers
-  to RPC while keeping the Slackbot and Scalar identifiers on REST; static
-  generation retains its existing session-resolution behavior.
+- **AC-20** — GIVEN a request with `client: f3-map` or `client: f3-admin` WHEN the
+  API selects its transport THEN it dispatches to RPC while keeping the Slackbot
+  and Scalar identifiers on REST. Generic `orpc` remains RPC-compatible and records
+  NULL source; static generation retains its existing session-resolution behavior.
+  A client must not begin sending a new identifier until every API revision it
+  can reach, including rollback targets, accepts that identifier as RPC.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -148,8 +150,9 @@ query boundaries without adding a history UI or test endpoint.
   connection reuse, including NULL attribution after commit and rollback.
 - Observed read statements, lazy once-only execution, native callback results,
   and invalid settings rejected before any statement.
-- Exact client-header normalization, proxy and direct-client identifiers, and
-  RPC/REST dispatch for recognized apps.
+- Exact client-header normalization and RPC/REST dispatch for recognized apps.
+  Map/Admin proxies overwrite caller-supplied identifiers with generic `orpc`,
+  and Admin direct clients retain that identifier and their authentication behavior.
 - Real procedure middleware identity cases, an existing production-router
   mutation, overlapping contexts and detached work.
 - Approved Staging UI verification for the application acceptance criterion.

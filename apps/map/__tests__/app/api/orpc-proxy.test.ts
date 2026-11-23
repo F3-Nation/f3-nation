@@ -29,7 +29,7 @@ describe("oRPC proxy route", () => {
     vi.unstubAllEnvs();
   });
 
-  it("overwrites a caller's client header with f3-map", async () => {
+  it("overwrites a caller's client header with orpc", async () => {
     const { GET } = await import("~/app/api/orpc/[[...rest]]/route");
     await GET(
       new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
@@ -37,7 +37,7 @@ describe("oRPC proxy route", () => {
       }),
     );
     expect((fetchSpy.mock.calls[0]![1].headers as Headers).get("client")).toBe(
-      "f3-map",
+      "orpc",
     );
   });
 
