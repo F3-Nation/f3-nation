@@ -5,9 +5,9 @@ packages:
 
 catalog:
   "@auth/core": 0.41.3
-  "@better-auth/core": ^1.7.18
-  "@better-auth/drizzle-adapter": ^1.7.18
-  "@better-auth/oauth-provider": ^1.7.18
+  "@better-auth/core": ^1.7.27
+  "@better-auth/drizzle-adapter": ^1.7.27
+  "@better-auth/oauth-provider": ^1.7.27
   "@commitlint/cli": ^21.2.4
   "@commitlint/config-conventional": ^21.2.4
   "@commitlint/cz-commitlint": ^21.2.4
@@ -76,7 +76,7 @@ catalog:
   "@vitejs/plugin-react": ^6.3.0
   "@vitest/coverage-v8": ^5.1.0
   "@vitest/eslint-plugin": ^1.6.28
-  better-auth: ^1.7.18
+  better-auth: ^1.7.27
   class-variance-authority: ^0.7.1
   cmdk: ^1.1.1
   commitizen: ^4.3.2

@@ -767,6 +767,12 @@ describe("authorize requires the openid scope (#1439)", () => {
       ),
     );
     expectInvalidScopeRedirect(response);
+    // Set by the plugin's requireOpenId option, not by an unsupported scope.
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get(
+        "error_description",
+      ),
+    ).toBe("the openid scope is required");
   });
 
   it("applies the same rule to a POST authorize request", async () => {
