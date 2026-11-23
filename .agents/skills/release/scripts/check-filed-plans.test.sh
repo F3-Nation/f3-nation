@@ -46,8 +46,8 @@ export LIST_COUNT="$tmp_dir/list-count"
 
 # Fake gh: `issue list` prints $ISSUES_FILE, or $LATE_ISSUES_FILE from the
 # second call on when that file exists (an issue search only finds later);
-# `api .../collaborators/<login>/permission` prints $PERM_DIR/<login> or fails
-# like a 404 when there is no such file.
+# `api .../collaborators/<login>/permission` prints $PERM_DIR/<login>, fails
+# like a server error for the login "broken", and like a 404 otherwise.
 cat >"$tmp_dir/bin/gh" <<'GH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$CALL_LOG"
@@ -63,7 +63,14 @@ case "$1 $2" in
   api*)
     login="${2#repos/Org/repo/collaborators/}"
     login="${login%/permission}"
-    [ -f "$PERM_DIR/$login" ] || exit 1
+    if [ "$login" = broken ]; then
+      echo "gh: Server Error (HTTP 502)" >&2
+      exit 1
+    fi
+    if [ ! -f "$PERM_DIR/$login" ]; then
+      echo "gh: Not Found (HTTP 404)" >&2
+      exit 1
+    fi
     cat "$PERM_DIR/$login"
     ;;
   *) exit 1 ;;
@@ -156,7 +163,17 @@ set_issues "$(issue 102 "$release_plan" "reader" "No app ships.")"
 assert_eq "a release plan opened by a read-only account fails" 1 "$(run_check "$no_app_facts")"
 
 set_issues "$(issue 102 "$release_plan" "stranger" "No app ships.")"
-assert_eq "a release plan whose author's access can't be read fails" 1 "$(run_check "$no_app_facts")"
+assert_eq "a release plan from a non-collaborator (404) fails" 1 "$(run_check "$no_app_facts")"
+assert_eq "a non-collaborator is reported as untrusted" "check-filed-plans: no Staging release plan for #42 from a trusted author" \
+  "$(cd "$repo" && bash "$check" --pr 42 --facts "$no_app_facts" 2>/dev/null)"
+
+set_issues "$(issue 102 "$release_plan" "broken" "No app ships.")"
+assert_eq "a failed access lookup fails the check" 1 "$(run_check "$no_app_facts")"
+assert_eq "a failed access lookup is reported as a lookup error, not an untrusted author" \
+  "check-filed-plans: can't read the access of a release plan's author" \
+  "$(cd "$repo" && bash "$check" --pr 42 --facts "$no_app_facts" 2>/dev/null)"
+assert_eq "a failed access lookup prints gh's error" "1" \
+  "$(cd "$repo" && bash "$check" --pr 42 --facts "$no_app_facts" 2>&1 >/dev/null | grep -c "can't read broken's access: gh: Server Error (HTTP 502)")"
 
 set_issues "$(issue 102 "Release plan: Map tweaks to Production (#42)" "$bot" "No app ships.")"
 assert_eq "a Production release plan doesn't count" 1 "$(run_check "$no_app_facts")"

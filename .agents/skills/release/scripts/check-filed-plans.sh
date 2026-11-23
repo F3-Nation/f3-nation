@@ -85,7 +85,9 @@ for component in $components; do
 done
 
 # Prints the number of each issue whose title matches $1 and whose author the
-# skill trusts.
+# skill trusts. A 404 means the author isn't a collaborator, so not trusted;
+# any other failed lookup (an outage, a rate limit, a token error) is printed
+# to stderr and fails the call, so it isn't mistaken for an untrusted author.
 trusted_numbers() {
   local number login permission
   jq -r --arg re "$1" '.[] | select(.title | test($re)) | "\(.number) \(.author.login)"' <<<"$issues" \
@@ -94,8 +96,14 @@ trusted_numbers() {
         echo "$number"
         continue
       fi
-      permission="$(gh api "repos/${GH_REPO}/collaborators/${login}/permission" --jq '.permission' 2>/dev/null)" \
-        || permission=""
+      if ! permission="$(gh api "repos/${GH_REPO}/collaborators/${login}/permission" --jq '.permission' 2>&1)"; then
+        if grep -q 'HTTP 404' <<<"$permission"; then
+          permission=""
+        else
+          printf "check-filed-plans: can't read %s's access: %s\n" "$login" "$permission" >&2
+          exit 1
+        fi
+      fi
       case "$permission" in
         admin | maintain | write) echo "$number" ;;
       esac
@@ -119,7 +127,10 @@ check_once() {
     return 1
   }
 
-  release_plans="$(trusted_numbers "^Release plan: .* to Staging \\(#${pr}\\)\$")"
+  release_plans="$(trusted_numbers "^Release plan: .* to Staging \\(#${pr}\\)\$")" || {
+    echo "can't read the access of a release plan's author"
+    return 1
+  }
   if [ -z "$release_plans" ]; then
     echo "no Staging release plan for #${pr} from a trusted author"
     return 1
@@ -130,7 +141,10 @@ check_once() {
     return 0
   fi
 
-  test_plans="$(trusted_numbers "^Staging test plan: .* \\(#${pr}\\)\$")"
+  test_plans="$(trusted_numbers "^Staging test plan: .* \\(#${pr}\\)\$")" || {
+    echo "can't read the access of a test plan's author"
+    return 1
+  }
   if [ -z "$test_plans" ]; then
     echo "the release ships an app but has no Staging test plan from a trusted author"
     return 1
