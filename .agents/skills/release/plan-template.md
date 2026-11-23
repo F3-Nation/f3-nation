@@ -44,7 +44,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 <!-- OPTIONAL (Staging only, when an app with a Staging deploy is in the release): -->
 
-- [ ] **Confirm the Staging deploys finished.** The plans are filed when the release is cut, so a deploy may still be running. Nothing below, and no test in the test plan, starts until each tag's newest Staging deploy has succeeded. The check prints `true` when the tag's own run did. Owner: Release lead
+- [ ] **Confirm the Staging deploys finished.** The plans are filed when the release is cut, so a deploy may still be running. Nothing below, and no test in the test plan, starts until Staging runs each tag: the newest successful `deploy-staging` job for the app deployed it. The check prints `true` when the tag's own run's `deploy-staging` job succeeded. Owner: Release lead
 
   ```bash
   for TAG in {{EACH_STAGING_DEPLOY_TAG}}; do
@@ -55,8 +55,12 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   done
   ```
 
-  - **Then check for redeploys started by hand,** whatever the check printed: they run from `main` with the tag as an input, so the check can't see them. On each app's deploy workflow in the [Actions page](https://github.com/F3-Nation/f3-nation/actions), look for a run started from `main` after the tag's run. Count it only if it deployed this tag: its `ci-gate` job shows the tag as `REF` in the "Validate deploy ref is an existing release tag" step. Ignore runs for other tags. Still running: wait for it. Its `deploy-staging` job succeeded: that tag is done, even if its line printed `false`. Failed: post in `#monorepo` and stop.
-  - **If a line prints `false` and no redeploy succeeded:** open the tag's run. Still running: wait and run the check again. Failed: post in `#monorepo` and stop.
+  - **Then check for deploys started by hand,** whatever the check printed: they run from `main` with the tag as an input, so the check can't see them. On each app's deploy workflow in the [Actions page](https://github.com/F3-Nation/f3-nation/actions), look at runs started from `main` after the tag's run. Each shows the tag it deploys as `REF` in its `ci-gate` job's "Validate deploy ref is an existing release tag" step. Staging runs the tag of the newest successful `deploy-staging` job, so:
+    - **One for this tag is running:** wait for its `deploy-staging` job, not the whole run (its `deploy-prod` job waits for a Production approval).
+    - **The newest successful one deployed this tag:** that tag is done, even if its line printed `false`.
+    - **The newest successful one deployed another tag:** Staging runs that tag now. Run the app's deploy workflow from `main` with this release's tag, and wait for its `deploy-staging` job to succeed.
+    - **One for this tag failed in `deploy-staging`:** post in `#monorepo` and stop.
+  - **If a line prints `false` and no deploy started by hand covers it:** open the tag's run. Its `deploy-staging` job still running: wait and run the check again. Failed: post in `#monorepo` and stop.
 
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 
