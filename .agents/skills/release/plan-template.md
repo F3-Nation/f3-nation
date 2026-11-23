@@ -48,14 +48,14 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
   ```bash
   for TAG in {{EACH_STAGING_DEPLOY_TAG}}; do
-    RUN=$(gh run list -R F3-Nation/f3-nation --branch "$TAG" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+    RUN=$(gh run list -R F3-Nation/f3-nation --workflow "deploy-${TAG%@*}.yml" --branch "$TAG" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
     OK=$(test -n "$RUN" && gh run view "$RUN" -R F3-Nation/f3-nation --json jobs \
       --jq '[.jobs[] | select(.name | endswith("deploy-staging"))] | length > 0 and all(.conclusion == "success")')
     test "$OK" = true && echo "staging $TAG: true" || echo "staging $TAG: false"
   done
   ```
 
-  - **If a line prints `false`:** open the tag's run on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). Still running: wait and run the check again. Failed: post in `#monorepo` and stop.
+  - **If a line prints `false`:** open the app's deploy workflow on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). Still running: wait and run the check again. Failed: post in `#monorepo` and stop. A redeploy started by hand runs from `main` with the tag as an input, so the check can't see it: if one ran for this tag, confirm its `deploy-staging` job succeeded.
 
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 
