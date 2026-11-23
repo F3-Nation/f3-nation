@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+import { env } from "~/env";
 import { getSiteUrl } from "~/lib/site";
 
 // Read the site URL per request: the image is built without F3_MAP_BASE_URL
@@ -8,6 +9,11 @@ import { getSiteUrl } from "~/lib/site";
 export const dynamic = "force-dynamic";
 
 export default function robots(): MetadataRoute.Robots {
+  // Only Production is meant to be found through search.
+  if (env.F3_CHANNEL !== "prod") {
+    return { rules: { userAgent: "*", disallow: "/" } };
+  }
+
   return {
     rules: { userAgent: "*", allow: "/" },
     sitemap: `${getSiteUrl()}/sitemap.xml`,

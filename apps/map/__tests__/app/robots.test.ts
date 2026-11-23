@@ -2,9 +2,15 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockEnv = vi.hoisted((): { F3_MAP_BASE_URL: string | undefined } => ({
-  F3_MAP_BASE_URL: "",
-}));
+const mockEnv = vi.hoisted(
+  (): {
+    F3_MAP_BASE_URL: string | undefined;
+    F3_CHANNEL: string | undefined;
+  } => ({
+    F3_MAP_BASE_URL: "",
+    F3_CHANNEL: "prod",
+  }),
+);
 
 vi.mock("~/env", () => ({ env: mockEnv }));
 
@@ -13,6 +19,7 @@ import robots, { dynamic } from "~/app/robots";
 describe("robots.txt", () => {
   beforeEach(() => {
     mockEnv.F3_MAP_BASE_URL = "https://staging.map.f3nation.com";
+    mockEnv.F3_CHANNEL = "prod";
   });
 
   it("allows crawling and points at the sitemap on the configured URL", () => {
@@ -21,6 +28,15 @@ describe("robots.txt", () => {
       sitemap: "https://staging.map.f3nation.com/sitemap.xml",
     });
   });
+
+  it.each(["local", "ci", "branch", "dev", "staging", undefined])(
+    "blocks crawlers everywhere except Production (channel: %s)",
+    (channel) => {
+      mockEnv.F3_CHANNEL = channel;
+
+      expect(robots()).toEqual({ rules: { userAgent: "*", disallow: "/" } });
+    },
+  );
 
   it("drops a trailing slash so the sitemap URL has no double slash", () => {
     mockEnv.F3_MAP_BASE_URL = "https://map.f3nation.com///";
