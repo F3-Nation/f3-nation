@@ -61,8 +61,8 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
       SERVES="lookup failed"
     fi
     IN_FLIGHT=false
-    for STATUS in queued in_progress waiting; do
-      RUNS=$(gh run list -R F3-Nation/f3-nation --workflow "deploy-$APP.yml" --status "$STATUS" --json databaseId --jq '.[].databaseId') \
+    for STATUS in requested queued pending waiting in_progress; do
+      RUNS=$(gh run list -R F3-Nation/f3-nation --workflow "deploy-$APP.yml" --status "$STATUS" --limit 1000 --json databaseId --jq '.[].databaseId') \
         || { IN_FLIGHT="lookup failed"; break; }
       for RUN in $RUNS; do
         STAGING_PENDING=$(gh run view "$RUN" -R F3-Nation/f3-nation --json jobs \
