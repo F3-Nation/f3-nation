@@ -263,16 +263,18 @@ review is full:
 
 - the PR isn't gated (Step 1);
 - at most 50 changed lines in at most 5 files, counted as Step 3 records them;
-- no changed file is agent instructions or an item on Step 3's safety checklist;
+- no changed file is agent instructions, and the diff touches no item on Step 3's safety
+  checklist;
 - the diff touches no sign-in, session, permission, token or API-key code; no API procedure,
   route handler, Slack bot handler, proxy, server action or scheduled job; no database schema,
   migration, query or SQL; no log line or error message that carries user or request data; no
   code that puts outside input into HTML, a URL, a shell command or a file path; no browser
   storage; and no environment variable or `env.ts`;
 - the PR isn't in a private security-advisory repository (the cross-repo case in Step 1);
-- a search of the worktree (`git grep`) for each function, component, type or export the diff
-  changes finds no caller or consumer outside the changed files; a symbol you can't search for
-  counts as doubt.
+- a search of the worktree (`git grep`) for each function, component, type, export, CSS custom
+  property or class the diff changes (for a theme token, also the utility class it generates)
+  finds no caller or consumer outside the changed files; a symbol you can't search for counts as
+  doubt.
 
 **Pick the seats** from the depth and the diff, using the first row that matches:
 
