@@ -131,6 +131,16 @@ describe("database audit attribution", () => {
     await runWithAuditContext({ userId: null, source: "job" }, async () =>
       production.db.insert(table).values({ type: name("source-only") }),
     );
+    await runWithAuditContext({ userId: null, source: "admin" }, () =>
+      production.db.transaction(async (tx) => {
+        await tx
+          .insert(table)
+          .values({ type: name("source-only-transaction") });
+      }),
+    );
+    expect(await history("source-only-transaction")).toEqual([
+      { op: "I", changed_by: null, changed_via: "admin" },
+    ]);
     await runWithAuditContext(actor, () =>
       production.db.transaction(async (tx) => {
         await runWithAuditContext({ userId: 99, source: "other" }, async () =>
@@ -170,61 +180,74 @@ describe("database audit attribution", () => {
     ]);
   });
 
-  it("rolls back both source and history and clears pooled attribution after commit and rollback", async () => {
-    const single = postgres(env.TEST_DATABASE_URL!, { max: 1, prepare: false });
-    withAuditContext(single);
-    const singleDb = drizzle(single);
-    try {
-      const [first] = await single<
-        { pid: number }[]
-      >`select pg_backend_pid() as pid`;
-      await runWithAuditContext({ userId: 54, source: "committed" }, async () =>
-        singleDb.insert(table).values({ type: name("committed") }),
-      );
-      await singleDb.insert(table).values({ type: name("after-commit") });
-      await expect(
-        runWithAuditContext({ userId: 55, source: "rolled-back" }, () =>
-          singleDb.transaction(async (tx) => {
-            await tx.insert(table).values({ type: name("rolled-back") });
-            tx.rollback();
-          }),
-        ),
-      ).rejects.toThrow("Rollback");
-      await singleDb.insert(table).values({ type: name("after-rollback") });
-      expect(
+  it.each([54, null])(
+    "clears pooled attribution after source-only or personal commit and rollback (actor %s)",
+    async (userId) => {
+      const single = postgres(env.TEST_DATABASE_URL!, {
+        max: 1,
+        prepare: false,
+      });
+      withAuditContext(single);
+      const singleDb = drizzle(single);
+      try {
+        const [first] = await single<
+          { pid: number }[]
+        >`select pg_backend_pid() as pid`;
+        await runWithAuditContext({ userId, source: "map" }, async () =>
+          singleDb.insert(table).values({ type: name(`committed-${userId}`) }),
+        );
         await singleDb
-          .select({ type: table.type })
-          .from(table)
-          .where(eq(table.type, name("rolled-back"))),
-      ).toEqual([]);
-      expect(await history("rolled-back")).toEqual([]);
-      expect(await history("committed")).toEqual([
-        { op: "I", changed_by: 54, changed_via: "committed" },
-      ]);
-      expect(await history("after-commit")).toEqual([
-        { op: "I", changed_by: null, changed_via: null },
-      ]);
-      expect(await history("after-rollback")).toEqual([
-        { op: "I", changed_by: null, changed_via: null },
-      ]);
-      const [last] = await single<
-        { pid: number }[]
-      >`select pg_backend_pid() as pid`;
-      expect(first?.pid).toEqual(expect.any(Number));
-      expect(last?.pid).toBe(first?.pid);
-    } finally {
-      await single.end();
-    }
-  });
+          .insert(table)
+          .values({ type: name(`after-commit-${userId}`) });
+        await expect(
+          runWithAuditContext({ userId, source: "admin" }, () =>
+            singleDb.transaction(async (tx) => {
+              await tx
+                .insert(table)
+                .values({ type: name(`rolled-back-${userId}`) });
+              tx.rollback();
+            }),
+          ),
+        ).rejects.toThrow("Rollback");
+        await singleDb
+          .insert(table)
+          .values({ type: name(`after-rollback-${userId}`) });
+        expect(
+          await singleDb
+            .select({ type: table.type })
+            .from(table)
+            .where(eq(table.type, name(`rolled-back-${userId}`))),
+        ).toEqual([]);
+        expect(await history(`rolled-back-${userId}`)).toEqual([]);
+        expect(await history(`committed-${userId}`)).toEqual([
+          { op: "I", changed_by: userId, changed_via: "map" },
+        ]);
+        expect(await history(`after-commit-${userId}`)).toEqual([
+          { op: "I", changed_by: null, changed_via: null },
+        ]);
+        expect(await history(`after-rollback-${userId}`)).toEqual([
+          { op: "I", changed_by: null, changed_via: null },
+        ]);
+        const [last] = await single<
+          { pid: number }[]
+        >`select pg_backend_pid() as pid`;
+        expect(first?.pid).toEqual(expect.any(Number));
+        expect(last?.pid).toBe(first?.pid);
+      } finally {
+        await single.end();
+      }
+    },
+  );
 
   it("isolates 200 writes by 50 users over two pooled connections with complete NULL-safe verification", async () => {
     await Promise.all(
       Array.from({ length: 200 }, (_, index) => {
-        const userId = (index % 50) + 1;
-        return runWithAuditContext({ userId, source: `u${userId}` }, async () =>
+        const userId = index % 3 === 0 ? null : (index % 50) + 1;
+        const source = ["map", "admin", "me", null][index % 4]!;
+        return runWithAuditContext({ userId, source }, async () =>
           db.insert(table).values({
             type: name(`concurrent-${index}`),
-            description: String(userId),
+            description: JSON.stringify({ userId, source }),
           }),
         );
       }),
@@ -235,8 +258,8 @@ describe("database audit attribution", () => {
       select count(*)::int as count,
         count(distinct new_row->>'type')::int as distinct_writes,
         count(*) filter (where
-          changed_by is distinct from (new_row->>'description')::int
-          or changed_via is distinct from 'u' || (new_row->>'description'))::int as mismatches
+          changed_by is distinct from ((new_row->>'description')::jsonb->>'userId')::int
+          or changed_via is distinct from ((new_row->>'description')::jsonb->>'source'))::int as mismatches
       from public_history.attendance_types where new_row->>'type' like ${name("concurrent-%")}`;
     expect(result).toEqual({ count: 200, distinct_writes: 200, mismatches: 0 });
     const [source] = await client<
