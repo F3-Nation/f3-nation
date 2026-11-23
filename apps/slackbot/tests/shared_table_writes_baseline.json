@@ -19,5 +19,6 @@
   "scripts/q_lineups.py": 3,
   "scripts/update_slack_users.py": 1,
   "utilities/database/special_queries.py": 2,
-  "utilities/helper_functions.py": 4
+  "utilities/helper_functions.py": 4,
+  "utilities/slack_tokens/refresh.py": 1
 }

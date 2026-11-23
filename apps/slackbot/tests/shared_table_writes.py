@@ -248,7 +248,7 @@ class _Resolver:
 
     def statement(self, node):
         """Tables a statement passed to session.execute writes to."""
-        if _is_select_sql(node):
+        if _is_read_only_sql(node):
             return set()
         if isinstance(node, ast.Name):
             return self._variable(node.id, self.statement)
@@ -262,7 +262,7 @@ class _Resolver:
             if name in READ_STATEMENTS:
                 return set()
             if name == "text":
-                return set() if node.args and _is_select_sql(node.args[0]) else None
+                return set() if node.args and _is_read_only_sql(node.args[0]) else None
             return None
         # insert(X).values(...).on_conflict_do_nothing() and select(X).where(...) keep their kind.
         if isinstance(func, ast.Attribute) and isinstance(func.value, (ast.Call, ast.Name)):
@@ -289,13 +289,17 @@ class _Resolver:
         return None
 
 
-def _is_select_sql(node):
-    """Whether a string literal is a single SELECT statement."""
+# Raw SQL that reads or changes session settings but never writes rows.
+READ_ONLY_SQL = frozenset({"select", "set", "show"})
+
+
+def _is_read_only_sql(node):
+    """Whether a string literal is a single SELECT, SET or SHOW statement."""
     if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
         return False
     sql = node.value.strip().rstrip(";")
     words = sql.split()
-    return bool(words) and words[0].lower() == "select" and ";" not in sql
+    return bool(words) and words[0].lower() in READ_ONLY_SQL and ";" not in sql
 
 
 def _query_targets(node, assignments, visiting=frozenset()):

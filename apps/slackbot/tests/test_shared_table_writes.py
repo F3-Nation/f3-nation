@@ -180,13 +180,16 @@ def test_reads_are_not_counted_but_an_untraceable_statement_is(tmp_path):
             session.execute(union_all(select(User.id), select(Org.id)))
             session.execute(select(func.pg_advisory_xact_lock(1)))
             session.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": 1})
+            session.execute(text("SET LOCAL lock_timeout = '5s'"))
+            session.execute(text("show statement_timeout"))
+            session.execute(text("SET LOCAL lock_timeout = '5s'; DELETE FROM users"))
             session.scalars(_joinedloads(Org, query)).all()
             session.execute(text("DELETE FROM users"))
             session.execute(statement)
         """,
     )
 
-    assert _tables(result) == [UNRESOLVED, UNRESOLVED]
+    assert _tables(result) == [UNRESOLVED, UNRESOLVED, UNRESOLVED]
 
 
 def test_every_query_assignment_and_alias_is_followed(tmp_path):
