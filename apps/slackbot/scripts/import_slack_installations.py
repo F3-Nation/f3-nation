@@ -1,10 +1,10 @@
 """Copy Bolt `FileInstallationStore` installations into `slack_spaces`.
 
-Run once per environment, after the migration and before deploying the release
-that reads bot credentials from `slack_spaces`. The installations directory is
-a local copy of the bucket the previous release stored them in. Don't re-run it
-after that deploy: the release saves new installations only to `slack_spaces`,
-so from then on the files are older than the rows and would overwrite them.
+The installations directory is a local copy of the bucket Bolt's
+`FileInstallationStore` wrote to. A file replaces its non-rotating row's token,
+so import only from a copy at least as new as the rows: a workspace that
+reinstalls through `SlackSpaceInstallationStore` after the copy was taken has
+its newer token only in `slack_spaces`. Rotating rows are always skipped.
 
     python scripts/import_slack_installations.py --installations-dir <dir> [--dry-run]
 
@@ -12,8 +12,8 @@ Each workspace prints one line, `<team_id> <status>`:
 
 - `imported`: the file's bot id, bot user id, scopes and token were saved.
 - `imported_new`: a file with no `slack_spaces` row; the row was created from
-  it, named after the file's team name. Without it the workspace would stop
-  working once the release reads credentials only from `slack_spaces`.
+  it, named after the file's team name. The Slackbot reads credentials only from
+  `slack_spaces`, so without a row the workspace has no token.
 - `backfilled`: no file, so the row's own token was checked with `auth.test`
   to fill the bot id, bot user id and scopes.
 - `skipped_rotating`: the row already holds a rotating token. Its file holds an
@@ -80,6 +80,8 @@ def _import_new_team(team_id: str, store: FileInstallationStore, dry_run: bool) 
     file_bot = store.find_bot(enterprise_id=None, team_id=team_id)
     if file_bot is None:
         return "no_token"
+    if not file_bot.bot_token:
+        return "error:empty_token"
     if file_bot.team_id != team_id:
         return "team_mismatch"
     if dry_run:
@@ -108,6 +110,9 @@ def _import_team(team_id: str, token: Optional[str], store: FileInstallationStor
 
     file_bot = store.find_bot(enterprise_id=None, team_id=team_id)
     if file_bot is not None:
+        # Saving a file without a token would blank the workspace's working one.
+        if not file_bot.bot_token:
+            return "error:empty_token"
         if file_bot.team_id != team_id:
             return "team_mismatch"
         if dry_run:
@@ -140,7 +145,7 @@ def main(argv: list[str]) -> int:
     if not os.path.isdir(args.installations_dir):
         parser.error(f"--installations-dir is not a directory: {args.installations_dir}")
 
-    # The previous release wrote the files without a client_id; adding one changes the directory layout.
+    # The files were written by a store with no client_id; passing one would look under a `<client_id>/` directory.
     store = FileInstallationStore(base_dir=args.installations_dir)
     stored = _stored_tokens()
     known = {team_id for team_id, _token in stored}

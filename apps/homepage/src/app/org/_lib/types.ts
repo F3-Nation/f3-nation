@@ -91,3 +91,17 @@ export interface AoSearchResult {
   longitude: number;
   eventCount: number;
 }
+
+// One item from GET /v1/org-chart/leadership: a person holding a position or
+// role at a non-AO org.
+export interface LeaderEntry {
+  orgId: number;
+  kind: "position" | "role";
+  id: number;
+  title: string;
+  userId: number;
+  f3Name: string | null;
+  avatarUrl: string | null;
+  /** The person's home region name, shown after their name. */
+  homeRegionName: string | null;
+}

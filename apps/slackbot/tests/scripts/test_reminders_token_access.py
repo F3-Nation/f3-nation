@@ -26,6 +26,7 @@ def _item(team_id: str, user_id: str, **extra):
     )
 
 
+@pytest.mark.parametrize("first_lookup", ["uninstalled", "raises"])
 @pytest.mark.parametrize(
     "module, list_class, send",
     [
@@ -33,7 +34,7 @@ def _item(team_id: str, user_id: str, **extra):
         (backblast_reminders, "BackblastList", backblast_reminders.send_backblast_reminders),
     ],
 )
-def test_reminders_skip_uninstalled_workspace(monkeypatch, module, list_class, send):
+def test_reminders_skip_a_workspace_without_a_client(monkeypatch, module, list_class, send, first_lookup):
     items = [_item("T1", "U1"), _item("T2", "U2")]
     if module is preblast_reminders:
         for item in items:
@@ -46,8 +47,15 @@ def test_reminders_skip_uninstalled_workspace(monkeypatch, module, list_class, s
 
     monkeypatch.setattr(getattr(module, list_class), "pull_data", pull_data)
     installed_client = MagicMock()
-    clients = {"T1": None, "T2": installed_client}
-    monkeypatch.setattr(module, "slack_client_for_team", lambda team_id, **kwargs: clients[team_id])
+
+    def client_for_team(team_id, **kwargs):
+        if team_id == "T2":
+            return installed_client
+        if first_lookup == "raises":
+            raise RuntimeError("lookup failed")
+        return None
+
+    monkeypatch.setattr(module, "slack_client_for_team", client_for_team)
     if module is preblast_reminders:
         monkeypatch.setattr(module, "datetime", SimpleNamespace(now=lambda tz: datetime(2026, 9, 1, 10)))
 

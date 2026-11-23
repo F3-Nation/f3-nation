@@ -1,4 +1,5 @@
 import { MemoryRatelimiter } from "@orpc/experimental-ratelimit/memory";
+import { oo } from "@orpc/openapi";
 import { ORPCError, os } from "@orpc/server";
 import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
@@ -20,13 +21,16 @@ import {
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
+import type { Permission } from "@acme/shared/app/permissions";
+import { roleHasPermission } from "@acme/shared/app/permissions";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { getTrustedClientIp } from "@acme/shared/common/client-ip";
 import { isDevelopment } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { checkHasPermissionsOnOrg } from "./check-has-role-on-org";
 import { jwksFetchFailure } from "./jwks-failure";
-import { logError, logWarn } from "./logger";
+import { logError, logInfo, logWarn } from "./logger";
 import { getProxiedClientIp } from "./proxied-client-ip";
 import { trustedClientIds } from "./trusted-client-ids";
 import { trustedIssuers } from "./trusted-issuers";
@@ -48,6 +52,13 @@ export interface Context extends BaseContext {
  * its anonymous branches run locally exactly as in production.
  */
 const DEV_MOCK_SESSION_ID = 0;
+
+/**
+ * `session.id` of every API-key session. A key is not a person, so its session
+ * names no user: this matches no `users` row, and each check that compares the
+ * caller with a user id treats a key as nobody in particular.
+ */
+export const API_KEY_SESSION_USER_ID = -1;
 
 const getDevMockSession = (): Session => ({
   id: DEV_MOCK_SESSION_ID,
@@ -269,6 +280,78 @@ export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
 });
 
 /**
+ * Declares the permissions an endpoint needs, in one place:
+ *
+ * - The handler gets `context.assertPermissionsOnOrg(orgId)`, which throws
+ *   `UNAUTHORIZED` unless the caller has every one of them on that org (or an
+ *   ancestor). The handler must call it with the org it acts on.
+ * - Before the handler runs, the caller must have each permission on at
+ *   least one org. Without this, a handler that forgot the org check would be
+ *   open to every signed-in caller; with it, only to callers who hold the
+ *   permissions somewhere. It needs no query.
+ * - The endpoint's OpenAPI entry lists them, so the API docs do too: a line
+ *   appended to the description, and an `x-required-permissions` extension
+ *   holding the permission names.
+ */
+export const permissionProcedure = (
+  ...permissions: [Permission, ...Permission[]]
+) => {
+  // An empty list would make the gate below pass every caller.
+  if ((permissions as readonly Permission[]).length === 0) {
+    throw new Error("permissionProcedure needs at least one permission");
+  }
+  return withSessionAndDb.use(
+    oo.spec(
+      os.$context<Context>().middleware(({ context, next }) => {
+        const { session, db } = context;
+        const needed =
+          permissions.length > 1 ? "these permissions" : "this permission";
+        const displayNames = permissions
+          .map(({ displayName }) => displayName)
+          .join(", ");
+        const hasEachSomewhere = permissions.every((permission) =>
+          session?.roles?.some((r) =>
+            roleHasPermission(r.roleName, permission),
+          ),
+        );
+        if (!hasEachSomewhere) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: `This action needs ${needed}: ${displayNames}`,
+          });
+        }
+        const assertPermissionsOnOrg = async (orgId: number) => {
+          if (
+            !(await checkHasPermissionsOnOrg({
+              session,
+              db,
+              orgId,
+              permissions,
+            }))
+          ) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: `This action needs ${needed} on the org: ${displayNames}`,
+            });
+          }
+        };
+        return next({ context: { assertPermissionsOnOrg } });
+      }),
+      (operation) => ({
+        ...operation,
+        description: [
+          operation.description,
+          `**Required ${permissions.length > 1 ? "permissions" : "permission"}:** ${permissions
+            .map(({ displayName, name }) => `${displayName} (\`${name}\`)`)
+            .join(", ")} on the org the request acts on.`,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        "x-required-permissions": permissions.map(({ name }) => name),
+      }),
+    ),
+  );
+};
+
+/**
  * Admin endpoints that must not be driven by an API key, e.g. minting or
  * revoking keys: a key could otherwise create long-lived keys that outlive it.
  */
@@ -374,9 +457,7 @@ const getSession = async ({ context }: { context: BaseContext }) => {
       apiKeyId: schema.apiKeys.id,
       ownerId: schema.apiKeys.ownerId,
       apiKey: schema.apiKeys.key,
-      userId: schema.users.id,
-      email: schema.users.email,
-      f3Name: schema.users.f3Name,
+      name: schema.apiKeys.name,
       revokedAt: schema.apiKeys.revokedAt,
       expiresAt: schema.apiKeys.expiresAt,
     })
@@ -402,7 +483,7 @@ const getSession = async ({ context }: { context: BaseContext }) => {
   }
 
   // Get orgs and roles associated with this API key via join table
-  const orgRoles = await db
+  const grants = await db
     .select({
       orgId: schema.orgs.id,
       orgName: schema.orgs.name,
@@ -416,23 +497,38 @@ const getSession = async ({ context }: { context: BaseContext }) => {
     )
     .where(eq(schema.rolesXApiKeysXOrg.apiKeyId, apiKeyRecord.apiKeyId));
 
-  const roles =
-    orgRoles.length > 0
-      ? orgRoles.map((or) => ({
-          orgId: or.orgId,
-          orgName: or.orgName,
-          roleName: or.roleName,
-        }))
-      : [];
+  // Only editor and admin grants authorize anything, matching what `create`
+  // accepts; other role names on a key are ignored.
+  const orgRoles = grants.filter(
+    (grant) => grant.roleName === "editor" || grant.roleName === "admin",
+  );
 
+  // A key with no role grants authorizes nothing, so it resolves to no
+  // session and its caller is treated as anonymous. A session here would pass
+  // `protectedProcedure` and see the fields reads hide from anonymous callers.
+  if (orgRoles.length === 0) {
+    logInfo("api.auth.api_key_without_roles", {
+      apiKeyId: apiKeyRecord.apiKeyId,
+      appClient,
+    });
+    return null;
+  }
+
+  const roles = orgRoles.map((or) => ({
+    orgId: or.orgId,
+    orgName: or.orgName,
+    roleName: or.roleName,
+  }));
+
+  // The key acts only through its own role grants, never as its owner:
+  // `ownerId` records whose key it is, but the session carries no user id or
+  // email, so nothing that reads the caller's identity gets the owner.
   session = {
-    id: apiKeyRecord.userId,
-    email: apiKeyRecord.email,
+    id: API_KEY_SESSION_USER_ID,
+    email: undefined,
     roles,
     user: {
-      id: apiKeyRecord.ownerId?.toString() ?? undefined,
-      email: apiKeyRecord.email,
-      name: apiKeyRecord.f3Name ?? undefined,
+      name: apiKeyRecord.name,
       roles,
     },
     apiKey: {

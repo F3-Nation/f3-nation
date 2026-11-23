@@ -22,6 +22,18 @@ class Materialization:
     product: str
     partition_by: tuple[str, ...] = ()
     sort_by: tuple[str, ...] = ()
+    # Rows per Parquet row group; None keeps DuckDB's default (122,880 rows).
+    # Readers decompress a whole column chunk to fetch one row, so datasets
+    # served by point lookups under a tight reader memory limit set this low.
+    row_group_size: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.row_group_size is not None and (
+            isinstance(self.row_group_size, bool)
+            or not isinstance(self.row_group_size, int)
+            or self.row_group_size <= 0
+        ):
+            raise ValueError("row_group_size must be a positive integer")
 
     @property
     def query_reference(self) -> str:
@@ -86,6 +98,11 @@ _SCHEMA_VERSIONS = MappingProxyType(
     }
 )
 _SORT_BY = MappingProxyType({"pv_events": ("region_org_id", "event_date"), "pv_event_details": ("event_id",)})
+# pv_event_details holds large backblast text and is read one event_id at a
+# time by Pax Vault with a 384 MB DuckDB memory limit. At the default row-group
+# size a single lookup decompresses hundreds of MB; 8,192-row groups keep each
+# lookup to a few MB while the file size stays about the same.
+_ROW_GROUP_SIZE = MappingProxyType({"pv_event_details": 8192})
 
 
 def _definition(name: str, product: str) -> Materialization:
@@ -99,6 +116,7 @@ def _definition(name: str, product: str) -> Materialization:
         product=product,
         partition_by=(),
         sort_by=_SORT_BY.get(name, ()),
+        row_group_size=_ROW_GROUP_SIZE.get(name),
     )
 
 

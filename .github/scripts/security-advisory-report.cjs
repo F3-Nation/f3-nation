@@ -12,7 +12,7 @@
  * from every integration, workflow tokens included. So this runs on a
  * codeowner's machine with their own gh login, through the
  * security-advisory-report agent skill, which posts the message to the
- * private #codeowners Slack channel as that person.
+ * private #security-managers Slack channel as that person.
  *
  *   node .github/scripts/security-advisory-report.cjs --check   # access checks only
  *   node .github/scripts/security-advisory-report.cjs           # checks, then the message
@@ -290,15 +290,12 @@ function advisoryLists(advisories, board, factsByUrl, slackIds, now) {
 /**
  * The environment for pr-triage: the caller's, minus every PR_TRIAGE_*
  * override (a test fixture, page limit or codeowner list would make the live
- * report wrong). Review bots can't reach a temporary private fork, so the
- * triage doesn't wait on them.
+ * report wrong).
  */
-const triageEnv = (env) => ({
-  ...Object.fromEntries(
+const triageEnv = (env) =>
+  Object.fromEntries(
     Object.entries(env).filter(([key]) => !key.startsWith("PR_TRIAGE_")),
-  ),
-  PR_TRIAGE_BOT_TIMEOUT_SECS: "0",
-});
+  );
 
 /** pr-triage's board for one fork. */
 function triageFork(fork) {
@@ -367,6 +364,7 @@ async function buildAdvisoryReport({
       repo: fork.split("/")[1],
       board: { ...board, prs },
       base: REPO,
+      approvalsFor: `${ghsa}'s fix PRs`,
     };
   });
 

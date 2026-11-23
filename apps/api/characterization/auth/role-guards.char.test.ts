@@ -99,9 +99,16 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
       );
     });
 
-    it("authorizes a user-role key (any authenticated principal passes)", async () => {
-      await expectAuthorized(
+    it("rejects a role-less key as if no credential were sent", async () => {
+      await expectUnauthorized(
         await target.invoke(guardReq(PATH, { ip: 2, bearer: userKey.key })),
+        "Unauthorized",
+      );
+    });
+
+    it("authorizes a key with an editor role", async () => {
+      await expectAuthorized(
+        await target.invoke(guardReq(PATH, { ip: 30, bearer: editorKey.key })),
       );
     });
   });

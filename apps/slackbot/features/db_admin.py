@@ -239,14 +239,20 @@ def handle_send_admin_announcement(
             org_x_slack_space = record[1]
             admin_users = get_admin_users(org_x_slack_space.org_id, slack_space.team_id)
             slack_admin_ids = {safe_get(u, 1, "slack_id") for u in admin_users if safe_get(u, 1, "slack_id")}
+            if not slack_admin_ids:
+                continue
+            try:
+                slack_client = slack_client_for_team(slack_space.team_id)
+            except Exception as e:
+                logger.error(f"Slack client lookup failed for {slack_space.workspace_name}: {type(e).__name__}")
+                continue
+            if slack_client is None:
+                logger.error(
+                    f"No Slack installation for {slack_space.workspace_name}; admin announcement not sent there"
+                )
+                continue
             for slack_user_id in slack_admin_ids:
                 try:
-                    slack_client = slack_client_for_team(slack_space.team_id)
-                    if slack_client is None:
-                        logger.error(
-                            f"No Slack installation for {slack_space.workspace_name}; admin announcement not sent there"
-                        )
-                        break
                     slack_client.chat_postMessage(
                         channel=slack_user_id,
                         blocks=[announcement_text],

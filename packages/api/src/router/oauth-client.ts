@@ -44,9 +44,7 @@ import { nationAdminProcedure } from "../shared";
 /**
  * A client registered with a scope auth3 doesn't serve can't use it: the
  * plugin only issues scopes it supports, and auth3 rejects an authorize
- * request without `openid`. The allowlist also keeps an admin from
- * registering the reserved `openid_required` marker apps/auth uses
- * internally to force invalid_scope.
+ * request without `openid`.
  */
 const clientScopesSchema = z
   .array(z.enum(SUPPORTED_OAUTH_SCOPES))

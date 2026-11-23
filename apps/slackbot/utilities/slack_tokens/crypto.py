@@ -58,7 +58,7 @@ def decrypt_refresh_token(ciphertext: str) -> str:
 def check_encryption_key() -> bool:
     """Log `slack.token.encryption_key_invalid` at ERROR if the key list is unset or unparseable.
 
-    Called where the app and the hourly job start, so a missing or broken key
+    Call it at process start, so a missing or broken key
     shows up at deploy time instead of at the first refresh. Skipped in local
     development, where the key is optional. Never logs key material.
     """

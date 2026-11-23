@@ -3,10 +3,10 @@ import { z } from "zod";
 
 import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { Permission } from "@acme/shared/app/permissions";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { logError } from "../logger";
-import { protectedProcedure } from "../shared";
+import { permissionProcedure, protectedProcedure } from "../shared";
 import type { Context } from "../shared";
 
 type JsonValue =
@@ -167,30 +167,37 @@ const updateSlackMessageInputSchema = baseMessageInputSchema
   })
   .strict();
 
+// Slack team, enterprise and member IDs are uppercase alphanumeric. Rejecting
+// anything else keeps a malformed ID from reaching the query as an ordinary miss.
+const slackIdSchema = (what: string) =>
+  z
+    .string()
+    .regex(/^[A-Z0-9]{1,64}$/, `${what} must be an uppercase Slack ID`)
+    .describe(what);
+
+const resolveSlackUserInputSchema = z
+  .object({
+    slackTeamId: slackIdSchema("Slack workspace (team) ID, e.g. T0123ABCD"),
+    slackUserId: slackIdSchema("Slack member ID, e.g. U0123ABCD"),
+  })
+  .strict();
+
+const resolveSlackUserOutputSchema = z.object({
+  userId: z
+    .number()
+    .int()
+    .nullable()
+    .describe(
+      "F3 user ID linked to this Slack member, or null when the member has no linked F3 user",
+    ),
+});
+
 const slackMessageOutputSchema = z.object({
   ok: z.literal(true),
   action: z.enum(["posted", "updated"]),
   channel: z.string(),
   ts: z.string(),
 });
-
-const assertOrgAdmin = async (
-  ctx: Pick<Context, "session" | "db">,
-  regionOrgId: number,
-) => {
-  const authResult = await checkHasRoleOnOrg({
-    session: ctx.session,
-    db: ctx.db,
-    orgId: regionOrgId,
-    roleName: "admin",
-  });
-
-  if (!authResult.success) {
-    throw new ORPCError("UNAUTHORIZED", {
-      message: "Admin access to this org is required",
-    });
-  }
-};
 
 const assertActiveOrgExists = async (db: AppDb, regionOrgId: number) => {
   const [org] = await db
@@ -253,10 +260,12 @@ const getSlackBotTokenForOrg = async (
 };
 
 const prepareSlackMessageRequest = async (
-  ctx: Pick<Context, "session" | "db">,
+  ctx: Pick<Context, "db"> & {
+    assertPermissionsOnOrg: (orgId: number) => Promise<void>;
+  },
   regionOrgId: number,
 ): Promise<{ botToken: string }> => {
-  await assertOrgAdmin(ctx, regionOrgId);
+  await ctx.assertPermissionsOnOrg(regionOrgId);
   const [, botToken] = await Promise.all([
     assertActiveOrgExists(ctx.db, regionOrgId),
     getSlackBotTokenForOrg(ctx.db, regionOrgId),
@@ -457,7 +466,44 @@ export const callSlackWebApi = async ({
 };
 
 export const slackRouter = {
-  postMessage: protectedProcedure
+  // Open to every authenticated caller, with no per-org check: the mapping is
+  // not personal information, and a caller must already know the workspace and
+  // member IDs. An API key with no role grants resolves to no session, so it is
+  // rejected here as on every protected endpoint.
+  // See docs/specs/slack-user-resolution.md.
+  resolveUser: protectedProcedure
+    .input(resolveSlackUserInputSchema)
+    .route({
+      method: "GET",
+      path: "/user/{slackTeamId}/{slackUserId}",
+      tags: ["slack"],
+      summary: "Resolve a Slack member to an F3 user",
+      description:
+        "Return the F3 user ID linked to a Slack member in a workspace. Returns 404 when the workspace has no stored member with that ID.",
+    })
+    .output(resolveSlackUserOutputSchema)
+    .handler(async ({ context: ctx, input }) => {
+      const [row] = await ctx.db
+        .select({ userId: schema.slackUsers.userId })
+        .from(schema.slackUsers)
+        .where(
+          and(
+            eq(schema.slackUsers.slackTeamId, input.slackTeamId),
+            eq(schema.slackUsers.slackId, input.slackUserId),
+          ),
+        )
+        .limit(1);
+
+      if (!row) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "No Slack member with that ID in that workspace",
+        });
+      }
+
+      return { userId: row.userId };
+    }),
+
+  postMessage: permissionProcedure(Permission.MessagesSend)
     .input(postSlackMessageInputSchema)
     .route({
       method: "POST",
@@ -465,7 +511,7 @@ export const slackRouter = {
       tags: ["slack"],
       summary: "Post a Slack message",
       description:
-        "Post a Slack message to a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
+        "Post a Slack message to a channel, user, or group. Requires an active F3 Nation Slack app installation.",
     })
     .output(slackMessageOutputSchema)
     .handler(async ({ context: ctx, input }) => {
@@ -497,7 +543,7 @@ export const slackRouter = {
       };
     }),
 
-  updateMessage: protectedProcedure
+  updateMessage: permissionProcedure(Permission.MessagesSend)
     .input(updateSlackMessageInputSchema)
     .route({
       method: "PATCH",
@@ -505,7 +551,7 @@ export const slackRouter = {
       tags: ["slack"],
       summary: "Update a Slack message",
       description:
-        "Update a Slack message in a channel, user, or group. Requires admin access on the target org and an active F3 Nation Slack app installation.",
+        "Update a Slack message in a channel, user, or group. Requires an active F3 Nation Slack app installation.",
     })
     .output(slackMessageOutputSchema)
     .handler(async ({ context: ctx, input }) => {

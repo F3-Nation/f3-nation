@@ -1,5 +1,5 @@
 {
-  "id": "5ca022d1-7800-4cb1-acf2-3d8a89eaf528",
+  "id": "2d0e4da5-0344-4ed9-8b23-ec285382fde2",
   "prevId": "615edb66-ae6b-439e-b77a-0b2066fee6a4",
   "version": "7",
   "dialect": "postgresql",
@@ -372,6 +372,14 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
+        },
+        "attendance_type": {
+          "name": "attendance_type",
+          "type": "attendance_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pax'"
         }
       },
       "indexes": {
@@ -4984,36 +4992,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "bot_id": {
-          "name": "bot_id",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bot_user_id": {
-          "name": "bot_user_id",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bot_scopes": {
-          "name": "bot_scopes",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bot_token_expires_at": {
-          "name": "bot_token_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bot_refresh_token_encrypted": {
-          "name": "bot_refresh_token_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "settings": {
           "name": "settings",
           "type": "jsonb",
@@ -5779,6 +5757,15 @@
         "quarterly",
         "yearly",
         "lifetime"
+      ]
+    },
+    "public.attendance_type": {
+      "name": "attendance_type",
+      "schema": "public",
+      "values": [
+        "pax",
+        "q",
+        "co_q"
       ]
     },
     "public.day_of_week": {

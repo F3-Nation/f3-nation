@@ -356,15 +356,13 @@ done
 
 # Per-environment env vars (from env file, not secrets)
 # --update-env-vars never removes a key, so an unset ADMIN_TEAM_ID goes to
-# --remove-env-vars, and ADMIN_BOT_TOKEN (replaced by ADMIN_TEAM_ID) leaves the
-# running service and job through --remove-secrets.
+# --remove-env-vars.
 REMOVE_ENV_VARS=()
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
   [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
   [[ -z "$value" && "$var" == "ADMIN_TEAM_ID" ]] && REMOVE_ENV_VARS+=("$var")
 done
-REMOVE_SECRETS_ARG="ADMIN_BOT_TOKEN"
 
 # Deployment classification is derived from the selected target, never from
 # arbitrary values in the env file or the caller's shell.
@@ -410,7 +408,6 @@ gcloud run services update "$SERVICE_NAME" \
   --region "$REGION" \
   --update-env-vars "$UPDATE_ENV_VARS_ARG" \
   --update-secrets "$UPDATE_SECRETS_ARG" \
-  --remove-secrets "$REMOVE_SECRETS_ARG" \
   ${REMOVE_ENV_FLAGS[@]+"${REMOVE_ENV_FLAGS[@]}"} \
   --quiet
 
@@ -423,7 +420,6 @@ if gcloud run jobs describe "$SCRIPTS_JOB_NAME" \
     --region "$REGION" \
     --update-env-vars "$UPDATE_ENV_VARS_ARG" \
     --update-secrets "$UPDATE_SECRETS_ARG" \
-    --remove-secrets "$REMOVE_SECRETS_ARG" \
     ${REMOVE_ENV_FLAGS[@]+"${REMOVE_ENV_FLAGS[@]}"} \
     --quiet
 else

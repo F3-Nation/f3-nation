@@ -53,14 +53,14 @@ def _row(engine, team_id):
         return (row.bot_token, row.bot_id, row.bot_user_id, row.bot_scopes, row.bot_token_expires_at)
 
 
-def _write_file(directory, team_id, *, team_name=None, enterprise_id=None):
-    # Production wrote the files without a client_id.
+def _write_file(directory, team_id, *, team_name=None, enterprise_id=None, token=FILE_TOKEN):
+    # No client_id, so the file lands in `none-<team_id>/bot-latest`, the layout the importer reads.
     FileInstallationStore(base_dir=str(directory)).save_bot(
         Bot(
             enterprise_id=enterprise_id,
             team_id=team_id,
             team_name=team_name,
-            bot_token=FILE_TOKEN,
+            bot_token=token,
             bot_id="B_FILE",
             bot_user_id="U_FILE",
             bot_scopes=["chat:write", "users:read"],
@@ -301,3 +301,22 @@ def test_rejects_a_stored_token_for_another_workspace(isolated_postgres, tmp_pat
 
     assert capsys.readouterr().out.splitlines() == ["T35 team_mismatch"]
     assert _row(isolated_postgres, "T35") == (ROW_TOKEN, None, None, None, None)
+
+
+def test_rejects_a_file_without_a_token_and_keeps_the_stored_one(isolated_postgres, tmp_path, capsys):
+    _seed(isolated_postgres, "T36")
+    _write_file(tmp_path, "T36", token="")
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 1
+
+    assert capsys.readouterr().out.splitlines() == ["T36 error:empty_token"]
+    assert _row(isolated_postgres, "T36") == (ROW_TOKEN, None, None, None, None)
+
+
+def test_rejects_a_file_without_a_token_or_a_row(isolated_postgres, tmp_path, capsys):
+    _write_file(tmp_path, "T37", token="")
+
+    assert importer.main(["--installations-dir", str(tmp_path)]) == 1
+
+    assert capsys.readouterr().out.splitlines() == ["T37 error:empty_token"]
+    assert _workspace_name(isolated_postgres, "T37") is None

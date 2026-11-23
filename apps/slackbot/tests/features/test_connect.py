@@ -445,7 +445,7 @@ def test_admin_team_unset_skips_and_logs(monkeypatch):
     client.views_update.assert_called_once()
 
 
-def test_admin_team_without_row_logs_no_row(monkeypatch):
+def test_admin_team_without_token_logs_no_token(monkeypatch):
     monkeypatch.setenv("ADMIN_TEAM_ID", "T_ADMIN")
     monkeypatch.setattr(connect, "slack_client_for_team", lambda team_id, **kw: None)
     logger = MagicMock()
@@ -454,7 +454,7 @@ def test_admin_team_without_row_logs_no_row(monkeypatch):
 
     logger.warning.assert_called_once_with(
         "slack.token.admin_team_missing",
-        extra={"json_fields": {"event": "slack.token.admin_team_missing", "reason": "no_row", "team_id": "T_ADMIN"}},
+        extra={"json_fields": {"event": "slack.token.admin_team_missing", "reason": "no_token", "team_id": "T_ADMIN"}},
     )
 
 

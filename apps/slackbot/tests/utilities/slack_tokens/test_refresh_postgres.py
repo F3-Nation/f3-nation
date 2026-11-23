@@ -13,6 +13,7 @@ from slack_sdk.errors import SlackApiError, SlackTokenRotationError
 from slack_sdk.oauth.installation_store import Bot
 from slack_sdk.web import base_client as slack_base_client
 from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from tests import postgres_fixture
@@ -477,3 +478,107 @@ def test_save_bot_failure_is_logged_and_sanitized(isolated_postgres, caplog):
     assert raised.value.__cause__ is None and raised.value.__context__ is None
     assert "slack.token.refresh_failed" in _events(caplog)
     assert all(NEW_TOKEN not in r.getMessage() for r in caplog.records)
+
+
+def test_refresh_commit_failure_is_reported_as_save_error(isolated_postgres, rotator, monkeypatch, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    before = _row(isolated_postgres)
+    caplog.set_level(logging.INFO)
+
+    # Fail only the commit of the token write, not the unlocked read before it.
+    written = []
+    original_write, original_commit = refresh._write, Session.commit
+
+    def recording_write(row, bot):
+        original_write(row, bot)
+        written.append(True)
+
+    def failing_commit(self):
+        if written:
+            written.clear()
+            raise OperationalError("COMMIT", {}, Exception("connection dropped"))
+        original_commit(self)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(refresh, "_write", recording_write)
+        patched.setattr(Session, "commit", failing_commit)
+        with pytest.raises(refresh.TokenSaveError) as raised:
+            refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    assert raised.value.__cause__ is None and raised.value.__context__ is None
+    assert _row(isolated_postgres) == before
+    events = _events(caplog)
+    assert "slack.token.refreshed" not in events
+    assert "slack.token.refresh_failed" in events
+
+
+class _ScriptedRotator(FakeRotator):
+    """Returns `result(bot)` instead of a full rotation."""
+
+    def __init__(self, result):
+        super().__init__()
+        self.result = result
+
+    def perform_bot_token_rotation(self, *, bot, minutes_before_expiration):
+        self.calls += 1
+        return self.result(bot)
+
+
+def _rotated(bot, *, refresh_token, expires_at):
+    return Bot(
+        team_id=bot.team_id,
+        bot_token=NEW_TOKEN,
+        bot_id=bot.bot_id,
+        bot_user_id=bot.bot_user_id,
+        bot_scopes=bot.bot_scopes,
+        bot_refresh_token=refresh_token,
+        bot_token_expires_at=int(expires_at.timestamp()),
+        installed_at=bot.installed_at,
+    )
+
+
+def test_rotation_without_new_refresh_token_keeps_the_stored_one(isolated_postgres, monkeypatch):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    fake = _ScriptedRotator(lambda bot: _rotated(bot, refresh_token=None, expires_at=_now() + timedelta(hours=12)))
+    monkeypatch.setattr(refresh, "_rotator", lambda: fake)
+
+    bot = refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    row = _row(isolated_postgres)
+    assert bot.bot_token == row["bot_token"] == NEW_TOKEN
+    assert decrypt_refresh_token(row["bot_refresh_token_encrypted"]) == STORED_REFRESH
+
+
+def test_no_rotation_returns_stored_bot_and_leaves_row(isolated_postgres, monkeypatch):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    before = _row(isolated_postgres)
+    fake = _ScriptedRotator(lambda bot: None)
+    monkeypatch.setattr(refresh, "_rotator", lambda: fake)
+
+    bot = refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    assert fake.calls == 1
+    assert bot.bot_token == STORED_TOKEN
+    assert _row(isolated_postgres) == before
+
+
+def test_rotated_token_refused_by_guard_leaves_row(isolated_postgres, monkeypatch, caplog):
+    _seed(isolated_postgres, expires_in=timedelta(minutes=30))
+    before = _row(isolated_postgres)
+    fake = _ScriptedRotator(
+        lambda bot: _rotated(bot, refresh_token=NEW_REFRESH, expires_at=_now() + timedelta(minutes=10))
+    )
+    monkeypatch.setattr(refresh, "_rotator", lambda: fake)
+
+    bot = refresh.refresh_if_needed(TEAM_ID, minutes_before_expiration=refresh.STORE_WINDOW_MINUTES, path="test")
+
+    assert bot.bot_token == STORED_TOKEN
+    assert _row(isolated_postgres) == before
+    assert "slack.token.save_refused" in _events(caplog)
+
+
+def test_rotation_client_times_out_before_the_lock(monkeypatch):
+    monkeypatch.setenv(constants.SLACK_CLIENT_ID, "client-id")
+    monkeypatch.setenv(constants.SLACK_CLIENT_SECRET, "client-secret")
+
+    assert refresh._rotator().client.timeout == 3

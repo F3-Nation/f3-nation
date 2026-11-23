@@ -12,6 +12,7 @@ from slack_bolt.error import BoltError
 from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth.installation_store import Installation
 from slack_sdk.oauth.token_rotation import TokenRotator
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from tests import postgres_fixture
@@ -29,7 +30,7 @@ from tests.utilities.slack_tokens.test_refresh_postgres import (
     rotator,  # noqa: F401
 )
 from utilities.slack_tokens import refresh, store
-from utilities.slack_tokens.crypto import decrypt_refresh_token
+from utilities.slack_tokens.crypto import TokenDecryptError, decrypt_refresh_token
 from utilities.slack_tokens.store import SlackSpaceInstallationStore
 
 pytestmark = postgres_fixture.requires_postgres
@@ -166,6 +167,90 @@ def test_save_refused_by_guard_logs_warning_and_raises_bolt_error(isolated_postg
     ]
     assert record.levelno == logging.WARNING
     assert record.json_fields == {"event": "slack.token.install_refused", "team_id": TEAM_ID}
+
+
+@pytest.mark.parametrize(
+    "error, logged_here",
+    [
+        (refresh.TokenLockTimeout(TEAM_ID), True),
+        (TokenDecryptError("SLACK_TOKEN_ENCRYPTION_KEY is not set"), True),
+        # `save_bot_locked` logs its own save failures before raising.
+        (refresh.TokenSaveError("saving the bot token failed with OperationalError"), False),
+    ],
+)
+def test_save_failure_raises_bolt_error(monkeypatch, caplog, error, logged_here):
+    def failing_save(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(store, "save_bot_locked", failing_save)
+
+    # Bolt's OAuthFlow shows its storage-error page only for a BoltError; anything else is a bare 500.
+    with pytest.raises(BoltError) as raised:
+        SlackSpaceInstallationStore().save(_installation())
+
+    assert raised.value.__cause__ is None
+    failed = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
+    if logged_here:
+        [record] = failed
+        assert record.levelno == logging.ERROR
+        assert record.json_fields == {
+            "event": "slack.token.refresh_failed",
+            "team_id": TEAM_ID,
+            "path": "install",
+            "error_type": type(error).__name__,
+        }
+    else:
+        assert failed == []
+
+
+def test_save_commit_failure_raises_bolt_error(isolated_postgres, monkeypatch, caplog):
+    _seed(isolated_postgres, expires_in=None)
+    before = _row(isolated_postgres)
+
+    # Fail only the commit of the token write, through the real save path.
+    written = []
+    original_write, original_commit = refresh._write, Session.commit
+
+    def recording_write(row, bot):
+        original_write(row, bot)
+        written.append(True)
+
+    def failing_commit(self):
+        if written:
+            written.clear()
+            raise OperationalError("COMMIT", {}, Exception("connection dropped"))
+        original_commit(self)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(refresh, "_write", recording_write)
+        patched.setattr(Session, "commit", failing_commit)
+        with pytest.raises(BoltError) as raised:
+            SlackSpaceInstallationStore().save(_installation())
+
+    assert raised.value.__cause__ is None
+    assert _row(isolated_postgres) == before
+    [record] = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
+    assert record.levelno == logging.ERROR
+    assert record.json_fields == {
+        "event": "slack.token.refresh_failed",
+        "team_id": TEAM_ID,
+        "path": "save_bot_locked",
+        "error_type": "OperationalError",
+    }
+    for text_ in (caplog.text, str(raised.value)):
+        assert NEW_TOKEN not in text_ and NEW_REFRESH not in text_
+
+
+def test_save_without_encryption_key_raises_bolt_error(isolated_postgres, monkeypatch, caplog):
+    monkeypatch.delenv("SLACK_TOKEN_ENCRYPTION_KEY")
+
+    with pytest.raises(BoltError):
+        SlackSpaceInstallationStore().save(_installation())
+
+    assert _row(isolated_postgres) is None
+    [record] = [r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.token.refresh_failed"]
+    assert record.json_fields["path"] == "install"
+    assert record.json_fields["error_type"] == "TokenDecryptError"
 
 
 def test_delete_bot_clears_credentials(isolated_postgres):

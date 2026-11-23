@@ -1,16 +1,15 @@
 """Refreshes Slack bot tokens and guards every write to a workspace's token fields.
 
-Token columns are written only by `utilities/slack_tokens` and the operator
-CLIs in `scripts/`, always through `save_bot_locked` or `locked_row`, so every
+Write the token columns only through `save_bot_locked` or `locked_row`, so every
 write runs in one transaction holding a per-workspace `pg_advisory_xact_lock`.
 Slack revokes access tokens from earlier refreshes and accepts concurrent
 refreshes, so two unserialized refreshes can each save a token the other just
 revoked. The transaction-scoped lock is released by commit or rollback, so a
 pooled connection never keeps it after an exception.
 
-The refresh token is decrypted only by `refresh_if_needed`, to call Slack, and
-by `crypto.reencrypt_refresh_token` for the re-key CLI, which never sees the
-plaintext. Every `Bot` this module returns has `bot_refresh_token=None`.
+Decrypt the refresh token only where it is sent to Slack or re-encrypted. Every
+`Bot` this module returns has `bot_refresh_token=None`, so Bolt and callers never
+hold it.
 """
 
 import logging
@@ -71,7 +70,9 @@ def _rotator() -> TokenRotator:
     return TokenRotator(
         client_id=os.environ[constants.SLACK_CLIENT_ID],
         client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
-        client=oauth_web_client(),
+        # Well under the 5 s lock_timeout and Slack's 3 s ack budget: the call runs while
+        # holding the workspace lock and a pooled connection.
+        client=oauth_web_client(timeout=3),
     )
 
 
@@ -164,7 +165,7 @@ def _guard_allows(row: SlackSpace, bot: Bot) -> bool:
 
 def _write(row: SlackSpace, bot: Bot) -> None:
     row.bot_token = bot.bot_token
-    # Bolt's request context carries no scopes and may lack IDs; keep stored values then.
+    # Keep stored IDs and scopes when the offered bot lacks them, as one rebuilt from a row that never stored them does.
     if bot.bot_id:
         row.bot_id = bot.bot_id
     if bot.bot_user_id:
@@ -177,17 +178,20 @@ def _write(row: SlackSpace, bot: Bot) -> None:
     )
 
 
-def _flush(session: Session, team_id: str, path: str) -> None:
-    """Send the token write now, so a database failure is logged and sanitized here.
+def _flush(session: Session, team_id: str, path: str, *, commit: bool = False) -> None:
+    """Send the token write now (and commit it, with `commit`), so a database failure is logged and sanitized here.
 
-    SQLAlchemy's exception text includes the bound parameters, which here are
-    the token and refresh-token ciphertext. The replacement error is raised
-    outside the `except` block so the original is neither its cause nor its
-    context.
+    The bound parameters are the token and refresh-token ciphertext. The
+    replacement error carries only the exception type and is raised outside the
+    `except` block, so the original is neither its cause nor its context,
+    whatever the engine's parameter-hiding setting.
     """
     failure = None
     try:
-        session.flush()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
     except SQLAlchemyError as e:
         failure = _error_fields(e)
     if failure is not None:
@@ -229,7 +233,7 @@ def save_bot_locked(
     Returns False without writing when the save guard rejects the token.
     With `expected_token` (a token string, or None for "no row or no token"),
     raises `TokenChanged` without writing if the row no longer holds it.
-    Raises `TokenSaveError` if the database rejects the write.
+    Raises `TokenSaveError` if the database rejects the write or its commit.
     `workspace_name` is written only when the row is created.
     """
     with _locked(team_id) as (session, row):
@@ -241,7 +245,8 @@ def save_bot_locked(
         elif not _guard_allows(row, bot):
             return False
         _write(row, bot)
-        _flush(session, team_id, "save_bot_locked")
+        # Commit here, not when `_locked` exits, so a failed commit is sanitized and logged too.
+        _flush(session, team_id, "save_bot_locked", commit=True)
         return True
 
 
@@ -309,8 +314,12 @@ def refresh_if_needed(team_id: str, *, minutes_before_expiration: int, path: str
                 return stored
             _write(row, rotated)
             _flush(session, team_id, path)
+            result = _bot_from_row(row)
+            # Commit before logging success, so a failed commit is reported as `TokenSaveError`
+            # with `refresh_failed`, never as a refresh.
+            _flush(session, team_id, path, commit=True)
             _log(logging.INFO, "slack.token.refreshed", team_id, path=path)
-            return _bot_from_row(row)
+            return result
     except TokenLockTimeout:
         _log(logging.WARNING, "slack.token.lock_timeout", team_id, path=path)
         return load_bot(team_id)

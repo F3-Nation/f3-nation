@@ -176,11 +176,11 @@ def _failing_flush(monkeypatch, failures):
     real_flush = refresh._flush
     calls = []
 
-    def flush(session, team_id, path):
+    def flush(session, team_id, path, **kwargs):
         calls.append(path)
         if failures is None or len(calls) <= failures:
             raise refresh.TokenSaveError("saving the bot token failed with OperationalError")
-        real_flush(session, team_id, path)
+        real_flush(session, team_id, path, **kwargs)
 
     monkeypatch.setattr(refresh, "_flush", flush)
     return calls

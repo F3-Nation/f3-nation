@@ -230,6 +230,77 @@ describe("Attendance Router", () => {
     return user;
   };
 
+  // Helper to give a user attendance with the given types: planned
+  // (preblast) by default, actual (backblast) when isPlanned is false
+  const createPlannedAttendanceWithTypes = async (
+    eventInstanceId: number,
+    userId: number,
+    typeIds: number[],
+    isPlanned = true,
+  ) => {
+    const [attendance] = await db
+      .insert(schema.attendance)
+      .values({ eventInstanceId, userId, isPlanned })
+      .returning();
+    createdAttendanceIds.push(attendance!.id);
+    await db.insert(schema.attendanceXAttendanceTypes).values(
+      typeIds.map((attendanceTypeId) => ({
+        attendanceId: attendance!.id,
+        attendanceTypeId,
+      })),
+    );
+    return attendance!;
+  };
+
+  // Helper to list the users holding planned Q on an event instance
+  const getPlannedQUserIds = async (eventInstanceId: number) => {
+    const rows = await db
+      .select({ userId: schema.attendance.userId })
+      .from(schema.attendance)
+      .innerJoin(
+        schema.attendanceXAttendanceTypes,
+        eq(
+          schema.attendanceXAttendanceTypes.attendanceId,
+          schema.attendance.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.attendance.eventInstanceId, eventInstanceId),
+          eq(schema.attendance.isPlanned, true),
+          eq(
+            schema.attendanceXAttendanceTypes.attendanceTypeId,
+            ATTENDANCE_TYPE_IDS!.Q,
+          ),
+        ),
+      );
+    return rows.map((row) => row.userId);
+  };
+
+  // Helper to read an attendance record's type ids, sorted
+  const getTypeIds = async (attendanceId: number) => {
+    const rows = await db
+      .select({ id: schema.attendanceXAttendanceTypes.attendanceTypeId })
+      .from(schema.attendanceXAttendanceTypes)
+      .where(eq(schema.attendanceXAttendanceTypes.attendanceId, attendanceId));
+    return rows.map((row) => row.id).sort((a, b) => a - b);
+  };
+
+  // Helper to sign in as a plain member
+  const signInAs = async (user: {
+    id: number;
+    email: string;
+    f3Name: string | null;
+  }) => {
+    await mockAuthWithSession(
+      createUserSession({
+        userId: user.id,
+        email: user.email,
+        f3Name: user.f3Name ?? undefined,
+      }),
+    );
+  };
+
   describe("getForEventInstance", () => {
     it("should return empty attendance for new event instance", async () => {
       const session = await createAdminSession();
@@ -568,6 +639,139 @@ describe("Attendance Router", () => {
       if (result.attendanceId) {
         createdAttendanceIds.push(result.attendanceId);
       }
+    });
+
+    it("should reject a member signing up as Q when another user is Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const scheduledQ = await createTestUser();
+      const member = await createTestUser();
+
+      await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        scheduledQ!.id,
+        [ATTENDANCE_TYPE_IDS!.Q],
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.createPlanned({
+          eventInstanceId: eventInstance!.id,
+          userId: member!.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+
+      expect(await getPlannedQUserIds(eventInstance!.id)).toEqual([
+        scheduledQ!.id,
+      ]);
+      const memberAttendance = await db
+        .select()
+        .from(schema.attendance)
+        .where(
+          and(
+            eq(schema.attendance.eventInstanceId, eventInstance!.id),
+            eq(schema.attendance.userId, member!.id),
+          ),
+        );
+      expect(memberAttendance).toEqual([]);
+    });
+
+    it("should reject an editor signing a second user up as Q", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const scheduledQ = await createTestUser();
+      const other = await createTestUser();
+
+      await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        scheduledQ!.id,
+        [ATTENDANCE_TYPE_IDS!.Q],
+      );
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.createPlanned({
+          eventInstanceId: eventInstance!.id,
+          userId: other!.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.Q],
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+
+      expect(await getPlannedQUserIds(eventInstance!.id)).toEqual([
+        scheduledQ!.id,
+      ]);
+    });
+
+    it("should let a member sign up as Q when the event has no Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const member = await createTestUser();
+      await signInAs(member!);
+
+      const client = createTestClient();
+      const result = await client.attendance.createPlanned({
+        eventInstanceId: eventInstance!.id,
+        userId: member!.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+      });
+      createdAttendanceIds.push(result.attendanceId);
+
+      expect(await getPlannedQUserIds(eventInstance!.id)).toEqual([member!.id]);
+    });
+
+    it("should let the current Q re-submit their sign-up with Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const q = await createTestUser();
+      const attendance = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        q!.id,
+        [ATTENDANCE_TYPE_IDS!.Q],
+      );
+      await signInAs(q!);
+
+      const client = createTestClient();
+      const result = await client.attendance.createPlanned({
+        eventInstanceId: eventInstance!.id,
+        userId: q!.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+      });
+
+      expect(result.attendanceId).toBe(attendance.id);
+      expect(await getPlannedQUserIds(eventInstance!.id)).toEqual([q!.id]);
+    });
+
+    it("should let a member sign up as PAX when another user is Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const scheduledQ = await createTestUser();
+      const member = await createTestUser();
+      await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        scheduledQ!.id,
+        [ATTENDANCE_TYPE_IDS!.Q],
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      const result = await client.attendance.createPlanned({
+        eventInstanceId: eventInstance!.id,
+        userId: member!.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+      });
+      createdAttendanceIds.push(result.attendanceId);
+
+      expect(await getTypeIds(result.attendanceId)).toEqual([
+        ATTENDANCE_TYPE_IDS!.PAX,
+      ]);
+      expect(await getPlannedQUserIds(eventInstance!.id)).toEqual([
+        scheduledQ!.id,
+      ]);
     });
 
     it("should reject creating planned attendance for another user", async () => {
@@ -1025,6 +1229,232 @@ describe("Attendance Router", () => {
       });
 
       expect(result.success).toBe(true);
+    });
+
+    it("should reject a member adding Q to their attendance when another user is Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const scheduledQ = await createTestUser();
+      const member = await createTestUser();
+
+      await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        scheduledQ!.id,
+        [ATTENDANCE_TYPE_IDS!.Q],
+      );
+      const memberAttendance = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        member!.id,
+        [ATTENDANCE_TYPE_IDS!.PAX],
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.updateAttendanceTypes({
+          attendanceId: memberAttendance.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+
+      expect(await getPlannedQUserIds(eventInstance!.id)).toEqual([
+        scheduledQ!.id,
+      ]);
+      const memberTypes = await db
+        .select()
+        .from(schema.attendanceXAttendanceTypes)
+        .where(
+          eq(
+            schema.attendanceXAttendanceTypes.attendanceId,
+            memberAttendance.id,
+          ),
+        );
+      expect(memberTypes.map((t) => t.attendanceTypeId)).toEqual([
+        ATTENDANCE_TYPE_IDS!.PAX,
+      ]);
+    });
+
+    it("should let the current Q keep Q while changing their other types", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const q = await createTestUser();
+      const attendance = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        q!.id,
+        [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+      );
+      await signInAs(q!);
+
+      const client = createTestClient();
+      await client.attendance.updateAttendanceTypes({
+        attendanceId: attendance.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.Q],
+      });
+
+      const types = await db
+        .select()
+        .from(schema.attendanceXAttendanceTypes)
+        .where(
+          eq(schema.attendanceXAttendanceTypes.attendanceId, attendance.id),
+        );
+      expect(types.map((t) => t.attendanceTypeId)).toEqual([
+        ATTENDANCE_TYPE_IDS!.Q,
+      ]);
+    });
+
+    it("should let one of two existing Qs change their other types", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const qA = await createTestUser();
+      const qB = await createTestUser();
+      const attendanceA = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        qA!.id,
+        [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+      );
+      await createPlannedAttendanceWithTypes(eventInstance!.id, qB!.id, [
+        ATTENDANCE_TYPE_IDS!.Q,
+      ]);
+      await signInAs(qA!);
+
+      const client = createTestClient();
+      await client.attendance.updateAttendanceTypes({
+        attendanceId: attendanceA.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.Q],
+      });
+
+      expect(await getTypeIds(attendanceA.id)).toEqual([
+        ATTENDANCE_TYPE_IDS!.Q,
+      ]);
+    });
+
+    it("should reject a third user adding Q when the event has two Qs", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const qA = await createTestUser();
+      const qB = await createTestUser();
+      const member = await createTestUser();
+      await createPlannedAttendanceWithTypes(eventInstance!.id, qA!.id, [
+        ATTENDANCE_TYPE_IDS!.PAX,
+        ATTENDANCE_TYPE_IDS!.Q,
+      ]);
+      await createPlannedAttendanceWithTypes(eventInstance!.id, qB!.id, [
+        ATTENDANCE_TYPE_IDS!.Q,
+      ]);
+      const memberAttendance = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        member!.id,
+        [ATTENDANCE_TYPE_IDS!.PAX],
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.updateAttendanceTypes({
+          attendanceId: memberAttendance.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+
+      expect(await getTypeIds(memberAttendance.id)).toEqual([
+        ATTENDANCE_TYPE_IDS!.PAX,
+      ]);
+      const qUserIds = await getPlannedQUserIds(eventInstance!.id);
+      expect(qUserIds.sort((a, b) => a - b)).toEqual(
+        [qA!.id, qB!.id].sort((a, b) => a - b),
+      );
+    });
+
+    it("should let a member change non-Q types when another user is Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const scheduledQ = await createTestUser();
+      const member = await createTestUser();
+      await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        scheduledQ!.id,
+        [ATTENDANCE_TYPE_IDS!.Q],
+      );
+      const memberAttendance = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        member!.id,
+        [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.COQ],
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      await client.attendance.updateAttendanceTypes({
+        attendanceId: memberAttendance.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX],
+      });
+
+      expect(await getTypeIds(memberAttendance.id)).toEqual([
+        ATTENDANCE_TYPE_IDS!.PAX,
+      ]);
+    });
+
+    it("should reject a member adding Q to their actual attendance when another user is the actual Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const actualQ = await createTestUser();
+      const member = await createTestUser();
+      await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        actualQ!.id,
+        [ATTENDANCE_TYPE_IDS!.Q],
+        false,
+      );
+      const memberAttendance = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        member!.id,
+        [ATTENDANCE_TYPE_IDS!.PAX],
+        false,
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.updateAttendanceTypes({
+          attendanceId: memberAttendance.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+
+      expect(await getTypeIds(memberAttendance.id)).toEqual([
+        ATTENDANCE_TYPE_IDS!.PAX,
+      ]);
+    });
+
+    it("should let a member record Q on actual attendance when someone else was the planned Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const plannedQ = await createTestUser();
+      const member = await createTestUser();
+      await createPlannedAttendanceWithTypes(eventInstance!.id, plannedQ!.id, [
+        ATTENDANCE_TYPE_IDS!.Q,
+      ]);
+      const memberAttendance = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        member!.id,
+        [ATTENDANCE_TYPE_IDS!.PAX],
+        false,
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      await client.attendance.updateAttendanceTypes({
+        attendanceId: memberAttendance.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q],
+      });
+
+      expect(await getTypeIds(memberAttendance.id)).toEqual(
+        [ATTENDANCE_TYPE_IDS!.PAX, ATTENDANCE_TYPE_IDS!.Q].sort(
+          (a, b) => a - b,
+        ),
+      );
+      expect(await getPlannedQUserIds(eventInstance!.id)).toEqual([
+        plannedQ!.id,
+      ]);
     });
 
     it("should reject updating attendance types for another user without editor role", async () => {
