@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   close: vi.fn<(callback: (error?: Error) => void) => void>(),
@@ -12,6 +12,11 @@ vi.mock("~/lib/logging", () => ({ logError: vi.fn(), logInfo: vi.fn() }));
 vi.mock("@hono/node-server", () => ({ serve: () => ({ close: mocks.close }) }));
 vi.mock("@acme/db/client", () => ({ closeDb: mocks.closeDb }));
 vi.mock("@acme/observability", () => ({ flushObservability: mocks.flush }));
+
+beforeEach(() => {
+  vi.resetModules();
+  vi.resetAllMocks();
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -59,3 +64,32 @@ it("drains HTTP before closing the database and keeps the deadline through clean
   await vi.advanceTimersByTimeAsync(0);
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it.each(["http", "database", "observability", "success"])(
+  "clears the shutdown deadline after %s completion",
+  async (phase) => {
+    vi.useFakeTimers();
+    let terminate!: () => void;
+    vi.spyOn(process, "on").mockImplementation((event, listener) => {
+      if (event === "SIGTERM") terminate = listener as () => void;
+      return process;
+    });
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
+    const failure = new Error("cleanup failure");
+    mocks.closeDb.mockResolvedValue(undefined);
+    mocks.flush.mockResolvedValue(undefined);
+    if (phase === "database") mocks.closeDb.mockRejectedValueOnce(failure);
+    if (phase === "observability") mocks.flush.mockRejectedValueOnce(failure);
+    await import("../src/server");
+    terminate();
+    mocks.close.mock.calls[0]![0](phase === "http" ? failure : undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(exit).toHaveBeenNthCalledWith(1, phase === "success" ? 0 : 1);
+    expect(vi.getTimerCount()).toBe(0);
+    const calls = exit.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(exit).toHaveBeenCalledTimes(calls);
+  },
+);

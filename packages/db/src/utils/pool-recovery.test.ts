@@ -32,6 +32,20 @@ describe("pool recovery", () => {
     for (let count = 0; count < 3; count++) pools[0]!.timeout();
     pools[0]!.success();
     expect(manager.db.identity).toBe(2);
+    expect(
+      logging.logWarn.mock.calls.filter(
+        ([event]) => event === "db.query.deadline_exceeded",
+      ),
+    ).toEqual(
+      Array.from({ length: 6 }, () => [
+        "db.query.deadline_exceeded",
+        { generation: 0 },
+      ]),
+    );
+    expect(logging.logWarn).toHaveBeenCalledWith("db.pool.recycled", {
+      generation: 1,
+      timeoutCount: 3,
+    });
     await manager.close();
     pools[1]!.timeout();
     expect(pools).toHaveLength(2);

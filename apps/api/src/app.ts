@@ -11,7 +11,10 @@ import { openApiJson } from "~/docs";
 import { docsPage } from "~/docs-page";
 import { handleRequest } from "~/handler";
 import { logError } from "~/lib/logging";
-import { checkDatabase } from "~/lib/database-health";
+import {
+  checkDatabase,
+  DATABASE_HEALTH_TIMEOUT_MS,
+} from "~/lib/database-health";
 // Surfaced as the service version in the health endpoints below.
 import packageJson from "../package.json";
 
@@ -79,7 +82,7 @@ app.get("/health", async (c) => {
       {
         id: "database",
         defaultSeverity: "critical",
-        timeoutMs: 3_000,
+        timeoutMs: DATABASE_HEALTH_TIMEOUT_MS,
         run: checkDatabase,
       },
     ]);

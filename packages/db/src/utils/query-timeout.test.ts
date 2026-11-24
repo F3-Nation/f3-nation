@@ -59,8 +59,7 @@ it("observes one deadline and ignores a late success", async () => {
   } as unknown as postgres.Sql;
   withQueryTimeout(client, 100, observer);
   const query = client.unsafe("select 1");
-  const result = Promise.resolve(query);
-  const rejected = result.catch((error: unknown) => error);
+  const rejected = query.then(undefined, (error: unknown) => error);
   await vi.advanceTimersByTimeAsync(100);
   expect(await rejected).toMatchObject({
     message: "Query exceeded 100ms pool-wait/execution timeout",

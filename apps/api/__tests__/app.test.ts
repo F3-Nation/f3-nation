@@ -12,6 +12,12 @@ import { app } from "../src/app";
 // handler.ts's own unit tests and the characterization suite, not duplicated
 // here.
 
+const healthLogging = vi.hoisted(() => ({
+  logWarn: vi.fn(),
+  logError: vi.fn(),
+}));
+vi.mock("~/lib/logging", () => healthLogging);
+
 const { buildHealthResponse } = vi.hoisted(() => ({
   buildHealthResponse: vi.fn(),
 }));
@@ -117,30 +123,37 @@ describe("app", () => {
         finish = resolve;
       }),
     );
-    const first = app.request("/health");
-    const second = app.request("/health");
-    await vi.advanceTimersByTimeAsync(3_000);
-    const responses = await Promise.all([first, second]);
-    for (const response of responses) {
-      expect(response.status).toBe(200);
+    try {
+      const first = app.request("/health");
+      const second = app.request("/health");
+      await vi.advanceTimersByTimeAsync(3_000);
+      const responses = await Promise.all([first, second]);
+      for (const response of responses) {
+        expect(response.status).toBe(200);
+        expect(
+          healthResponseSchema.parse(await response.json()).checks,
+        ).toContainEqual(
+          expect.objectContaining({
+            id: "database",
+            status: "down",
+            details: { reason: "timeout", timeoutMs: 3_000 },
+          }),
+        );
+      }
+      const third = app.request("/health");
+      await vi.advanceTimersByTimeAsync(3_000);
       expect(
-        healthResponseSchema.parse(await response.json()).checks,
-      ).toContainEqual(
-        expect.objectContaining({
-          id: "database",
-          status: "down",
-          details: { reason: "timeout", timeoutMs: 3_000 },
-        }),
+        healthResponseSchema.parse(await (await third).json()).status,
+      ).toBe("down");
+      expect(database.execute).toHaveBeenCalledTimes(1);
+      expect(healthLogging.logWarn).toHaveBeenCalledExactlyOnceWith(
+        "api.health.database_probe_stalled",
+        {},
       );
+    } finally {
+      finish([]);
+      await vi.advanceTimersByTimeAsync(0);
     }
-    const third = app.request("/health");
-    await vi.advanceTimersByTimeAsync(3_000);
-    expect(healthResponseSchema.parse(await (await third).json()).status).toBe(
-      "down",
-    );
-    expect(database.execute).toHaveBeenCalledTimes(1);
-    finish([]);
-    await vi.advanceTimersByTimeAsync(0);
     const recovered = await app.request("/health");
     expect(healthResponseSchema.parse(await recovered.json()).status).toBe(
       "ok",
@@ -149,6 +162,7 @@ describe("app", () => {
   });
 
   it("returns a contract-valid /health response", async () => {
+    vi.useFakeTimers();
     const res = await app.fetch(new Request("http://api.test/health"));
 
     expect(res.status).toBe(200);
@@ -159,6 +173,8 @@ describe("app", () => {
       expect(parsed.data.service).toBe("f3-api");
       expect(parsed.data.status).toBe("ok");
     }
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(healthLogging.logWarn).not.toHaveBeenCalled();
   });
 
   it("still returns a contract-valid 200 if the health machinery itself throws", async () => {

@@ -71,6 +71,7 @@ it(
       const result = await client.db.execute(sql`select 42 as answer`);
       expect(result).toMatchObject([{ answer: 42 }]);
       expect(client.isLive()).toBe(true);
+      expect(client.check()).toBe(probe);
       await probeResult;
       await expect(client.check()).resolves.toBeUndefined();
     } finally {

@@ -74,3 +74,15 @@ it("requires recovery opt-in for physical health probes", async () => {
   const client = await import("./client");
   expect(() => client.checkDb()).toThrow("Database recovery is not enabled");
 });
+
+it("initializes recovery when the first database use is a health probe", async () => {
+  const check = vi.fn().mockResolvedValue(undefined);
+  factory.createDbClient.mockReturnValue({ db: {}, check });
+  const client = await import("./client");
+  client.enableDbRecovery();
+  await client.checkDb();
+  expect(factory.createDbClient).toHaveBeenCalledExactlyOnceWith({
+    recover: true,
+  });
+  expect(check).toHaveBeenCalledTimes(1);
+});

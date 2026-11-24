@@ -105,11 +105,13 @@ The [API deploy workflow](../.github/workflows/deploy-api.yml) configures an
 HTTP liveness probe on `/live`, independently of the TCP startup probe.
 Its [database recovery contract](specs/api-database-recovery.md) distinguishes
 the restart signal from `/health` dependency status. A traffic-shift rollback
-retains the selected revision's probe configuration. Redeploying an older image
-through a workflow that configures `/live` requires removing that probe in the
-same deployment (`gcloud run deploy ... --liveness-probe=""`), rather than
-passing the workflow's liveness flag, when the image has no `/live` route.
-Otherwise the missing route repeatedly restarts the old image.
+retains the selected revision's probe configuration and is the preferred rollback.
+The API workflow always configures `/live`; it cannot redeploy an image without
+that route safely. An authorized operator redeploying such an image must use a
+separate manual deployment, preserving the service's other settings and passing
+`gcloud run deploy f3-api --image=<pinned-image> --liveness-probe=""` with the
+correct project and region. The empty probe flag replaces the workflow's probe
+flag in that deployment; otherwise the missing route repeatedly restarts the image.
 
 The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes
 directly to GitHub Pages. Its emitted check names must stay distinct from the CI
