@@ -129,7 +129,7 @@ When `pr-local-test` recommends approval, the PR goes to a codeowner's final rev
 **The PR's author is responsible for resolving its review threads.** For every thread — from a bot, the inline review, the local test, or a codeowner:
 
 1. **Reply first.** Say what you changed, or why you're not changing it. When you changed code, link the commit that has the fix. The reply is the only record a reviewer has of how the comment was handled.
-2. **Then resolve it.** Click **Resolve conversation** on GitHub once you believe the item is handled. AI assistants post replies but never resolve threads, so each resolution means the author has read the reply and agrees it's done. Some review bots, CodeRabbit among them, resolve their own thread once a reply or push satisfies them; a thread that's already resolved needs nothing more.
+2. **Then resolve it.** Click **Resolve conversation** on GitHub once you believe the item is handled. AI assistants post replies but never resolve threads, so each resolution made from your account means you've read the reply and agree it's done. The one exception is a review bot resolving a thread it opened, from its own bot account, once a reply or a later commit settles it; a thread that's already resolved needs nothing more.
 3. **Out-of-scope suggestions** become a new Issue. Put the Issue number in your reply, then resolve the thread.
 4. **Still have a question?** Leave the thread open and make the question clear in a reply. @-mention the person who raised the comment, including when their AI assistant posted it for them, so GitHub notifies them; a review bot doesn't need it. Reviewers are volunteers with a lot of PRs, so an answer can take a while; it's perfectly fine to point someone at the waiting question in the F3 developers Slack.
 
@@ -137,16 +137,16 @@ The [`address-pr-comments`](../.agents/skills/address-pr-comments/SKILL.md) skil
 
 ## PRs waiting on their author
 
-A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a ready-for-review PR is waiting on them, and closes the PR if it keeps waiting. A PR is waiting on its author when any of these is true:
+A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a PR is waiting on them, and closes the PR if it keeps waiting. A draft is always waiting on its author: reviewers and review bots skip drafts, so it waits until someone pushes to it or marks it ready for review. A PR that is ready for review is waiting on its author when any of these is true:
 
 - A required check is failing.
 - It has a merge conflict with its base branch.
 - A review thread is unresolved, and a repo member, anyone with write access, or a bot has commented in it since the author's last reply. A comment from anyone else doesn't count.
 - A repo member, anyone with write access, or a bot requested changes and nothing has been pushed since.
 
-Drafts are never reminded or closed: a draft is work in progress, so the author isn't keeping anyone waiting. Moving a reminded PR back to Draft stops its clock like any other pause.
+A draft's clock starts when the PR is opened as a draft or moved back to Draft, so a reminder sent before the move no longer counts toward a close.
 
-The clock runs only while one of those is true, so time a PR spends waiting on the bots or a codeowner doesn't count against the author. A push, a comment from the author, marking the PR ready for review, or reopening it resets it; comments from bots and reviewers don't. A push counts from when it reached GitHub (the first check run, check suite or status on the new head commit, or the force-push that brought it), not from the date inside the commit, which the author can set to anything. If GitHub has recorded nothing for the latest commit yet (a `[skip ci]` push, for example), reminders still go out, but the Slack heads-up and the close wait. One exception: GitHub doesn't record when a merge conflict appears, so a conflict is counted from the PR's latest review, ready-for-review or reopen. That can bring an early reminder, but never an early close.
+The clock runs only while the PR is waiting on its author, so time a PR spends waiting on the bots or a codeowner doesn't count against the author. A push, a comment from the author, marking the PR ready for review, or reopening it resets it; comments from bots and reviewers don't. A push counts from when it reached GitHub (the first check run, check suite or status on the new head commit, or the force-push that brought it), not from the date inside the commit, which the author can set to anything. If GitHub has recorded nothing for the latest commit yet (a `[skip ci]` push, for example), reminders still go out, but the Slack heads-up and the close wait. One exception: GitHub doesn't record when a merge conflict appears, so a conflict is counted from the PR's latest review, ready-for-review or reopen. That can bring an early reminder, but never an early close.
 
 | Author                                                  | Reminder | Closed  |
 | ------------------------------------------------------- | -------- | ------- |
