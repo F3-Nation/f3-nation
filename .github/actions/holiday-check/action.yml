@@ -2,7 +2,8 @@ name: Holiday check
 description: >-
   Say whether today is a holiday listed in .github/holidays.json, for
   scheduled workflows that post a greeting instead of their usual message on
-  holidays. Needs the repository checked out first. Fails on a malformed
+  holidays. Needs the repository checked out first. Sets up Node from
+  .nvmrc, which later steps in the job then use too. Fails on a malformed
   holidays file rather than skipping the check.
 
 inputs:
@@ -26,6 +27,12 @@ outputs:
 runs:
   using: composite
   steps:
+    # The script has no dependencies, so this skips .github/actions/setup's
+    # pnpm install.
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+
     - id: check
       shell: bash
       env:
