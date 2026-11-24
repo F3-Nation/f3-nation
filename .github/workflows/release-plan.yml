@@ -116,13 +116,13 @@ jobs:
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
         with:
           # Workload identity federation: the action exchanges this job's
-          # GitHub OIDC token for a short-lived Claude API token. These are
-          # identifiers, not credentials; the rule's subject match is what
-          # restricts who can use them.
-          anthropic_federation_rule_id: fdrl_016KiLpUUwTChQ1kWL1FrVVQ
-          anthropic_organization_id: f6d5a3b5-5e88-442a-843b-36bb447b61a0
-          anthropic_service_account_id: svac_01VHUw1W6PYgZcuFug7kWT8R
-          anthropic_workspace_id: wrkspc_01AXDDn3G8wyLb1BuXH4YMe2
+          # GitHub OIDC token for a short-lived Claude API token. The IDs are
+          # release-plan environment variables, not secrets; the rule's
+          # subject match is what restricts who can use them.
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
           github_token: ${{ github.token }}
           # release-please.yml starts this run with the job token, so its actor
           # is github-actions[bot]; the action refuses bot actors not listed.
@@ -138,11 +138,18 @@ jobs:
             --allowedTools "Read,Glob,Grep,Edit(//tmp/**),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api repos/${{ github.repository }}/collaborators/*/permission*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(mktemp:*),Bash(bash -n:*)"
             --disallowedTools "Read(//proc/**),Bash(*/proc/*),Read(/${{ runner.temp }}/claude-workload-identity/**),Bash(*claude-workload-identity*)"
 
+      # The Claude step can't fail the job, and a re-run whose plans already
+      # exist passes check-plans without the agent, so a failed sign-in to
+      # the Claude API would otherwise leave a green run with no sign of it.
       - name: Print the agent's summary
         if: always()
         env:
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
         run: |
+          if [[ "$CLAUDE_OUTCOME" != "success" ]]; then
+            echo "::warning::The Claude step ended with outcome '${CLAUDE_OUTCOME}'. Check its log; a sign-in failure also appears under Authentication events on the Claude Console's Workload identity page."
+          fi
           if [[ -n "$EXECUTION_FILE" && -f "$EXECUTION_FILE" ]]; then
             echo "Agent summary:"
             jq -r '[.[] | select(.type == "result")] | last | .result // "(none)"' "$EXECUTION_FILE"
