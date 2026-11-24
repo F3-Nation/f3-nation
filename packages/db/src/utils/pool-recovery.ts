@@ -42,8 +42,8 @@ export function createRecoveringPool<T extends object>(
         live = true;
       },
       timeout: () => {
-        if (stopped || id !== generation) return;
         logWarn("db.query.deadline_exceeded", { generation: id });
+        if (stopped || id !== generation) return;
         if (id > 0) {
           failedRecoveryAt ??= performance.now();
           if (performance.now() - failedRecoveryAt >= 60_000) live = false;

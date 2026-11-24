@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createRecoveringPool } from "./pool-recovery";
 
-afterEach(() => vi.useRealTimers());
+const logging = vi.hoisted(() => ({ logError: vi.fn(), logWarn: vi.fn() }));
+vi.mock("../lib/logging", () => logging);
+afterEach(() => {
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
 
 describe("pool recovery", () => {
   it("switches future work after three timeouts and drains without replay", async () => {
@@ -24,7 +29,7 @@ describe("pool recovery", () => {
     expect(manager.db.identity).toBe(2);
     await Promise.resolve();
     expect(pools[0]!.close).toHaveBeenCalledExactlyOnceWith({ timeout: 5 });
-    pools[0]!.timeout();
+    for (let count = 0; count < 3; count++) pools[0]!.timeout();
     pools[0]!.success();
     expect(manager.db.identity).toBe(2);
     await manager.close();
@@ -98,12 +103,56 @@ describe("pool recovery", () => {
     expect(manager.close()).toBe(manager.close());
     await Promise.resolve();
     expect(closed).toBe(false);
-    observers[1]!.timeout();
+    for (let count = 0; count < 3; count++) observers[1]!.timeout();
     observers[1]!.success();
     expect(observers).toHaveLength(2);
     finish();
     await closing;
     expect(close).toHaveBeenCalledTimes(2);
     expect(closed).toBe(true);
+    for (let count = 0; count < 3; count++) observers[1]!.timeout();
+    expect(observers).toHaveLength(2);
+    expect(close).toHaveBeenCalledTimes(2);
   });
+});
+
+it("never dispatches a retiring write to its successor", async () => {
+  let finish!: (value: number) => void;
+  const pending = new Promise<number>((resolve) => {
+    finish = resolve;
+  });
+  const observers: { timeout: () => void; success: () => void }[] = [];
+  const writes: ReturnType<typeof vi.fn>[] = [];
+  const manager = createRecoveringPool((observer) => {
+    observers.push(observer);
+    const write = vi.fn<() => Promise<number>>().mockReturnValue(pending);
+    writes.push(write);
+    return { db: { write }, close: () => Promise.resolve() };
+  });
+  const original = manager.db.write();
+  for (let count = 0; count < 3; count++) observers[0]!.timeout();
+  expect(writes).toHaveLength(2);
+  finish(42);
+  expect(await original).toBe(42);
+  expect(writes[0]).toHaveBeenCalledTimes(1);
+  expect(writes[1]).not.toHaveBeenCalled();
+  await manager.close();
+});
+
+it("reports retirement failures without exposing driver details or rejecting shutdown", async () => {
+  const observers: { timeout: () => void; success: () => void }[] = [];
+  const manager = createRecoveringPool((observer) => {
+    observers.push(observer);
+    return {
+      db: {},
+      close: () => Promise.reject(new Error("private driver details")),
+    };
+  });
+  for (let count = 0; count < 3; count++) observers[0]!.timeout();
+  await expect(manager.close()).resolves.toBeUndefined();
+  expect(logging.logError).toHaveBeenCalledTimes(2);
+  expect(logging.logError).toHaveBeenCalledWith(
+    "db.pool.retirement_failed",
+    {},
+  );
 });

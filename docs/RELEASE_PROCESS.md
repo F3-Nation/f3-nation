@@ -104,9 +104,12 @@ For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 The [API deploy workflow](../.github/workflows/deploy-api.yml) configures an
 HTTP liveness probe on `/live`, independently of the TCP startup probe.
 Its [database recovery contract](specs/api-database-recovery.md) distinguishes
-the restart signal from `/health` dependency status. When rolling back to an
-image without `/live`, remove the liveness probe with that rollback so a
-missing route does not repeatedly restart the old image.
+the restart signal from `/health` dependency status. A traffic-shift rollback
+retains the selected revision's probe configuration. Redeploying an older image
+through a workflow that configures `/live` requires removing that probe in the
+same deployment (`gcloud run deploy ... --liveness-probe=""`), rather than
+passing the workflow's liveness flag, when the image has no `/live` route.
+Otherwise the missing route repeatedly restarts the old image.
 
 The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes
 directly to GitHub Pages. Its emitted check names must stay distinct from the CI

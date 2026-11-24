@@ -22,7 +22,7 @@ const database = vi.hoisted(() => ({
   enableDbRecovery: vi.fn(),
 }));
 vi.mock("@acme/db/client", () => ({
-  db: { execute: database.execute },
+  checkDb: database.execute,
   isDbLive: database.isDbLive,
   enableDbRecovery: database.enableDbRecovery,
 }));
@@ -66,7 +66,12 @@ const { docsPage, openApiJson } = vi.hoisted(() => ({
 vi.mock("~/docs-page", () => ({ docsPage }));
 vi.mock("~/docs", () => ({ openApiJson }));
 
+const recoveryEnabledAtImport = database.enableDbRecovery.mock.calls.length;
+
 describe("app", () => {
+  it("enables database recovery during API initialization", () => {
+    expect(recoveryEnabledAtImport).toBe(1);
+  });
   afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     vi.clearAllMocks();

@@ -55,6 +55,10 @@ it(
       );
       expect(links).toHaveLength(5);
       for (const link of links) link.blocked = true;
+      const probe = client.check();
+      const probeResult = probe.catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      expect(client.check()).toBe(probe);
       for (let count = 0; count < 3; count++) {
         await expect(
           client.db.execute(sql`select 1 as answer`),
@@ -67,6 +71,8 @@ it(
       const result = await client.db.execute(sql`select 42 as answer`);
       expect(result).toMatchObject([{ answer: 42 }]);
       expect(client.isLive()).toBe(true);
+      await probeResult;
+      await expect(client.check()).resolves.toBeUndefined();
     } finally {
       await client.close();
       for (const socket of sockets) socket.destroy();

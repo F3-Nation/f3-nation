@@ -41,7 +41,6 @@ let shuttingDown = false;
 process.on("SIGTERM", () => {
   if (shuttingDown) return;
   shuttingDown = true;
-  const databaseClosed = closeDb();
   logInfo("api.server.shutdown_initiated", {});
 
   const forceExit = setTimeout(() => {
@@ -50,15 +49,16 @@ process.on("SIGTERM", () => {
   }, 8000).unref();
 
   server.close((err) => {
-    clearTimeout(forceExit);
-    void databaseClosed
+    const finish = (error?: unknown) => {
+      clearTimeout(forceExit);
+      if (error) {
+        logError("api.server.shutdown_error", {}, error);
+        process.exit(1);
+      }
+      process.exit(0);
+    };
+    void closeDb()
       .then(() => flushObservability(2000))
-      .finally(() => {
-        if (err) {
-          logError("api.server.shutdown_error", {}, err);
-          process.exit(1);
-        }
-        process.exit(0);
-      });
+      .then(() => finish(err), finish);
   });
 });

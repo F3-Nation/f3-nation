@@ -31,6 +31,14 @@ export function enableDbRecovery() {
   recoveryEnabled = true;
 }
 
+/** A physical probe; health callers bound their own response deadline. */
+export const checkDb = () => {
+  if (shuttingDown) throw new Error("Database client is shutting down");
+  if (!recoveryEnabled) throw new Error("Database recovery is not enabled");
+  _db ??= resolveDb();
+  return recoveringClient!.check();
+};
+
 export const isDbLive = () => recoveringClient?.isLive() ?? true;
 export const closeDb = async () => {
   shuttingDown = true;

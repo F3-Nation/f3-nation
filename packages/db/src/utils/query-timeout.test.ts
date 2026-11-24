@@ -20,11 +20,29 @@ it("observes timely success but neither errors nor transaction BEGIN", async () 
     return { then: pending.then.bind(pending) };
   });
   await expect(client.unsafe("select 1")).rejects.toBe(failure);
-  const native = { then: Promise.resolve([]).then.bind(Promise.resolve([])) };
+  vi.useFakeTimers();
+  let finishBegin!: (value: unknown) => void;
+  const nativePromise = new Promise((resolve) => {
+    finishBegin = resolve;
+  });
+  const native = { then: nativePromise.then.bind(nativePromise) };
   unsafe.mockReturnValueOnce(native);
-  expect(
+  const begin = Promise.resolve(
     client.unsafe("begin", [], { onexecute: () => undefined } as never),
-  ).toBe(native);
+  );
+  let settled = false;
+  void begin.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await vi.advanceTimersByTimeAsync(200);
+  expect(settled).toBe(false);
+  finishBegin([]);
+  await expect(begin).resolves.toEqual([]);
   expect(observer.success).toHaveBeenCalledTimes(1);
   expect(observer.timeout).not.toHaveBeenCalled();
 });

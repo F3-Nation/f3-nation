@@ -216,11 +216,25 @@ export const createDbClient = (options: { recover?: boolean } = {}) => {
   const { databaseUrl, useSsl } = getDbUrl();
   const { url, hostOptions } = postgresArgs(databaseUrl);
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
+  let probe!: () => Promise<void>;
+  let outstandingProbe: Promise<void> | undefined;
+  const check = () => {
+    outstandingProbe ??= probe().finally(() => {
+      outstandingProbe = undefined;
+    });
+    return outstandingProbe;
+  };
   const create = (observer?: QueryObserver) => {
     const client = postgres(url, {
       ...sslOptions,
       ...poolOptions(hostOptions),
     });
+    // Health owns a physical query until settlement, including forced pool
+    // closure. A caller-facing query timeout cannot release that ownership.
+    const nativeUnsafe = client.unsafe.bind(client);
+    probe = async () => {
+      await nativeUnsafe("select 1");
+    };
     // Audit must wrap the timeout: timing out a begin-backed write could reject
     // it while its transaction later commits.
     if (QUERY_TIMEOUT_MS > 0)
@@ -231,8 +245,8 @@ export const createDbClient = (options: { recover?: boolean } = {}) => {
       close: (settings?: { timeout: number }) => client.end(settings),
     };
   };
-  if (options.recover) return createRecoveringPool(create);
-  return { ...create(), isLive: () => true };
+  if (options.recover) return { ...createRecoveringPool(create), check };
+  return { ...create(), isLive: () => true, check };
 };
 
 export const getDb = () => createDbClient().db;
