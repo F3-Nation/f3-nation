@@ -88,6 +88,23 @@ def test_sweep_counts_unchanged_token_as_skipped(isolated_postgres, monkeypatch)
 
 
 @postgres_fixture.requires_postgres
+def test_sweep_counts_cleared_row_as_skipped(isolated_postgres, monkeypatch):
+    _seed(isolated_postgres, "T_GONE", timedelta(hours=1))
+    # The row lost its token between the selection and the refresh.
+    monkeypatch.setattr(refresh_slack_tokens, "refresh_if_needed", lambda team_id, **_: None)
+
+    assert refresh_slack_tokens.refresh_expiring_tokens() == {"refreshed": 0, "failed": 0, "skipped": 1}
+
+
+@pytest.mark.parametrize("failed, exit_code", [(0, 0), (2, 1)])
+def test_sweep_cli_exits_non_zero_when_any_workspace_failed(monkeypatch, failed, exit_code):
+    counts = {"refreshed": 1, "failed": failed, "skipped": 0}
+    monkeypatch.setattr(refresh_slack_tokens, "refresh_expiring_tokens", lambda: counts)
+
+    assert refresh_slack_tokens.main() == exit_code
+
+
+@postgres_fixture.requires_postgres
 def test_sweep_continues_after_failure(isolated_postgres, monkeypatch, caplog):
     _seed(isolated_postgres, "T_A", timedelta(hours=1))
     _seed(isolated_postgres, "T_B", timedelta(hours=2))

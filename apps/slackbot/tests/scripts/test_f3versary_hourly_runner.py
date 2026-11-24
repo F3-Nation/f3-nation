@@ -7,6 +7,7 @@ from scripts import hourly_runner
 
 
 def silence_other_jobs(monkeypatch, achievement_callback=lambda: None):
+    monkeypatch.setattr(hourly_runner.refresh_slack_tokens, "refresh_expiring_tokens", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.calendar_images, "generate_calendar_images", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.backblast_reminders, "send_backblast_reminders", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.preblast_reminders, "send_preblast_reminders", lambda *args, **kwargs: None)

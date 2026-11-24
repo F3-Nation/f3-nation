@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_DIRS = {"tests", ".venv", "node_modules", "build", "coverage", "__pycache__"}
 EXCLUDED_PREFIXES = ("utilities/slack_tokens/",)
-# One-off operator CLIs whose job is moving or re-encrypting the stored tokens themselves.
+# Release-owner CLIs whose job is importing, converting or re-encrypting the stored tokens (spec AC-14).
 EXCLUDED_FILES = {
     "scripts/import_slack_installations.py",
     "scripts/convert_slack_tokens.py",

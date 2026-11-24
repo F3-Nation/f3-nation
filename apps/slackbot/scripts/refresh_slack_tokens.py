@@ -86,5 +86,12 @@ def refresh_expiring_tokens() -> dict[str, int]:
     return counts
 
 
+def main() -> int:
+    """Run the sweep once; exit 1 if any workspace failed."""
+    counts = refresh_expiring_tokens()
+    print(counts)
+    return 1 if counts["failed"] else 0
+
+
 if __name__ == "__main__":
-    print(refresh_expiring_tokens())
+    sys.exit(main())

@@ -22,7 +22,8 @@ only reads. The architecture and its tradeoffs are in
   The per-request region lookup in the same file fills a workspace's settings
   and never writes a token.
 - Token readers: Slackbot code outside `apps/slackbot/utilities/slack_tokens/`
-  gets a client from `slack_client_for_team` and never reads `bot_token`;
+  gets a client from `slack_client_for_team` and never reads `bot_token`,
+  apart from the release-owner CLIs that import, convert or re-key tokens;
   `apps/slackbot/tests/test_token_access_boundary.py` enforces this. DB Admin
   has no action that writes a token: Bolt's request token is read from the
   same row, so copying it back would change nothing.
@@ -168,26 +169,37 @@ refreshes earlier than its window.
   it offers no action that writes a bot token; reinstalling the app is how a
   stale token is replaced.
 - **AC-13** — GIVEN a non-rotating row WHEN the conversion CLI runs for that
-  team THEN it calls `oauth.v2.exchange` under the per-workspace lock and
-  saves the access token, expiry and encrypted refresh token. GIVEN a row that
-  is already rotating THEN the CLI skips it. GIVEN a row whose `settings` JSON
-  still holds a `bot_token` THEN the CLI prints that team as
+  team with `--apply` THEN it calls `oauth.v2.exchange` under the
+  per-workspace lock and saves the access token, expiry and encrypted refresh
+  token. Without `--apply` the CLI only reports what it would do, and
+  `--apply` is refused unless `--database` names the database the CLI is
+  connected to. GIVEN an encryption key that can't encrypt THEN `--apply`
+  exits non-zero before any exchange. GIVEN a row that is already rotating
+  THEN the CLI skips it. GIVEN a row whose `settings` JSON still holds a
+  `bot_token`, or isn't a JSON object, THEN the CLI prints that team as
   `blocked:settings_token`, makes no exchange call, leaves the row unchanged
-  and exits non-zero. GIVEN an exchange failure THEN the
-  row is unchanged and the failure is printed by team ID. GIVEN Slack answers
-  `token_already_exchanged`, or the exchange succeeds but the save still fails
-  after retries, THEN the CLI prints that team as needing a reinstall, never
-  calls the exchange again for it, and exits non-zero. GIVEN the exchange call
-  fails with an error that isn't a Slack API error (such as a dropped
-  connection) THEN the CLI prints that team as `error:<exception class>` and
-  exits non-zero; Slack may or may not have exchanged the token, so a re-run
-  for that team either converts it or reports it as needing a reinstall.
+  and exits non-zero; `--all` leaves such rows out of its batch and reports
+  how many it left out. GIVEN an exchange failure THEN the row is unchanged
+  and the failure is printed by team ID. GIVEN Slack answers
+  `token_already_exchanged`, the exchange response lacks a token field, or the
+  exchange succeeds but the save still fails after retries, THEN the CLI
+  prints that team as needing a reinstall, logs
+  `slack.token.exchange_lost`, doesn't call the exchange again for it in that
+  run, and exits non-zero. GIVEN the exchange call fails with an error that
+  carries no Slack error code (such as a dropped connection or a gateway
+  error) THEN the CLI prints that team as `error:<exception class>` and exits
+  non-zero; Slack may or may not have exchanged the token, so a re-run for
+  that team either converts it or reports it as needing a reinstall. `--all`
+  batches resume with `--after`, so rows a batch couldn't convert don't hold
+  up the next one.
 - **AC-14** — GIVEN any Slackbot code path WHEN it builds a Slack client for a
   workspace other than the one in Bolt's request context THEN the client comes
   from the token module, and the calling code never holds the token string. No token is read from the settings JSON, stored in a
   module-level cache, written to Slack metadata or logged. A test fails if any
   Slackbot source file outside the token module reads a `bot_token` attribute
-  or key, or calls the getter directly.
+  or key, or calls the getter directly. The release-owner CLIs that import,
+  convert or re-key the stored tokens are the only files exempt, because
+  moving or re-encrypting those tokens is their job.
 - **AC-15** — GIVEN local development (`LOCAL_DEVELOPMENT`) WHEN the Slackbot
   starts THEN it runs with the single long-lived `SLACK_BOT_TOKEN` and no
   OAuth store, and the getter returns that token.
@@ -274,8 +286,8 @@ Rotation can't be disabled on a Slack app, so the order is binding:
 - AC-8: the sweep refreshes near-expiry rows and survives one failing workspace.
 - AC-14: the static boundary test over Slackbot source.
 - AC-18: Bolt's own authorizer, run against the store, never refreshes.
-- AC-13: a lost exchange response is reported as needing a reinstall and is
-  never retried. An exchange call that fails with a non-Slack error is
+- AC-13: a lost exchange response is reported as needing a reinstall, logged
+  as `slack.token.exchange_lost`, and never retried in that run. An exchange call that fails with a non-Slack error is
   reported as `error:<exception class>`, and a re-run reports the team as
   needing a reinstall or converts it.
 
@@ -286,13 +298,19 @@ values, refresh tokens or key material, only the team ID.
 
 - `slack.token.refreshed`: team ID, path (`authorize`, `getter`, `sweep`).
 - `slack.token.refresh_failed`: team ID, path, Slack error code. `path` is
-  `save_bot_locked` when an install or import save fails, and `install` when
-  an OAuth install hits a lock timeout or an encryption-key error. Alert on any
-  occurrence in the sweep.
+  `save_bot_locked` when an install, import or conversion-retry save fails,
+  `install` when an OAuth install hits a lock timeout or an encryption-key
+  error, and `convert_slack_tokens` when the conversion CLI's first save after
+  an exchange fails. Alert on any occurrence in the sweep.
 - `slack.token.rotation_lost`: team ID, path. Logged at ERROR when Slack
   issued new tokens but neither the first save nor its retries in fresh
   transactions stored them. Slack has revoked the stored tokens, so the
   workspace needs a reinstall. Alert on any occurrence.
+- `slack.token.exchange_lost`: team ID, path, reason (`token_already_exchanged`,
+  `save_failed`, or `missing_<field>` when the exchange response lacked a
+  token field). Logged at ERROR by the conversion CLI when a workspace's
+  long-lived token can no longer be converted, so it needs a reinstall. Alert
+  on any occurrence.
 - `slack.token.lock_timeout`: team ID, path.
 - `slack.token.sweep_complete`: counts of workspaces refreshed, skipped and
   failed by the hourly sweep; WARNING when any failed, INFO otherwise.

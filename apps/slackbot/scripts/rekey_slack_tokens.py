@@ -1,10 +1,10 @@
 """Re-encrypt stored Slack refresh tokens with the newest `SLACK_TOKEN_ENCRYPTION_KEY`.
 
-To change the key, put the new key first and the old key second, deploy, run
-this script, then run it with `--check` until it exits 0, and only then remove
-the old key. A workspace whose refresh token only the removed key could decrypt
-has to reinstall the app. The hourly sweep is not a substitute: it skips rows
-that aren't near expiry.
+To change the key, put the new key first and the old key second, deploy,
+then run this script until it reports no failures and `--check` exits 0, and
+only then remove the old key. A row that no listed key decrypts can't be
+recovered: that workspace has to reinstall the app before `--check` can pass.
+The hourly sweep is not a substitute: it skips rows that aren't near expiry.
 
     python scripts/rekey_slack_tokens.py [--check]
 
