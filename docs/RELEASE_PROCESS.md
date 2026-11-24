@@ -70,7 +70,9 @@ If multiple PRs are merged to `main` before the Release Please PR is merged, Rel
 
 The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `main`.
 
-After the release PR has merged and deployed to Staging, have an agent run the [`release`](../.agents/skills/release/SKILL.md) skill. For Staging it files the Staging test plan and the release plan that links it; after the Staging go/no-go, run it again for the Production release plan. It works only from a merged release PR, never an open one, which is only a running changelog.
+When the release PR merges, [`release-please.yml`](../.github/workflows/release-please.yml) starts [`release-plan.yml`](../.github/workflows/release-plan.yml), which runs the [`release`](../.agents/skills/release/SKILL.md) skill unattended with Claude Code. It files the Staging release plan and, when the release ships an app, the Staging test plan, linked to each other. The plans can appear before the Staging deploys finish, so the release plan's first step checks that they succeeded. A run that ends without those plans, linked, fails and comments on the release PR with a link to it. Run **Release Plan** again from the Actions page: it plans only the latest merged release PR, never refiles a plan that release already has, and files a missing release plan or link. It doesn't file a test plan for a release plan that already exists; have an agent run the skill for that. After the Staging go/no-go, have an agent run the same skill for the Production release plan; nothing files that one automatically. The skill works only from a merged release PR, never an open one, which is only a running changelog.
+
+The workflow runs in the `release-plan` environment, which accepts runs from `main` alone and holds the `RELEASE_PLAN_ANTHROPIC_API_KEY` secret: a Claude API key from a workspace with a spend limit. Use that key for nothing else, so the limit caps only this workflow. To rotate it, create a new key in that workspace, update the secret, then delete the old key. What the run may do is set in [`release-plan.yml`](../.github/workflows/release-plan.yml): its `--allowedTools` list and each job's `permissions:`.
 
 ### 4. Release Please creates the tag
 
@@ -193,11 +195,12 @@ The changelogs live alongside each app's source and can be referenced during rel
 
 ## Configuration Files
 
-| File                                   | Purpose                                                                               |
-| -------------------------------------- | ------------------------------------------------------------------------------------- |
-| `.github/workflows/release-please.yml` | Runs on push to `main`; creates/updates release PRs and tags                          |
-| `release-please-config.json`           | Defines which packages are tracked, tag format, changelog sections                    |
-| `.release-please-manifest.json`        | Tracks the last-released version of each app; updated automatically by Release Please |
+| File                                   | Purpose                                                                                             |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `.github/workflows/release-please.yml` | Runs on push to `main`; creates/updates release PRs and tags                                        |
+| `.github/workflows/release-plan.yml`   | Started by `release-please.yml` when a release is cut; files the Staging test plan and release plan |
+| `release-please-config.json`           | Defines which packages are tracked, tag format, changelog sections                                  |
+| `.release-please-manifest.json`        | Tracks the last-released version of each app; updated automatically by Release Please               |
 
 **Do not manually edit `.release-please-manifest.json`.** Release Please owns this file.
 

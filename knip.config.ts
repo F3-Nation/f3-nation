@@ -13,7 +13,6 @@ const config: KnipConfig = {
     "packages/**/src/logger.ts",
     "packages/db/src/**",
     "packages/shared/src/app/constants.ts",
-    ".claude/scripts/sync-agent-skills.mjs",
     ".github/scripts/code-scanning-issue.cjs",
     ".github/scripts/ready-for-human-review-label.cjs",
     ".github/scripts/pr-author-nudge.cjs",
