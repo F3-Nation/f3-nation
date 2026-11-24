@@ -48,7 +48,22 @@ jobs:
             const answer = match[1].trim();
             const selectedApp = answer.match(/\bapps\/[a-z0-9-]+/)?.[0];
             if (!selectedApp) {
-              core.info(`Issue #${issue.number}: "${answer}" names no single app; no app label applied.`);
+              // Form options that intentionally name no app. Anything else came from an edited body,
+              // so its text is never logged: it may hold personal details.
+              const nonAppAnswers = new Set([
+                'packages (shared code)',
+                'repo / tooling / CI / deps',
+                'Not sure / multiple',
+              ]);
+              if (nonAppAnswers.has(answer)) {
+                core.info(`Issue #${issue.number} names no single app; no app label applied.`);
+              } else {
+                core.warning(
+                  `Issue #${issue.number}: the "Affected app" answer matches no form option and holds no apps/<name> path; ` +
+                    'no app label applied. Label it by hand, or end the option with "(apps/<name>)" in ' +
+                    '.github/ISSUE_TEMPLATE/{bug_report,feature_request}.yml.',
+                );
+              }
               return;
             }
             const selectedLabel = appLabels.get(selectedApp);
