@@ -26,6 +26,7 @@ def selected_values(**overrides):
         actions.F3VERSARY_ANNOUNCEMENTS_ENABLED: ["enable"],
         actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL: "C1",
         actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: "14",
+        actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS: "90",
     }
     values.update(overrides)
     return values
@@ -53,7 +54,7 @@ def test_settings_save_atomically_merges_only_f3versary_keys(monkeypatch):
     monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
     region_record = SlackSettings(team_id="T1", org_id=6)
 
-    assert f3versary_announcements._save_f3versary_settings(region_record, True, "C1", 14) is True
+    assert f3versary_announcements._save_f3versary_settings(region_record, True, "C1", 14, 90) is True
 
     session.execute.assert_called_once()
     statement = session.execute.call_args.args[0]
@@ -69,6 +70,7 @@ def test_settings_save_atomically_merges_only_f3versary_keys(monkeypatch):
             "f3versary_announcements_enabled": True,
             "f3versary_announcements_channel": "C1",
             "f3versary_announcements_lead_days": 14,
+            "f3versary_announcements_activity_days": 90,
         }
     ]
     session.commit.assert_called_once()
@@ -139,6 +141,7 @@ def test_form_read_uses_live_workspace_document_over_stale_cached_values(monkeyp
         "enabled": True,
         "channel": "C-new",
         "lead_days": 14,
+        "activity_days": 90,
     }
     assert session.query.call_count == 2
 
@@ -265,7 +268,7 @@ def test_valid_settings_save_refreshes_cached_workspace_values_without_touching_
     )
 
     update_db.assert_called_once()
-    assert update_db.call_args.args == (region_record, True, "C1", 30)
+    assert update_db.call_args.args == (region_record, True, "C1", 30, 90)
     refresh.assert_called_once()
     assert region_record.f3versary_announcements_enabled is True
     assert region_record.f3versary_announcements_channel == "C1"
@@ -297,7 +300,7 @@ def test_disabled_settings_can_save_without_a_channel(monkeypatch):
     )
 
     update_db.assert_called_once()
-    assert update_db.call_args.args == (region_record, False, None, 0)
+    assert update_db.call_args.args == (region_record, False, None, 0, 90)
 
 
 def test_form_defaults_lead_days_to_fourteen(monkeypatch):
@@ -307,7 +310,7 @@ def test_form_defaults_lead_days_to_fourteen(monkeypatch):
     monkeypatch.setattr(
         f3versary_announcements,
         "_load_f3versary_settings",
-        lambda region: {"enabled": False, "channel": None, "lead_days": 14},
+        lambda region: {"enabled": False, "channel": None, "lead_days": 14, "activity_days": 90},
     )
 
     f3versary_announcements.build_f3versary_announcements_form(
@@ -327,7 +330,7 @@ def test_enabled_form_selects_checkbox_on_reopen(monkeypatch):
     monkeypatch.setattr(
         f3versary_announcements,
         "_load_f3versary_settings",
-        lambda region: {"enabled": True, "channel": "C1", "lead_days": 30},
+        lambda region: {"enabled": True, "channel": "C1", "lead_days": 30, "activity_days": 90},
     )
 
     f3versary_announcements.build_f3versary_announcements_form(
@@ -367,6 +370,9 @@ def test_enabled_submission_reads_actual_checkbox_payload(monkeypatch):
                     enabled_action: {enabled_action: {"selected_options": [{"value": "enable"}]}},
                     channel_action: {channel_action: {"selected_conversation": "C1"}},
                     lead_days_action: {lead_days_action: {"value": "14"}},
+                    actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS: {
+                        actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS: {"selected_option": {"value": "90"}}
+                    },
                 }
             },
         }
@@ -374,8 +380,71 @@ def test_enabled_submission_reads_actual_checkbox_payload(monkeypatch):
 
     f3versary_announcements.handle_f3versary_announcements_edit(body, MagicMock(), MagicMock(), {}, region_record)
 
-    assert update_db.call_args.args == (region_record, True, "C1", 14)
+    assert update_db.call_args.args == (region_record, True, "C1", 14, 90)
 
 
 def test_enable_checkbox_is_optional_so_it_can_be_cleared():
     assert f3versary_announcements.F3VERSARY_ANNOUNCEMENTS_FORM.blocks[0].optional is True
+
+
+def test_attendance_dropdown_has_agreed_options_and_default():
+    form = f3versary_announcements.copy.deepcopy(f3versary_announcements.F3VERSARY_ANNOUNCEMENTS_FORM)
+    block = next(
+        block for block in form.as_form_field() if block.get("label", {}).get("text") == "Recent attendance requirement"
+    )
+    element = block["element"]
+    assert element["type"] == "static_select"
+    assert [(option["text"]["text"], option["value"]) for option in element["options"]] == [
+        ("No requirement", "0"),
+        ("1 month", "30"),
+        ("2 months", "60"),
+        ("3 months", "90"),
+        ("6 months", "180"),
+        ("12 months", "360"),
+    ]
+    assert element["initial_option"]["value"] == "90"
+
+
+@pytest.mark.parametrize("activity_days", ["0", "30", "60", "90", "180", "360"])
+def test_activity_requirement_submission_reads_raw_dropdown_payload(monkeypatch, activity_days):
+    region = SlackSettings(team_id="T1", org_id=6)
+    save = MagicMock(return_value=True)
+    monkeypatch.setattr(f3versary_announcements, "_save_f3versary_settings", save)
+    monkeypatch.setattr(f3versary_announcements, "update_local_region_records", MagicMock())
+    monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", MagicMock())
+    values = {
+        actions.F3VERSARY_ANNOUNCEMENTS_ENABLED: {"selected_options": [{"value": "enable"}]},
+        actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL: {"selected_conversation": "C1"},
+        actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: {"value": "14"},
+        actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS: {"selected_option": {"value": activity_days}},
+    }
+    body = {
+        "view": {"id": "V1", "blocks": [], "state": {"values": {key: {key: value} for key, value in values.items()}}}
+    }
+    f3versary_announcements.handle_f3versary_announcements_edit(body, MagicMock(), MagicMock(), {}, region)
+    assert save.call_args.args == (region, True, "C1", 14, int(activity_days))
+    assert region.f3versary_announcements_activity_days == int(activity_days)
+
+
+@pytest.mark.parametrize("activity_days", [None, "", "120", "-1", "91", "90.0", "no_requirement", {}, []])
+def test_unsupported_activity_submission_does_not_save(monkeypatch, activity_days):
+    save = MagicMock()
+    update = MagicMock()
+    monkeypatch.setattr(f3versary_announcements, "_save_f3versary_settings", save)
+    monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", update)
+    activity_action = actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS
+    values = {
+        actions.F3VERSARY_ANNOUNCEMENTS_ENABLED: {"selected_options": [{"value": "enable"}]},
+        actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL: {"selected_conversation": "C1"},
+        actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: {"value": "14"},
+        activity_action: {"selected_option": {"value": activity_days}},
+    }
+    body = {
+        "view": {"id": "V1", "blocks": [], "state": {"values": {key: {key: value} for key, value in values.items()}}}
+    }
+    f3versary_announcements.handle_f3versary_announcements_edit(
+        body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="T1", org_id=6)
+    )
+    save.assert_not_called()
+    assert update.call_args.kwargs["title"] == "Invalid attendance requirement"
+    assert update.call_args.kwargs["level"] == constants.AlertLevel.ERROR

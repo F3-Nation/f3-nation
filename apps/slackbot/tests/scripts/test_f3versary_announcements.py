@@ -340,6 +340,9 @@ def test_paginated_message_rejects_a_single_oversized_member_line():
 
 def test_first_attendance_query_excludes_inactive_events_and_scopes_users(monkeypatch):
     first_query = MagicMock()
+    from sqlalchemy import column
+
+    first_query.subquery.return_value.c.last_attendance_date = column("last_attendance_date")
     rows_query = MagicMock()
     for method in ("select_from", "join", "filter", "group_by"):
         getattr(first_query, method).return_value = first_query
@@ -952,3 +955,32 @@ def test_f3versary_skips_uninstalled_workspace(monkeypatch, caplog):
     assert outbox.run_for_date(10, 1, date(2026, 9, 1)).status == "complete"
     assert len(posts) == 1
     assert "Error processing" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "stored, expected",
+    [
+        (None, 90),
+        (0, 0),
+        (30, 30),
+        (60, 60),
+        (90, 90),
+        (180, 180),
+        (360, 360),
+        (True, 90),
+        (False, 90),
+        ("0", 90),
+        (90.0, 90),
+        (120, 90),
+        (-1, 90),
+        ({}, 90),
+    ],
+)
+def test_activity_settings_default_and_allowed_values(stored, expected):
+    _, org, space = slack_record(f3versary_announcements_activity_days=stored)
+    assert f3versary_announcements._load_settings(org, space).activity_days == expected
+
+
+def test_activity_change_invalidates_in_flight_config():
+    assert f3versary_announcements._config_matches(config(activity_days=90), config(activity_days=90))
+    assert not f3versary_announcements._config_matches(config(activity_days=90), config(activity_days=0))

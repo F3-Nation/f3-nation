@@ -19,8 +19,8 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
   - `apps/slackbot/utilities/slack/forms.py`
 - Start-date sources: the existing PostgreSQL user profile metadata and attendance/event-instance records.
 - Regional opt-in: the existing `public.slack_spaces.settings` JSON document stores
-  the enabled flag, channel, and lead time. The settings handler atomically
-  merges only those three F3versary keys so it does not overwrite unrelated
+  the enabled flag, channel, lead time, and attendance requirement. The settings handler atomically
+  merges only the F3versary keys so it does not overwrite unrelated
   Slackbot settings.
 - Delivery state: dedicated `slackbot.f3versary_delivery_runs` and
   `slackbot.f3versary_delivery_pages` PostgreSQL tables, which must be created
@@ -38,7 +38,7 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
 
 - **AC-2 — Settings location:** GIVEN an authorized regional administrator, WHEN they open F3 Nation Settings, THEN “F3versary Announcements” appears as its own option under Bot Management.
 
-- **AC-3 — Configurable settings:** GIVEN an authorized regional administrator, WHEN they configure F3versary Announcements, THEN they can enable or disable the feature, select a destination channel, and enter a whole-number lead time from 0 through 30 days. These choices are saved in and reopened from the live `public.slack_spaces.settings` JSON document for the workspace bound to their server-selected region context. Saving atomically merges only `f3versary_announcements_enabled`, `f3versary_announcements_channel`, and `f3versary_announcements_lead_days`, preserving every unrelated settings key.
+- **AC-3 — Configurable settings:** GIVEN an authorized regional administrator, WHEN they configure F3versary Announcements, THEN they can enable or disable the feature, select a destination channel, enter a whole-number lead time from 0 through 30 days, and select a Recent attendance requirement from No requirement, 1 month, 2 months, 3 months, 6 months, or 12 months. These choices are saved in and reopened from the live `public.slack_spaces.settings` JSON document for the workspace bound to their server-selected region context. Saving atomically merges only `f3versary_announcements_enabled`, `f3versary_announcements_channel`, `f3versary_announcements_lead_days`, and `f3versary_announcements_activity_days`, preserving every unrelated settings key.
 
 - **AC-4 — Defaults and validation:** GIVEN a region that has not selected a lead time, WHEN its settings are displayed or processed, THEN the lead time defaults to 14 days. The settings form rejects values below 0, above 30, or containing something other than a whole number. If a stored value is corrupt despite that validation, the job logs a non-sensitive warning and uses the 14-day default rather than silently treating it as intentional.
 
@@ -77,11 +77,17 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
 
 - **AC-15 — Failure and retry:** GIVEN a database or Slack failure, WHEN the task runs, THEN the failure is logged without sensitive information, the other hourly jobs continue, and the affected region remains eligible for a later hourly retry on the same Central calendar date. The ordered page plan and its exact text/blocks are committed before posting. Slack calls occur without a database row lock or transaction held across the network call. A same-day retry resumes at the first unrecorded page without recomputing or reordering candidates and reuses that page's deterministic Slack message ID. An expired claim may be reclaimed. If a run remains unfinished on a later Central calendar date, it is abandoned with a warning rather than sending stale pages or blocking future daily announcements; the current day's run may then proceed.
 
-- **AC-16 — Concurrent settings safety:** GIVEN an administrator saves F3versary settings while the job is processing, WHEN both database writes complete, THEN the administrator’s enabled, channel, and lead-time values in `public.slack_spaces.settings` and the run/page delivery state in the PostgreSQL `slackbot` schema are preserved. The settings handler uses an atomic JSONB merge of only the three F3versary keys; delivery writes never rewrite the shared settings document. The job rechecks current settings before saving a plan and claiming each next page, and pauses the saved run when it detects changed enablement, channel, or lead time. A settings edit that races after a page is claimed cannot recall a post already in flight; that race requires maintainer reliability review.
+- **AC-16 — Concurrent settings safety:** GIVEN an administrator saves F3versary settings while the job is processing, WHEN both database writes complete, THEN the administrator’s enabled, channel, and lead-time values in `public.slack_spaces.settings` and the run/page delivery state in the PostgreSQL `slackbot` schema are preserved. The settings handler uses an atomic JSONB merge of only the F3versary keys; delivery writes never rewrite the shared settings document. The job rechecks current settings before saving a plan and claiming each next page, and pauses the saved run when it detects changed enablement, channel, or lead time. A settings edit that races after a page is claimed cannot recall a post already in flight; that race requires maintainer reliability review.
 
 - **AC-17 — Forced local execution:** GIVEN a local or automated test invocation with forced execution enabled, WHEN the task runs outside its normal time, THEN it bypasses only the time gate and still observes regional enablement and duplicate protection.
 
 - **AC-18 — Dry run:** GIVEN a local invocation in dry-run mode, WHEN the task runs, THEN it displays the proposed message without contacting Slack or recording the region as processed.
+
+- **AC-19 — Recent attendance:** GIVEN an attendance requirement other than No requirement, WHEN candidates are selected, THEN each PAX must have actual attendance at an active event between the processing date minus the configured window and the processing date, inclusive. Planned attendance, inactive events, and future dates do not establish recent activity. Attendance in any region counts, while the current home region determines the announcement destination. The recent-activity window does not change the historical start date or anniversary-year calculation; a profile override alone does not satisfy it.
+
+- **AC-20 — Attendance settings:** GIVEN the Recent attendance requirement dropdown, WHEN it is opened or saved, THEN its exact options are No requirement, 1 month, 2 months, 3 months, 6 months, and 12 months. The month values represent 30, 60, 90, 180, and 360 days. The default is 3 months, including for existing workspaces without the key. No requirement stores 0 and disables only the recent-attendance filter. Unsupported submissions are rejected without saving. Missing or invalid stored values fall back to 90 days; the runner logs a non-sensitive warning for invalid non-null values. The helper text is “Each month represents 30 days. No requirement removes the attendance filter.”
+
+- **AC-21 — Saved delivery plans:** GIVEN an immutable delivery plan already exists, WHEN an attendance requirement changes, THEN the current invocation pauses before claiming another page if it detects the changed requirement. A later invocation resumes the existing immutable plan without recomputing its membership; the updated requirement applies to subsequently created plans. This preserves retry ordering and duplicate protection.
 
 ## 5. Roles & authorization
 
@@ -139,14 +145,15 @@ settings document represents one workspace-level F3versary configuration.
 ## 7. Critical-path test cases
 
 - An opted-out region is skipped.
-- A settings save atomically updates only the three F3versary JSON keys and
+- A settings save atomically updates only the F3versary JSON keys and
   preserves unrelated keys in `public.slack_spaces.settings`.
 - An opted-in region processes once after 5:00 PM Central.
 - Lead times of 0, 14, and 30 days identify the correct target date.
 - Invalid lead times are rejected.
 - A valid profile start-date override takes precedence over first actual attendance.
 - A missing, blank, or invalid override falls back to first actual attendance.
-- A valid override works when the user has no actual-attendance record.
+- A valid override establishes the anniversary date without attendance, but
+  the PAX is eligible without recent attendance only with No requirement selected.
 - A PAX who changes home regions retains a prior-region actual-attendance
   F3versary (or global profile override) and is announced only in the new home
   region when that region opts in.

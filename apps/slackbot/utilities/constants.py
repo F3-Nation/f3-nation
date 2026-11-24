@@ -5,6 +5,9 @@ import dotenv
 
 dotenv.load_dotenv()
 
+F3VERSARY_ACTIVITY_DAYS = (0, 30, 60, 90, 180, 360)
+DEFAULT_F3VERSARY_ACTIVITY_DAYS = 90
+
 
 def is_production_deployment() -> bool:
     """Return whether this process is explicitly configured for production."""

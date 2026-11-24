@@ -33,6 +33,7 @@ from sqlalchemy import and_, func
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
+from utilities.constants import DEFAULT_F3VERSARY_ACTIVITY_DAYS, F3VERSARY_ACTIVITY_DAYS
 from utilities.database.orm import SlackSettings
 from utilities.slack_tokens.client import slack_client_for_team
 
@@ -63,6 +64,7 @@ class F3versaryConfig:
     channel: str | None
     lead_days: int
     last_processed_date: date | None
+    activity_days: int = DEFAULT_F3VERSARY_ACTIVITY_DAYS
 
 
 @dataclass(frozen=True)
@@ -136,7 +138,13 @@ def _load_settings(
     belongs_to_org = settings.org_id == org.id
     raw_lead_days = settings.f3versary_announcements_lead_days
     lead_days = _bounded_lead_days(raw_lead_days)
+    activity_days = settings.f3versary_announcements_activity_days
+    if type(activity_days) is not int or activity_days not in F3VERSARY_ACTIVITY_DAYS:
+        if activity_days is not None:
+            logger.warning("Invalid F3versary attendance requirement; using default")
+        activity_days = DEFAULT_F3VERSARY_ACTIVITY_DAYS
     return F3versaryConfig(
+        activity_days=activity_days,
         enabled=belongs_to_org and bool(settings.f3versary_announcements_enabled),
         org_id=org.id,
         team_id=slack_space.team_id,
@@ -183,12 +191,21 @@ def select_f3versary_candidates(
     return sorted(candidates, key=lambda candidate: ((candidate.f3_name or "").casefold(), candidate.user_id))
 
 
-def get_f3versary_candidates(config: F3versaryConfig, target_date: date) -> list[F3versaryCandidate]:
+def get_f3versary_candidates(
+    config: F3versaryConfig,
+    target_date: date,
+    processing_date: date | None = None,
+) -> list[F3versaryCandidate]:
+    if processing_date is None:
+        processing_date = target_date - timedelta(days=config.lead_days)
     with get_session() as session:
         first_attendance = (
             session.query(
                 Attendance.user_id.label("user_id"),
                 func.min(EventInstance.start_date).label("first_attendance_date"),
+                func.max(EventInstance.start_date)
+                .filter(EventInstance.start_date <= processing_date)
+                .label("last_attendance_date"),
             )
             .select_from(Attendance)
             .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
@@ -203,7 +220,7 @@ def get_f3versary_candidates(config: F3versaryConfig, target_date: date) -> list
             .group_by(Attendance.user_id)
             .subquery()
         )
-        rows = (
+        rows_query = (
             session.query(
                 User.id,
                 User.f3_name,
@@ -218,8 +235,12 @@ def get_f3versary_candidates(config: F3versaryConfig, target_date: date) -> list
             )
             .filter(User.home_region_id == config.org_id)
             .group_by(User.id, User.f3_name, first_attendance.c.first_attendance_date, User.meta)
-            .all()
         )
+        if config.activity_days != 0:
+            rows_query = rows_query.filter(
+                first_attendance.c.last_attendance_date >= processing_date - timedelta(days=config.activity_days)
+            )
+        rows = rows_query.all()
 
     return select_f3versary_candidates(rows, target_date)
 
@@ -447,6 +468,7 @@ def _config_matches(original: F3versaryConfig, current: F3versaryConfig) -> bool
         and original.team_id == current.team_id
         and original.channel == current.channel
         and original.lead_days == current.lead_days
+        and original.activity_days == current.activity_days
     )
 
 

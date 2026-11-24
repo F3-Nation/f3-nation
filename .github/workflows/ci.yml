@@ -469,6 +469,7 @@ jobs:
           tests/utilities/slack_tokens/test_refresh_postgres.py
           tests/utilities/slack_tokens/test_store_postgres.py
           tests/scripts/test_import_slack_installations.py
+          tests/scripts/test_f3versary_activity_postgres.py
           tests/utilities/test_get_region_record_postgres.py
         env:
           SLACKBOT_POSTGRES_TESTS: "1"
