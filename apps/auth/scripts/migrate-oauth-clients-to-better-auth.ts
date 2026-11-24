@@ -73,9 +73,11 @@
  *        DATABASE_USER=<your db user>
  *        DATABASE_PASSWORD=<your db password>
  *        DATABASE_NAME=f3_staging      (f3_prod for prod)
+ *        NEXT_PUBLIC_AUTH_URL=<that environment's auth3 URL>
  *   3. Dry run. --resource must equal the identifier of the resource row
  *      Better Auth seeded in that database; it defaults to
- *      NEXT_PUBLIC_AUTH_URL from the env file. If the run stops with
+ *      NEXT_PUBLIC_AUTH_URL from the env file (the run stops with
+ *      resource_not_given if neither is set). If it stops with
  *      resource_missing, read the identifier with
  *        SELECT identifier FROM auth.better_auth_oauth_resource;
  *      and pass that:
