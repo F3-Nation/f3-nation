@@ -74,14 +74,13 @@ Running either skill takes one command and a PR number. Both live in [`.agents/s
 ### Set up your machine (once)
 
 - **Install the tools each skill needs.** Each skill checks them at the start and lists anything missing in one message. The lists live in the skills themselves: the Requirements table in [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md#requirements), and the `compatibility` line at the top of [`pr-local-test`](../.agents/skills/pr-local-test/SKILL.md), which also needs Docker running. On Windows, work inside WSL 2, as [AGENTS.md](../AGENTS.md#environment-setup) describes for the whole repo.
-- **Add the recommended add-ons.** Each skill works without them and falls back on its own, but runs better with them:
+- **Add the recommended add-on.** `pr-local-test` works without it and falls back on its own, but runs better with it:
 
-| Add-on                                                               | Helps                 | What you get                                                                                                                                                                             | Claude Code install                                   |
-| -------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test`       | The agent clicks through the running apps itself and takes screenshots, instead of scripting each browser check ([details](../.agents/skills/pr-local-test/reference.md#browser-checks)) | `/plugin install playwright@claude-plugins-official`  |
-| [Superpowers](https://github.com/obra/superpowers)                   | `address-pr-comments` | Least important: adds its guidance for weighing review feedback; the skill carries its own otherwise                                                                                     | `/plugin install superpowers@claude-plugins-official` |
+| Add-on                                                               | Helps           | What you get                                                                                                                                                                             | Claude Code install                                  |
+| -------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test` | The agent clicks through the running apps itself and takes screenshots, instead of scripting each browser check ([details](../.agents/skills/pr-local-test/reference.md#browser-checks)) | `/plugin install playwright@claude-plugins-official` |
 
-For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @playwright/mcp@latest`, and follow the Codex steps in the Superpowers README.
+For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @playwright/mcp@latest`.
 
 ### Run it
 
