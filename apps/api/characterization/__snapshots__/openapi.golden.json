@@ -3038,7 +3038,7 @@
                       "items": {
                         "properties": {
                           "attendanceType": {
-                            "description": "The capacity the user attends in: `pax`, `q` (leader) or `co_q` (co-leader)",
+                            "description": "The capacity the user attends in: `pax` (attendee), `q` (leader), `co_q` (co-leader)",
                             "enum": [
                               "pax",
                               "q",

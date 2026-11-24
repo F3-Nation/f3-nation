@@ -15,7 +15,8 @@ import { protectedProcedure } from "../shared";
 /**
  * Fixed ids of the `attendance_types` rows, which writers still link
  * attendance records to and the `attendanceTypes` response field still
- * reports. They are the same in production and in the local and test seeds.
+ * reports. They are fixed in production and in the local seed; tests insert
+ * them with `ensureAttendanceTypes`.
  */
 const ATTENDANCE_TYPE_IDS = { PAX: 1, Q: 2, COQ: 3 } as const;
 
@@ -29,6 +30,13 @@ const LEGACY_ATTENDANCE_TYPES = {
   q: { id: ATTENDANCE_TYPE_IDS.Q, type: "Q" },
   co_q: { id: ATTENDANCE_TYPE_IDS.COQ, type: "Co-Q" },
 } as const satisfies Record<AttendanceType, { id: number; type: string }>;
+
+/** What each attendance type means, for the API docs. */
+const ATTENDANCE_TYPE_MEANINGS = {
+  pax: "attendee",
+  q: "leader",
+  co_q: "co-leader",
+} as const satisfies Record<AttendanceType, string>;
 
 /**
  * Refuses a write that would give `userId` the Q type on an event instance
@@ -125,7 +133,9 @@ export const attendanceRouter = {
               attendanceType: z
                 .enum(AttendanceType)
                 .describe(
-                  "The capacity the user attends in: `pax`, `q` (leader) or `co_q` (co-leader)",
+                  `The capacity the user attends in: ${AttendanceType.map(
+                    (type) => `\`${type}\` (${ATTENDANCE_TYPE_MEANINGS[type]})`,
+                  ).join(", ")}`,
                 ),
               attendanceTypes: z
                 .array(
