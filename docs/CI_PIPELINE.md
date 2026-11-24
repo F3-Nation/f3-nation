@@ -199,9 +199,10 @@ that app's thin `deploy-<app>.yml` caller into the shared
 
 1. **`ci-gate`** — fails unless the tag points at a commit on `main`, then
    waits (does not re-run) for the CI checks matched by its `check-regexp` to
-   succeed on the tagged SHA. That is every required check
-   except `lint-title`, which runs only on pull requests and so never reports
-   on a tagged commit. The gate fails if a matching check concludes anything
+   succeed on the tagged SHA. That is every required check except
+   `lint-title`, plus the jobs in `test-coverage`'s `needs` (see above).
+   `lint-title` runs only on pull requests and so never reports on a tagged
+   commit. The gate fails if a matching check concludes anything
    other than `success` (including `failure` or `skipped`), or if no check
    matches at all. A required check that is missing on its own does not fail
    it, so redeploying a tag cut before a required check was added passes on

@@ -3,7 +3,9 @@
 # check satisfies MODE, or fails once ATTEMPTS polls have passed.
 #
 #   exist      every named check has a check run, in any state
-#   completed  every named check has a completed check run, whatever its conclusion
+#   completed  the newest run of every named check has completed, whatever its
+#              conclusion; an older finished run doesn't count while a rerun is
+#              pending
 #
 # Usage: wait-for-check-runs.sh MODE ATTEMPTS INTERVAL_SECONDS CHECK_NAME...
 # Needs `gh` signed in (GH_TOKEN in CI). A failed `gh` call fails the wait
@@ -25,7 +27,7 @@ case "${mode}" in exist | completed) ;; *) usage ;; esac
 missing=""
 for _ in $(seq 1 "${attempts}"); do
   if ! runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
-    --jq '.check_runs[] | [.name, .status] | @tsv')"; then
+    --jq '.check_runs[] | [.name, .status, .id] | @tsv')"; then
     echo "::error::Could not read the check runs on ${GITHUB_SHA}."
     exit 1
   fi
@@ -35,7 +37,10 @@ for _ in $(seq 1 "${attempts}"); do
       awk -F'\t' -v n="${name}" '$1 == n { found = 1 } END { exit !found }' <<<"${runs}" ||
         missing="${missing} ${name}"
     else
-      awk -F'\t' -v n="${name}" '$1 == n && $2 == "completed" { found = 1 } END { exit !found }' <<<"${runs}" ||
+      # Judge the newest run (ids only grow), as the staging-refresh gate does.
+      awk -F'\t' -v n="${name}" '
+        $1 == n && (!seen || $3 + 0 > newest) { seen = 1; newest = $3 + 0; status = $2 }
+        END { exit status != "completed" }' <<<"${runs}" ||
         missing="${missing} ${name}"
     fi
   done

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Regression tests for scripts/wait-for-check-runs.sh. `gh` is replaced by a
-# stub that replays one canned response per call (the `name<TAB>status` lines
-# the real call's --jq produces), so each case controls what every poll sees.
+# stub that replays one canned response per call (the `name<TAB>status<TAB>id`
+# lines the real call's --jq produces), so each case controls what every poll
+# sees.
 # Run directly: bash scripts/wait-for-check-runs.test.sh
 set -uo pipefail
 
@@ -37,7 +38,7 @@ STUB
 chmod +x "$tmp_dir/sleep"
 
 # Each argument is one poll's response, with "|" between lines and ":" between
-# name and status; FAIL makes that poll's gh call fail.
+# name, status and the optional id; FAIL makes that poll's gh call fail.
 set_responses() {
   rm -rf "$tmp_dir/responses" "$tmp_dir/calls" "$tmp_dir/sleeps"
   mkdir "$tmp_dir/responses"
@@ -84,14 +85,24 @@ set_responses "test-coverage:completed"
 assert_eq "completed returns on the first poll when the check has finished" \
   "0 calls=1: " "$(run_wait completed 5 0 test-coverage)"
 
-set_responses "test-coverage:queued|test-coverage:completed"
-assert_eq "completed accepts a finished run beside a queued rerun" \
+set_responses "test-coverage:queued:2|test-coverage:completed:1" \
+  "test-coverage:completed:2|test-coverage:completed:1"
+assert_eq "completed waits for a queued rerun, not an older finished run" \
+  "0 calls=2: " "$(run_wait completed 5 0 test-coverage)"
+
+set_responses "test-coverage:completed:2|test-coverage:queued:1"
+assert_eq "completed ignores an older run that is still pending" \
   "0 calls=1: " "$(run_wait completed 5 0 test-coverage)"
 
 set_responses "test-coverage-extra:completed"
 assert_eq "a check name only counts on an exact match" \
   "1 calls=2: ::error::These checks didn't finish on abc123 within 0 minutes: test-coverage" \
   "$(run_wait completed 2 0 test-coverage)"
+
+set_responses "lint-title:completed"
+assert_eq "exist only counts a check name on an exact match" \
+  "1 calls=2: ::error::CI didn't start these checks on abc123 within 0 minutes: lint" \
+  "$(run_wait exist 2 0 lint)"
 
 set_responses FAIL "build:completed"
 assert_eq "a failed gh call fails the wait instead of polling again" \
@@ -117,6 +128,11 @@ set_responses
 assert_eq "a non-numeric attempt count is a usage error" \
   "2 calls=0: usage: ${wait_script} exist|completed ATTEMPTS INTERVAL_SECONDS CHECK_NAME..." \
   "$(run_wait exist many 0 build)"
+
+set_responses
+assert_eq "no check names is a usage error and calls nothing" \
+  "2 calls=0: usage: ${wait_script} exist|completed ATTEMPTS INTERVAL_SECONDS CHECK_NAME..." \
+  "$(run_wait exist 5 0)"
 
 # Prints the recorded sleep durations, comma-separated ("" for none).
 sleeps() {
