@@ -110,8 +110,8 @@ The API workflow always configures `/live`; it cannot redeploy an image without
 that route safely. An authorized operator redeploying such an image must use a
 separate manual deployment, preserving the service's other settings and passing
 `gcloud run deploy f3-api --image=<pinned-image> --liveness-probe=""` with the
-correct project and region. The empty probe flag replaces the workflow's probe
-flag in that deployment; otherwise the missing route repeatedly restarts the image.
+correct project and region. The empty value clears the service's existing liveness
+probe; otherwise the missing route repeatedly restarts the image.
 
 The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes
 directly to GitHub Pages. Its emitted check names must stay distinct from the CI

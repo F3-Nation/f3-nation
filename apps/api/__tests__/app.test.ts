@@ -86,6 +86,7 @@ describe("app", () => {
   });
 
   it("reports a sanitized critical database failure while retaining HTTP 200", async () => {
+    vi.useFakeTimers();
     database.execute.mockRejectedValueOnce(
       new Error("private database details"),
     );
@@ -101,6 +102,8 @@ describe("app", () => {
       }),
     );
     expect(JSON.stringify(payload)).not.toContain("private");
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(healthLogging.logWarn).not.toHaveBeenCalled();
   });
 
   it("returns memory-only liveness status without querying the database", async () => {
@@ -126,7 +129,13 @@ describe("app", () => {
     try {
       const first = app.request("/health");
       const second = app.request("/health");
-      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.advanceTimersByTimeAsync(2_999);
+      expect(healthLogging.logWarn).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(healthLogging.logWarn).toHaveBeenCalledExactlyOnceWith(
+        "api.health.database_probe_stalled",
+        {},
+      );
       const responses = await Promise.all([first, second]);
       for (const response of responses) {
         expect(response.status).toBe(200);
