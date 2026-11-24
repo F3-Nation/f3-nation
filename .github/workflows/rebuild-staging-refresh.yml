@@ -63,7 +63,11 @@ jobs:
 
       # A dispatch soon after a push to main can start before CI has created
       # its checks, and the wait below fails when none of them exist. So first
-      # wait for every required check to appear on this commit.
+      # wait for every required check to appear on this commit. `test-coverage`
+      # is skipped here: it waits on `needs`, so its check run appears only
+      # after test-suites and test-slackbot-postgres finish. Those two are in
+      # REQUIRED and appear at run start; the test-coverage step below waits
+      # for the gate itself.
       - name: Wait for CI to start on this commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,6 +78,7 @@ jobs:
               --jq '.check_runs[].name')"
             missing=""
             for name in ${REQUIRED}; do
+              [[ "${name}" == test-coverage ]] && continue
               grep -qxF "${name}" <<<"${names}" || missing="${missing} ${name}"
             done
             if [[ -z "${missing}" ]]; then exit 0; fi
@@ -92,6 +97,22 @@ jobs:
             obfuscate-db-verify)$"
           wait-interval: 15
           allowed-conclusions: success
+
+      # The wait above can finish once the test jobs pass, a few seconds before
+      # their test-coverage gate has a check run, so wait for the gate to finish.
+      - name: Wait for test-coverage to finish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          attempts=20 interval=15
+          for _ in $(seq 1 "${attempts}"); do
+            finished="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+              --jq '.check_runs[] | select(.name == "test-coverage" and .status == "completed") | .id')"
+            if [[ -n "${finished}" ]]; then exit 0; fi
+            sleep "${interval}"
+          done
+          echo "::error::test-coverage did not finish on ${GITHUB_SHA} within $((attempts * interval / 60)) minutes"
+          exit 1
 
       # The wait above fails only when none of the named checks exist, so also
       # require each one: present on this commit, and its latest run green.

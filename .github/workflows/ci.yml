@@ -420,7 +420,7 @@ jobs:
   # needs, so the check takes as long as the slowest of them rather than their
   # sum; this job only reports their combined result.
   test-coverage:
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [test-suites, test-slackbot-postgres]
     runs-on: ubuntu-latest
     steps:

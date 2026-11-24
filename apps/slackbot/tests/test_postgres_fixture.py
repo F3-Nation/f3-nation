@@ -4,7 +4,7 @@ The second test reads what the first one left behind, so they run in file order.
 """
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
 from tests import postgres_fixture
 
@@ -35,11 +35,18 @@ def test_first_test_leaves_a_database_role_and_row(isolated_postgres):
         connection.exec_driver_sql(f"CREATE ROLE {ROLE} NOLOGIN")
         _first_test["database"] = connection.execute(text("SELECT current_database()")).scalar_one()
         _first_test["cluster"] = _cluster_id(connection)
+    # Held open past teardown on an engine the fixture doesn't own, so only
+    # DROP DATABASE ... WITH (FORCE) can end it and let the drop succeed.
+    leaked_engine = create_engine(isolated_postgres.url)
+    _first_test["leaked"] = (leaked_engine, leaked_engine.connect())
 
 
 def test_next_test_shares_the_server_but_not_the_database(isolated_postgres, postgres_server):
     if not _first_test:
         pytest.skip("runs after test_first_test_leaves_a_database_role_and_row")
+    leaked_engine, leaked_connection = _first_test["leaked"]
+    leaked_connection.invalidate()
+    leaked_engine.dispose()
     with isolated_postgres.connect() as connection:
         assert _cluster_id(connection) == _first_test["cluster"]
         assert connection.execute(text("SELECT current_database()")).scalar_one() != _first_test["database"]
