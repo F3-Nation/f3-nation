@@ -132,9 +132,46 @@ test("validation rejects malformed entries", () => {
     () => validate([{ name: "X", month: 1, day: 1, observed: "yes" }]),
     /`observed`/,
   );
+  assert.throws(
+    () => validate([{ name: "X", month: 1, day: 1, offset: 40 }]),
+    /-31 to 31/,
+  );
+  assert.throws(
+    () => validate([{ name: "A\ngreeting=x", month: 1, day: 1 }]),
+    /one-line `name`/,
+  );
+  assert.throws(
+    () => validate([{ name: "   ", month: 1, day: 1 }]),
+    /one-line `name`/,
+  );
 });
 
-function runScript(rules) {
+test("validation rejects unknown keys", () => {
+  assert.throws(
+    () =>
+      validate([{ name: "X", month: 11, weekday: "Thu", nth: 4, ofset: 1 }]),
+    /unknown key `ofset`/,
+  );
+  assert.throws(
+    () => validate([{ name: "X", month: 7, day: 4, observerd: true }]),
+    /unknown key `observerd`/,
+  );
+});
+
+test("validation rejects a day the month never has", () => {
+  assert.throws(
+    () => validate([{ name: "X", month: 2, day: 30 }]),
+    /`day` must exist/,
+  );
+  assert.throws(
+    () => validate([{ name: "X", month: 4, day: 31 }]),
+    /`day` must exist/,
+  );
+  assert.doesNotThrow(() => validate([{ name: "X", month: 2, day: 29 }]));
+  assert.doesNotThrow(() => validate([{ name: "X", month: 12, day: 31 }]));
+});
+
+function runScript(rules, timeZone = "America/Chicago") {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "holidays-test-"));
   try {
     const file = path.join(dir, "holidays.json");
@@ -145,7 +182,7 @@ function runScript(rules) {
       env: {
         ...process.env,
         HOLIDAYS_FILE: file,
-        TIME_ZONE: "America/Chicago",
+        TIME_ZONE: timeZone,
         GITHUB_OUTPUT: output,
       },
       encoding: "utf8",
@@ -167,6 +204,28 @@ test("script mode writes the holiday and greeting on a holiday", () => {
   const { status, output } = runScript([{ name: "Test Day", month, day }]);
   assert.equal(status, 0);
   assert.equal(output, `name=Test Day\ngreeting=${greeting("Test Day")}\n`);
+});
+
+test("script mode checks the date in TIME_ZONE", () => {
+  // UTC+14: a calendar day ahead of UTC for 14 hours of every day.
+  const zone = "Pacific/Kiritimati";
+  const now = new Date();
+  const zoneDate = localDate(now, zone);
+  const [, month, day] = zoneDate.split("-").map(Number);
+  const zoned = runScript([{ name: "Zone Day", month, day }], zone);
+  assert.equal(zoned.status, 0);
+  assert.match(zoned.output, /^name=Zone Day\n/);
+
+  const utcDate = now.toISOString().slice(0, 10);
+  if (utcDate !== zoneDate) {
+    const [, utcMonth, utcDay] = utcDate.split("-").map(Number);
+    const utc = runScript(
+      [{ name: "UTC Day", month: utcMonth, day: utcDay }],
+      zone,
+    );
+    assert.equal(utc.status, 0);
+    assert.equal(utc.output, "name=\ngreeting=\n");
+  }
 });
 
 test("script mode writes empty outputs on a normal day", () => {

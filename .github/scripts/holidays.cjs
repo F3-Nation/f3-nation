@@ -16,6 +16,7 @@
 const fs = require("node:fs");
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const KEYS = ["name", "month", "day", "weekday", "nth", "offset", "observed"];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function fail(index, message) {
@@ -26,6 +27,11 @@ function isInt(value, min, max) {
   return Number.isInteger(value) && value >= min && value <= max;
 }
 
+// `month` is 1–12; day 0 of the next month is this month's last day.
+function daysIn(year, month) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
 // Throws on any entry that doesn't match one of the rules above, so a typo
 // fails the run instead of silently dropping a holiday.
 function validate(rules) {
@@ -33,6 +39,9 @@ function validate(rules) {
     throw new Error("holidays file must hold a JSON array");
   rules.forEach((rule, i) => {
     if (typeof rule !== "object" || rule === null) fail(i, "must be an object");
+    for (const key of Object.keys(rule)) {
+      if (!KEYS.includes(key)) fail(i, `unknown key \`${key}\``);
+    }
     if (typeof rule.name !== "string" || !/^[^\r\n]+$/.test(rule.name.trim())) {
       fail(i, "needs a one-line `name`");
     }
@@ -41,7 +50,10 @@ function validate(rules) {
     const nthWeekday = "weekday" in rule || "nth" in rule;
     if (fixed === nthWeekday)
       fail(i, "needs either `day` or `weekday` with `nth`");
-    if (fixed && !isInt(rule.day, 1, 31)) fail(i, "`day` must be 1–31");
+    // A leap year's month lengths, so February 29 stays valid.
+    if (fixed && !isInt(rule.day, 1, daysIn(2024, rule.month))) {
+      fail(i, "`day` must exist in that month");
+    }
     if (nthWeekday) {
       if (!WEEKDAYS.includes(rule.weekday)) {
         fail(i, `\`weekday\` must be one of ${WEEKDAYS.join(", ")}`);
@@ -50,7 +62,7 @@ function validate(rules) {
         fail(i, "`nth` must be 1–5 or -1");
     }
     if ("offset" in rule && !isInt(rule.offset, -31, 31)) {
-      fail(i, "`offset` must be a whole number of days");
+      fail(i, "`offset` must be a whole number of days from -31 to 31");
     }
     if ("observed" in rule && typeof rule.observed !== "boolean") {
       fail(i, "`observed` must be true or false");
