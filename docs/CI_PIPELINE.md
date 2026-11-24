@@ -192,9 +192,8 @@ that app's thin `deploy-<app>.yml` caller into the shared
    [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml),
    [`_deploy-cloudrun-job.yml`](../.github/workflows/_deploy-cloudrun-job.yml)
    and [`deploy-homepage.yml`](../.github/workflows/deploy-homepage.yml), and
-   is maintained separately from the `main` ruleset.
-   [`rebuild-staging-refresh.yml`](../.github/workflows/rebuild-staging-refresh.yml)
-   keeps its own copy, which also waits on `obfuscate-db-verify`; see
+   is maintained separately from the `main` ruleset. Other workflows that wait
+   on the required checks keep their own copies; see
    [workflow conventions](../.github/AGENTS.md#workflow-conventions) for
    keeping them in step.
 2. **`build`** — the deploy image is built once and pushed to Artifact

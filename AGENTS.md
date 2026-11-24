@@ -169,7 +169,7 @@ follow
 
 ## Docker build platform
 
-Rules for workflows and composite actions live in [`.github/AGENTS.md`](.github/AGENTS.md).
+Rules for files under `.github/` live in [`.github/AGENTS.md`](.github/AGENTS.md).
 
 - **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
 

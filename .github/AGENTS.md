@@ -1,6 +1,6 @@
 # .github (workflows, actions, scripts)
 
-These rules apply to new and changed workflows and composite actions. The
+These rules apply to new and changed files under `.github/`. The
 Docker build-platform rule lives in root [`AGENTS.md`](../AGENTS.md#docker-build-platform).
 
 ## Workflow conventions
@@ -8,7 +8,7 @@ Docker build-platform rule lives in root [`AGENTS.md`](../AGENTS.md#docker-build
 - **Pin third-party actions to a full commit SHA with a version comment** (`<owner>/<action>@<full 40-character commit SHA> # v<version>`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
 - Share toolchain setup through the composite action [`.github/actions/setup`](actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
-- The `main` branch ruleset's required status checks are a GitHub setting, and every workflow that waits on them keeps its own copy: each `check-regexp` under `.github/workflows/` (`git grep -l check-regexp .github/workflows` finds them all) and any check-name list beside one, such as the `REQUIRED` env in `rebuild-staging-refresh.yml`. Renaming or adding a required check means updating the ruleset and every copy by hand, and nothing checks that they agree. Every required check except `lint-title` belongs in each copy; a copy may also wait on checks the ruleset doesn't require, as the staging-refresh gate does with `obfuscate-db-verify`. `lint-title` is deliberately excluded from the deploy gate because it never runs on `push` (`pr-title.yml` triggers only on `pull_request` and `merge_group`), so a commit that reached `main` outside the merge queue has no `lint-title` check-run, and waiting on one that will never exist would hang the gate rather than deploy.
+- The `main` branch ruleset's required status checks are a GitHub setting, and every workflow that waits on them keeps its own copy: each `check-regexp` under `.github/workflows/` (`git grep -l check-regexp .github/workflows` finds them all) and any check-name list beside one, such as the `REQUIRED` env in `rebuild-staging-refresh.yml`. Renaming or adding a required check means updating the ruleset and every copy by hand, and nothing checks that they agree. Every required check except `lint-title` belongs in each copy. A copy may also wait on checks the ruleset doesn't require but its own job depends on; keep those when bringing it in step with the ruleset. `lint-title` is deliberately left out of every copy because it never runs on `push` (`pr-title.yml` triggers only on `pull_request` and `merge_group`), so a commit that reached `main` outside the merge queue has no `lint-title` check-run. A `check-regexp` would skip it, but a check-name list such as `REQUIRED` fails when a named check is missing.
 
 ## Security
 
