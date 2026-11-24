@@ -1050,6 +1050,11 @@ export const requestRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // Every review names a person, as approval does through `checkRequest`;
+      // an API-key session carries no email, so a key cannot reject.
+      const reviewer = ctx.session?.user?.email;
+      if (!reviewer) throw missingIdentityError(ctx);
+
       const [updateRequest] = await ctx.db
         .select()
         .from(schema.updateRequests)
@@ -1081,7 +1086,7 @@ export const requestRouter = {
         .update(schema.updateRequests)
         .set({
           status: "rejected",
-          reviewedBy: ctx.session?.user?.email ?? null,
+          reviewedBy: reviewer,
           reviewedAt: new Date().toISOString(),
         })
         .where(
@@ -1112,6 +1117,15 @@ interface CheckRequestInput extends UpdateRequestOrgIdFields {
   submittedBy: string;
 }
 
+// An API-key session is valid but can never carry an email, so it gets a
+// message naming the actual fix instead of "Email is required".
+const missingIdentityError = (ctx: Context) =>
+  new ORPCError("UNAUTHORIZED", {
+    message: ctx.session?.apiKey
+      ? "API keys cannot submit or review change requests; sign in with a user account"
+      : "Email is required",
+  });
+
 const checkRequest = async ({
   input,
   ctx,
@@ -1127,7 +1141,9 @@ const checkRequest = async ({
   }
 
   // `protectedProcedure` guarantees a session user but not that it carries an
-  // email, so this is a missing session identity rather than bad input.
+  // email, so this is a missing session identity rather than bad input. An
+  // API-key session never carries one, so a key can neither submit a request
+  // nor approve one.
   //
   // This has to precede the `submittedBy` resolution below, not follow it: the
   // session email is the only identity accepted, so an emailless session can
@@ -1135,11 +1151,7 @@ const checkRequest = async ({
   // BAD_REQUEST "Submitted by is required" for what is really an emailless
   // session — the wrong status for the actual cause.
   const email = ctx.session?.user?.email;
-  if (!email) {
-    throw new ORPCError("UNAUTHORIZED", {
-      message: "Email is required",
-    });
-  }
+  if (!email) throw missingIdentityError(ctx);
 
   // Identity for the audit trail comes from the session, never from the client.
   // `input.submittedBy` is required by the request schemas and echoed back in

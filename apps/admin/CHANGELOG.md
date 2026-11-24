@@ -1,5 +1,57 @@
 # Changelog
 
+## [2.12.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.11.0...admin@2.12.0) (2026-11-24)
+
+
+### Features
+
+* **admin,api,shared:** let region editors opt in to the password vault ([#1750](https://github.com/F3-Nation/f3-nation/issues/1750)) ([811efa7](https://github.com/F3-Nation/f3-nation/commit/811efa70c4ef0af27e48f4c185bb05e513b83210))
+* **api,admin,shared,validators,db:** several roles per org, password roles in admin ([#1749](https://github.com/F3-Nation/f3-nation/issues/1749)) ([f2b061c](https://github.com/F3-Nation/f3-nation/commit/f2b061cc90a27db8a66448a8fda5c4d1cf29a965))
+* **api,shared:** accept originating app claims before client rollout ([#1778](https://github.com/F3-Nation/f3-nation/issues/1778)) ([612b277](https://github.com/F3-Nation/f3-nation/commit/612b277ec1fcda8336803d3b0e5bee139051a5a6))
+
+
+### Bug Fixes
+
+* **admin:** fix suppressed react-hooks lint violations ([#1454](https://github.com/F3-Nation/f3-nation/issues/1454)) ([a018ec8](https://github.com/F3-Nation/f3-nation/commit/a018ec8b5805e97be10dd918154a72cd0b84e049))
+* **admin:** skip the closeModal click restore once the document is gone ([#1730](https://github.com/F3-Nation/f3-nation/issues/1730)) ([27db41a](https://github.com/F3-Nation/f3-nation/commit/27db41a8ca596fb87425f39fcf8961a9b7ad695c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.18.0
+    * @acme/shared bumped to 0.8.0
+    * @acme/ui bumped to 0.3.2
+    * @acme/validators bumped to 0.6.0
+
+## [2.11.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.10.0...admin@2.11.0) (2026-11-17)
+
+
+### Features
+
+* **admin:** turn on typedRoutes ([#1579](https://github.com/F3-Nation/f3-nation/issues/1579)) ([6826a21](https://github.com/F3-Nation/f3-nation/commit/6826a21ec868a9f6e1837ad400abec44beeabc6e))
+
+
+### Bug Fixes
+
+* **admin:** show region context in the Events AO filter ([#1578](https://github.com/F3-Nation/f3-nation/issues/1578)) ([864014b](https://github.com/F3-Nation/f3-nation/commit/864014b91d0c1d6066e6cbab290158e80feae92a))
+* **admin:** show weekday and time in the Add Event Instance Series dropdown ([#1661](https://github.com/F3-Nation/f3-nation/issues/1661)) ([c6d0738](https://github.com/F3-Nation/f3-nation/commit/c6d07380e96961e1dd860dcba3a6bc6c0cbf9f3f))
+* **api:** allow source admins to correct member home regions ([#1612](https://github.com/F3-Nation/f3-nation/issues/1612)) ([986faa5](https://github.com/F3-Nation/f3-nation/commit/986faa54a7490b8dc8412a4f76f3b4d83f52c0a2))
+* **api:** limit OAuth client scopes to the ones auth3 serves ([#1475](https://github.com/F3-Nation/f3-nation/issues/1475)) ([580fd27](https://github.com/F3-Nation/f3-nation/commit/580fd276880e859ce1092eae41dc0d8f494eb862))
+* **ui,admin:** keep ControlledSelect controlled before form reset ([#1451](https://github.com/F3-Nation/f3-nation/issues/1451)) ([c3ee39a](https://github.com/F3-Nation/f3-nation/commit/c3ee39a1c8b8ece167baf90c8a3b1f4a4e2bbebd))
+* **ui:** resolve react-hooks lint violations in packages/ui ([#1378](https://github.com/F3-Nation/f3-nation/issues/1378)) ([c0a1f85](https://github.com/F3-Nation/f3-nation/commit/c0a1f852c43e51368bafffdbac6f43999f6d64e9))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.17.0
+    * @acme/shared bumped to 0.7.0
+    * @acme/ui bumped to 0.3.1
+    * @acme/validators bumped to 0.5.3
+
 ## [2.10.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.9.1...admin@2.10.0) (2026-10-29)
 
 

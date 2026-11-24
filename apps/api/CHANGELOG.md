@@ -1,5 +1,45 @@
 # Changelog
 
+## [6.14.0](https://github.com/F3-Nation/f3-nation/compare/api@6.13.1...api@6.14.0) (2026-11-24)
+
+
+### Features
+
+* **api,admin,shared,validators,db:** several roles per org, password roles in admin ([#1749](https://github.com/F3-Nation/f3-nation/issues/1749)) ([f2b061c](https://github.com/F3-Nation/f3-nation/commit/f2b061cc90a27db8a66448a8fda5c4d1cf29a965))
+* **api,shared:** accept originating app claims before client rollout ([#1778](https://github.com/F3-Nation/f3-nation/issues/1778)) ([612b277](https://github.com/F3-Nation/f3-nation/commit/612b277ec1fcda8336803d3b0e5bee139051a5a6))
+* **api,shared:** add ADR 0002 permission checks and use them for Slack messages ([#1682](https://github.com/F3-Nation/f3-nation/issues/1682)) ([ac9bfbc](https://github.com/F3-Nation/f3-nation/commit/ac9bfbcd24a56cc085ed0b986a3fc82021d939c2))
+* **api:** resolve Slack members to F3 user IDs ([#1758](https://github.com/F3-Nation/f3-nation/issues/1758)) ([963b8a0](https://github.com/F3-Nation/f3-nation/commit/963b8a0d84724839c7f72a6b8e58e4f7474a916d))
+* **homepage:** add Table view to /org directory ([#1705](https://github.com/F3-Nation/f3-nation/issues/1705)) ([845716a](https://github.com/F3-Nation/f3-nation/commit/845716a9e286bc5506ddea542ee280fc31cc9968))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.18.0
+    * @acme/shared bumped to 0.8.0
+  * devDependencies
+    * @acme/db bumped to 0.12.0
+
+## [6.13.1](https://github.com/F3-Nation/f3-nation/compare/api@6.13.0...api@6.13.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **api:** allow source admins to correct member home regions ([#1612](https://github.com/F3-Nation/f3-nation/issues/1612)) ([986faa5](https://github.com/F3-Nation/f3-nation/commit/986faa54a7490b8dc8412a4f76f3b4d83f52c0a2))
+* **api:** limit OAuth client scopes to the ones auth3 serves ([#1475](https://github.com/F3-Nation/f3-nation/issues/1475)) ([580fd27](https://github.com/F3-Nation/f3-nation/commit/580fd276880e859ce1092eae41dc0d8f494eb862))
+* **api:** stop returning region emails from the public region list ([#1508](https://github.com/F3-Nation/f3-nation/issues/1508)) ([9184cdf](https://github.com/F3-Nation/f3-nation/commit/9184cdf5430d26fb7c804d23775207752e78c473))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.17.0
+    * @acme/shared bumped to 0.7.0
+  * devDependencies
+    * @acme/db bumped to 0.11.0
+
 ## [6.13.0](https://github.com/F3-Nation/f3-nation/compare/api@6.12.1...api@6.13.0) (2026-10-29)
 
 

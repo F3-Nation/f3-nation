@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "2.7.0",
+  "version": "2.8.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,6 +17,7 @@
     "with-env": "dotenv run -q --"
   },
   "dependencies": {
+    "@acme/api": "workspace:*",
     "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/observability": "workspace:*",

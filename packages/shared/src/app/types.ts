@@ -76,33 +76,6 @@ export interface PlaceDetails {
   };
 }
 
-export interface GeoPluginResult {
-  geoplugin_status: number; // 200;
-  geoplugin_request: string; // "71.71.123.153";
-  geoplugin_delay: string; // "1ms";
-  geoplugin_credit: string; // "Some of the returned data includes GeoLite2 data created by MaxMind, available from <a href='https://www.maxmind.com'>https://www.maxmind.com</a>.";
-  geoplugin_city: string; // "Elkin";
-  geoplugin_region: string; // "North Carolina";
-  geoplugin_regionCode: string; // "NC";
-  geoplugin_regionName: string; // "North Carolina";
-  geoplugin_areaCode: string; // "";
-  geoplugin_dmaCode: string; // "518";
-  geoplugin_countryCode: string; // "US";
-  geoplugin_countryName: string; // "United States";
-  geoplugin_inEU: number; // 0;
-  geoplugin_euVATrate: boolean; //false;
-  geoplugin_continentCode: string; // "NA";
-  geoplugin_continentName: string; // "North America";
-  geoplugin_latitude: string; // "36.2867";
-  geoplugin_longitude: string; // "-80.86";
-  geoplugin_locationAccuracyRadius: string; // "5";
-  geoplugin_timezone: string; // "America/New_York";
-  geoplugin_currencyCode: string; // "USD";
-  geoplugin_currencySymbol: string; // "$";
-  geoplugin_currencySymbol_UTF8: string; // "$";
-  geoplugin_currencyConverter: number; // 0;
-}
-
 export const Location = {
   High_Country: "High_Country",
   Alabama: "Alabama",
@@ -336,27 +309,6 @@ export const Location = {
 
 export type Location = (typeof Location)[keyof typeof Location];
 
-export const isDDD = (
-  day: string,
-): day is
-  | "Sunday"
-  | "Monday"
-  | "Tuesday"
-  | "Wednesday"
-  | "Thursday"
-  | "Friday"
-  | "Saturday" => {
-  return [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ].includes(day);
-};
-
 export type SlackUserMeta = Record<string, unknown>;
 
 export type SlackSpacesMeta = Record<string, unknown>;
@@ -378,6 +330,12 @@ export type OrgMeta = {
   mapSeed?: boolean;
   firstEventNotificationSent?: boolean;
   region_location_short_description?: string;
+  /**
+   * Region opt-in for the password vault. The vault's sync job (a separate
+   * repository) reads this key by name and treats only `true` as enabled, so
+   * renaming it or storing another truthy value turns the vault off.
+   */
+  password_vault_enabled?: boolean | null;
 } & Record<string, unknown>;
 
 // The original/new id fields an update request carries as `meta` when it

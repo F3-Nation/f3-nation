@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.7.0...pkg-shared@0.8.0) (2026-11-24)
+
+
+### Features
+
+* **admin,api,shared:** let region editors opt in to the password vault ([#1750](https://github.com/F3-Nation/f3-nation/issues/1750)) ([811efa7](https://github.com/F3-Nation/f3-nation/commit/811efa70c4ef0af27e48f4c185bb05e513b83210))
+* **api,admin,shared,validators,db:** several roles per org, password roles in admin ([#1749](https://github.com/F3-Nation/f3-nation/issues/1749)) ([f2b061c](https://github.com/F3-Nation/f3-nation/commit/f2b061cc90a27db8a66448a8fda5c4d1cf29a965))
+* **api,shared:** accept originating app claims before client rollout ([#1778](https://github.com/F3-Nation/f3-nation/issues/1778)) ([612b277](https://github.com/F3-Nation/f3-nation/commit/612b277ec1fcda8336803d3b0e5bee139051a5a6))
+* **api,shared:** add ADR 0002 permission checks and use them for Slack messages ([#1682](https://github.com/F3-Nation/f3-nation/issues/1682)) ([ac9bfbc](https://github.com/F3-Nation/f3-nation/commit/ac9bfbcd24a56cc085ed0b986a3fc82021d939c2))
+* **db:** add attendance.attendance_type with a sync trigger and batched backfill ([#1742](https://github.com/F3-Nation/f3-nation/issues/1742)) ([3818ab7](https://github.com/F3-Nation/f3-nation/commit/3818ab7cec908b09be90655519b880320f59b917))
+
+## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.6.0...pkg-shared@0.7.0) (2026-11-17)
+
+
+### Features
+
+* **db:** attribute API writes to request actors ([#1493](https://github.com/F3-Nation/f3-nation/issues/1493)) ([a5aeed3](https://github.com/F3-Nation/f3-nation/commit/a5aeed3525167666f01b51d7c3cbb54b99dd9f95))
+* **map:** default to dark theme and a wider first view ([#1583](https://github.com/F3-Nation/f3-nation/issues/1583)) ([33dc88f](https://github.com/F3-Nation/f3-nation/commit/33dc88f7389a0caabb5c7829468f8a2b334a68c3))
+
+
+### Bug Fixes
+
+* **api:** limit OAuth client scopes to the ones auth3 serves ([#1475](https://github.com/F3-Nation/f3-nation/issues/1475)) ([580fd27](https://github.com/F3-Nation/f3-nation/commit/580fd276880e859ce1092eae41dc0d8f494eb862))
+* **slackbot:** omit empty calendar special-event sections ([#1477](https://github.com/F3-Nation/f3-nation/issues/1477)) ([f2a5f7f](https://github.com/F3-Nation/f3-nation/commit/f2a5f7f0c2a21b12420ea24079d1e1813e4adfe8))
+
 ## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.5.1...pkg-shared@0.6.0) (2026-10-29)
 
 

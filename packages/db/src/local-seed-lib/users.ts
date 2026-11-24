@@ -13,13 +13,24 @@ interface SeedUsersResult {
   roleIds: RoleIds;
 }
 
+/**
+ * A dev user whose `regionName` isn't in `regionIds` (a loaded snapshot
+ * without that region) is still inserted, but gets no role.
+ */
 export async function seedDevUsers(
   db: AppDb,
   nationId: number,
+  regionIds: Record<string, number> = {},
 ): Promise<SeedUsersResult> {
-  // 7. Roles — the system only uses editor/admin. Read-only access is the
-  // absence of a role (defacto "user"), so "user" is intentionally not seeded.
-  const SEED_ROLES = ["editor", "admin"] as const;
+  // 7. Roles — seed access-grant roles only; a signed-in user needs no role
+  // for member-tier access. user.crupdate looks each role up by name, so a
+  // role without a row here can't be granted locally.
+  const SEED_ROLES = [
+    "editor",
+    "admin",
+    "password_manager",
+    "password_reader",
+  ] as const;
   const existingRoles = await db.select().from(schema.roles);
   const rolesToInsert = SEED_ROLES.filter(
     (r) => !existingRoles.some((e) => e.name === r),
@@ -39,7 +50,7 @@ export async function seedDevUsers(
   // 8. Dev users
   let adminUserId: number | undefined;
   for (const devUser of DEV_USERS) {
-    const { role, ...userData } = devUser;
+    const { role, regionName, ...userData } = devUser;
     await db.insert(schema.users).values(userData).onConflictDoNothing();
 
     const [user] = await db
@@ -56,13 +67,20 @@ export async function seedDevUsers(
         : role === "editor"
           ? editorRole.id
           : null;
-    if (roleId !== null) {
+    const orgId = regionName ? regionIds[regionName] : nationId;
+    if (roleId !== null && orgId !== undefined) {
       await db
         .insert(schema.rolesXUsersXOrg)
-        .values({ userId: user.id, roleId, orgId: nationId })
+        .values({ userId: user.id, roleId, orgId })
         .onConflictDoNothing();
     }
-    console.log(`  ✓ Dev user: ${devUser.email} (${role ?? "no role"})`);
+    const scope =
+      roleId === null
+        ? "no role"
+        : orgId === undefined
+          ? `no role: region ${regionName} not found`
+          : `${role}${regionName ? ` of ${regionName}` : ""}`;
+    console.log(`  ✓ Dev user: ${devUser.email} (${scope})`);
   }
 
   if (!adminUserId) throw new Error("Admin dev user missing after insert");
@@ -98,7 +116,7 @@ export async function seedApiKeys(
     // Roles attach to the nation by default; keys with a regionName are
     // region-scoped (e.g. local-boone-editor-key) so e2e tests can
     // exercise cross-region RBAC denials. Resolved before inserting so a
-    // skipped key leaves no role-less (read-only) key behind.
+    // skipped key leaves no role-less key behind.
     const orgId = apiKey.regionName ? regionIds[apiKey.regionName] : nationId;
     if (orgId === undefined) {
       if (skipMissingRegions) {
@@ -127,8 +145,8 @@ export async function seedApiKeys(
       )[0]?.id;
 
     if (keyId) {
-      // Read-only keys (role: null) get no association — absence of a role is
-      // the system's read-only access level.
+      // Role-less keys (role: null) get no association; the API treats such a
+      // key as no credential, so it grants nothing beyond an anonymous request.
       const roleId =
         apiKey.role === "admin"
           ? roleIds.adminId

@@ -1,6 +1,6 @@
 ---
 name: pr-local-test
-description: Use when the user wants a GitHub pull request pulled down and tested hands-on in their local dev environment ("test PR #N locally", "verify PR N on my machine", "QA this PR", "run through PR N before I approve it"), possibly several PRs in parallel, or wants leftover pr-local-test sandboxes listed or cleaned up. Not for code-only reviews without running anything — use pr-review-inline.
+description: 'Use when the user wants a GitHub pull request pulled down and tested hands-on in their local dev environment ("test PR #N locally", "verify PR N on my machine", "QA this PR", "run through PR N before I approve it"), possibly several PRs in parallel, or wants leftover pr-local-test sandboxes listed or cleaned up. Not for code-only reviews without running anything — use pr-review-inline.'
 compatibility: macOS, Linux, or WSL 2 with bash, git, gh (authenticated), jq, curl, openssl, Docker, and lsof or ss. Browser checks use a Playwright tool or the Playwright CLI if available; otherwise those checks go to the user.
 ---
 
@@ -350,7 +350,9 @@ When the user's 🙋 results arrive, work out the verdict again and show it agai
 **Draft feedback (don't post yet):**
 
 - **Inline comments:** only for problems traced to the diff. Use pr-review-inline's comment
-  body format (dual audience, severity label) and its dedup rules (its Steps 5 and 8). Save them
+  body format ([`comment-format.md`](../pr-review-inline/comment-format.md): dual audience,
+  severity label) and its dedup rules (its "Fetch existing feedback for dedup" and "Dedup, then
+  verify" steps). Save them
   as `$RUN/comments.json`: an array of `{path, line, side, body}`, plus `start_line` and
   `start_side` for multi-line spans. Put `<!-- pr-local-test -->` on the line just above each
   body's signature, **not** pr-review-inline's `<!-- pr-review-inline -->` marker.

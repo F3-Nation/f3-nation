@@ -10,6 +10,7 @@ from features.fng import FNG_REMINDER_DEFAULT_DAYS, fng_reminder_days, notify_fn
 from utilities import constants
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
+    error_stack,
     safe_convert,
     safe_get,
     update_local_region_records,
@@ -103,8 +104,13 @@ def handle_team_join(body: dict, client: WebClient, logger: Logger, context: dic
         logger.error(
             "welcome.fng_notify_failed error_type=%s",
             type(exc).__name__,
-            exc_info=exc,
-            extra={"json_fields": {"event": "welcome.fng_notify_failed", "error_type": type(exc).__name__}},
+            extra={
+                "json_fields": {
+                    "event": "welcome.fng_notify_failed",
+                    "error_type": type(exc).__name__,
+                    "error_stack": error_stack(exc),
+                }
+            },
         )
 
     if region_record.welcome_dm_enable:

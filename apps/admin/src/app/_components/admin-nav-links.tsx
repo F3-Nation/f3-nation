@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -38,10 +39,18 @@ interface AdminNavLinksProps {
 
 type NavLink =
   | {
-      href: string;
+      href: Route;
       icon: React.ElementType;
       label: string;
       type: "link";
+      adminOnly?: boolean;
+      nationAdminOnly?: boolean;
+    }
+  | {
+      href: string;
+      icon: React.ElementType;
+      label: string;
+      type: "external";
       adminOnly?: boolean;
       nationAdminOnly?: boolean;
     }
@@ -124,7 +133,9 @@ export const AdminNavLinks = ({
     ...orgAdminTypes.map((orgType) => {
       const display = orgTypeDisplay[orgType];
       return {
-        href: `/${display.routeSegment}`,
+        // Bare `Route` admits only static routes; these links go to the
+        // dynamic `[orgSegment]` route, so the href is asserted.
+        href: `/${display.routeSegment}` as Route,
         icon: orgIcons[display.icon],
         label: display.pluralLabel,
         type: "link" as const,
@@ -138,7 +149,7 @@ export const AdminNavLinks = ({
       href: mapUrl,
       icon: MapPin,
       label: "Map",
-      type: "link",
+      type: "external",
     },
     {
       href: routes.admin.apiKeys.__path,
@@ -193,7 +204,7 @@ export const AdminNavLinks = ({
           );
         }
         const Icon = link.icon;
-        const isExternal = link.href.startsWith("http");
+        const isExternal = link.type === "external";
         const linkClass = cn(
           "flex items-center gap-2 text-sm font-medium",
           !isExternal && pathname === link.href ? "bg-muted" : "",

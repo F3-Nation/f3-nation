@@ -26,6 +26,7 @@ from utilities.helper_functions import (
     safe_get,
 )
 from utilities.slack import actions, orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -329,7 +330,7 @@ def build_nearby_events_modal(
 ):
     """Open or refresh the Nearby Special Events modal."""
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
-    user = get_user(slack_user_id, region_record, client, logger)
+    user = get_user(slack_user_id, region_record, client, logger, require_link=False)
     user_id = user.user_id if user else None
 
     existing_view_id = safe_get(body, "view", "id")
@@ -484,13 +485,13 @@ def handle_nearby_events_hc_action(
     if region_org_id:
         try:
             target_settings = _get_target_settings(region_org_id)
-            if target_settings and target_settings.bot_token:
+            target_client = slack_client_for_team(target_settings.team_id) if target_settings else None
+            if target_client is not None:
                 event_record: EventInstance = DbManager.get(
                     EventInstance, event_instance_id, joinedloads=[EventInstance.org]
                 )
                 if event_record and event_record.preblast_ts:
                     preblast_channel = _get_event_preblast_channel(target_settings, event_record)
-                    target_client = WebClient(token=target_settings.bot_token)
                     post_hc_thread_reply(
                         client=target_client,
                         logger=logger,

@@ -2,22 +2,6 @@ import { z } from "zod";
 
 export const F3_NATION_ORG_ID = 1;
 
-export enum SnapPoint {
-  "pt-0.95" = 0.95,
-  // "pt-0.5" = 0.5,
-  "pt-150px" = "150px",
-}
-
-export const DAY_ORDER = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-
 export const SHORT_DAY_ORDER = ["Su", "M", "Tu", "W", "Th", "F", "Sa"] as const;
 
 export const DEFAULT_ZOOM = 2.9;
@@ -25,7 +9,10 @@ export const BOONE_CENTER = [36.211104, -81.660849] as [number, number];
 export const DEFAULT_CENTER = BOONE_CENTER;
 
 export const CLOSE_ZOOM = 13;
-export const FAR_ZOOM = 4;
+// First view when the map centers on the visitor: a regional view, wider on larger screens
+export const USER_LOCATION_ZOOM = 10;
+// Map theme for visitors who haven't picked one in Settings
+export const MAP_DEFAULT_THEME = "dark";
 export const COUNTRY_ZOOM = 5; // below 5 it is red
 
 export enum BreakPoints {
@@ -113,8 +100,6 @@ export const Z_INDEX = {
   LOADING_MODAL: 9001,
 } as const;
 
-export const MOBILE_SEARCH_RESULT_ITEM_HEIGHT = 128;
-
 export const MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS = 3;
 
 // Length caps mirror packages/api/src/router/map/index.ts's feedbackSchema so
@@ -132,9 +117,8 @@ export type FeedbackSchema = z.infer<typeof feedbackSchema>;
 export const filterButtonClassName =
   "text-sm w-full whitespace-nowrap font-semibold pointer-events-auto flex items-center justify-center gap-2 rounded-md bg-card px-2 py-1 shadow-sm text-foreground";
 
-// Basic is just signed in
-// Editor can change data for their region
-// Admin can change anything
+// Descriptive access level per route; nothing reads it to enforce access.
+// Real checks live in apps/admin/src/proxy.ts and the API procedures.
 type AuthType = "none" | "admin" | "basic" | "editor";
 
 interface RouteBase {
@@ -249,45 +233,7 @@ export const routes = {
       __auth: "none",
     },
   },
-} as const;
-
-export const getAuthRoutes = (routes: Routes, auth: AuthType): string[] => {
-  const authPaths: string[] = [];
-
-  const traverse = (obj: RouteBase | Routes, _parentKey = "") => {
-    if (
-      "__path" in obj &&
-      typeof obj.__path === "string" &&
-      obj.__auth === auth
-    ) {
-      authPaths.push(obj.__path);
-    }
-
-    for (const [key, value] of Object.entries(obj as Record<string, Route>)) {
-      if (!["__path", "__auth"].includes(key)) {
-        traverse(value, key);
-      }
-    }
-  };
-
-  traverse(routes);
-  return authPaths;
-};
-
-export const ADMIN_PATHS = getAuthRoutes(routes, "admin");
-export const EDITOR_PATHS = getAuthRoutes(routes, "editor");
-
-export enum AppType {
-  MOBILE = "expo-react",
-  WEB = "nextjs-react",
-  RSC = "rsc",
-  UNKNOWN = "unknown",
-}
-
-export enum Permissions {
-  ADMIN = "admin",
-  EDIT = "edit",
-}
+} as const satisfies Routes;
 
 export const START_END_TIME_DB_FORMAT = "HHmm";
 export const START_END_TIME_DISPLAY_FORMAT = "h:mmA";
@@ -521,18 +467,3 @@ export const EVENT_CATEGORY_LABEL_MAP: Record<string, string> =
   Object.fromEntries(EVENT_CATEGORY_OPTIONS.map((o) => [o.value, o.label]));
 
 export const API_PREFIX_V1 = "/v1";
-export const MAP_API_PREFIX = "/map";
-
-export enum ApiKeyTags {
-  API = "api",
-  API_KEY = "api-key",
-  AUTH = "auth",
-  EVENT = "event",
-  EVENT_TYPE = "event-type",
-  FEEDBACK = "feedback",
-  LOCATION = "location",
-  ORG = "org",
-  PING = "ping",
-  REQUEST = "request",
-  USER = "user",
-}

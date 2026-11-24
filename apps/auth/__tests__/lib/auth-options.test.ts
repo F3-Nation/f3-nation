@@ -86,42 +86,20 @@ describe("email-mfa CredentialsProvider.authorize", () => {
     expect(verifyEmailCode).not.toHaveBeenCalled();
   });
 
-  it('sends a code and returns null when action is "send"', async () => {
-    vi.mocked(sendEmailCode).mockResolvedValueOnce(undefined);
+  it.each([
+    { email: "pax@example.com", action: "send" },
+    { email: "pax@example.com" },
+    { email: "pax@example.com", code: "" },
+  ])(
+    "returns null without sending or verifying a code when none is given: %j",
+    async (credentials) => {
+      const result = await authorize(credentials);
 
-    const result = await authorize({
-      email: "PAX@Example.com",
-      action: "send",
-    });
-
-    // Normalized (lowercased/trimmed) before being handed to sendEmailCode
-    expect(sendEmailCode).toHaveBeenCalledWith("pax@example.com");
-    expect(result).toBeNull();
-  });
-
-  it("sends a code and returns null when no code is provided", async () => {
-    vi.mocked(sendEmailCode).mockResolvedValueOnce(undefined);
-
-    const result = await authorize({ email: "pax@example.com" });
-
-    expect(sendEmailCode).toHaveBeenCalledWith("pax@example.com");
-    expect(result).toBeNull();
-  });
-
-  it("logs and rethrows a generic error when sending the code fails", async () => {
-    const dbError = new Error("connection reset");
-    vi.mocked(sendEmailCode).mockRejectedValueOnce(dbError);
-
-    await expect(
-      authorize({ email: "pax@example.com", action: "send" }),
-    ).rejects.toThrow("Failed to send verification code. Please try again.");
-
-    expect(logError).toHaveBeenCalledWith(
-      "auth.authorize.send_code_failed",
-      {},
-      dbError,
-    );
-  });
+      expect(result).toBeNull();
+      expect(sendEmailCode).not.toHaveBeenCalled();
+      expect(verifyEmailCode).not.toHaveBeenCalled();
+    },
+  );
 
   it("returns null when the code fails to verify", async () => {
     vi.mocked(verifyEmailCode).mockResolvedValueOnce(null);

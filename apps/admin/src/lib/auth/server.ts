@@ -8,12 +8,12 @@ import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 import { ACCESS_TOKEN_COOKIE_NAME } from "./constants";
 import type { AdminSession } from "./session";
-import { isAdminRoleName } from "./session";
 import { env } from "~/env";
 import { logDebug, logWarn } from "~/lib/logging";
 import { getMyProfile } from "~/lib/api/client";
 
-const NO_ADMIN_ACCESS_PATH = `${routes.admin.noAccess.__path}?reason=no-admin-access`;
+const NO_ADMIN_ACCESS_PATH =
+  `${routes.admin.noAccess.__path}?reason=no-admin-access` as const;
 
 const getCachedSessionPayload = cache(async (accessToken: string) => {
   const result = await verifyAccessToken(
@@ -92,21 +92,12 @@ export async function getSessionLookup(): Promise<SessionLookup> {
       apiUnavailable: false,
       session: {
         ...session,
-        // Drop roles the portal does not surface (e.g. password_manager) so
-        // they never appear in the user menu, no-access page, or any session
-        // consumer.
-        roles: profile.roles.flatMap((role) =>
-          isAdminRoleName(role.roleName)
-            ? [
-                {
-                  roleId: role.roleId,
-                  orgId: role.orgId,
-                  orgName: role.orgName,
-                  roleName: role.roleName,
-                },
-              ]
-            : [],
-        ),
+        roles: profile.roles.map((role) => ({
+          roleId: role.roleId,
+          orgId: role.orgId,
+          orgName: role.orgName,
+          roleName: role.roleName,
+        })),
       },
     };
   } catch (error) {

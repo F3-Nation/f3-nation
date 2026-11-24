@@ -1,18 +1,22 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { createContext, Suspense, useContext, useEffect, useRef } from "react";
+import {
+  createContext,
+  Suspense,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "next/navigation";
 
-import {
-  CLOSE_ZOOM,
-  DEFAULT_CENTER,
-  DEFAULT_ZOOM,
-} from "@acme/shared/app/constants";
+import { DEFAULT_CENTER, DEFAULT_ZOOM } from "@acme/shared/app/constants";
 import { safeParseFloat, safeParseInt } from "@acme/shared/common/functions";
 
 import { getQueryData, orpc } from "~/orpc/react";
 import { mapStore } from "~/utils/store/map";
+import { getInitialZoom, parseZoomParam } from "~/utils/user-location-zoom";
 import { setSelectedItem } from "~/utils/store/selected-item";
 
 const InitialLocationContext = createContext<{
@@ -40,22 +44,17 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
   const queryLon = safeParseFloat(
     searchParams.get("lon") ?? searchParams.get("lng"),
   );
-  const queryZoom = safeParseFloat(searchParams.get("zoom"));
+  const queryZoom = parseZoomParam(searchParams.get("zoom"));
   const queryLocationId = safeParseInt(searchParams.get("locationId"));
   const queryEventId = safeParseInt(searchParams.get("eventId"));
 
-  const center = useRef<google.maps.LatLngLiteral | null>(null);
-  const zoom = useRef<number | null>(null);
-  const didSetQueryParamLocation = useRef(false);
-  const hasSyncedInitialMapState = useRef(false);
-
-  // Calculate initial values during render (reading is safe)
-  if (center.current === null) {
+  const [initialLocation] = useState(() => {
     const locationLatLng = getQueryData(
       orpc.map.location.eventsAndLocations.queryKey({
         input: undefined,
       }),
     )?.find((location) => location[0] === queryLocationId);
+
     const locLat = locationLatLng?.[3];
     const locLon = locationLatLng?.[4];
 
@@ -66,31 +65,35 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
           ? { lat: queryLat, lng: queryLon }
           : null;
 
-    didSetQueryParamLocation.current = !!queryParamCenter;
-    center.current = queryParamCenter ?? mapStore.get("center");
-  }
+    return {
+      center: queryParamCenter ?? mapStore.get("center"),
+      didSetQueryParamLocation: !!queryParamCenter,
+      zoom: getInitialZoom({
+        queryZoom,
+        hasQueryLocation:
+          !!queryLocationId || (queryLat != null && queryLon != null),
+        storedZoom: mapStore.get("zoom"),
+      }),
+    };
+  });
 
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-  zoom.current ??= queryZoom
-    ? queryZoom
-    : // If we have a query location or lat/lon, use the close zoom
-      !!queryLocationId || (queryLat != null && queryLon != null)
-      ? CLOSE_ZOOM
-      : // Otherwise, use the stored zoom or default zoom
-        mapStore.get("zoom");
+  const hasSyncedInitialMapState = useRef(false);
 
   // Sync the derived initial state into the external stores in an effect.
   // Writing to these stores during render updates other subscribed components
   // (e.g. the ancestor UserLocationProvider) mid-render, which React flags.
   useEffect(() => {
+    // Once per mount: later URL changes mirror map state and must not re-select.
     if (hasSyncedInitialMapState.current) return;
     hasSyncedInitialMapState.current = true;
 
     mapStore.setState({
-      didSetQueryParamLocation: didSetQueryParamLocation.current,
-      nearbyLocationCenter: center.current
-        ? { ...center.current, name: "", type: "default" }
-        : null,
+      didSetQueryParamLocation: initialLocation.didSetQueryParamLocation,
+      nearbyLocationCenter: {
+        ...initialLocation.center,
+        name: "",
+        type: "default",
+      },
     });
 
     if (queryLocationId != null) {
@@ -100,14 +103,13 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
         showPanel: true,
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialLocation, queryLocationId, queryEventId]);
 
   return (
     <InitialLocationContext.Provider
       value={{
-        initialCenter: center.current,
-        initialZoom: zoom.current,
+        initialCenter: initialLocation.center,
+        initialZoom: initialLocation.zoom,
       }}
     >
       {params.children}

@@ -98,6 +98,9 @@ export const SNAPSHOT_TABLES = [
   "event_instances",
   "event_instances_x_event_types",
   "event_tags_x_event_instances",
+  "attendance",
+  "attendance_x_attendance_types",
+  "achievements_x_users",
 ].map((t) => `public.${t}`);
 
 /** Must have rows, or the snapshot is refused rather than replace a good one. */
@@ -107,13 +110,17 @@ export const SNAPSHOT_REQUIRED_TABLES = [
   "event_types",
   "events",
   "event_instances",
+  "attendance",
 ].map((t) => `public.${t}`);
 
 /** Non-deliverable: every fake address in the snapshot is on this domain. */
 export const SNAPSHOT_EMAIL_SINK = "dev.staging-email-sink@f3nation.local";
 
-/** event_instances kept, by start_date, in days around the export date. */
-export const SNAPSHOT_WINDOW = { daysBack: 30, daysAhead: 90 };
+/**
+ * event_instances kept, by start_date, in days around the export date.
+ * attendance follows its instances, so daysBack sets most of the file's size.
+ */
+export const SNAPSHOT_WINDOW = { daysBack: 183, daysAhead: 90 };
 
 /** Overwritten on every run; the bucket itself is public. */
 export const SNAPSHOT_OBJECT = {

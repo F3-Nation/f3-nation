@@ -73,6 +73,10 @@ def build_region_form(
 def handle_region_edit(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     form_data = REGION_FORM.get_selected_values(body)
 
+    admin_users_slack = safe_get(form_data, actions.REGION_ADMINS)
+    admin_users: list[SlackUser] = [get_user(user_id, region_record, client, logger) for user_id in admin_users_slack]
+    admin_user_ids = [u.user_id for u in admin_users]
+
     file = safe_get(form_data, actions.REGION_LOGO, 0)
     if file:
         file_list, file_send_list, file_ids, low_rez_file_ids = upload_files_to_storage(
@@ -126,9 +130,6 @@ def handle_region_edit(body: dict, client: WebClient, logger: Logger, context: d
 
     DbManager.update_record(Org, region_record.org_id, fields)
 
-    admin_users_slack = safe_get(form_data, actions.REGION_ADMINS)
-    admin_users: list[SlackUser] = [get_user(user_id, region_record, client, logger) for user_id in admin_users_slack]
-    admin_user_ids = [u.user_id for u in admin_users]
     admin_role_id = DbManager.find_first_record(Role, filters=[Role.name == "admin"]).id
     admin_records = [
         Role_x_User_x_Org(

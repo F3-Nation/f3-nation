@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.5.3...pkg-validators@0.6.0) (2026-11-24)
+
+
+### Features
+
+* **api,admin,shared,validators,db:** several roles per org, password roles in admin ([#1749](https://github.com/F3-Nation/f3-nation/issues/1749)) ([f2b061c](https://github.com/F3-Nation/f3-nation/commit/f2b061cc90a27db8a66448a8fda5c4d1cf29a965))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.12.0
+    * @acme/shared bumped to 0.8.0
+
+## [0.5.3](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.5.2...pkg-validators@0.5.3) (2026-11-17)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.11.0
+    * @acme/shared bumped to 0.7.0
+
 ## [0.5.2](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.5.1...pkg-validators@0.5.2) (2026-10-29)
 
 

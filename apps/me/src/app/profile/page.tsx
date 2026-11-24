@@ -17,7 +17,7 @@ function logUnavailable(
 ) {
   const context = {
     sessionUserId,
-    apiBaseUrl: process.env.F3_API_BASE_URL,
+    apiBaseUrl: env.F3_API_BASE_URL,
     lookup,
   };
   // A well-formed 500 is how the API reports both a database outage and its
@@ -42,7 +42,7 @@ export default async function ProfilePage() {
     if (isNotFoundApiError(err)) {
       logWarn("me.profile.user_not_found", {
         sessionUserId: session.userId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
+        apiBaseUrl: env.F3_API_BASE_URL,
       });
       redirect("/?error=user_not_found");
     }
@@ -55,7 +55,7 @@ export default async function ProfilePage() {
       "me.profile.load_failed",
       {
         sessionUserId: session.userId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
+        apiBaseUrl: env.F3_API_BASE_URL,
       },
       err,
     );
@@ -73,7 +73,7 @@ export default async function ProfilePage() {
       "me.profile.regions_failed",
       {
         sessionUserId: session.userId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
+        apiBaseUrl: env.F3_API_BASE_URL,
       },
       err,
     );

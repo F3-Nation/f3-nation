@@ -15,7 +15,20 @@ const { deleteBetterAuthOAuthTokens, getAuth } =
   await import("~/lib/better-auth");
 const { logError } = await import("~/lib/logging");
 const { revokeAllUserTokens } = await import("~/lib/oauth");
-const { POST } = await import("../../../../src/app/api/logout/route");
+const { POST: logout } = await import("../../../../src/app/api/logout/route");
+
+function POST(headers: Record<string, string> = {}) {
+  return logout(
+    new Request("https://auth.f3nation.com/api/logout", {
+      method: "POST",
+      headers: {
+        host: "auth.f3nation.com",
+        "sec-fetch-site": "same-origin",
+        ...headers,
+      },
+    }) as never,
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -26,6 +39,14 @@ beforeEach(() => {
 });
 
 describe("POST /api/logout", () => {
+  it("rejects a cross-site request and revokes nothing", async () => {
+    const res = await POST({ "sec-fetch-site": "cross-site" });
+
+    expect(res.status).toBe(403);
+    expect(getCurrentSession).not.toHaveBeenCalled();
+    expect(revokeAllUserTokens).not.toHaveBeenCalled();
+  });
+
   it("returns 401 without a session and revokes nothing", async () => {
     vi.mocked(getCurrentSession).mockResolvedValue(null);
 

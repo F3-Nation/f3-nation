@@ -58,7 +58,7 @@ def handle_app_mention(
     region_record: SlackSettings,
 ):
     slack_user_id = body["event"]["user"]
-    user_id = safe_get(get_user(slack_user_id, region_record, client, logger), "user_id")
+    user_id = safe_get(get_user(slack_user_id, region_record, client, logger, require_link=False), "user_id")
     blocks = [
         SectionBlock(
             text="Hi there! Looking for me? :wave:\n\nHere are some things I can help you with:",

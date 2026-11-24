@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.10.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.9.1...homepage@1.10.0) (2026-11-24)
+
+
+### Features
+
+* **homepage:** add Table view to /org directory ([#1705](https://github.com/F3-Nation/f3-nation/issues/1705)) ([845716a](https://github.com/F3-Nation/f3-nation/commit/845716a9e286bc5506ddea542ee280fc31cc9968))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.8.0
+    * @acme/ui bumped to 0.3.2
+
+## [1.9.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.9.0...homepage@1.9.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **homepage:** fix suppressed react-hooks violations in org-map ([#1576](https://github.com/F3-Nation/f3-nation/issues/1576)) ([d55d37a](https://github.com/F3-Nation/f3-nation/commit/d55d37aa27bf1c773fc9662f13dc4c2d8334e6d6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.7.0
+    * @acme/ui bumped to 0.3.1
+
 ## [1.9.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.8.1...homepage@1.9.0) (2026-10-29)
 
 

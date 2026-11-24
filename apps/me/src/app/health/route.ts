@@ -15,6 +15,10 @@ function getServiceVersion(): string {
 }
 
 async function checkUpstreamApi(): Promise<CheckRunnerResult> {
+  // Read raw rather than through `env`, which throws on a bad value. With
+  // validation on, the proxy's import of `env` already fails the request with a
+  // 500 before this route runs, so the missing and invalid branches below only
+  // run when validation is skipped (`SKIP_ENV_VALIDATION`).
   const apiBaseUrl = process.env.F3_API_BASE_URL;
 
   if (!apiBaseUrl) {

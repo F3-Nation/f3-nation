@@ -10,9 +10,17 @@ permissions:
   pull-requests: write
   issues: write
 
+# The release app's key can create release tags, which deploy. It lives only in
+# the release-please environment, which accepts runs from main alone, so a
+# workflow on any other branch can't read it. Every job that uses the key runs
+# in that environment and never runs code from a release PR branch.
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    environment: release-please
+    outputs:
+      prs_created: ${{ steps.release.outputs.prs_created }}
+      prs: ${{ steps.release.outputs.prs }}
     steps:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         id: app-token
@@ -20,7 +28,107 @@ jobs:
           app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        id: release
         with:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # `uv lock` can run build backends named in the release PR branch. The
+  # release-branches ruleset (scripts/release-protections.sh) lets only the
+  # release app and org admins push there, so the branch holds Release Please's
+  # output from main. The job still runs without secrets or a cache save, since
+  # it shares main's cache scope, and hands over only uv.lock.
+  # Keeps Docker's `uv sync --locked` aligned with Release Please's version bumps.
+  lock-uv:
+    needs: release-please
+    if: needs.release-please.outputs.prs_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        pr: ${{ fromJSON(needs.release-please.outputs.prs) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.pr.headBranchName }}
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.8"
+          enable-cache: false
+
+      # locked-at records the commit the lock was built from, so push-uv-lock
+      # can skip a lock that a newer push to the branch has superseded.
+      - name: Refresh uv.lock
+        run: |
+          uv lock
+          git rev-parse HEAD >locked-at
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: uv-lock-${{ matrix.pr.number }}
+          path: |
+            uv.lock
+            locked-at
+          retention-days: 1
+
+  # Holds the key, so it never checks out the branch: it commits the new uv.lock
+  # through GraphQL createCommitOnBranch, which refuses the commit if the branch
+  # moved since the lock was built, so a lost race fails the job.
+  push-uv-lock:
+    needs: [release-please, lock-uv]
+    runs-on: ubuntu-latest
+    environment: release-please
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        pr: ${{ fromJSON(needs.release-please.outputs.prs) }}
+    concurrency:
+      group: uv-lock-${{ matrix.pr.number }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uv-lock-${{ matrix.pr.number }}
+          path: ${{ runner.temp }}/uv-lock
+
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Commit uv.lock if changed
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ matrix.pr.headBranchName }}
+          LOCK: ${{ runner.temp }}/uv-lock/uv.lock
+          LOCKED_AT: ${{ runner.temp }}/uv-lock/locked-at
+        run: |
+          set -o pipefail
+          locked_at="$(cat "$LOCKED_AT")"
+          head="$(gh api "repos/${REPO}/git/ref/heads/${BRANCH}" --jq '.object.sha')"
+          if [[ "${head}" != "${locked_at}" ]]; then
+            echo "${BRANCH} moved since uv.lock was built; the newer run writes its own lock."
+            exit 0
+          fi
+          current="$(gh api "repos/${REPO}/contents/uv.lock?ref=${locked_at}" --jq '.sha')"
+          if [[ "$(git hash-object "$LOCK")" == "${current}" ]]; then
+            echo "uv.lock is already up to date."
+            exit 0
+          fi
+          # expectedHeadOid makes the commit fail if the branch moved since the lock was built.
+          jq -n --arg repo "$REPO" --arg branch "$BRANCH" --arg head "$locked_at" \
+            --rawfile content <(base64 -w0 "$LOCK") \
+            '{query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: {input: {branch: {repositoryNameWithOwner: $repo, branchName: $branch},
+                expectedHeadOid: $head,
+                message: {headline: "chore(slackbot): refresh uv.lock for release"},
+                fileChanges: {additions: [{path: "uv.lock", contents: $content}]}}}}' \
+            >"$RUNNER_TEMP/uv-lock-body.json"
+          gh api graphql --input "$RUNNER_TEMP/uv-lock-body.json" >/dev/null

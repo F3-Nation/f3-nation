@@ -95,7 +95,7 @@ reviews:
       - name: "Authorization on changed endpoints"
         mode: "warning"
         instructions: |
-          CC-AUTHZ, CC-PUBLIC and KP-ACTIVE. Fail if any API procedure or route this PR adds or changes reads or writes a specific resource without checking the caller against the org that owns the fetched row (and the destination org on a move), or lets an anonymous caller reach private, inactive or personal data or an unbounded page. Pass if the PR changes no endpoints.
+          CC-AUTHZ, CC-PUBLIC and KP-ACTIVE. Fail if any API procedure or route this PR adds or changes reads or writes a specific resource without checking the caller against the org that owns the fetched row (and the destination org on a move, except the source-admin home-region correction specified in docs/specs/admin-user-home-region.md), or lets an anonymous caller reach private, inactive or personal data or an unbounded page. Pass if the PR changes no endpoints.
       - name: "Silent failure"
         mode: "warning"
         instructions: |

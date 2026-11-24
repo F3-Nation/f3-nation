@@ -1,12 +1,4 @@
 {
-  "src/app/org/_components/org-map.tsx": {
-    "react-hooks/refs": {
-      "count": 9
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
   "src/app/org/_components/search-box.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1

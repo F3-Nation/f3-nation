@@ -1,5 +1,59 @@
 # Changelog
 
+## [7.11.0](https://github.com/F3-Nation/f3-nation/compare/map@7.10.0...map@7.11.0) (2026-11-24)
+
+
+### Features
+
+* **api,shared:** accept originating app claims before client rollout ([#1778](https://github.com/F3-Nation/f3-nation/issues/1778)) ([612b277](https://github.com/F3-Nation/f3-nation/commit/612b277ec1fcda8336803d3b0e5bee139051a5a6))
+
+
+### Bug Fixes
+
+* **map:** fail a proxied API response that stalls after its headers ([#1585](https://github.com/F3-Nation/f3-nation/issues/1585)) ([c8d4e8c](https://github.com/F3-Nation/f3-nation/commit/c8d4e8c893e8cb92ac0c629b3bd82e7c9f8b44d6))
+* **map:** let Next.js compress the /api/orpc proxy; move to next 16.4.6 ([#1709](https://github.com/F3-Nation/f3-nation/issues/1709)) ([f83b071](https://github.com/F3-Nation/f3-nation/commit/f83b071ed218e9b0b73778dab59c6e30f4874077))
+* **map:** resolve 10 suppressed react-hooks lint violations ([#1513](https://github.com/F3-Nation/f3-nation/issues/1513)) ([4175e91](https://github.com/F3-Nation/f3-nation/commit/4175e91035601c448284ab2fb8fed980df6c015b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.18.0
+    * @acme/auth bumped to 0.3.1
+    * @acme/shared bumped to 0.8.0
+    * @acme/ui bumped to 0.3.2
+    * @acme/validators bumped to 0.6.0
+
+## [7.10.0](https://github.com/F3-Nation/f3-nation/compare/map@7.9.0...map@7.10.0) (2026-11-17)
+
+
+### Features
+
+* **db:** attribute API writes to request actors ([#1493](https://github.com/F3-Nation/f3-nation/issues/1493)) ([a5aeed3](https://github.com/F3-Nation/f3-nation/commit/a5aeed3525167666f01b51d7c3cbb54b99dd9f95))
+* **map:** default to dark theme and a wider first view ([#1583](https://github.com/F3-Nation/f3-nation/issues/1583)) ([33dc88f](https://github.com/F3-Nation/f3-nation/commit/33dc88f7389a0caabb5c7829468f8a2b334a68c3))
+
+
+### Bug Fixes
+
+* **auth:** consume email sign-in tokens atomically ([#1463](https://github.com/F3-Nation/f3-nation/issues/1463)) ([2d9695d](https://github.com/F3-Nation/f3-nation/commit/2d9695da355f8613045dae49cf72b73273af3b67))
+* **map:** point auth error sign-in links at /auth/sign-in ([#1504](https://github.com/F3-Nation/f3-nation/issues/1504)) ([058c792](https://github.com/F3-Nation/f3-nation/commit/058c792d7dc0ccec9fade4cf7201ae3265e23fcf)), closes [#1461](https://github.com/F3-Nation/f3-nation/issues/1461)
+* **map:** preserve AO identity after weekday filtering ([#1455](https://github.com/F3-Nation/f3-nation/issues/1455)) ([429d033](https://github.com/F3-Nation/f3-nation/commit/429d033160dc3cf1f8498ce2407ce1f3bccf88f6))
+* **map:** show a fallback when Google Maps rejects the API key ([#1610](https://github.com/F3-Nation/f3-nation/issues/1610)) ([ec0b08b](https://github.com/F3-Nation/f3-nation/commit/ec0b08b4c4510b9849034901d2b02bfc7438b011))
+* **slackbot:** prevent duplicate Q messages with workspace identities ([#1505](https://github.com/F3-Nation/f3-nation/issues/1505)) ([2b0ceff](https://github.com/F3-Nation/f3-nation/commit/2b0ceff18aa832a34a77903a7dc173bff03d2168))
+* **slackbot:** redact hourly runner exception details ([#1589](https://github.com/F3-Nation/f3-nation/issues/1589)) ([454bef3](https://github.com/F3-Nation/f3-nation/commit/454bef347b0ae527708e730d21c3c691b0146ec0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.17.0
+    * @acme/auth bumped to 0.3.0
+    * @acme/shared bumped to 0.7.0
+    * @acme/ui bumped to 0.3.1
+    * @acme/validators bumped to 0.5.3
+
 ## [7.9.0](https://github.com/F3-Nation/f3-nation/compare/map@7.8.1...map@7.9.0) (2026-10-29)
 
 

@@ -1,8 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
+import type * as OrpcClientModule from "@orpc/client";
 import type * as ReactModule from "react";
+import { RPCLink } from "@orpc/client/fetch";
 
-// Mock environment variables
-process.env.F3_API_BASE_URL = "https://api.test.f3nation.com/v1";
+// The raw process value and the validated `env` value differ on purpose, so a
+// read of `process.env` instead of `env` shows up as the wrong URL.
+process.env.F3_API_BASE_URL = "https://raw-process-env.test/v1";
+const VALIDATED_API_BASE_URL = "https://validated.test/v1";
+vi.mock("@/env", () => ({
+  env: { F3_API_BASE_URL: "https://validated.test/v1" },
+}));
+
+const { logError, logWarn } = vi.hoisted(() => ({
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+}));
+vi.mock("@/lib/logging", () => ({ logError, logWarn }));
 
 // Mock server-only (no-op in tests)
 vi.mock("server-only", () => ({}));
@@ -31,7 +44,8 @@ const mockMe = {
   users: vi.fn(),
 };
 
-vi.mock("@orpc/client", () => ({
+vi.mock("@orpc/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof OrpcClientModule>()),
   createORPCClient: vi.fn(() => ({ me: mockMe })),
 }));
 vi.mock("@orpc/client/fetch", () => ({
@@ -61,6 +75,107 @@ describe("API client (oRPC)", () => {
     expect(mockMe.profile).toHaveBeenCalledOnce();
     expect(user.id).toBe(42);
     expect(user.f3Name).toBe("Dredd");
+  });
+
+  it("points the oRPC link at the validated F3_API_BASE_URL", async () => {
+    mockMe.profile.mockResolvedValueOnce({ user: { id: 42 } });
+
+    const { getMyProfile } = await import("@/lib/api/client");
+    await getMyProfile();
+
+    expect(RPCLink).toHaveBeenCalledWith(
+      expect.objectContaining({ url: VALIDATED_API_BASE_URL }),
+    );
+  });
+
+  describe("the link's fetch", () => {
+    const fetchMock = vi.fn<typeof fetch>();
+
+    async function getLinkFetch() {
+      mockMe.profile.mockResolvedValueOnce({ user: { id: 42 } });
+      const { getMyProfile } = await import("@/lib/api/client");
+      await getMyProfile();
+      const options = vi.mocked(RPCLink).mock.calls[0]?.[0] as unknown as {
+        fetch: (input: Request, init?: RequestInit) => Promise<Response>;
+      };
+      return options.fetch;
+    }
+
+    beforeEach(() => {
+      fetchMock.mockReset();
+      vi.stubGlobal("fetch", fetchMock);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("logs the validated URL when the API answers with an error status", async () => {
+      fetchMock.mockResolvedValue(
+        Response.json({ json: { code: "FORBIDDEN" } }, { status: 403 }),
+      );
+      const linkFetch = await getLinkFetch();
+
+      await linkFetch(new Request(`${VALIDATED_API_BASE_URL}/me/profile`));
+
+      expect(logWarn).toHaveBeenCalledWith(
+        "me.api.upstream_http_error",
+        expect.objectContaining({ apiBaseUrl: VALIDATED_API_BASE_URL }),
+      );
+    });
+
+    it("logs the validated URL when the request fails", async () => {
+      fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+      const linkFetch = await getLinkFetch();
+
+      await expect(
+        linkFetch(new Request(`${VALIDATED_API_BASE_URL}/me/profile`)),
+      ).rejects.toThrow("fetch failed");
+
+      expect(logError).toHaveBeenCalledWith(
+        "me.api.upstream_request_failed",
+        expect.objectContaining({ apiBaseUrl: VALIDATED_API_BASE_URL }),
+        expect.any(TypeError),
+      );
+    });
+
+    it("aborts the request with the reason of a caller signal that is already aborted", async () => {
+      const reason = new Error("caller gave up");
+      fetchMock.mockImplementation((_input, init) =>
+        init?.signal?.aborted
+          ? Promise.reject(init.signal.reason as Error)
+          : Promise.resolve(new Response("{}")),
+      );
+      const linkFetch = await getLinkFetch();
+
+      await expect(
+        linkFetch(new Request(`${VALIDATED_API_BASE_URL}/me/profile`), {
+          signal: AbortSignal.abort(reason),
+        }),
+      ).rejects.toBe(reason);
+    });
+
+    it("aborts the request with the reason of a caller signal that aborts later", async () => {
+      const reason = new Error("caller gave up");
+      fetchMock.mockImplementation(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(init.signal?.reason as Error);
+            });
+          }),
+      );
+      const linkFetch = await getLinkFetch();
+      const caller = new AbortController();
+
+      const pending = linkFetch(
+        new Request(`${VALIDATED_API_BASE_URL}/me/profile`),
+        { signal: caller.signal },
+      );
+      caller.abort(reason);
+
+      await expect(pending).rejects.toBe(reason);
+    });
   });
 
   it("updateMyProfile calls me.updateProfile() with the correct body", async () => {

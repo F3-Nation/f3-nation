@@ -1,3 +1,4 @@
+import { stripStravaMetadata } from "./user-metadata";
 import type { SQL } from "@acme/db";
 import {
   aliasedTable,
@@ -58,8 +59,10 @@ export const shapeUserPii = <T extends Partial<UserSelectType>>(
   user: T,
   includePii: boolean,
 ): T | Omit<T, keyof typeof userPiiColumns> => {
-  if (includePii) return user;
   const publicUser = { ...user };
+  if ("meta" in publicUser)
+    publicUser.meta = stripStravaMetadata(publicUser.meta);
+  if (includePii) return publicUser;
   for (const column of Object.keys(userPiiColumns)) {
     delete publicUser[column as keyof typeof userPiiColumns];
   }
@@ -127,12 +130,9 @@ const buildUserSelect = ({
   if (includePii) {
     select = { ...select, ...userPiiColumns };
   } else if (includeEmail) {
-    // Add only email if requested (without full PII)
-    select = {
-      ...select,
-      email: schema.users.email,
-      emailVerified: schema.users.emailVerified,
-    };
+    // The email alone, which a byEmail caller already knows; the rest of the
+    // PII, emailVerified included, stays hidden.
+    select = { ...select, email: schema.users.email };
   }
 
   return select;
@@ -232,7 +232,7 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
       .record(z.string(), z.unknown())
       .nullable()
       .optional()
-      .describe("User metadata"),
+      .describe("User metadata excluding top-level strava_* keys"),
     homeRegion: z
       .object({
         homeRegionId: z.number().describe("Home region ID"),
@@ -244,6 +244,11 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
       .nullable()
       .optional()
       .describe("User's home region when set"),
+    piiVisible: z
+      .boolean()
+      .describe(
+        "Whether this user's PII fields (email, phone, emergency contacts) are included",
+      ),
   });
 
 /** User shape for `byId`, `byEmail`, etc. (matches `buildSingleUserQuery`). */
@@ -263,7 +268,7 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
       .record(z.string(), z.unknown())
       .nullable()
       .optional()
-      .describe("User metadata"),
+      .describe("User metadata excluding top-level strava_* keys"),
     homeRegion: z
       .object({
         homeRegionId: z.number().describe("Home region ID"),
@@ -287,16 +292,31 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
       .describe("Positions held by the user"),
   });
 
-// Shared query logic for list queries
+/**
+ * Shared query logic for list queries. With `includePii`, PII is returned for
+ * every row, or only for users homed in `piiHomeRegionIds` when that is given.
+ * Partial email search and sorting by email or phone apply to those rows only,
+ * so neither reveals a value the caller is not shown.
+ */
 export const buildUserListQuery = async ({
   ctx,
   input,
   includePii,
+  piiHomeRegionIds,
 }: {
   ctx: Context;
   input: z.infer<typeof userListInputSchema>;
   includePii: boolean;
+  piiHomeRegionIds?: number[];
 }) => {
+  const piiVisible = !includePii
+    ? sql<boolean>`false`
+    : !piiHomeRegionIds
+      ? sql<boolean>`true`
+      : piiHomeRegionIds.length === 0
+        ? sql<boolean>`false`
+        : sql<boolean>`COALESCE(${inArray(schema.users.homeRegionId, piiHomeRegionIds)}, false)`;
+
   const { limit, offset, usePagination } = resolvePagination({
     pageSize: input.pageSize,
     pageIndex: input.pageIndex,
@@ -325,14 +345,14 @@ export const buildUserListQuery = async ({
           ilike(schema.users.f3Name, `%${input.searchTerm}%`),
           ilike(schema.users.firstName, `%${input.searchTerm}%`),
           ilike(schema.users.lastName, `%${input.searchTerm}%`),
-          includePii
-            ? ilike(schema.users.email, `%${input.searchTerm}%`)
-            : eq(
-                schema.users.email,
-                input.searchTerm.includes("@")
-                  ? normalizeEmail(input.searchTerm)
-                  : input.searchTerm,
-              ),
+          and(piiVisible, ilike(schema.users.email, `%${input.searchTerm}%`)),
+          // A caller who already knows the whole address may find its user.
+          eq(
+            schema.users.email,
+            input.searchTerm.includes("@")
+              ? normalizeEmail(input.searchTerm)
+              : input.searchTerm,
+          ),
         )
       : undefined,
     input.orgIds?.length
@@ -365,8 +385,8 @@ export const buildUserListQuery = async ({
         roles: sql`MIN(${schema.roles.name})`,
         status: schema.users.status,
         homeRegion: homeRegion.name,
-        email: schema.users.email,
-        phone: sql`NULLIF(${schema.users.phone}, '')`,
+        email: sql`CASE WHEN ${piiVisible} THEN ${schema.users.email} END`,
+        phone: sql`CASE WHEN ${piiVisible} THEN NULLIF(${schema.users.phone}, '') END`,
         regions: sql`MIN(${schema.orgs.name})`,
         created: schema.users.created,
       },
@@ -400,7 +420,7 @@ export const buildUserListQuery = async ({
   });
 
   const query = ctx.db
-    .select(select)
+    .select({ ...select, piiVisible })
     .from(schema.users)
     .leftJoin(
       schema.rolesXUsersXOrg,
@@ -418,7 +438,8 @@ export const buildUserListQuery = async ({
 
   return {
     users: users.map((user: (typeof users)[number]) => ({
-      ...user,
+      ...shapeUserPii(user, user.piiVisible),
+      meta: stripStravaMetadata(user.meta),
       name: [user.firstName, user.lastName].join(" ").trim(),
       homeRegion: user.homeRegion ?? null,
     })),
@@ -506,6 +527,7 @@ export const buildSingleUserQuery = async (
   return {
     user: {
       ...user,
+      meta: stripStravaMetadata(user.meta),
       homeRegion: user.homeRegion ?? null,
       positions,
     },
@@ -530,16 +552,16 @@ export const hasRoleOnAny = (
   });
 
 /**
- * Orgs whose editors may edit a user's profile: the home region, else any org
- * the user holds a role on, else the nation.
+ * Orgs whose editors may edit a user's profile and read their PII: the home
+ * region, else the nation. The home region is the only link, because an org
+ * admin can grant any user a role on their org and so could otherwise give
+ * themselves this access.
  */
 export const getProfileScopeOrgIds = async (
   ctx: Context,
   homeRegionId: number | null,
-  roleOrgIds: number[],
 ): Promise<number[]> => {
   if (homeRegionId) return [homeRegionId];
-  if (roleOrgIds.length > 0) return roleOrgIds;
   const nations = await ctx.db
     .select({ id: schema.orgs.id })
     .from(schema.orgs)
@@ -548,10 +570,21 @@ export const getProfileScopeOrgIds = async (
 };
 
 /**
- * PII access for an existing user: editors and admins of the orgs that scope
- * their profile (checkHasRoleOnOrg walks up the org tree), or admins of an org
- * the user has a role on. user.crupdate applies the same rule.
+ * The one rule for editing another user's profile and reading their PII: the
+ * caller is an editor or admin of the user's profile-scope orgs
+ * (checkHasRoleOnOrg walks up the org tree).
  */
+export const isProfileEditorOf = async (
+  ctx: Context,
+  user: { homeRegionId: number | null },
+): Promise<boolean> =>
+  hasRoleOnAny(
+    ctx,
+    await getProfileScopeOrgIds(ctx, user.homeRegionId),
+    "editor",
+  );
+
+/** PII access for an existing user; user.crupdate applies the same rule. */
 export const checkUserPiiAccess = async ({
   ctx,
   userId,
@@ -565,18 +598,5 @@ export const checkUserPiiAccess = async ({
     .where(eq(schema.users.id, userId));
   if (!user) return false;
 
-  const roleOrgIds = (
-    await ctx.db
-      .selectDistinct({ orgId: schema.rolesXUsersXOrg.orgId })
-      .from(schema.rolesXUsersXOrg)
-      .where(eq(schema.rolesXUsersXOrg.userId, userId))
-  ).map(({ orgId }) => orgId);
-
-  return (
-    (await hasRoleOnAny(
-      ctx,
-      await getProfileScopeOrgIds(ctx, user.homeRegionId, roleOrgIds),
-      "editor",
-    )) || (await hasRoleOnAny(ctx, roleOrgIds, "admin"))
-  );
+  return isProfileEditorOf(ctx, user);
 };

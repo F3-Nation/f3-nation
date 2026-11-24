@@ -27,6 +27,18 @@ describe("admin oRPC proxy route", () => {
     vi.unstubAllEnvs();
   });
 
+  it("overwrites a caller's client header with orpc", async () => {
+    const { GET } = await import("~/app/api/orpc/[[...rest]]/route");
+    await GET(
+      new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+        headers: { client: "scalar-api" },
+      }),
+    );
+    expect((fetchSpy.mock.calls[0]![1].headers as Headers).get("client")).toBe(
+      "orpc",
+    );
+  });
+
   it("reports the browser's trusted hop to the API with the proxy secret", async () => {
     vi.stubEnv("PROXY_CLIENT_IP_SECRET", "s".repeat(32));
     const { GET } = await import("~/app/api/orpc/[[...rest]]/route");

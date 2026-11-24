@@ -123,7 +123,9 @@ def _show_emergency_info_modal(
 
     """Display the emergency information for a user."""
     # Send notification to the user whose info was accessed
-    accessing_user = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger)
+    accessing_user = get_user(
+        safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger, require_link=False
+    )
     accessing_region_name = (
         safe_get(DbManager.get(Org, region_record.org_id), "name") if region_record.org_id else None
     ) or "Unknown Region"
