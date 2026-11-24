@@ -6,6 +6,8 @@ import urllib.parse
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from tools import preview_view
@@ -53,11 +55,22 @@ def test_capture_payload_returns_the_last_view_sent():
     assert preview_view.capture_payload(render) == {"type": "modal", "blocks": []}
 
 
-def test_capture_payload_fails_when_the_preview_reaches_the_database():
+@pytest.mark.parametrize("cached_session", [False, True])
+def test_capture_payload_fails_when_the_preview_reaches_the_database(cached_session, monkeypatch):
+    """A session factory cached earlier in the process would skip `get_engine`, so the guard must block it too."""
+    from f3_data_models import utils
     from f3_data_models.utils import get_session
+
+    if cached_session:
+        cached_factory = MagicMock()
+        monkeypatch.setitem(utils.SESSION_FACTORY_CACHE, utils._normalize_backend(None), cached_factory)
 
     with pytest.raises(RuntimeError, match="reached the database"):
         preview_view.capture_payload(lambda client: get_session())
+
+    if cached_session:
+        cached_factory.assert_not_called()
+        assert utils.SESSION_FACTORY_CACHE[utils._normalize_backend(None)] is cached_factory
 
 
 def test_capture_payload_raises_when_nothing_is_sent():

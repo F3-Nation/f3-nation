@@ -34,13 +34,17 @@ UNPATCHED_DB_MESSAGE = "The preview reached the database; patch that query in it
 def capture_payload(render: Callable[[MagicMock], object]) -> dict:
     """Call `render` with a mock Slack client and return the last view or message it sent, ready for the Builder.
 
-    The database engine is replaced with one that raises, so a query the preview didn't patch fails loudly instead of
-    reading whatever database the developer's .env points at.
+    The database engine is replaced with one that raises, and the cached session factories are hidden so `get_session`
+    has to ask for that engine, so a query the preview didn't patch fails loudly instead of reading whatever database
+    the developer's .env points at.
     """
     client = MagicMock()
     for method in (*VIEW_METHODS, *MESSAGE_METHODS):
         getattr(client, method).return_value = {"ok": True, "ts": "1700000000.000100"}
-    with patch("f3_data_models.utils.get_engine", side_effect=RuntimeError(UNPATCHED_DB_MESSAGE)):
+    with (
+        patch("f3_data_models.utils.get_engine", side_effect=RuntimeError(UNPATCHED_DB_MESSAGE)),
+        patch.dict("f3_data_models.utils.SESSION_FACTORY_CACHE", clear=True),
+    ):
         render(client)
     for name, _args, kwargs in reversed(client.mock_calls):
         if name in VIEW_METHODS:
