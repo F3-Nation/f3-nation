@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveQueryTimeoutMs, withQueryTimeout } from "@acme/db/testing";
+import * as dbLogging from "../../../db/src/lib/logging";
 
 // Coverage for the client-side query timeout. Lives here rather than
 // packages/db because this package already has the live-Postgres vitest
@@ -188,8 +189,8 @@ describe("withQueryTimeout (timer/canceller bookkeeping, faked client)", () => {
       unhandled.push(reason);
     };
     process.on("unhandledRejection", onUnhandled);
-    const consoleError = vi
-      .spyOn(console, "error")
+    const cancellationWarning = vi
+      .spyOn(dbLogging, "logWarn")
       .mockImplementation(() => undefined);
     try {
       withQueryTimeout(client, 1_000);
@@ -210,13 +211,13 @@ describe("withQueryTimeout (timer/canceller bookkeeping, faked client)", () => {
       vi.useRealTimers();
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(unhandled).toHaveLength(0);
-      expect(consoleError).toHaveBeenCalledWith(
-        expect.stringContaining("cancelling a timed-out query failed"),
-        cancelError,
+      expect(cancellationWarning).toHaveBeenCalledWith(
+        "db.query.cancellation_failed",
+        {},
       );
     } finally {
       process.off("unhandledRejection", onUnhandled);
-      consoleError.mockRestore();
+      cancellationWarning.mockRestore();
     }
   });
 });

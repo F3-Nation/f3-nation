@@ -8,6 +8,8 @@ import { isTest } from "@acme/shared/common/constants";
 import { schema } from "..";
 import { withAuditContext } from "./audit-context";
 import { withQueryTimeout } from "./query-timeout";
+import { createRecoveringPool } from "./pool-recovery";
+import type { QueryObserver } from "./pool-recovery";
 
 // A hang backstop, not a latency budget: leave headroom for slow statements.
 // Native transactions are excluded; see withQueryTimeout.
@@ -210,16 +212,27 @@ export const poolOptions = (hostOptions: { host?: string }) => ({
   prepare: false,
 });
 
-export const createDbClient = () => {
+export const createDbClient = (options: { recover?: boolean } = {}) => {
   const { databaseUrl, useSsl } = getDbUrl();
   const { url, hostOptions } = postgresArgs(databaseUrl);
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
-  const client = postgres(url, { ...sslOptions, ...poolOptions(hostOptions) });
-  // Audit must wrap the timeout: timing out a begin-backed write could reject
-  // it while its transaction later commits.
-  if (QUERY_TIMEOUT_MS > 0) withQueryTimeout(client, QUERY_TIMEOUT_MS);
-  withAuditContext(client);
-  return { db: drizzle(client, { schema }), close: () => client.end() };
+  const create = (observer?: QueryObserver) => {
+    const client = postgres(url, {
+      ...sslOptions,
+      ...poolOptions(hostOptions),
+    });
+    // Audit must wrap the timeout: timing out a begin-backed write could reject
+    // it while its transaction later commits.
+    if (QUERY_TIMEOUT_MS > 0)
+      withQueryTimeout(client, QUERY_TIMEOUT_MS, observer);
+    withAuditContext(client);
+    return {
+      db: drizzle(client, { schema }),
+      close: (settings?: { timeout: number }) => client.end(settings),
+    };
+  };
+  if (options.recover) return createRecoveringPool(create);
+  return { ...create(), isLive: () => true };
 };
 
 export const getDb = () => createDbClient().db;

@@ -101,6 +101,13 @@ For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 1. Main Slackbot Cloud Run service deploy (`f3-slackbot` in `f3-slackbot-staging` and `f3-slackbot`)
 2. Scripts Cloud Run Job deploy (`f3-slackbot-scripts` in `f3-slackbot-staging` and `f3-slackbot`)
 
+The [API deploy workflow](../.github/workflows/deploy-api.yml) configures an
+HTTP liveness probe on `/live`, independently of the TCP startup probe.
+Its [database recovery contract](specs/api-database-recovery.md) distinguishes
+the restart signal from `/health` dependency status. When rolling back to an
+image without `/live`, remove the liveness probe with that rollback so a
+missing route does not repeatedly restart the old image.
+
 The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes
 directly to GitHub Pages. Its emitted check names must stay distinct from the CI
 checks its gate waits on; see
