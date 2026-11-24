@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from f3_data_models.models import Attendance_Type
 from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Enum, Float, Integer, String, Table, create_engine, event
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session, registry
@@ -68,6 +69,7 @@ def query_data(monkeypatch):
             Column("event_instance_id", Integer),
             Column("user_id", Integer),
             Column("created", DateTime),
+            Column("attendance_type", Enum(Attendance_Type), default=Attendance_Type.pax),
         ),
         "Attendance_x_AttendanceType": Table(
             "attendance_type_links",
@@ -153,8 +155,13 @@ def query_data(monkeypatch):
             models["EventType"](id=1, name="Bootcamp"),
             models["EventType"](id=2, name="Run"),
             models["EventType_x_EventInstance"](event_instance_id=1, event_type_id=1),
-            models["Attendance"](id=1, event_instance_id=1, user_id=1, created=datetime(2026, 11, 1)),
-            models["Attendance_x_AttendanceType"](attendance_id=1, attendance_type_id=2),
+            models["Attendance"](
+                id=1,
+                event_instance_id=1,
+                user_id=1,
+                created=datetime(2026, 11, 1),
+                attendance_type=Attendance_Type.q,
+            ),
             models["User"](id=1, f3_name="Synthetic F3 Q", avatar_url=F3_AVATAR),
             models["User"](id=2, f3_name="Other F3 Q", avatar_url="https://example.test/other-f3.png"),
             models["SlackSpace"](id=1, team_id="T_DESTINATION", settings=settings),
@@ -443,12 +450,31 @@ def test_queries_preserve_name_and_avatar_fallback_sources(query_data, module):
 
 
 @pytest.mark.parametrize("module", [preblast_reminders, auto_preblast_send], ids=["reminder", "automatic"])
+@pytest.mark.parametrize("attendance_type", [Attendance_Type.pax, Attendance_Type.co_q])
+def test_queries_count_only_the_q_as_the_events_q(query_data, module, attendance_type):
+    add_identities(query_data, {})
+    query_data.session.query(query_data.models.Attendance).update({"attendance_type": attendance_type})
+    query_data.session.commit()
+
+    items = pull_items(module)
+
+    assert len(items) == 1
+    assert items[0].q_name is None
+    assert items[0].slack_user_id is None
+
+
+@pytest.mark.parametrize("module", [preblast_reminders, auto_preblast_send], ids=["reminder", "automatic"])
 def test_queries_keep_first_q_attendance_selection(query_data, module):
     add_identities(query_data, {}, {"id": 11, "user_id": 2, "slack_updated": 999})
     query_data.session.add_all(
         [
-            query_data.models.Attendance(id=2, event_instance_id=1, user_id=2, created=datetime(2026, 11, 2)),
-            query_data.models.Attendance_x_AttendanceType(attendance_id=2, attendance_type_id=2),
+            query_data.models.Attendance(
+                id=2,
+                event_instance_id=1,
+                user_id=2,
+                created=datetime(2026, 11, 2),
+                attendance_type=Attendance_Type.q,
+            ),
         ]
     )
     query_data.session.commit()

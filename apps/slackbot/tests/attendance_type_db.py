@@ -6,7 +6,7 @@ typed only by `attendance.attendance_type` (no link-table rows), so a query that
 reads the link table, or that drops its type filter, gets the wrong people back.
 """
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from f3_data_models.models import (
@@ -20,6 +20,8 @@ from f3_data_models.models import (
     EventType_x_EventInstance,
     Org,
     Org_Type,
+    Org_x_SlackSpace,
+    SlackSpace,
     SlackUser,
     User,
 )
@@ -59,20 +61,34 @@ def create_schema(engine) -> None:
 
 
 def seed_event(
-    engine, *, start_date: date, event_id: int = 100, leaders: bool = True, with_links: bool = False, **event_fields
+    engine,
+    *,
+    start_date: date,
+    event_id: int = 100,
+    leaders: bool = True,
+    with_links: bool = False,
+    is_planned: bool = True,
+    **event_fields,
 ) -> int:
     """One event at the AO with a PAX and, unless `leaders` is False, a Q and a Co-Q.
 
+    The PAX signed up first, then the Co-Q, then the Q, so "the first record" is never the Q by accident.
     With `with_links`, each record also gets the link row matching its type, as a backfilled record has.
+    The region has a Slack space in TEAM_ID, and every user's home region is the region.
     """
     with Session(engine) as session:
         if session.get(Org, REGION_ID) is None:
             session.add(Org(id=REGION_ID, org_type=Org_Type.region, name="Region", is_active=True))
             session.add(Org(id=AO_ID, org_type=Org_Type.ao, name="AO", is_active=True, parent_id=REGION_ID))
             session.add(EventType(id=1, name="Bootcamp", event_category=Event_Category.first_f))
-            for user_id, name in F3_NAMES.items():
-                session.add(User(id=user_id, email=f"{name.lower()}@example.test", f3_name=name))
+            session.add(SlackSpace(id=1, team_id=TEAM_ID, settings={"team_id": TEAM_ID, "org_id": REGION_ID}))
             session.flush()
+            for user_id, name in F3_NAMES.items():
+                session.add(
+                    User(id=user_id, email=f"{name.lower()}@example.test", f3_name=name, home_region_id=REGION_ID)
+                )
+            session.flush()
+            session.add(Org_x_SlackSpace(org_id=REGION_ID, slack_space_id=1))
             for user_id, name in F3_NAMES.items():
                 session.add(
                     SlackUser(
@@ -101,13 +117,14 @@ def seed_event(
         session.add(EventType_x_EventInstance(event_instance_id=event_id, event_type_id=1))
         members = [(PAX_USER, Attendance_Type.pax)]
         if leaders:
-            members += [(Q_USER, Attendance_Type.q), (CO_Q_USER, Attendance_Type.co_q)]
-        for user_id, attendance_type in members:
+            members += [(CO_Q_USER, Attendance_Type.co_q), (Q_USER, Attendance_Type.q)]
+        for order, (user_id, attendance_type) in enumerate(members):
             session.add(
                 Attendance(
                     event_instance_id=event_id,
                     user_id=user_id,
-                    is_planned=True,
+                    is_planned=is_planned,
+                    created=datetime(2026, 1, 1) + timedelta(minutes=order),
                     attendance_type=attendance_type,
                     attendance_x_attendance_types=(
                         [Attendance_x_AttendanceType(attendance_type_id=attendance_type.value)] if with_links else []

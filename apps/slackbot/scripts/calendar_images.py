@@ -16,7 +16,7 @@ from numbers import Real
 import pytz
 from f3_data_models.models import (
     Attendance,
-    Attendance_x_AttendanceType,
+    Attendance_Type,
     EventInstance,
     EventTag,
     EventTag_x_EventInstance,
@@ -385,11 +385,10 @@ def _build_calendar_query(session, current_week_start, overall_end):
             func.row_number().over(partition_by=Attendance.event_instance_id, order_by=Attendance.created).label("rn"),
         )
         .select_from(Attendance)
-        .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
         .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
         .join(Org, EventInstance.org_id == Org.id)
         .filter(
-            Attendance_x_AttendanceType.attendance_type_id == 2,
+            Attendance.attendance_type == Attendance_Type.q,
             EventInstance.start_date >= current_week_start,
             EventInstance.start_date < overall_end,
             Org.parent_id == calendar_region_id,
@@ -403,11 +402,10 @@ def _build_calendar_query(session, current_week_start, overall_end):
             func.max(Attendance.updated).label("q_last_updated"),
         )
         .select_from(Attendance)
-        .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
         .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
         .join(Org, EventInstance.org_id == Org.id)
         .filter(
-            Attendance_x_AttendanceType.attendance_type_id == 2,
+            Attendance.attendance_type == Attendance_Type.q,
             EventInstance.start_date >= current_week_start,
             EventInstance.start_date < overall_end,
             Org.parent_id == calendar_region_id,

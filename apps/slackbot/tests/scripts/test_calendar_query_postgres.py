@@ -74,9 +74,9 @@ def isolated_postgres():
                 "CREATE TABLE event_instances (id integer PRIMARY KEY, start_date date, start_time time, "
                 "updated timestamp, pax_count integer, series_exception text, org_id integer, location_id integer, "
                 "is_active boolean)",
+                "CREATE TYPE attendance_type AS ENUM ('pax', 'q', 'co_q')",
                 "CREATE TABLE attendance (id integer PRIMARY KEY, event_instance_id integer, user_id integer, "
-                "created timestamp, updated timestamp)",
-                "CREATE TABLE attendance_x_attendance_types (attendance_id integer, attendance_type_id integer)",
+                "created timestamp, updated timestamp, attendance_type attendance_type NOT NULL DEFAULT 'pax')",
                 "CREATE TABLE users (id integer PRIMARY KEY, f3_name text)",
                 "CREATE TABLE event_tags (id integer PRIMARY KEY, name text, color text)",
                 "CREATE TABLE event_tags_x_event_instances (event_instance_id integer, event_tag_id integer)",
@@ -107,7 +107,8 @@ def test_bounded_calendar_query_matches_legacy_global_q_subqueries(isolated_post
         connection.execute(
             text(
                 "INSERT INTO users (id, f3_name) VALUES "
-                "(101, 'First Q One'), (102, 'Second Q One'), (201, 'First Q Two')"
+                "(101, 'First Q One'), (102, 'Second Q One'), (201, 'First Q Two'), "
+                "(103, 'Early PAX One'), (104, 'Early Co-Q One')"
             )
         )
         connection.execute(
@@ -128,16 +129,13 @@ def test_bounded_calendar_query_matches_legacy_global_q_subqueries(isolated_post
         )
         connection.execute(
             text(
-                "INSERT INTO attendance (id, event_instance_id, user_id, created, updated) VALUES "
-                "(501, 1001, 101, '2026-09-20 06:00:00', '2026-10-01 11:00:00'), "
-                "(502, 1001, 102, '2026-09-21 06:00:00', '2026-10-03 12:00:00'), "
-                "(601, 2001, 201, '2026-09-22 06:00:00', '2026-10-02 13:00:00')"
-            )
-        )
-        connection.execute(
-            text(
-                "INSERT INTO attendance_x_attendance_types (attendance_id, attendance_type_id) "
-                "VALUES (501, 2), (502, 2), (601, 2)"
+                "INSERT INTO attendance (id, event_instance_id, user_id, created, updated, attendance_type) VALUES "
+                "(501, 1001, 101, '2026-09-20 06:00:00', '2026-10-01 11:00:00', 'q'), "
+                "(502, 1001, 102, '2026-09-21 06:00:00', '2026-10-03 12:00:00', 'q'), "
+                "(601, 2001, 201, '2026-09-22 06:00:00', '2026-10-02 13:00:00', 'q'), "
+                # Signed up first and changed last, so the Q name and freshness are wrong if they count.
+                "(503, 1001, 103, '2026-09-01 06:00:00', '2026-10-04 14:00:00', 'pax'), "
+                "(504, 1001, 104, '2026-09-02 06:00:00', '2026-10-04 15:00:00', 'co_q')"
             )
         )
 
@@ -149,14 +147,10 @@ def test_bounded_calendar_query_matches_legacy_global_q_subqueries(isolated_post
                 "WITH ranked_q AS ("
                 " SELECT attendance.event_instance_id, attendance.user_id, "
                 " row_number() OVER (PARTITION BY attendance.event_instance_id ORDER BY attendance.created) AS rn "
-                " FROM attendance JOIN attendance_x_attendance_types "
-                " ON attendance.id = attendance_x_attendance_types.attendance_id "
-                " WHERE attendance_x_attendance_types.attendance_type_id = 2 "
+                " FROM attendance WHERE attendance.attendance_type = 'q' "
                 "), q_updates AS ("
                 " SELECT attendance.event_instance_id, max(attendance.updated) AS q_last_updated "
-                " FROM attendance JOIN attendance_x_attendance_types "
-                " ON attendance.id = attendance_x_attendance_types.attendance_id "
-                " WHERE attendance_x_attendance_types.attendance_type_id = 2 "
+                " FROM attendance WHERE attendance.attendance_type = 'q' "
                 " GROUP BY attendance.event_instance_id"
                 ") SELECT event_instances.id, event_instances.start_date, orgs.name, users.f3_name, "
                 "q_updates.q_last_updated "
