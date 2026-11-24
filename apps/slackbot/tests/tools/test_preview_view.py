@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import urllib.parse
 
@@ -33,6 +34,7 @@ def test_calendar_home_scenarios_show_their_distinct_states():
     assert "Hide filters" not in texts(member)
     assert "Assign Q" in texts(admin) and "Assign Q" not in texts(member)
     assert "No upcoming events match these filters." in texts(empty)
+    assert "Moneyball" in texts(member) and "Moneyball" not in texts(filters)
 
 
 def test_capture_payload_returns_message_blocks():
@@ -43,6 +45,21 @@ def test_capture_payload_returns_message_blocks():
     assert payload == {"blocks": blocks}
 
 
+def test_capture_payload_returns_the_last_view_sent():
+    def render(client):
+        client.views_open(trigger_id="T", view={"type": "modal", "blocks": [{"type": "divider"}]})
+        client.views_update(view_id="V", view={"type": "modal", "blocks": [], "callback_id": "dropped"})
+
+    assert preview_view.capture_payload(render) == {"type": "modal", "blocks": []}
+
+
+def test_capture_payload_fails_when_the_preview_reaches_the_database():
+    from f3_data_models.utils import get_session
+
+    with pytest.raises(RuntimeError, match="reached the database"):
+        preview_view.capture_payload(lambda client: get_session())
+
+
 def test_capture_payload_raises_when_nothing_is_sent():
     with pytest.raises(RuntimeError, match="no view or message"):
         preview_view.capture_payload(lambda client: None)
@@ -50,12 +67,14 @@ def test_capture_payload_raises_when_nothing_is_sent():
 
 @pytest.mark.parametrize(("team", "prefix"), [(None, "/block-kit-builder#"), ("T123", "/block-kit-builder/T123#")])
 def test_builder_url_round_trips_the_payload(team, prefix):
-    payload = {"blocks": [{"type": "divider"}], "note": "a # & ? b"}
+    payload = {"blocks": [{"type": "divider"}], "note": "a # & ? b / 50%"}
 
     url = preview_view.builder_url(payload, team)
 
     assert prefix in url
-    assert json.loads(urllib.parse.unquote(url.split("#", 1)[1])) == payload
+    fragment = url.split("#", 1)[1]
+    assert re.fullmatch(r"[A-Za-z0-9%._~-]*", fragment)
+    assert json.loads(urllib.parse.unquote(fragment)) == payload
 
 
 def test_main_prints_builder_url_and_writes_out_file(tmp_path, capsys):
@@ -66,6 +85,19 @@ def test_main_prints_builder_url_and_writes_out_file(tmp_path, capsys):
     url = capsys.readouterr().out.strip()
     assert url.startswith("https://app.slack.com/block-kit-builder/T123#")
     assert json.loads(out.read_text()) == calendar_home.SCENARIOS["empty"]()
+
+
+@pytest.mark.parametrize("argv", [[], ["--list"]])
+def test_main_lists_views_and_scenarios(argv, capsys):
+    assert preview_view.main(argv) == 0
+
+    assert capsys.readouterr().out.strip() == "calendar-home: member, filters, admin, empty"
+
+
+def test_main_defaults_to_the_first_scenario(capsys):
+    assert preview_view.main(["calendar-home"]) == 0
+
+    assert capsys.readouterr().err.startswith("calendar-home / member:")
 
 
 def test_main_rejects_unknown_scenario():

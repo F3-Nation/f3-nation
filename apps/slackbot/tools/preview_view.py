@@ -7,7 +7,7 @@ Run from apps/slackbot:
 
 Each preview calls the real view builder with the database queries and the Slack client mocked, so it needs no
 database, Slack app or network access. Add a preview by writing a module in `tools/previews/` with a `SCENARIOS` dict
-and registering it in `PREVIEWS` below.
+and registering it in `_previews()` below.
 """
 
 import argparse
@@ -16,35 +16,39 @@ import os
 import sys
 import urllib.parse
 from collections.abc import Callable
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # Match the test suite: don't start the debugger or use the local GCS emulator from the developer's .env.
 os.environ["ENABLE_DEBUGGING"] = "false"
 os.environ["GCS_EMULATOR_HOST"] = ""
 
 BUILDER_URL = "https://app.slack.com/block-kit-builder"
-# Slack client methods whose payload a preview can show, checked in this order.
+# Slack client methods whose payload a preview can show; the last such call is the one shown.
 VIEW_METHODS = ("views_open", "views_update", "views_push", "views_publish")
 MESSAGE_METHODS = ("chat_postMessage", "chat_postEphemeral", "chat_update")
 # Top-level view fields Block Kit Builder renders; ids, callback ids and metadata are left out.
 VIEW_FIELDS = ("type", "title", "close", "submit", "blocks")
+UNPATCHED_DB_MESSAGE = "The preview reached the database; patch that query in its tools/previews module."
 
 
 def capture_payload(render: Callable[[MagicMock], object]) -> dict:
-    """Call `render` with a mock Slack client and return the first view or message it sent, ready for the Builder."""
+    """Call `render` with a mock Slack client and return the last view or message it sent, ready for the Builder.
+
+    The database engine is replaced with one that raises, so a query the preview didn't patch fails loudly instead of
+    reading whatever database the developer's .env points at.
+    """
     client = MagicMock()
     for method in (*VIEW_METHODS, *MESSAGE_METHODS):
         getattr(client, method).return_value = {"ok": True, "ts": "1700000000.000100"}
-    render(client)
-    for method in VIEW_METHODS:
-        call = getattr(client, method).call_args
-        if call:
-            view = call.kwargs["view"]
-            return {key: view[key] for key in VIEW_FIELDS if key in view}
-    for method in MESSAGE_METHODS:
-        call = getattr(client, method).call_args
-        if call:
-            return {"blocks": call.kwargs["blocks"]}
+    with patch("f3_data_models.utils.get_engine", side_effect=RuntimeError(UNPATCHED_DB_MESSAGE)):
+        render(client)
+    for name, _args, kwargs in reversed(client.mock_calls):
+        if name in VIEW_METHODS:
+            return {key: kwargs["view"][key] for key in VIEW_FIELDS if key in kwargs["view"]}
+        if name in MESSAGE_METHODS:
+            if "blocks" not in kwargs:
+                raise RuntimeError(f"The preview called client.{name} without blocks=, so there is nothing to show.")
+            return {"blocks": kwargs["blocks"]}
     raise RuntimeError("The preview sent no view or message to the Slack client.")
 
 
@@ -81,9 +85,9 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = scenarios[scenario]()
     if args.out:
+        text = json.dumps(payload, indent=2) + "\n"
         with open(args.out, "w") as file:
-            json.dump(payload, file, indent=2)
-            file.write("\n")
+            file.write(text)
     print(f"{args.view} / {scenario}: {len(payload['blocks'])} blocks", file=sys.stderr)
     print(builder_url(payload, args.team))
     return 0

@@ -9,6 +9,7 @@ from f3_data_models.models import Series_Exception
 
 from features.calendar.home import build_home_form
 from tools.preview_view import capture_payload
+from utilities.helper_functions import current_date_cst
 from utilities.slack import actions
 
 AOS = [
@@ -35,12 +36,12 @@ def _event(
     closed: bool = False,
     series: str | None = None,
 ) -> SimpleNamespace:
-    """One row shaped like `CalendarHomeQuery`, dated relative to today."""
+    """One row shaped like `CalendarHomeQuery`, dated relative to today in US/Central, as the view compares it."""
     return SimpleNamespace(
         event=SimpleNamespace(
             id=event_id,
             name=name or f"Event {event_id}",
-            start_date=datetime.date.today() + datetime.timedelta(days=days_ahead),
+            start_date=current_date_cst() + datetime.timedelta(days=days_ahead),
             start_time=start_time,
             series_exception=Series_Exception.closed if closed else None,
             highlight=highlight,
@@ -72,8 +73,13 @@ def _events() -> list[SimpleNamespace]:
     ]  # fmt: skip
 
 
+SAMPLE_RECORDS = {"Org": AOS, "EventType": EVENT_TYPES, "Location": []}
+
+
 def _find_records(model, *_args, **_kwargs) -> list:
-    return {"Org": AOS, "EventType": EVENT_TYPES}.get(model.__name__, [])
+    if model.__name__ not in SAMPLE_RECORDS:
+        raise KeyError(f"The calendar-home preview has no sample {model.__name__} rows; add them to SAMPLE_RECORDS.")
+    return SAMPLE_RECORDS[model.__name__]
 
 
 def _render(body: dict, *, admin: bool = False, events: list | None = None) -> dict:
@@ -99,13 +105,15 @@ OPENED = {"user": {"id": "U_PREVIEW"}, "trigger_id": "TRIGGER"}
 
 def filters_open() -> dict:
     """The Filters button pressed with two AOs already chosen, so the inputs show and the summary counts them."""
-    stored = {"filters": {actions.CALENDAR_HOME_AO_FILTER: [str(AOS[0].id), str(AOS[4].id)]}}
+    chosen = (AOS[0], AOS[4])
+    stored = {"filters": {actions.CALENDAR_HOME_AO_FILTER: [str(ao.id) for ao in chosen]}}
     body = {
         "user": {"id": "U_PREVIEW"},
         "actions": [{"action_id": actions.CALENDAR_HOME_FILTERS}],
         "view": {"id": "V_PREVIEW", "private_metadata": json.dumps(stored), "blocks": [], "state": {"values": {}}},
     }
-    return _render(body)
+    # The query is mocked, so apply the AO filter to the sample rows here, as the real query would.
+    return _render(body, events=[e for e in _events() if e.org.name in {ao.name for ao in chosen}])
 
 
 SCENARIOS = {
