@@ -1,0 +1,26 @@
+[
+  { "name": "New Year's Day", "month": 1, "day": 1, "observed": true },
+  {
+    "name": "Martin Luther King Jr. Day",
+    "month": 1,
+    "weekday": "Mon",
+    "nth": 3
+  },
+  { "name": "Presidents' Day", "month": 2, "weekday": "Mon", "nth": 3 },
+  { "name": "Memorial Day", "month": 5, "weekday": "Mon", "nth": -1 },
+  { "name": "Juneteenth", "month": 6, "day": 19, "observed": true },
+  { "name": "Independence Day", "month": 7, "day": 4, "observed": true },
+  { "name": "Labor Day", "month": 9, "weekday": "Mon", "nth": 1 },
+  { "name": "Columbus Day", "month": 10, "weekday": "Mon", "nth": 2 },
+  { "name": "Veterans Day", "month": 11, "day": 11, "observed": true },
+  { "name": "Thanksgiving", "month": 11, "weekday": "Thu", "nth": 4 },
+  {
+    "name": "Day after Thanksgiving",
+    "month": 11,
+    "weekday": "Thu",
+    "nth": 4,
+    "offset": 1
+  },
+  { "name": "Christmas", "month": 12, "day": 25, "observed": true },
+  { "name": "Christmas Eve", "month": 12, "day": 24, "observed": true }
+]
