@@ -22,6 +22,7 @@ jobs:
           script: |
             const appLabels = new Map([
               ['apps/admin', 'app: admin'],
+              ['apps/analytics', 'app: analytics'],
               ['apps/api', 'app: api'],
               ['apps/auth', 'app: auth'],
               ['apps/homepage', 'app: homepage'],
@@ -43,7 +44,13 @@ jobs:
               return;
             }
 
-            const selectedApp = match[1].trim();
+            // Options read "Map — map.f3nation.com (apps/map)"; older issues hold the bare path.
+            const answer = match[1].trim();
+            const selectedApp = answer.match(/\bapps\/[a-z0-9-]+/)?.[0];
+            if (!selectedApp) {
+              core.info(`Issue #${issue.number}: "${answer}" names no single app; no app label applied.`);
+              return;
+            }
             const selectedLabel = appLabels.get(selectedApp);
 
             if (!selectedLabel) {
