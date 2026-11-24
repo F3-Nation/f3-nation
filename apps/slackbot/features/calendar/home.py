@@ -9,6 +9,7 @@ import pytz
 import requests
 from f3_data_models.models import (
     Attendance,
+    Attendance_Type,
     Attendance_x_AttendanceType,
     EventInstance,
     EventType,
@@ -32,6 +33,7 @@ from features.calendar.event_preblast import (
 )
 from utilities import constants, storage
 from utilities.constants import (
+    LEADER_ATTENDANCE_TYPES,
     MAX_CALENDAR_WEEKS,
     WEEK_LABELS,
     WEEK_SCHEDULE_LABELS,
@@ -426,7 +428,7 @@ def build_assign_q_form(
     attendance = DbManager.find_records(
         Attendance,
         filters=[Attendance.event_instance_id == event_instance_id],
-        joinedloads=[Attendance.slack_users, Attendance.attendance_types],
+        joinedloads=[Attendance.slack_users],
     )
 
     form = copy.deepcopy(ASSIGN_Q_FORM)
@@ -437,13 +439,11 @@ def build_assign_q_form(
         + f"*Start Time:* {event_instance.start_time or 'TBD'}\n"
     )
 
-    existing_q_slack_users = [a.slack_users for a in attendance if any(at.type == "Q" for at in a.attendance_types)]
+    existing_q_slack_users = [a.slack_users for a in attendance if a.attendance_type == Attendance_Type.q]
     if existing_q_slack_users:
         slack_user_id = [su.slack_id for su in existing_q_slack_users[0] if su.slack_team_id == region_record.team_id]
         form.set_initial_values({actions.CALENDAR_HOME_ASSIGN_Q_USER: slack_user_id[:1] if slack_user_id else None})
-    existing_co_q_slack_users = [
-        a.slack_users for a in attendance if any(at.type == "Co-Q" for at in a.attendance_types)
-    ]
+    existing_co_q_slack_users = [a.slack_users for a in attendance if a.attendance_type == Attendance_Type.co_q]
     if existing_co_q_slack_users:
         slack_user_ids = []
         for slack_user in existing_co_q_slack_users:
@@ -493,13 +493,12 @@ def handle_assign_q_form(
     existing_attendance_records = DbManager.find_records(
         Attendance,
         filters=[Attendance.event_instance_id == event_instance_id],
-        joinedloads=[Attendance.slack_users, Attendance.attendance_types],
     )
 
     # Delete existing Q / Co-Q attendance records entirely
     q_changed = False
     for ea in existing_attendance_records:
-        if any(at.type in ["Q", "Co-Q"] for at in ea.attendance_types):
+        if ea.attendance_type in LEADER_ATTENDANCE_TYPES:
             q_changed = True
             DbManager.delete_records(
                 cls=Attendance_x_AttendanceType,
@@ -520,13 +519,12 @@ def handle_assign_q_form(
     existing_attendance_records = DbManager.find_records(
         Attendance,
         filters=[Attendance.event_instance_id == event_instance_id],
-        joinedloads=[Attendance.slack_users, Attendance.attendance_types],
     )
 
     if q_user_id:
         if q_user_id in [ea.user_id for ea in existing_attendance_records]:
             attendance_record = next((ea for ea in existing_attendance_records if ea.user_id == q_user_id), None)
-            if attendance_record and 2 not in [at.id for at in attendance_record.attendance_types]:
+            if attendance_record and attendance_record.attendance_type != Attendance_Type.q:
                 DbManager.create_record(
                     Attendance_x_AttendanceType(attendance_id=attendance_record.id, attendance_type_id=2)
                 )
@@ -546,7 +544,7 @@ def handle_assign_q_form(
         for co_q_user_id in co_qs_user_ids:
             if co_q_user_id in [ea.user_id for ea in existing_attendance_records]:
                 attendance_record = next((ea for ea in existing_attendance_records if ea.user_id == co_q_user_id), None)
-                if attendance_record and 3 not in [at.id for at in attendance_record.attendance_types]:
+                if attendance_record and attendance_record.attendance_type != Attendance_Type.co_q:
                     DbManager.create_record(
                         Attendance_x_AttendanceType(attendance_id=attendance_record.id, attendance_type_id=3)
                     )
@@ -618,10 +616,9 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
                 Attendance.user_id == user_id,
                 Attendance.is_planned,
             ],
-            joinedloads=[Attendance.attendance_x_attendance_types],
         )
         if attendance_record:
-            if 2 not in attendance_record[0].attendance_x_attendance_types:
+            if attendance_record[0].attendance_type != Attendance_Type.q:
                 DbManager.create_record(
                     Attendance_x_AttendanceType(attendance_id=attendance_record[0].id, attendance_type_id=2)
                 )
@@ -662,10 +659,9 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             filters=[
                 Attendance.event_instance_id == event_instance_id,
                 Attendance.user_id == user_id,
-                Attendance.attendance_types.any(Attendance_x_AttendanceType.attendance_type_id == 1),
+                Attendance.attendance_type == Attendance_Type.pax,
                 Attendance.is_planned,
             ],
-            joinedloads=[Attendance.attendance_types],
         )
         update_post = True
         hc_action = False
@@ -697,10 +693,10 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
         preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
         if preblast_info.event_record.preblast_ts:
             q_list = [
-                r.user.id
+                r["user_id"]
                 for r in preblast_info.attendance_records
-                if bool({t.id for t in r.attendance_types}.intersection([2, 3]))
-            ]  # noqa
+                if r["attendance_type"] in LEADER_ATTENDANCE_TYPES
+            ]
             blocks = [
                 *preblast_info.preblast_blocks,
                 orm.ActionsBlock(
@@ -710,7 +706,7 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             blocks = [b.as_form_field() for b in blocks]
             metadata = {
                 "event_instance_id": event_instance_id,
-                "attendees": [r.user.id for r in preblast_info.attendance_records],
+                "attendees": [r["user_id"] for r in preblast_info.attendance_records],
                 "qs": q_list,
             }
             try:

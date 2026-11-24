@@ -6,10 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from f3_data_models.models import Attendance_Type
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
-from application.attendance import CO_Q_TYPE_ID, HC_TYPE_ID, Q_TYPE_ID, AttendanceData
+from application.attendance import AttendanceData
 from application.event_instance import EventInstanceData
 from application.preblast.service import PreblastService
 from features.calendar import get_preblast_action_blocks
@@ -318,14 +319,14 @@ class PreblastViewsTest(unittest.TestCase):
                 event_instance_id=event_id,
                 user_id=100,
                 f3_name="Dredd",
-                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+                attendance_type=Attendance_Type.q,
             ),
             AttendanceData(
                 id=2,
                 event_instance_id=event_id,
                 user_id=200,
                 f3_name="Ghost",
-                attendance_type_ids=[HC_TYPE_ID, CO_Q_TYPE_ID],
+                attendance_type=Attendance_Type.co_q,
             ),
         ]
         mock_build_attendance_service.return_value = attendance_service
@@ -364,7 +365,7 @@ class PreblastViewsTest(unittest.TestCase):
                 event_instance_id=event_id,
                 user_id=100,
                 f3_name="Dredd",
-                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+                attendance_type=Attendance_Type.q,
             )
         ]
         mock_build_attendance_service.return_value = attendance_service
@@ -411,7 +412,7 @@ class PreblastViewsTest(unittest.TestCase):
                 id=1,
                 event_instance_id=event_id,
                 user_id=existing_q_user_id,
-                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+                attendance_type=Attendance_Type.q,
             )
         ]
         mock_build_attendance_service.return_value = attendance_service
@@ -463,7 +464,7 @@ class PreblastViewsTest(unittest.TestCase):
                 id=1,
                 event_instance_id=event_id,
                 user_id=existing_q_user_id,
-                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+                attendance_type=Attendance_Type.q,
             )
         ]
         mock_build_attendance_service.return_value = attendance_service
@@ -599,7 +600,7 @@ class PreblastViewsTest(unittest.TestCase):
                 id=1,
                 event_instance_id=event_id,
                 user_id=existing_q_user_id,
-                attendance_type_ids=[HC_TYPE_ID, Q_TYPE_ID],
+                attendance_type=Attendance_Type.q,
             )
         ]
         mock_build_attendance_service.return_value = attendance_service
@@ -707,12 +708,12 @@ def _hc_un_hc_body(user_slack_id: str = "U_ACTOR") -> dict:
     }
 
 
-@pytest.mark.parametrize("q_type_id", [Q_TYPE_ID, CO_Q_TYPE_ID])
-def test_hc_un_hc_button_is_a_no_op_for_q(q_type_id):
+@pytest.mark.parametrize("leader_type", [Attendance_Type.q, Attendance_Type.co_q])
+def test_hc_un_hc_button_is_a_no_op_for_q(leader_type):
     preblast_service = MagicMock()
     attendance_service = MagicMock()
     attendance_service.get_planned_for_event_instance.return_value = [
-        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type_ids=[q_type_id, HC_TYPE_ID]),
+        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type=leader_type),
     ]
     client = MagicMock()
 
@@ -763,7 +764,7 @@ def test_hc_un_hc_button_is_a_no_op_for_q_missing_from_message_qs():
     preblast_service = MagicMock()
     attendance_service = MagicMock()
     attendance_service.get_planned_for_event_instance.return_value = [
-        AttendanceData(id=2, event_instance_id=42, user_id=8, attendance_type_ids=[Q_TYPE_ID, HC_TYPE_ID]),
+        AttendanceData(id=2, event_instance_id=42, user_id=8, attendance_type=Attendance_Type.q),
     ]
     body = _hc_un_hc_body()
     body["message"]["metadata"]["event_payload"]["attendees"] = [7, 8]
@@ -788,7 +789,7 @@ def test_hc_un_hc_button_un_hcs_former_q_still_in_message_qs():
     preblast_service = MagicMock()
     attendance_service = MagicMock()
     attendance_service.get_planned_for_event_instance.return_value = [
-        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type_ids=[HC_TYPE_ID]),
+        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type=Attendance_Type.pax),
     ]
     preblast_info = SimpleNamespace(
         attendance_records=[],
@@ -815,8 +816,8 @@ def test_hc_un_hc_button_still_un_hcs_a_non_q_attendee():
     preblast_service = MagicMock()
     attendance_service = MagicMock()
     attendance_service.get_planned_for_event_instance.return_value = [
-        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type_ids=[Q_TYPE_ID, HC_TYPE_ID]),
-        AttendanceData(id=2, event_instance_id=42, user_id=8, attendance_type_ids=[HC_TYPE_ID]),
+        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type=Attendance_Type.q),
+        AttendanceData(id=2, event_instance_id=42, user_id=8, attendance_type=Attendance_Type.pax),
     ]
     body = _hc_un_hc_body()
     body["message"]["metadata"]["event_payload"]["attendees"] = [7, 8]
@@ -845,7 +846,7 @@ def test_hc_un_hc_button_hcs_a_non_q_non_attendee():
     preblast_service = MagicMock()
     attendance_service = MagicMock()
     attendance_service.get_planned_for_event_instance.return_value = [
-        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type_ids=[Q_TYPE_ID, HC_TYPE_ID]),
+        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type=Attendance_Type.q),
     ]
     preblast_info = SimpleNamespace(
         attendance_records=[],

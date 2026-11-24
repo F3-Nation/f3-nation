@@ -2,8 +2,12 @@ import os
 from enum import StrEnum
 
 import dotenv
+from f3_data_models.models import Attendance_Type
 
 dotenv.load_dotenv()
+
+# The attendance types that lead an event: the Q and any Co-Qs.
+LEADER_ATTENDANCE_TYPES = (Attendance_Type.q, Attendance_Type.co_q)
 
 
 def is_production_deployment() -> bool:

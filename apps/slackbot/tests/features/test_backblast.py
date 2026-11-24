@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import pytest
-from f3_data_models.models import EventInstance, EventType_x_EventInstance, Org
+from f3_data_models.models import Attendance_Type, EventInstance, EventType_x_EventInstance, Org
 
 from features.backblast import backblast_middleware, build_backblast_form, handle_backblast_post
 from utilities.slack import actions, forms
@@ -559,3 +559,52 @@ def test_downrange_cross_post_continues_after_a_client_lookup_error(
 
     second_client.chat_postMessage.assert_called_once()
     assert second_client.chat_postMessage.call_args.kwargs["channel"] == "C_DR2"
+
+
+def test_backblast_form_prefills_q_and_co_q_from_attendance_type(region_record):
+    event_record = SimpleNamespace(
+        id=42,
+        name="Workout",
+        org=SimpleNamespace(name="Test AO"),
+        start_date=datetime.date(2026, 9, 30),
+        event_types=[SimpleNamespace(id=12, name="Bootcamp", is_active=True, specific_org_id=None)],
+        meta={},
+        backblast_ts=None,
+        pax_count=None,
+        backblast_rich=None,
+        backblast=None,
+    )
+
+    def attendance(slack_id, attendance_type):
+        return MagicMock(
+            attendance_type=attendance_type,
+            slack_users=[SimpleNamespace(slack_id=slack_id, slack_team_id=region_record.team_id)],
+        )
+
+    client = MagicMock()
+    with (
+        patch("features.backblast.DbManager") as db_manager,
+        patch("features.backblast.get_user", return_value=SimpleNamespace(user_id=1)),
+    ):
+        db_manager.get.side_effect = lambda model, *_a, **_k: (
+            event_record if model is EventInstance else SimpleNamespace(id=10, event_types=[])
+        )
+        db_manager.find_records.return_value = [
+            attendance("U_PAX", Attendance_Type.pax),
+            attendance("U_COQ", Attendance_Type.co_q),
+            attendance("U_Q", Attendance_Type.q),
+        ]
+
+        build_backblast_form(
+            body={"user": {"id": "U_PAX"}, "actions": [{"action_id": actions.BACKBLAST_EDIT_BUTTON}]},
+            client=client,
+            logger=MagicMock(),
+            context={},
+            region_record=region_record,
+            event_instance_id=event_record.id,
+        )
+
+    view = (client.views_update.call_args or client.views_open.call_args).kwargs["view"]
+    elements = {block["block_id"]: block.get("element", {}) for block in view["blocks"] if block.get("block_id")}
+    assert elements[actions.BACKBLAST_Q].get("initial_user") == "U_Q"
+    assert elements[actions.BACKBLAST_COQ].get("initial_users") == ["U_COQ"]

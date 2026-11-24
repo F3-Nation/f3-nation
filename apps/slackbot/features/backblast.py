@@ -11,8 +11,8 @@ import pytz
 from cryptography.fernet import Fernet
 from f3_data_models.models import (
     Attendance,
+    Attendance_Type,
     Attendance_x_AttendanceType,
-    AttendanceType,
     EventInstance,
     EventType,
     EventType_x_EventInstance,
@@ -33,6 +33,7 @@ from features import connect
 from utilities import constants, sendmail
 from utilities.bot_logger import post_bot_log
 from utilities.builders import send_error_response
+from utilities.constants import LEADER_ATTENDANCE_TYPES
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import (
     MissingBackblastQuery,
@@ -167,12 +168,9 @@ def backblast_middleware(
                 filters=[
                     Attendance.event_instance_id == event_instance_id,
                     Attendance.user_id == user_id,
-                    Attendance.attendance_x_attendance_types.any(
-                        Attendance_x_AttendanceType.attendance_type_id.in_([2, 3])
-                    ),
+                    Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
                     Attendance.is_planned,
                 ],
-                joinedloads=[Attendance.attendance_x_attendance_types],
             )
             admin_users = get_admin_users(region_record.org_id, region_record.team_id)
             if attendance_records or any(u[0].id == user_id for u in admin_users):
@@ -184,7 +182,7 @@ def backblast_middleware(
             attendance_filter=[
                 Attendance.user_id == user_id,
                 Attendance.is_planned,
-                Attendance.attendance_types.any(AttendanceType.id.in_([2, 3])),
+                Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
             ],
             event_filter=[
                 EventInstance.start_date <= current_date_cst(),
@@ -466,11 +464,9 @@ def handle_missing_backblasts_overflow(
                 filters=[
                     Attendance.event_instance_id == event_instance_id,
                     Attendance.is_planned,
-                    Attendance.attendance_x_attendance_types.any(
-                        Attendance_x_AttendanceType.attendance_type_id.in_([2, 3])
-                    ),
+                    Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
                 ],
-                joinedloads=[Attendance.slack_users, Attendance.attendance_x_attendance_types],
+                joinedloads=[Attendance.slack_users],
             )
             target_slack_ids = [
                 s.slack_id
@@ -575,14 +571,14 @@ def build_backblast_form(
         q_list = [
             attendance_slack_dict[r]
             for r in attendance_records
-            if bool({t.id for t in r.attendance_types}.intersection([2])) and attendance_slack_dict[r]
+            if r.attendance_type == Attendance_Type.q and attendance_slack_dict[r]
         ]
         if not q_list and safe_get(body, "actions", 0, "action_id") == actions.BACKBLAST_NOQ_SELECT:
             q_list = [user_id]
         coq_list = [
             attendance_slack_dict[r]
             for r in attendance_records
-            if bool({t.id for t in r.attendance_types}.intersection([3])) and attendance_slack_dict[r]
+            if r.attendance_type == Attendance_Type.co_q and attendance_slack_dict[r]
         ]
         slack_pax_list = [attendance_slack_dict[r] for r in attendance_records if attendance_slack_dict[r]]
 

@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from f3_data_models.models import (
     Attendance,
+    Attendance_Type,
     Attendance_x_AttendanceType,
     EventInstance,
     Location,
@@ -474,9 +475,8 @@ def handle_nearby_events_hc_action(
                     Attendance.event_instance_id == event_instance_id,
                     Attendance.user_id == user_id,
                     Attendance.is_planned,
-                    Attendance.attendance_x_attendance_types.any(Attendance_x_AttendanceType.attendance_type_id == 1),
+                    Attendance.attendance_type == Attendance_Type.pax,
                 ],
-                joinedloads=[Attendance.attendance_x_attendance_types],
             )
         except Exception as e:
             logger.error(f"Error deleting HC attendance for nearby event {event_instance_id}: {e}")

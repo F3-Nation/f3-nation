@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
 import pytest
-from f3_data_models.models import Series_Exception
+from f3_data_models.models import Attendance_Type, Series_Exception
 from slack_sdk.errors import SlackApiError
 
 from features.calendar.home import SLACK_MODAL_BLOCK_LIMIT, _append_calendar_event_group, build_home_form
@@ -46,9 +46,7 @@ def test_assign_q_does_not_delete_existing_attendance_for_unlinked_selection(mon
         }
     client.users_info.side_effect = lambda user: {"user": {"id": user, "profile": {}}}
     with patch.object(home, "DbManager") as database:
-        database.find_records.return_value = [
-            SimpleNamespace(id=9, user_id=42, attendance_types=[SimpleNamespace(type="Q")])
-        ]
+        database.find_records.return_value = [SimpleNamespace(id=9, user_id=42, attendance_type=Attendance_Type.q)]
         with pytest.raises(helper_functions.UnlinkedSlackIdentityError):
             home.handle_assign_q_form(body, client, MagicMock(), {}, SimpleNamespace(team_id="T_TEST", org_id=1))
         database.delete_records.assert_not_called()
@@ -209,3 +207,65 @@ def test_loading_calendar_update_propagates_modal_error_to_dispatcher():
             region_record=region_record,
             update_view_id="V_LOADING",
         )
+
+
+def _attendance(slack_id, attendance_type):
+    return SimpleNamespace(
+        attendance_type=attendance_type,
+        slack_users=[SimpleNamespace(slack_id=slack_id, slack_team_id="T_TEST")],
+    )
+
+
+def test_assign_q_form_prefills_the_current_q_and_co_qs():
+    from features.calendar import home
+
+    event = SimpleNamespace(
+        name="Workout", org=SimpleNamespace(name="AO"), start_date=datetime.date(2026, 9, 30), start_time="0530"
+    )
+    client = MagicMock()
+    with patch.object(home, "DbManager") as database:
+        database.get.return_value = event
+        database.find_records.return_value = [
+            _attendance("U_PAX", Attendance_Type.pax),
+            _attendance("U_COQ", Attendance_Type.co_q),
+            _attendance("U_Q", Attendance_Type.q),
+        ]
+        home.build_assign_q_form(
+            {"trigger_id": "T"}, client, MagicMock(), {}, SimpleNamespace(team_id="T_TEST"), event_instance_id=7
+        )
+
+    view = client.views_push.call_args.kwargs["view"]
+    elements = {block["block_id"]: block.get("element", {}) for block in view["blocks"] if block.get("block_id")}
+    assert elements[actions.CALENDAR_HOME_ASSIGN_Q_USER].get("initial_users") == ["U_Q"]
+    assert elements[actions.CALENDAR_HOME_ASSIGN_Q_CO_QS].get("initial_users") == ["U_COQ"]
+
+
+def test_take_q_refreshes_a_posted_preblast_with_the_leaders(monkeypatch):
+    from features.calendar import home
+
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(preblast_ts=123.456),
+        preblast_blocks=[],
+        attendance_records=[
+            {"user_id": 7, "attendance_type": Attendance_Type.q},
+            {"user_id": 8, "attendance_type": Attendance_Type.co_q},
+            {"user_id": 9, "attendance_type": Attendance_Type.pax},
+        ],
+    )
+    monkeypatch.setattr(home, "get_user", lambda *_a, **_k: SimpleNamespace(user_id=9))
+    monkeypatch.setattr(home, "build_home_form", lambda *_a, **_k: None)
+    monkeypatch.setattr(home, "build_preblast_info", lambda *_a, **_k: preblast_info)
+    monkeypatch.setattr(home, "get_preblast_channel", lambda *_a, **_k: "C_PREBLAST")
+    client = MagicMock()
+    body = {
+        "user": {"id": "U9"},
+        "view": {"id": "V1"},
+        "actions": [{"action_id": "event_100", "selected_option": {"value": "Take Q"}}],
+    }
+    with patch.object(home, "DbManager") as database:
+        database.find_records.return_value = []
+        home.handle_home_event(body, client, MagicMock(), {}, SimpleNamespace(team_id="T_TEST", org_id=1))
+
+    payload = client.chat_update.call_args.kwargs["metadata"]["event_payload"]
+    assert payload["qs"] == [7, 8]
+    assert payload["attendees"] == [7, 8, 9]
