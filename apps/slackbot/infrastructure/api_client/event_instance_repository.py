@@ -377,6 +377,7 @@ class ApiEventInstanceRepository:
         preblast: str | None,
         preblast_ts: int | float | None = None,
         existing_instance: EventInstanceData | None = None,
+        clear_location_id: bool = False,
     ) -> EventInstanceData:
         existing = existing_instance or self.get_by_id(instance_id)
         if existing is not None and existing.id != instance_id:
@@ -402,6 +403,8 @@ class ApiEventInstanceRepository:
             series_exception=series_exception,
         )
         payload["id"] = instance_id
+        if clear_location_id:
+            payload["locationId"] = None
         result = self._client.post("/v1/event-instance", json=payload)
         raw = result.get("eventInstance") or result.get("result") or result
         return _parse_instance(raw)

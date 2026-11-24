@@ -169,10 +169,9 @@ def build_event_instance_add_form(
         names=[get_location_display_name(loc) for loc in locations],
         values=[str(loc.id) for loc in locations],
     )
-    if is_preblast and not edit_event_instance:
-        location_options.extend(
-            orm.as_selector_options(names=["Clear selection"], values=[CLEAR_LOCATION_OPTION_VALUE])
-        )
+    location_options.extend(
+        orm.as_selector_options(names=["Clear selection"], values=[CLEAR_LOCATION_OPTION_VALUE])
+    )
 
     form.set_options(
         {
@@ -416,6 +415,7 @@ def handle_event_instance_add(
             preblast_rich=preblast_rich,
             preblast=preblast_text,
             existing_instance=existing,
+            clear_location_id=selected_location_id == CLEAR_LOCATION_OPTION_VALUE,
         )
         post_bot_log(
             client=client,
@@ -668,7 +668,7 @@ INSTANCE_FORM = orm.BlockView(
         orm.InputBlock(
             label="Location",
             action=CALENDAR_ADD_EVENT_INSTANCE_LOCATION,
-            element=orm.StaticSelectElement(placeholder="Select the location"),
+            element=orm.StaticSelectElement(placeholder="Select the location", option_group_label="Locations"),
             optional=True,
         ),
         orm.InputBlock(
