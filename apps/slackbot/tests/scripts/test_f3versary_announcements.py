@@ -701,6 +701,36 @@ def test_production_real_clock_stops_stale_day_before_claiming(monkeypatch):
     )
 
 
+def test_activity_setting_change_pauses_before_claiming_page(monkeypatch, caplog):
+    org, slack_space = slack_record(f3versary_announcements_activity_days=0)[1:]
+    run = SimpleNamespace(
+        id=1,
+        slack_space_id=10,
+        org_id=1,
+        processing_date=date(2026, 9, 1),
+        target_date=date(2026, 9, 15),
+        channel="C1",
+        lead_days=14,
+        status="planned",
+    )
+    run_query, space_query = MagicMock(), MagicMock()
+    run_query.filter.return_value.with_for_update.return_value.one.return_value = run
+    space_query.filter.return_value.with_for_update.return_value.one.return_value = slack_space
+    session = MagicMock()
+    session.__enter__.return_value = session
+    queries = {
+        f3versary_announcements.F3versaryDeliveryRun: run_query,
+        f3versary_announcements.SlackSpace: space_query,
+    }
+    session.query.side_effect = lambda model: queries[model]
+    monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
+
+    assert f3versary_announcements._claim_next_page(1, org, config(activity_days=90), date(2026, 9, 1)) is None
+    assert run.status == "planned"
+    session.commit.assert_not_called()
+    assert "settings changed" in caplog.text
+
+
 def test_active_claim_lease_blocks_reclaim_then_expired_claim_is_reused(monkeypatch):
     org, slack_space = slack_record()[1:]
     run = SimpleNamespace(
