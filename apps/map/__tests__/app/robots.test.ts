@@ -1,0 +1,72 @@
+// @vitest-environment node
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockEnv = vi.hoisted(
+  (): {
+    F3_MAP_BASE_URL: string | undefined;
+    F3_CHANNEL: string | undefined;
+  } => ({
+    F3_MAP_BASE_URL: "",
+    F3_CHANNEL: "prod",
+  }),
+);
+
+vi.mock("~/env", () => ({ env: mockEnv }));
+
+import robots, { dynamic } from "~/app/robots";
+
+describe("robots.txt", () => {
+  beforeEach(() => {
+    mockEnv.F3_MAP_BASE_URL = "https://staging.map.f3nation.com";
+    mockEnv.F3_CHANNEL = "prod";
+  });
+
+  it("allows crawling and points at the sitemap on the configured URL", () => {
+    expect(robots()).toEqual({
+      rules: { userAgent: "*", allow: "/" },
+      sitemap: "https://staging.map.f3nation.com/sitemap.xml",
+    });
+  });
+
+  it.each(["local", "ci", "branch", "dev", "staging", undefined])(
+    "blocks crawlers everywhere except Production (channel: %s)",
+    (channel) => {
+      mockEnv.F3_CHANNEL = channel;
+
+      expect(robots()).toEqual({ rules: { userAgent: "*", disallow: "/" } });
+    },
+  );
+
+  it("drops a trailing slash so the sitemap URL has no double slash", () => {
+    mockEnv.F3_MAP_BASE_URL = "https://map.f3nation.com///";
+
+    expect(robots().sitemap).toBe("https://map.f3nation.com/sitemap.xml");
+  });
+
+  it("is rendered per request, never at image build time", () => {
+    expect(dynamic).toBe("force-dynamic");
+  });
+
+  it("reads the URL on every request, not once at import", () => {
+    expect(robots().sitemap).toBe(
+      "https://staging.map.f3nation.com/sitemap.xml",
+    );
+
+    mockEnv.F3_MAP_BASE_URL = "https://map.f3nation.com";
+
+    expect(robots().sitemap).toBe("https://map.f3nation.com/sitemap.xml");
+  });
+
+  it("falls back to localhost when the URL is empty (validation skipped)", () => {
+    mockEnv.F3_MAP_BASE_URL = "   ";
+
+    expect(robots().sitemap).toBe("http://localhost:3000/sitemap.xml");
+  });
+
+  it("falls back to localhost when the URL is unset (validation skipped)", () => {
+    mockEnv.F3_MAP_BASE_URL = undefined;
+
+    expect(robots().sitemap).toBe("http://localhost:3000/sitemap.xml");
+  });
+});

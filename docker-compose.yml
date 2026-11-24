@@ -50,7 +50,7 @@ services:
     command: -scheme http -port 9023 -public-host localhost:${F3_GCS_PORT:-9023} -backend filesystem -filesystem-root /data
 
   mailpit:
-    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+    image: axllent/mailpit:v1.34.0@sha256:23a2ef85bc50853ab3093645d1d64679afd8887e89da5e48a88940c172591a4e
     container_name: ${F3_CONTAINER_PREFIX:-f3}-mailpit
     restart: unless-stopped
     ports:
