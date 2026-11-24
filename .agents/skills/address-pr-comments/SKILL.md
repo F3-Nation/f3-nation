@@ -1,7 +1,7 @@
 ---
 name: address-pr-comments
 description: Use when the user wants to address, implement, respond to, or work through review feedback on their GitHub pull request ("address the PR comments", "respond to review feedback", "resolve the PR threads") — invoke before touching any code in response to that feedback.
-compatibility: Any agent with a shell (bash or zsh) on macOS, Linux, or WSL 2. Needs git 2.31+ and an authenticated gh. Uses the Superpowers receiving-code-review skill if installed (built-in guidance otherwise).
+compatibility: Any agent with a shell (bash or zsh) on macOS, Linux, or WSL 2. Needs git 2.31+ and an authenticated gh.
 ---
 
 # Address PR Comments
@@ -23,11 +23,10 @@ check in Check 1 or Step 2.
 
 Check these before Step 1 and report everything missing in one message.
 
-| Need                                      | If missing                                                                                                                          |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `git` 2.31+, `gh` (`gh auth status`)      | Stop. Install hints: `brew install <tool>` (macOS), `sudo apt install <tool>` (WSL/Linux).                                          |
-| `pnpm` on `PATH`                          | Follow the NVM note in the root `AGENTS.md` (Environment Setup).                                                                    |
-| Superpowers `receiving-code-review` skill | Continue with the guidance in Step 5a. Mention once that installing [Superpowers](https://github.com/obra/superpowers) is optional. |
+| Need                                 | If missing                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `git` 2.31+, `gh` (`gh auth status`) | Stop. Install hints: `brew install <tool>` (macOS), `sudo apt install <tool>` (WSL/Linux). |
+| `pnpm` on `PATH`                     | Follow the NVM note in the root `AGENTS.md` (Environment Setup).                           |
 
 ## Step 1 — Pre-flight Checks
 
@@ -314,8 +313,7 @@ Note that this run started them: Step 6 stops them.
 
 In plan order, for each comment with a code action: read the code first and verify the reviewer's premise against it, then make one comment's change at a time.
 
-If the Superpowers `receiving-code-review` skill is installed, apply it for evaluation, YAGNI
-checks, and pushback tone. Otherwise hold to the same rules:
+Weigh each comment by these rules:
 
 - Verify before implementing. A reviewer (human or bot) can be wrong about the code; check the
   claim against the PR head, and push back with evidence when it doesn't hold.
