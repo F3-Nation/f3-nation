@@ -79,7 +79,8 @@ SAMPLE_RECORDS = {"Org": AOS, "EventType": EVENT_TYPES, "Location": []}
 def _find_records(model, *_args, **_kwargs) -> list:
     if model.__name__ not in SAMPLE_RECORDS:
         raise KeyError(f"The calendar-home preview has no sample {model.__name__} rows; add them to SAMPLE_RECORDS.")
-    return SAMPLE_RECORDS[model.__name__]
+    # A copy, because the view builder extends and sorts the list it gets back.
+    return list(SAMPLE_RECORDS[model.__name__])
 
 
 def _render(body: dict, *, admin: bool = False, events: list | None = None) -> dict:
@@ -100,7 +101,8 @@ def _render(body: dict, *, admin: bool = False, events: list | None = None) -> d
         )
 
 
-OPENED = {"user": {"id": "U_PREVIEW"}, "trigger_id": "TRIGGER"}
+# Every way of opening Calendar Home first shows a loading modal, which the view builder then updates.
+OPENED = {"user": {"id": "U_PREVIEW"}, "trigger_id": "TRIGGER", actions.LOADING_ID: "V_LOADING"}
 
 
 def filters_open() -> dict:

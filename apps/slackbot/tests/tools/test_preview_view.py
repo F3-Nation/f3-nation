@@ -37,6 +37,7 @@ def test_calendar_home_scenarios_show_their_distinct_states():
     assert "Assign Q" in texts(admin) and "Assign Q" not in texts(member)
     assert "No upcoming events match these filters." in texts(empty)
     assert "Moneyball" in texts(member) and "Moneyball" not in texts(filters)
+    assert all("submit" not in payload for payload in (member, filters, admin, empty))
 
 
 def test_capture_payload_returns_message_blocks():
@@ -71,6 +72,23 @@ def test_capture_payload_fails_when_the_preview_reaches_the_database(cached_sess
     if cached_session:
         cached_factory.assert_not_called()
         assert utils.SESSION_FACTORY_CACHE[utils._normalize_backend(None)] is cached_factory
+
+
+def test_capture_payload_fails_when_the_preview_makes_an_http_request():
+    import requests
+
+    with pytest.raises(RuntimeError, match="HTTP request"):
+        preview_view.capture_payload(lambda client: requests.get("https://example.invalid"))
+
+
+def test_capture_payload_fails_on_an_unstubbed_slack_call():
+    with pytest.raises(RuntimeError, match="client.users_info"):
+        preview_view.capture_payload(lambda client: client.users_info(user="U1"))
+
+
+def test_capture_payload_rejects_a_message_without_blocks():
+    with pytest.raises(RuntimeError, match="without blocks="):
+        preview_view.capture_payload(lambda client: client.chat_postMessage(channel="C1", text="hi"))
 
 
 def test_capture_payload_raises_when_nothing_is_sent():

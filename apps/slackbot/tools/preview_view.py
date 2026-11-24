@@ -29,14 +29,15 @@ MESSAGE_METHODS = ("chat_postMessage", "chat_postEphemeral", "chat_update")
 # Top-level view fields Block Kit Builder renders; ids, callback ids and metadata are left out.
 VIEW_FIELDS = ("type", "title", "close", "submit", "blocks")
 UNPATCHED_DB_MESSAGE = "The preview reached the database; patch that query in its tools/previews module."
+UNPATCHED_NETWORK_MESSAGE = "The preview made an HTTP request; patch that call in its tools/previews module."
 
 
 def capture_payload(render: Callable[[MagicMock], object]) -> dict:
     """Call `render` with a mock Slack client and return the last view or message it sent, ready for the Builder.
 
-    The database engine is replaced with one that raises, and the cached session factories are hidden so `get_session`
-    has to ask for that engine, so a query the preview didn't patch fails loudly instead of reading whatever database
-    the developer's .env points at.
+    Anything the preview didn't patch fails loudly instead of reaching what the developer's .env points at: the database
+    engine is replaced with one that raises (and cached session factories are hidden so `get_session` has to ask for
+    it), HTTP requests raise, and so does any Slack client call other than the view and message methods above.
     """
     client = MagicMock()
     for method in (*VIEW_METHODS, *MESSAGE_METHODS):
@@ -44,8 +45,14 @@ def capture_payload(render: Callable[[MagicMock], object]) -> dict:
     with (
         patch("f3_data_models.utils.get_engine", side_effect=RuntimeError(UNPATCHED_DB_MESSAGE)),
         patch.dict("f3_data_models.utils.SESSION_FACTORY_CACHE", clear=True),
+        patch("requests.Session.request", side_effect=RuntimeError(UNPATCHED_NETWORK_MESSAGE)),
     ):
         render(client)
+    allowed = {*VIEW_METHODS, *MESSAGE_METHODS}
+    for name, _args, _kwargs in client.mock_calls:
+        method = name.split("(")[0].split(".")[0]
+        if method not in allowed:
+            raise RuntimeError(f"The preview called client.{method}; patch that lookup in its tools/previews module.")
     for name, _args, kwargs in reversed(client.mock_calls):
         if name in VIEW_METHODS:
             return {key: kwargs["view"][key] for key in VIEW_FIELDS if key in kwargs["view"]}
