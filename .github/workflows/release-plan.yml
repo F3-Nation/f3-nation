@@ -21,7 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     # Accepts runs from main alone. The Claude federation rule accepts only
     # this environment's OIDC subject, so a workflow on another branch can't
-    # get a Claude API token.
+    # get a Claude API token. Renaming the environment means updating the
+    # rule's subject match in the Claude Console.
     environment: release-plan
     timeout-minutes: 30
     permissions:
@@ -94,13 +95,17 @@ jobs:
       #   file, but the allowed git commands can write files in the checkout
       #   (--output), so no later step in this job runs a file from it, and
       #   the plans are checked in their own job from a fresh checkout;
-      # - the action keeps GitHub's OIDC request variables out of Claude's
-      #   environment, so the agent can't mint an OIDC token;
-      # - the scrub removes credentials from every command's environment, the
-      #   /proc denies keep Read and commands out of the Claude process's own
-      #   environment, and the claude-workload-identity denies keep them out
-      #   of the GitHub OIDC token and the exchanged Claude token that the
-      #   action writes there (Read denies also bind sandboxed commands);
+      # - the action removes GitHub's OIDC request variables from Claude's
+      #   environment, so the agent can't mint an OIDC token; recheck this
+      #   when bumping the action;
+      # - the scrub removes credentials from every command's environment, and
+      #   the /proc denies keep Read and commands out of the Claude process's
+      #   own environment;
+      # - the action writes the GitHub OIDC token and the exchanged Claude
+      #   token under runner.temp/claude-workload-identity, which the
+      #   matching denies keep Read and commands out of (Read denies also bind
+      #   sandboxed commands); if an action bump moves that folder, update
+      #   the denies;
       # - the job token can write only issues.
       # The check-plans job decides the run's result, so an agent that files
       # both plans and then exits non-zero doesn't fail it.
