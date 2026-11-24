@@ -38,7 +38,7 @@ function getForwardedHeaders(
   headers.delete("cookie");
   headers.delete("host");
   headers.delete("content-length");
-  headers.set(Header.Client, Client.ORPC);
+  headers.set(Header.Client, Client.F3_ADMIN);
   headers.set(Header.Authorization, `Bearer ${accessToken}`);
   setProxiedClientIp(headers, request.headers, env.PROXY_CLIENT_IP_SECRET);
   return headers;

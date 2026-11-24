@@ -96,7 +96,8 @@ unchanged.
   through real email/OTP and edits a tracked entity through the UI THEN its
   history records that user and the normalized source from AC-19. A Development
   Mode sign-in records NULL actor while retaining the normalized source.
-  Generic `orpc` requests, including interactive Map/Admin clients, record NULL source.
+  Interactive Map/Admin clients record `map`/`admin`; generic `orpc` requests
+  record NULL source.
 - **AC-19** — GIVEN an API request WHEN its `client` header exactly matches a
   recognized value in [the source normalizer](../../packages/api/src/audit-source.ts)
   THEN its writes record that normalized source independently of actor eligibility.
@@ -108,6 +109,11 @@ unchanged.
   NULL source; static generation retains its existing session-resolution behavior.
   A client must not begin sending a new identifier until every API revision it
   can reach, including rollback targets, accepts that identifier as RPC.
+- **AC-21** — GIVEN a Map or Admin proxy request WHEN it reaches the API THEN
+  the proxy overwrites any caller-supplied client header with `f3-map` or
+  `f3-admin`, respectively. Admin browser and direct server clients send
+  `f3-admin` while retaining their cookie and bearer authentication behavior.
+  Map static generation retains `orpc-ssg`.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -151,8 +157,9 @@ query boundaries without adding a history UI or test endpoint.
 - Observed read statements, lazy once-only execution, native callback results,
   and invalid settings rejected before any statement.
 - Exact client-header normalization and RPC/REST dispatch for recognized apps.
-  Map/Admin proxies overwrite caller-supplied identifiers with generic `orpc`,
-  and Admin direct clients retain that identifier and their authentication behavior.
+  Map/Admin proxies overwrite caller-supplied identifiers with their app's
+  identifier, and Admin direct clients send `f3-admin` while retaining their
+  authentication behavior.
 - Real procedure middleware identity cases, an existing production-router
   mutation, overlapping contexts and detached work.
 - Approved Staging UI verification for the application acceptance criterion.

@@ -29,17 +29,20 @@ describe("oRPC proxy route", () => {
     vi.unstubAllEnvs();
   });
 
-  it("overwrites a caller's client header with orpc", async () => {
-    const { GET } = await import("~/app/api/orpc/[[...rest]]/route");
-    await GET(
-      new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
-        headers: { client: "scalar-api" },
-      }),
-    );
-    expect((fetchSpy.mock.calls[0]![1].headers as Headers).get("client")).toBe(
-      "orpc",
-    );
-  });
+  it.each([undefined, "orpc", "scalar-api", "f3-admin"])(
+    "identifies the Map when the caller's client header is %s",
+    async (client) => {
+      const { GET } = await import("~/app/api/orpc/[[...rest]]/route");
+      await GET(
+        new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+          headers: client === undefined ? {} : { client },
+        }),
+      );
+      expect(
+        (fetchSpy.mock.calls[0]![1].headers as Headers).get("client"),
+      ).toBe("f3-map");
+    },
+  );
 
   it("forwards cookies to the upstream API for a signed-in-only path", async () => {
     const { POST } =

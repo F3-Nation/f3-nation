@@ -145,7 +145,7 @@ function getForwardedHeaders(request: NextRequest): Headers {
   // identity that reaches the API from here.
   headers.delete("authorization");
   headers.delete("x-api-key");
-  headers.set(Header.Client, Client.ORPC);
+  headers.set(Header.Client, Client.F3_MAP);
   setProxiedClientIp(headers, request.headers, env.PROXY_CLIENT_IP_SECRET);
 
   return headers;

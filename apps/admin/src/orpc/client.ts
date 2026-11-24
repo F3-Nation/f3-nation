@@ -24,7 +24,7 @@ const orpcUrl = getOrpcUrl();
 const link = new RPCLink({
   url: orpcUrl,
   fetch: (input, init) => {
-    input.headers.set(Header.Client, Client.ORPC);
+    input.headers.set(Header.Client, Client.F3_ADMIN);
 
     return fetch(input, {
       ...init,
