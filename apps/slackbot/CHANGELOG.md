@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## [2.13.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.12.0...slackbot@2.13.0) (2026-11-24)
+
+
+### Features
+
+* **slackbot,api,db:** read Slack bot tokens through one rotation-ready store ([#1619](https://github.com/F3-Nation/f3-nation/issues/1619)) ([646827b](https://github.com/F3-Nation/f3-nation/commit/646827b6f226035292fdb97331e5a9f9f8b37d16))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#1782](https://github.com/F3-Nation/f3-nation/issues/1782)) ([d19751a](https://github.com/F3-Nation/f3-nation/commit/d19751a29733d7152ef1815372712f5dc8b215df))
+* **slackbot:** send each FNG reminder once and keep emails out of FNG error logs ([#1408](https://github.com/F3-Nation/f3-nation/issues/1408)) ([0a636ca](https://github.com/F3-Nation/f3-nation/commit/0a636ca447132bc2f0e712b3af960a28b7a4cd05))
+
 ## [2.12.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.11.0...slackbot@2.12.0) (2026-11-17)
 
 
