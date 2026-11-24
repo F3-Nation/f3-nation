@@ -25,12 +25,15 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      issues: write # file and edit the plan issues; comment on the release PR when the run fails
+      issues: write # file and edit the plan issues
       pull-requests: read # read the release PR and its changelog
       actions: read # release-facts.sh reads deploy runs
     concurrency:
       group: release-plan
       cancel-in-progress: false
+    # Set before the agent starts, so the jobs after it can trust it.
+    outputs:
+      number: ${{ steps.release-pr.outputs.number }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,12 +89,14 @@ jobs:
       # - --permission-mode default denies every tool call the allowlist
       #   doesn't cover;
       # - the file tools write only under /tmp, and no allowed command runs a
-      #   file;
+      #   file, but the allowed git commands can write files in the checkout
+      #   (--output), so no later step in this job runs a file from it, and
+      #   the plans are checked in their own job from a fresh checkout;
       # - the scrub removes the API key from every command's environment, and
       #   the /proc denies keep Read and commands out of the Claude process's
       #   own environment;
       # - the job token can write only issues.
-      # The plans check below decides the run's result, so an agent that files
+      # The check-plans job decides the run's result, so an agent that files
       # both plans and then exits non-zero doesn't fail it.
       - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         id: claude
@@ -115,33 +120,73 @@ jobs:
             --allowedTools "Read,Glob,Grep,Edit(//tmp/**),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api repos/${{ github.repository }}/collaborators/*/permission*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(mktemp:*),Bash(bash -n:*)"
             --disallowedTools "Read(//proc/**),Bash(*/proc/*)"
 
-      # The skill ends without error when it stops on purpose (a step that
-      # needs a human run, a failed command), so the run's result is the plans
-      # existing, trusted and linked, not the agent's exit status.
-      - name: Check the plans were filed
-        if: always() && steps.release-pr.outputs.number != ''
+      - name: Print the agent's summary
+        if: always()
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.release-pr.outputs.number }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: |
-          set -euo pipefail
           if [[ -n "$EXECUTION_FILE" && -f "$EXECUTION_FILE" ]]; then
             echo "Agent summary:"
             jq -r '[.[] | select(.type == "result")] | last | .result // "(none)"' "$EXECUTION_FILE"
           fi
+
+      # The agent could have written git config or hooks into .git; removing
+      # it means actions/checkout's end-of-job cleanup runs no git command
+      # against them.
+      - name: Remove the checkout's git data
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/.git"
+
+  # Runs on its own runner from a fresh checkout of this workflow's commit, so
+  # nothing the agent wrote can change the check. The skill ends without error
+  # when it stops on purpose (a step that needs a human run, a failed command),
+  # so the run's result is the plans existing, trusted and linked, not the
+  # agent's exit status.
+  check-plans:
+    needs: release-plan
+    if: always() && needs.release-plan.outputs.number != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read # release-facts.sh reads deploy runs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          # release-facts.sh diffs back to the previous release commit.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the plans were filed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.release-plan.outputs.number }}
+        run: |
+          set -euo pipefail
+          bash .agents/skills/release/scripts/release-facts.sh --pr "$PR_NUMBER" >"$RUNNER_TEMP/release-facts.json"
           bash .agents/skills/release/scripts/check-filed-plans.sh \
             --pr "$PR_NUMBER" --facts "$RUNNER_TEMP/release-facts.json" --attempts 6 --delay 15
 
-      # A dispatched run notifies nobody when it fails; the release PR's
-      # subscribers see this comment.
+  # A dispatched run notifies nobody when it fails; the release PR's
+  # subscribers see this comment. check-plans runs whenever a release PR was
+  # found, so its result alone says whether the plans are missing.
+  report-failure:
+    needs: [release-plan, check-plans]
+    if: ${{ !cancelled() && needs.check-plans.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # comment on the release PR
+    steps:
       - name: Report the failure on the release PR
-        if: failure() && steps.release-pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.release-pr.outputs.number }}
+          PR_NUMBER: ${{ needs.release-plan.outputs.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --silent \
