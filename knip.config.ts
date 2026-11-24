@@ -39,7 +39,7 @@ const config: KnipConfig = {
       // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
       // devDependency is never a static import knip can follow.
       ignoreDependencies: ["eslint"],
-      // ci.yml's test-coverage job boots the esbuild bundle from a
+      // ci.yml's test-suites job boots the esbuild bundle from a
       // runner-temp directory copied there at CI time (outside the checkout,
       // deliberately — see build.mjs), so `./instrument.js` never exists as a
       // real repo file for knip's GitHub Actions plugin to resolve.

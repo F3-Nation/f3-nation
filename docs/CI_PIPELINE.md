@@ -17,7 +17,9 @@ PR opened/updated
        ├─ lint ·········· pnpm lint (ESLint)                 [required to merge]
        ├─ typecheck ····· pnpm typecheck (tsc)               [required to merge]
        ├─ build ········· pnpm build (Turbo)                 [required to merge]
-       ├─ test-coverage · pnpm test (Vitest vs postgres:18)  [required to merge]
+       ├─ test-coverage · passes when both test jobs pass    [required to merge]
+       │   ├─ test-suites ·········· pnpm test + API characterization (postgres:18)
+       │   └─ test-slackbot-postgres  Slackbot suites vs disposable postgres:18
        ├─ security-audit  pnpm audit --prod --level=high    [required to merge]
        ├─ db-schema-sync · Drizzle migration drift check    [required to merge]
        ├─ docker-build ·· app + job images (matrix)        [advisory]
@@ -59,7 +61,7 @@ read-only access to the GHCR cache, while a separate `main`-only job refreshes
 it with package-write permission.
 
 The five Turbo-backed required checks (`format-check`, `lint`, `typecheck`,
-`build`, and `test-coverage`) add `--affected` on pull requests, selecting
+`build`, and `test-coverage` through its `test-suites` job) add `--affected` on pull requests, selecting
 changed workspaces and their dependents. Their checkouts include the complete
 Git history needed for the comparison. Setup pins Turbo's affected calculation
 to the pull request's exact base and head SHAs, while the tasks themselves run
@@ -181,8 +183,12 @@ as the slowest one:
   dropped after it.
 
 A new job that must gate merges joins `test-coverage`'s `needs` list instead of
-becoming another required check, so the `main` ruleset and the deploy
-workflows' `check-regexp` lists stay unchanged.
+becoming another required check, so the `main` ruleset stays unchanged; the
+gate step checks every entry in `needs`. The job is also added to each deploy
+workflow's `check-regexp` and to `rebuild-staging-refresh.yml`'s required
+list. A job waiting on `needs` has no check run until it starts, and the deploy
+gates wait only on checks that already exist, so without those entries a
+deploy could pass its gate before `test-coverage` appears.
 
 ## Deploy pipeline (per app)
 

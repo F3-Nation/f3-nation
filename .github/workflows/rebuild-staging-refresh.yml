@@ -49,8 +49,9 @@ jobs:
       checks: read # read CI check runs on github.sha
     env:
       REQUIRED: >-
-        build lint typecheck format-check test-coverage security-audit
-        db-schema-sync obfuscate-db-verify
+        build lint typecheck format-check test-coverage test-suites
+        test-slackbot-postgres security-audit db-schema-sync
+        obfuscate-db-verify
     steps:
       # Belt and braces: a dispatch from another branch runs that branch's copy
       # of this file, so the real guard is the environment's branch policy.
@@ -87,7 +88,8 @@ jobs:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           check-regexp: "^(build|lint|typecheck|format-check|test-coverage|\
-            security-audit|db-schema-sync|obfuscate-db-verify)$"
+            test-suites|test-slackbot-postgres|security-audit|db-schema-sync|\
+            obfuscate-db-verify)$"
           wait-interval: 15
           allowed-conclusions: success
 

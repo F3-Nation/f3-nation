@@ -175,7 +175,7 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync)$"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|test-suites|test-slackbot-postgres|security-audit|db-schema-sync)$"
           wait-interval: 15
           allowed-conclusions: success
 
