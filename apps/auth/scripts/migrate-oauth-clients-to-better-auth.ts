@@ -72,11 +72,14 @@
  *        DATABASE_PORT=5482            (5481 for prod)
  *        DATABASE_USER=<your db user>
  *        DATABASE_PASSWORD=<your db password>
- *        DATABASE_NAME=f3_staging
- *   3. Dry run, passing --resource as the issuer resource that Better Auth
- *      seeded in that database (on staging,
- *      https://staging.auth3.f3nation.com/api/auth2):
- *        pnpm -C apps/auth migrate-oauth-clients-to-better-auth --env staging --resource <issuer>
+ *        DATABASE_NAME=f3_staging      (f3_prod for prod)
+ *   3. Dry run. --resource must equal the identifier of the resource row
+ *      Better Auth seeded in that database; it defaults to
+ *      NEXT_PUBLIC_AUTH_URL from the env file. If the run stops with
+ *      resource_missing, read the identifier with
+ *        SELECT identifier FROM auth.better_auth_oauth_resource;
+ *      and pass that:
+ *        pnpm -C apps/auth migrate-oauth-clients-to-better-auth --env staging --resource <identifier>
  *   4. Read the output, then run the same command with --confirm and answer y.
  *   5. Delete the env file and stop the proxy.
  * The script connects without SSL to a loopback host, since the proxy's local
@@ -263,7 +266,9 @@ export function planMigration({
   return { newRows, toStamp, needsReview, toLink };
 }
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+// No IPv6 literal: postgres splits DATABASE_HOST on ":" to find a port, so
+// "::1" can't be used as a host here at all.
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
 /**
  * SSL is required for any staging or prod host, except a loopback one: that

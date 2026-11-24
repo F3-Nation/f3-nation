@@ -187,11 +187,8 @@ describe("sslFor", () => {
     "127.0.0.1",
     "localhost",
     "LOCALHOST",
-    "::1",
-    "[::1]",
     "127.0.0.1:5482",
     "localhost:5482",
-    "[::1]:5482",
   ])("skips SSL for a cloud-sql-proxy on %s", (host) => {
     expect(sslFor("staging", host)).toBe(false);
     expect(sslFor("prod", host)).toBe(false);
