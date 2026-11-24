@@ -11,6 +11,7 @@ import {
   mockAuthWithSession,
   createTestClient,
   cleanup,
+  getOrCreateF3NationOrg,
 } from "./test-utils";
 
 // Literal approved spec matrix: [primary key in declared order, ignore, redact].
@@ -1165,6 +1166,9 @@ describe("audit history migration (#664)", () => {
   it("records a real API-router creation and deletion with a masked API key", async () => {
     await mockAuthWithSession(await createAdminSession());
     const result = await createTestClient().apiKey.create({
+      roles: [
+        { orgId: (await getOrCreateF3NationOrg()).id, roleName: "editor" },
+      ],
       name: "audit integration",
     });
     try {

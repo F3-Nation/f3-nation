@@ -7,6 +7,7 @@ import {
   exportJWK,
   generateKeyPair,
 } from "jose";
+import { betterAuth } from "better-auth";
 import { getAuthTables } from "@better-auth/core/db";
 import { getIP } from "@better-auth/core/utils/ip";
 import { isAccessTokenPayload, verifyAccessToken } from "@f3nation/sso";
@@ -60,9 +61,10 @@ function createTestAuth(
   f3UserId: number | null,
   claimOtpAttempt: CreateAuthInstanceOptions["claimOtpAttempt"] = () =>
     Promise.resolve(true),
+  overrides: Partial<CreateAuthInstanceOptions> = {},
 ) {
   const memoryDb: MemoryDB = {};
-  const options = {
+  const options: CreateAuthInstanceOptions = {
     baseURL: BASE_URL,
     basePath: BASE_PATH,
     secret: "test-only-not-a-real-secret",
@@ -71,12 +73,15 @@ function createTestAuth(
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
     claimOtpAttempt,
+    reserveOtpSend: () => Promise.resolve(true),
+    markEmailVerified: () => Promise.resolve(),
     isNationAdmin: () => Promise.resolve(false),
     findF3Profile: findOnboardedProfile,
     // Permissive — unlike production, these tests need to exercise client
     // creation directly. See "denies client creation..." below for
     // coverage of production's actual (stricter) policy.
     allowClientAction: () => Promise.resolve(true),
+    ...overrides,
   };
   const authOptions = buildBetterAuthOptions(options);
   for (const table of Object.keys(getAuthTables(authOptions))) {
@@ -104,6 +109,8 @@ function createMultiUserTestAuth(
     findF3UserId: (email: string) =>
       Promise.resolve(emailToF3UserId[email] ?? null),
     claimOtpAttempt: () => Promise.resolve(true),
+    reserveOtpSend: () => Promise.resolve(true),
+    markEmailVerified: () => Promise.resolve(),
     isNationAdmin: (f3UserId: number) =>
       Promise.resolve(adminF3UserIds.has(f3UserId)),
     findF3Profile: findOnboardedProfile,
@@ -421,6 +428,8 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
       claimOtpAttempt: () => Promise.resolve(true),
+      reserveOtpSend: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(false),
       findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
@@ -473,6 +482,8 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
       claimOtpAttempt: () => Promise.resolve(true),
+      reserveOtpSend: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(false),
       findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
@@ -534,6 +545,8 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       findF3UserId: (email: string) =>
         Promise.resolve(email === "admin-m@f3nation.test" ? 701 : null),
       claimOtpAttempt: () => Promise.resolve(true),
+      reserveOtpSend: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(true),
       findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
@@ -598,6 +611,8 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(701),
       claimOtpAttempt: () => Promise.resolve(true),
+      reserveOtpSend: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(true),
       findF3Profile: findOnboardedProfile,
       allowClientAction: allowProductionClientAction,
@@ -639,6 +654,8 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       findF3UserId: (email: string) =>
         Promise.resolve(emailToF3UserId[email] ?? null),
       claimOtpAttempt: () => Promise.resolve(true),
+      reserveOtpSend: () => Promise.resolve(true),
+      markEmailVerified: () => Promise.resolve(),
       isNationAdmin: () => Promise.resolve(true),
       findF3Profile: findOnboardedProfile,
       allowClientAction: (
@@ -750,6 +767,12 @@ describe("authorize requires the openid scope (#1439)", () => {
       ),
     );
     expectInvalidScopeRedirect(response);
+    // Set by the plugin's requireOpenId option, not by an unsupported scope.
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get(
+        "error_description",
+      ),
+    ).toBe("the openid scope is required");
   });
 
   it("applies the same rule to a POST authorize request", async () => {
@@ -910,6 +933,8 @@ describe("client IP for Better Auth's rate limiter", () => {
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(null),
     claimOtpAttempt: () => Promise.resolve(true),
+    reserveOtpSend: () => Promise.resolve(true),
+    markEmailVerified: () => Promise.resolve(),
     isNationAdmin: () => Promise.resolve(false),
     findF3Profile: findOnboardedProfile,
     allowClientAction: () => Promise.resolve(true),
@@ -1136,5 +1161,358 @@ describe("shared OTP attempt budget", () => {
 
     expect(res.status).toBe(400);
     expect(claim).not.toHaveBeenCalled();
+  });
+});
+
+describe("per-address OTP send limit", () => {
+  const email = "send-limit@f3nation.test";
+
+  function post(
+    auth: ReturnType<typeof createTestAuth>,
+    path: string,
+    body: unknown,
+    headers: Record<string, string> = {},
+  ) {
+    return auth.handler(
+      new Request(`${ENDPOINT}${path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: BASE_URL,
+          ...headers,
+        },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  const sendPath = "/email-otp/send-verification-otp";
+
+  it("refuses a sign-in send with 429 once the address is over the limit", async () => {
+    const reserveOtpSend = vi.fn(() => Promise.resolve(false));
+    const sendVerificationOTP = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(4242, undefined, {
+      reserveOtpSend,
+      sendVerificationOTP,
+    });
+
+    const res = await post(auth, sendPath, { email, type: "sign-in" });
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({
+      code: "TOO_MANY_OTP_REQUESTS",
+    });
+    expect(reserveOtpSend).toHaveBeenCalledExactlyOnceWith(email);
+    expect(sendVerificationOTP).not.toHaveBeenCalled();
+  });
+
+  it("sends a sign-in code while the address is under the limit", async () => {
+    const reserveOtpSend = vi.fn(() => Promise.resolve(true));
+    const sendVerificationOTP = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(4242, undefined, {
+      reserveOtpSend,
+      sendVerificationOTP,
+    });
+
+    const res = await post(auth, sendPath, {
+      email: "Send-Limit@F3Nation.test",
+      type: "sign-in",
+    });
+
+    expect(res.status).toBe(200);
+    // Counted under the address the endpoint sends to.
+    expect(reserveOtpSend).toHaveBeenCalledExactlyOnceWith(email);
+    expect(sendVerificationOTP).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ email, type: "sign-in" }),
+      expect.anything(),
+    );
+  });
+
+  it.each([
+    "/email-otp/request-password-reset",
+    "/forget-password/email-otp",
+    "/email-otp/request-email-change",
+  ])("disables %s, which this app never uses", async (path) => {
+    const reserveOtpSend = vi.fn(() => Promise.resolve(true));
+    const sendVerificationOTP = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(4242, undefined, {
+      reserveOtpSend,
+      sendVerificationOTP,
+    });
+    // A signed-in caller with an existing Better Auth user, so nothing but
+    // the disabled path stands in the way.
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    const session = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    const res = await post(
+      auth,
+      path,
+      { email, newEmail: "new-address@f3nation.test" },
+      { authorization: `Bearer ${session.token}` },
+    );
+
+    expect(res.status).toBe(404);
+    expect(reserveOtpSend).not.toHaveBeenCalled();
+    expect(sendVerificationOTP).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a non-string email", { email: 123, type: "sign-in" }, 400],
+    ["a missing email", { type: "sign-in" }, 400],
+    ["an invalid email", { email: "not-an-email", type: "sign-in" }, 400],
+    ["a missing type", { email }, 400],
+    ["an unknown type", { email, type: "bogus" }, 400],
+    ["an email-verification type", { email, type: "email-verification" }, 400],
+    ["a forget-password type", { email, type: "forget-password" }, 400],
+    ["a change-email type", { email, type: "change-email" }, 400],
+  ])(
+    "refuses a send with %s without spending the address's limit",
+    async (_label, body, status) => {
+      const reserveOtpSend = vi.fn(() => Promise.resolve(true));
+      const sendVerificationOTP = vi.fn(() => Promise.resolve());
+      const auth = createTestAuth(4242, undefined, {
+        reserveOtpSend,
+        sendVerificationOTP,
+      });
+
+      const res = await post(auth, sendPath, body);
+
+      expect(res.status).toBe(status);
+      expect(reserveOtpSend).not.toHaveBeenCalled();
+      expect(sendVerificationOTP).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses a cross-site form send before spending the address's limit", async () => {
+    const reserveOtpSend = vi.fn(() => Promise.resolve(true));
+    const sendVerificationOTP = vi.fn(() => Promise.resolve());
+    const memoryDb: MemoryDB = {};
+    const options: CreateAuthInstanceOptions = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP,
+      findF3UserId: () => Promise.resolve(4242),
+      claimOtpAttempt: () => Promise.resolve(true),
+      reserveOtpSend,
+      markEmailVerified: () => Promise.resolve(),
+      isNationAdmin: () => Promise.resolve(false),
+      findF3Profile: findOnboardedProfile,
+      allowClientAction: () => Promise.resolve(true),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    // Better Auth skips its CSRF checks under NODE_ENV=test unless the
+    // origin check is turned on explicitly, as it is in production.
+    const auth = betterAuth({
+      ...authOptions,
+      advanced: { ...authOptions.advanced, disableOriginCheck: false },
+    });
+
+    const res = await auth.handler(
+      new Request(`${ENDPOINT}${sendPath}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "sec-fetch-site": "cross-site",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-dest": "document",
+        },
+        body: JSON.stringify({ email, type: "sign-in" }),
+      }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(reserveOtpSend).not.toHaveBeenCalled();
+    expect(sendVerificationOTP).not.toHaveBeenCalled();
+  });
+
+  // Models email-mfa.ts's reserveEmailCodeSend: reservations are taken one
+  // at a time (its per-address lock), and the address has `remaining` sends
+  // left before the cooldown or hourly cap refuses the next.
+  function sharedQuota(remaining: number) {
+    let queue = Promise.resolve();
+    return vi.fn((_email: string) => {
+      const reservation = queue.then(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (remaining <= 0) return false;
+        remaining -= 1;
+        return true;
+      });
+      queue = reservation.then(() => undefined);
+      return reservation;
+    });
+  }
+
+  it.each([
+    ["the first send", 0],
+    ["the fifth send of the hour", 4],
+  ])(
+    "lets one of two parallel requests through at %s, and its emailed code signs in",
+    async (_label, alreadySent) => {
+      const reserveOtpSend = sharedQuota(alreadySent + 1);
+      const sent: string[] = [];
+      const sendVerificationOTP = vi.fn(({ otp }: { otp: string }) => {
+        sent.push(otp);
+        return Promise.resolve();
+      });
+      const auth = createTestAuth(4242, undefined, {
+        reserveOtpSend,
+        sendVerificationOTP,
+      });
+      for (let i = 0; i < alreadySent; i++) {
+        expect(await reserveOtpSend(email)).toBe(true);
+      }
+
+      const responses = await Promise.all([
+        post(auth, "/email-otp/send-verification-otp", {
+          email,
+          type: "sign-in",
+        }),
+        post(auth, "/email-otp/send-verification-otp", {
+          email,
+          type: "sign-in",
+        }),
+      ]);
+
+      expect(responses.map((res) => res.status).sort()).toEqual([200, 429]);
+      // The refused request was stopped before Better Auth generated a code,
+      // so the one code emailed is still the one Better Auth holds.
+      expect(sent).toHaveLength(1);
+      const session = await auth.api.signInEmailOTP({
+        body: { email, otp: sent[0]! },
+      });
+      expect(session.token).toBeTruthy();
+    },
+  );
+
+  it("keeps an emailed code valid when a later send is refused", async () => {
+    const reserveOtpSend = sharedQuota(1);
+    const sent: string[] = [];
+    const auth = createTestAuth(4242, undefined, {
+      reserveOtpSend,
+      sendVerificationOTP: ({ otp }: { otp: string }) => {
+        sent.push(otp);
+        return Promise.resolve();
+      },
+    });
+    const body = { email, type: "sign-in" };
+
+    expect(
+      (await post(auth, "/email-otp/send-verification-otp", body)).status,
+    ).toBe(200);
+    expect(
+      (await post(auth, "/email-otp/send-verification-otp", body)).status,
+    ).toBe(429);
+
+    expect(sent).toHaveLength(1);
+    const session = await auth.api.signInEmailOTP({
+      body: { email, otp: sent[0]! },
+    });
+    expect(session.token).toBeTruthy();
+  });
+
+  it("leaves the address's last send for a real sign-in after refused requests", async () => {
+    const reserveOtpSend = sharedQuota(1);
+    const sent: string[] = [];
+    const sendVerificationOTP = vi.fn(({ otp }: { otp: string }) => {
+      sent.push(otp);
+      return Promise.resolve();
+    });
+    const auth = createTestAuth(4242, undefined, {
+      reserveOtpSend,
+      sendVerificationOTP,
+    });
+
+    for (const [path, body] of [
+      [sendPath, { email, type: "forget-password" }],
+      [sendPath, { email, type: "bogus" }],
+      [sendPath, { email: "not-an-email", type: "sign-in" }],
+      ["/email-otp/request-password-reset", { email }],
+      ["/email-otp/request-email-change", { newEmail: email }],
+    ] as const) {
+      expect((await post(auth, path, body)).status).toBeGreaterThanOrEqual(400);
+    }
+    expect(reserveOtpSend).not.toHaveBeenCalled();
+
+    const res = await post(auth, sendPath, { email, type: "sign-in" });
+
+    expect(res.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    const session = await auth.api.signInEmailOTP({
+      body: { email, otp: sent[0] ?? "" },
+    });
+    expect(session.token).toBeTruthy();
+  });
+});
+
+describe("marking the email verified after sign-in", () => {
+  const email = "verify@f3nation.test";
+
+  it("marks the signed-in user's email verified", async () => {
+    const markEmailVerified = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(4242, undefined, { markEmailVerified });
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(markEmailVerified).toHaveBeenCalledExactlyOnceWith(4242, email);
+  });
+
+  it("leaves it unmarked when the code is wrong", async () => {
+    const markEmailVerified = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(4242, undefined, { markEmailVerified });
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    const wrong = otp === "000000" ? "111111" : "000000";
+
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp: wrong } }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_OTP" } });
+    expect(markEmailVerified).not.toHaveBeenCalled();
+  });
+
+  it("leaves it unmarked when the email has no F3 account", async () => {
+    const markEmailVerified = vi.fn(() => Promise.resolve());
+    const auth = createTestAuth(null, undefined, { markEmailVerified });
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp } }),
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+    expect(markEmailVerified).not.toHaveBeenCalled();
+  });
+
+  it("keeps the sign-in when marking it fails", async () => {
+    const markEmailVerified = vi.fn(() =>
+      Promise.reject(
+        Object.assign(new Error("terminating connection"), { code: "57P01" }),
+      ),
+    );
+    const logError = vi.spyOn(logging, "logError");
+    const auth = createTestAuth(4242, undefined, { markEmailVerified });
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(signIn.token).toBeTruthy();
+    expect(logError).toHaveBeenCalledExactlyOnceWith(
+      "auth.better_auth.email_verified_mark_failed",
+      { errorName: "Error", code: "57P01" },
+    );
+    logError.mockRestore();
   });
 });

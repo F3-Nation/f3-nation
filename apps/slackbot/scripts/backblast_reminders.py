@@ -32,6 +32,7 @@ from sqlalchemy.orm import aliased
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import current_date_cst, safe_get
 from utilities.slack import actions, orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 MSG_TEMPLATE = "Hey there, {q_name}! I hope that the {event_name} on {event_date} at {event_ao} went well! I have not seen a backblast posted for this event yet... Please click the button below to fill out the backblast so we can track those stats!"  # noqa
 
@@ -121,8 +122,16 @@ class BackblastList:
 
 
 def send_backblast_reminders(force=False):
+    """
+    DM each Q a reminder to post a backblast for a recent event.
+
+    A workspace with no installation is skipped. A workspace whose token lookup raises is logged
+    and recorded, the remaining Qs are still reminded, and a ``RuntimeError`` afterward reports
+    how many workspaces failed so the hourly runner records the incomplete run.
+    """
     # get the current time in US/Central timezone
     current_time = datetime.now(pytz.timezone("US/Central"))
+    failed_team_ids: set[str] = set()
     # check if the current time is between 5:00 PM and 6:00 PM, eventually configurable
     if current_time.hour == 17 or force:
         backblast_list = BackblastList()
@@ -137,14 +146,12 @@ def send_backblast_reminders(force=False):
                 event_ao=backblast.org.name,
             )
 
-            slack_bot_token = backblast.slack_settings.bot_token
             backblast_reminder_days = backblast.slack_settings.backblast_reminder_days
             if backblast_reminder_days is None:
                 backblast_reminder_days = 5
 
             if (
-                slack_bot_token
-                and backblast.slack_user_id
+                backblast.slack_user_id
                 and not safe_get(backblast.event.meta, "backblast_reminder_dismissed")
                 and backblast.event.series_exception != Series_Exception.closed
             ):
@@ -152,7 +159,15 @@ def send_backblast_reminders(force=False):
                     backblast_reminder_days > 0
                     and (current_date_cst() - backblast.event.start_date).days <= backblast_reminder_days
                 ):
-                    slack_client = WebClient(slack_bot_token)
+                    try:
+                        slack_client = slack_client_for_team(backblast.slack_settings.team_id)
+                    except Exception as e:
+                        team_id = backblast.slack_settings.team_id
+                        print(f"Error getting Slack client for team {team_id}: {type(e).__name__}")
+                        failed_team_ids.add(team_id)
+                        continue
+                    if slack_client is None:
+                        continue
                     blocks = [
                         orm.SectionBlock(label=msg),
                         orm.ActionsBlock(
@@ -177,6 +192,9 @@ def send_backblast_reminders(force=False):
                     except Exception as e:
                         print(f"Error sending backblast reminder to {backblast.slack_user_id}: {e}")
                         continue
+
+    if failed_team_ids:
+        raise RuntimeError(f"Backblast reminders skipped for {len(failed_team_ids)} workspace(s)")
 
 
 def handle_backblast_reminder_dismiss(

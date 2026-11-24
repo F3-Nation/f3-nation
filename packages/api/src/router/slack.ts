@@ -6,7 +6,7 @@ import type { AppDb } from "@acme/db/client";
 import { Permission } from "@acme/shared/app/permissions";
 
 import { logError } from "../logger";
-import { permissionProcedure } from "../shared";
+import { permissionProcedure, protectedProcedure } from "../shared";
 import type { Context } from "../shared";
 
 type JsonValue =
@@ -167,6 +167,31 @@ const updateSlackMessageInputSchema = baseMessageInputSchema
   })
   .strict();
 
+// Slack team, enterprise and member IDs are uppercase alphanumeric. Rejecting
+// anything else keeps a malformed ID from reaching the query as an ordinary miss.
+const slackIdSchema = (what: string) =>
+  z
+    .string()
+    .regex(/^[A-Z0-9]{1,64}$/, `${what} must be an uppercase Slack ID`)
+    .describe(what);
+
+const resolveSlackUserInputSchema = z
+  .object({
+    slackTeamId: slackIdSchema("Slack workspace (team) ID, e.g. T0123ABCD"),
+    slackUserId: slackIdSchema("Slack member ID, e.g. U0123ABCD"),
+  })
+  .strict();
+
+const resolveSlackUserOutputSchema = z.object({
+  userId: z
+    .number()
+    .int()
+    .nullable()
+    .describe(
+      "F3 user ID linked to this Slack member, or null when the member has no linked F3 user",
+    ),
+});
+
 const slackMessageOutputSchema = z.object({
   ok: z.literal(true),
   action: z.enum(["posted", "updated"]),
@@ -324,10 +349,17 @@ export const callSlackWebApi = async ({
   url,
   botToken,
   payload,
+  reloadBotToken,
 }: {
   url: string;
   botToken: string;
   payload: SlackMessagePayload;
+  /**
+   * Re-reads the stored token. The Slackbot rotates tokens, and a refresh
+   * revokes the token this request was sent with, so on `token_revoked` the
+   * request is repeated once if the stored token has changed.
+   */
+  reloadBotToken?: () => Promise<string>;
 }): Promise<NormalizedSlackWebApiSuccess> => {
   let response: Response;
   let body: string;
@@ -390,6 +422,18 @@ export const callSlackWebApi = async ({
 
   if (!data.ok) {
     const slackError = data.error ?? "unknown_error";
+    if (slackError === "token_revoked" && reloadBotToken) {
+      let reloaded: string | undefined;
+      try {
+        reloaded = await reloadBotToken();
+      } catch (err) {
+        // Fall through to report the original Slack error.
+        logError("api.slack.token_reload_failed", {}, err);
+      }
+      if (reloaded && reloaded !== botToken) {
+        return callSlackWebApi({ url, botToken: reloaded, payload });
+      }
+    }
     reportSlackError(slackError);
     throw mapSlackError(slackError);
   }
@@ -422,6 +466,43 @@ export const callSlackWebApi = async ({
 };
 
 export const slackRouter = {
+  // Open to every authenticated caller, with no per-org check: the mapping is
+  // not personal information, and a caller must already know the workspace and
+  // member IDs. An API key with no role grants resolves to no session, so it is
+  // rejected here as on every protected endpoint.
+  // See docs/specs/slack-user-resolution.md.
+  resolveUser: protectedProcedure
+    .input(resolveSlackUserInputSchema)
+    .route({
+      method: "GET",
+      path: "/user/{slackTeamId}/{slackUserId}",
+      tags: ["slack"],
+      summary: "Resolve a Slack member to an F3 user",
+      description:
+        "Return the F3 user ID linked to a Slack member in a workspace. Returns 404 when the workspace has no stored member with that ID.",
+    })
+    .output(resolveSlackUserOutputSchema)
+    .handler(async ({ context: ctx, input }) => {
+      const [row] = await ctx.db
+        .select({ userId: schema.slackUsers.userId })
+        .from(schema.slackUsers)
+        .where(
+          and(
+            eq(schema.slackUsers.slackTeamId, input.slackTeamId),
+            eq(schema.slackUsers.slackId, input.slackUserId),
+          ),
+        )
+        .limit(1);
+
+      if (!row) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "No Slack member with that ID in that workspace",
+        });
+      }
+
+      return { userId: row.userId };
+    }),
+
   postMessage: permissionProcedure(Permission.MessagesSend)
     .input(postSlackMessageInputSchema)
     .route({
@@ -441,6 +522,7 @@ export const slackRouter = {
       const response = await callSlackWebApi({
         url: "https://slack.com/api/chat.postMessage",
         botToken,
+        reloadBotToken: () => getSlackBotTokenForOrg(ctx.db, input.regionOrgId),
         payload: {
           channel: input.slackChannelId,
           text: input.text,
@@ -480,6 +562,7 @@ export const slackRouter = {
       const response = await callSlackWebApi({
         url: "https://slack.com/api/chat.update",
         botToken,
+        reloadBotToken: () => getSlackBotTokenForOrg(ctx.db, input.regionOrgId),
         payload: {
           channel: input.slackChannelId,
           ts: input.ts,

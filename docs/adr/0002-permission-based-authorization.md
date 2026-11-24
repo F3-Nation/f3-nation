@@ -44,7 +44,7 @@ Granting sector-level **admin** so someone could **send a message** is the
 canonical over-grant: the role vocabulary (admin/editor) is coarser than the
 capabilities the org actually delegates.
 
-### What exists today (verified July 2026)
+### What existed when this was accepted (November 2026)
 
 **The planned permission model is already in the database — dormant.**
 `packages/db/drizzle/schema.ts` defines `permissions` and
@@ -60,25 +60,40 @@ vestigial `Permissions` enums (`packages/shared/src/app/constants.ts`,
    _any_ org. They are door-checks only; they scope nothing.
 2. Org-scoped checks at call sites: `checkHasRoleOnOrg`
    (`packages/api/src/check-has-role-on-org.ts`) takes a role + org and walks
-   _up_ the org hierarchy (AO → Region → Sector → Area → Nation) in SQL, so a
-   grant at Sector level covers everything beneath it. `"admin"` is
-   hard-coded as a superset of any requested role.
+   _up_ the org's ancestors in SQL without assuming a fixed set of tiers (see
+   [ADR 0003](0003-depth-agnostic-org-hierarchy.md)), so a grant at Sector
+   level covers everything beneath it. The walk follows at most
+   `ORG_TREE_MAX_DEPTH` parent edges
+   (`packages/shared/src/app/org-hierarchy.ts`), far more than the hierarchy
+   has; a grant farther up than that does not match, so the check denies.
+   `"admin"` is hard-coded as a superset of any requested role.
 
 **Load-bearing facts that constrain any redesign:**
 
-- Role grants live in `roles_x_users_x_org` (role × user × org) and are baked
-  into the JWT session at sign-in as `{orgId, orgName, roleName}[]`
-  (`packages/auth/src/lib/md-pg-drizzzle-adapter.ts`). Grant changes do not
-  reach live sessions until re-login or session update — the ComzQ grant
-  above needed a re-login to take effect.
+- Role grants live in `roles_x_users_x_org` (role × user × org). How fresh a
+  caller's roles are depends on the credential:
+  - Cookie sessions bake them into the session JWT at sign-in as
+    `{orgId, orgName, roleName}[]` (the `jwt` callback in
+    `packages/auth/src/config.ts`). Grant changes do not reach a live cookie
+    session until re-login or session update — the ComzQ grant above needed a
+    re-login to take effect.
+  - Auth-service access tokens and API keys carry no roles; when one of them
+    authenticates a request, the API reads its grants from the database for
+    that request (`getSession` in `packages/api/src/shared.ts`), so a grant
+    change takes effect at once. `getSession` checks the session cookie
+    first, so a request that also carries a valid cookie is authorized with
+    the cookie session's roles instead.
 - `roles.name` is a Postgres enum (`user_role`). Adding any new role (e.g. `comz`)
   requires an `ALTER TYPE` migration, not just an insert.
 - API keys authenticate through the same role tables
   (`roles_x_api_keys_x_org`, resolved in `packages/api/src/shared.ts`), so a
   permission layer must cover both principal types.
-- `nationAdminProcedure` relies on a fragile string match —
-  `orgName.toLowerCase().includes("f3 nation")` in
-  `packages/shared/src/app/role-checks.ts`.
+- `nationAdminProcedure` requires `admin` on the org whose id is
+  `F3_NATION_ORG_ID` **and** whose name contains "f3 nation"
+  (`isNationAdminFromSession` in `packages/shared/src/app/role-checks.ts`).
+  The name match is fragile: renaming that org to a name that does not
+  contain "f3 nation" (in any letter case) would lock every nation admin
+  out.
 - The org-hierarchy walk is the genuinely hard part of the system's
   authorization, and it already exists and works.
 

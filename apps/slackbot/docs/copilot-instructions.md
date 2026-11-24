@@ -42,7 +42,7 @@ This is a **Slack Bolt Python app** deployed to Google Cloud Run that manages F3
 - PostgreSQL runs on `localhost:5433` (mapped from container port 5432)
 - Migrations handled by `db-init` service which clones F3-Data-Models repo and runs Alembic
 
-**Pattern**: Always use `DbManager.get()`, `DbManager.find_records()`, `DbManager.create_record()`, etc. Never raw SQL.
+**Pattern**: Changes to shared F3 data go through the F3 API, never `DbManager` writes; see [API_MIGRATION.md](API_MIGRATION.md). Direct database access through `DbManager` is for reads and for the bot's own Slack tables. Never raw SQL.
 
 ### Testing & Code Quality
 
@@ -77,10 +77,9 @@ The boolean flag controls whether a loading modal appears before the handler run
 
 **Modern pattern** (see `features/calendar/event_tag.py`):
 
-1. **Service class** - business logic (e.g., `EventTagService`)
-2. **Views class** - Slack UI construction (e.g., `EventTagViews`)
-3. **Handler functions** - orchestrate service + views, registered in routing
-4. **Module-level constants** for action IDs
+1. **Views class** - Slack UI construction (e.g., `EventTagViews`)
+2. **Handler functions** - call the F3 API through plain functions and render the views, registered in routing. Existing domains call a service class instead (e.g., `EventTagService`); new code doesn't add service or repository layers (see [API_MIGRATION.md](API_MIGRATION.md)).
+3. **Module-level constants** for action IDs
 
 **Legacy pattern** (older modules): Build functions, handle functions, and UI mixed in single file. Refactor new code to modern pattern.
 
@@ -137,7 +136,7 @@ External package managing database schema. Located at: `https://github.com/F3-Na
 ### Slack Integration
 
 - Uses `slack-bolt` 1.22.0 with `SlackRequestHandler` adapter for Flask/Functions Framework
-- OAuth handled by `FileInstallationStore` (mounted volume in production)
+- OAuth installations are stored in the workspace's `slack_spaces` row by `SlackSpaceInstallationStore` (bot-only); the OAuth state store uses a mounted volume in production
 - `process_before_response=True` in production for faster ack
 
 ### Environment Configuration
@@ -173,4 +172,4 @@ Required variables in `.env`:
 - **API migration**: Direct DB access will be replaced by API calls
 - **Full ORM migration**: Move all code to use `slack_sdk.models` directly
 - **Testing**: Expand test coverage, especially for critical feature paths
-- **Modularization**: Refactor legacy features to Service/Views/Handler pattern
+- **Modularization**: Separate Slack view construction from handler logic in legacy features

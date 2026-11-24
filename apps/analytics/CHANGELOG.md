@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/F3-Nation/f3-nation/compare/analytics@1.2.2...analytics@1.3.0) (2026-11-24)
+
+
+### Features
+
+* **analytics:** add generation-aware release cleanup command ([#1634](https://github.com/F3-Nation/f3-nation/issues/1634)) ([4698af1](https://github.com/F3-Nation/f3-nation/commit/4698af134d26a9d86a4d865683bee51bd538412e))
+
+
+### Bug Fixes
+
+* **analytics:** write pv_event_details with 8,192-row Parquet row groups ([#1722](https://github.com/F3-Nation/f3-nation/issues/1722)) ([1cbbf30](https://github.com/F3-Nation/f3-nation/commit/1cbbf308250909fe2202ab54b6cb8eb54772fe18))
+* **deps:** update python dependencies (non-major) ([#1782](https://github.com/F3-Nation/f3-nation/issues/1782)) ([d19751a](https://github.com/F3-Nation/f3-nation/commit/d19751a29733d7152ef1815372712f5dc8b215df))
+
 ## [1.2.2](https://github.com/F3-Nation/f3-nation/compare/analytics@1.2.1...analytics@1.2.2) (2026-11-17)
 
 

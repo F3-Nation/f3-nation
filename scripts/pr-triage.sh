@@ -67,6 +67,8 @@ SEP=$'\x1f'
 NOT_NEEDED_LABEL="local test: not needed"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CODEOWNERS_FILE="${PR_TRIAGE_CODEOWNERS:-$script_dir/../.github/CODEOWNERS}"
+# shellcheck source=scripts/lib/open-file.sh
+. "$script_dir/lib/open-file.sh"
 
 usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "pr-triage: $*" >&2; exit 1; }
@@ -122,6 +124,17 @@ team=$(grep / <<<"$codeowners" | head -1 || true)
 [[ -z "$team" ]] || die "$CODEOWNERS_FILE names the team @$team; list each codeowner's own @handle instead"
 [[ -n "$codeowners" ]] || die "$CODEOWNERS_FILE lists no @handles"
 codeowners_json=$(jq -R -s -c 'split("\n") | map(select(length > 0))' <<<"$codeowners")
+# The handles on every ownership line: without a PR's changed files, only their approval is
+# sure to come from an owner of each file. A line with no handles leaves its paths unowned.
+full_owners_json=$(awk '
+  { split("", seen); owned = 0
+    for (i = 1; i <= NF; i++) {
+      if ($i ~ /^#/) break
+      if ($i ~ /^@/) { h = tolower(substr($i, 2)); if (!(h in seen)) { seen[h] = 1; count[h]++ }; owned = 1 }
+    }
+    lines += owned }
+  END { for (h in count) if (count[h] == lines) print h }' "$CODEOWNERS_FILE" |
+  sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
 
 # shellcheck disable=SC2016
 query='
@@ -146,7 +159,7 @@ query($owner: String!, $name: String!, $cursor: String) {
           nodes { ... on ReopenedEvent { createdAt } }
         }
         commits(last: 1) {
-          nodes { commit { oid committedDate } }
+          nodes { commit { oid committedDate statusCheckRollup { state } } }
         }
         # Both ends of each list: a skill marker may be among the oldest or the newest.
         comments(last: 100) { ...comments }
@@ -183,6 +196,18 @@ query_no_decision="${query/ reviewDecision / }"
 [[ "$query_no_decision" != "$query" ]] ||
   die "the query must list reviewDecision with a space on each side, so a failing page can be retried without it"
 
+# GitHub can fail the whole query computing reviewDecision for an advisory fork's PR, so fork
+# queries read each reviewer's latest approval or change request instead, and classify works
+# out the decision from them. A fork page that keeps failing falls back to query_no_decision
+# too, which reads neither.
+# shellcheck disable=SC2016
+opinions_fragment='latestOpinionatedReviews(first: 100) {
+  pageInfo { hasNextPage }
+  nodes { state author { login } commit { oid } }
+}'
+fork_query=${query/reviewDecision/$opinions_fragment}
+is_advisory_fork() { [[ "$(tr '[:upper:]' '[:lower:]' <<<"${1#*/}")" =~ -ghsa(-[0-9a-z]{4}){3}$ ]]; }
+
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/pr-triage.XXXXXX")
 advisory_pid=""
 board_tmp=""
@@ -197,8 +222,9 @@ trap cleanup EXIT
 # Every page of a repo's open PRs into <file>: every page's PRs under the last page's pageInfo,
 # so hasNextPage still marks a cut-off list.
 fetch_prs() {
-  local target="$1" file="$2" dir cursor="" page=0 page_file
+  local target="$1" file="$2" dir cursor="" page=0 page_file q="$query"
   local -a args
+  if is_advisory_fork "$target"; then q="$fork_query"; fi
   dir=$(mktemp -d "$work_dir/pages.XXXXXX") || return 1
   page_args() {
     args=(-f query="$1" -f owner="${target%%/*}" -f name="${target#*/}")
@@ -206,7 +232,7 @@ fetch_prs() {
   }
   while :; do
     page=$((page + 1))
-    page_args "$query"
+    page_args "$q"
     page_file="$dir/$(printf '%03d' "$page").json"
     if ! gh api graphql "${args[@]}" >"$page_file"; then
       # A busy GitHub occasionally answers 502 or 504; one retry usually succeeds.
@@ -315,6 +341,8 @@ classify='
   def lower_login: (. // "") | ascii_downcase;
   ($codeowners | map({key: ., value: true}) | from_entries) as $owners
   | def codeowner: $owners[lower_login] == true;
+  ($fullOwners | map({key: ., value: true}) | from_entries) as $full
+  | def full_owner: $full[lower_login] == true;
   # Only a codeowner'"'"'s run moves a PR; anyone else'"'"'s is extra input. That also leaves out
   # review bots, which quote the markers back in their own comments.
   def owner_marker($m): (.author.login | codeowner) and (.body | has_marker($m));
@@ -406,7 +434,18 @@ classify='
       | (($open | length) > 0 and ($moreThreads | not)
           and all($openThreads[]; (.lastComment.nodes[0].author.login // "") == $author))
         as $allReplied
-      | ($pr.reviewDecision == "APPROVED") as $approved
+      # On a fork, a conservative stand-in for the main branch ruleset, which needs owners of the
+      # changed files only: without those files, it needs a head-commit approval from a
+      # non-author listed on every ownership line, no latest opinion requesting changes, and a
+      # complete opinion list, since a cut-off one may hide a change request. An owner of only
+      # the touched paths can approve on GitHub without counting here.
+      | (if $pr | has("latestOpinionatedReviews") then
+           ($pr.latestOpinionatedReviews.nodes // []) as $opinions
+           | ($pr.latestOpinionatedReviews.pageInfo.hasNextPage != true)
+             and any($opinions[]; .state == "APPROVED" and (.author.login | full_owner) and not_by($author)
+               and $head.oid != null and .commit.oid == $head.oid)
+             and all($opinions[]; .state != "CHANGES_REQUESTED")
+         else $pr.reviewDecision == "APPROVED" end) as $approved
       | ($pr.mergeable == "CONFLICTING") as $conflicts
 
       | (if $pr.isDraft then ["DRAFT", ""]
@@ -480,7 +519,19 @@ classify='
           codeownerAssignees: [$assignees[] | select(codeowner and (lower_login != ($author | lower_login)))],
           unresolvedThreads: ($open | length),
           threadOpeners: ($open | unique),
+          # Unresolved threads whose last comment isn'"'"'t the author'"'"'s, whatever the bucket:
+          # INLINE outranks THREADS, so the bucket alone hides a review bot'"'"'s unanswered threads.
+          threadsAwaitingAuthor: ([$openThreads[]
+            | select((.lastComment.nodes[0].author.login // "") != $author)] | length),
           approved: $approved,
+          conflicts: $conflicts,
+          # The head commit'"'"'s combined check state: SUCCESS, PENDING, FAILURE, ERROR, EXPECTED,
+          # or null when nothing reports on it.
+          ciState: ($head.statusCheckRollup.state // null),
+          changesRequested: (if $pr | has("latestOpinionatedReviews")
+            then any($pr.latestOpinionatedReviews.nodes[]?; .state == "CHANGES_REQUESTED")
+            else $pr.reviewDecision == "CHANGES_REQUESTED" end),
+          awaitingFixes: $awaitingFixes,
           turnSince: ($turnSince | todate),
           url: $pr.url,
           mine: ($author == $me),
@@ -501,7 +552,7 @@ classify='
 # One repo's board from its fetched PRs; <advisory> is null for the repo itself.
 classify_board() {
   jq --arg repo "$2" --arg cutoff "$LEGACY_CUTOFF" --arg notNeededLabel "$NOT_NEEDED_LABEL" \
-    --argjson codeowners "$codeowners_json" --argjson ledger "$ledger_json" \
+    --argjson codeowners "$codeowners_json" --argjson fullOwners "$full_owners_json" --argjson ledger "$ledger_json" \
     --argjson advisory "$3" --argjson now "${PR_TRIAGE_NOW:-null}" "$classify" "$1"
 }
 
@@ -544,8 +595,11 @@ if [[ -s "$work_dir/advisories.json" ]]; then
     fi
   done < <(jq -r '.[] | [.ghsa, .severity, .fork] | join("\u001f")' "$work_dir/advisories.json")
   (( ${#fork_boards[@]} > 0 )) || fork_boards=(/dev/null)
+  # The board goes through a file in the private work_dir, not argv: it can hold advisory PR
+  # titles, and a large one would pass the per-argument size limit.
+  printf '%s\n' "$board" >"$work_dir/base.json"
   # shellcheck disable=SC2016
-  board=$(jq -s --argjson base "$board" --slurpfile advisories "$work_dir/advisories.json" \
+  board=$(jq -s --slurpfile base "$work_dir/base.json" --slurpfile advisories "$work_dir/advisories.json" \
     --arg statuses "$statuses" --arg repo "$repo" '
     def forks($n): "\($n) security advisory fork\(if $n == 1 then "" else "s" end)";
     . as $forks
@@ -559,7 +613,7 @@ if [[ -s "$work_dir/advisories.json" ]]; then
         if $status[$i] == "read" then {read: (.read + 1), fork: $forks[.read]}
         else {read, fork: null} end;
         {advisory: $all[$i], status: $status[$i], fork})] as $each
-    | $base
+    | $base[0]
     | .prs = ([$forks[].prs[]] + .prs)
     | .advisoryForks = ($forks | length)
     # A fork that could not be read, or whose PRs were cut off, is left out: whether it has a
@@ -586,24 +640,6 @@ if $json; then
   printf '%s\n' "$board"
   exit 0
 fi
-
-open_file() {
-  local file="$1"
-  if grep -qi microsoft /proc/version 2>/dev/null; then
-    if command -v wslview >/dev/null 2>&1; then
-      wslview "$file"
-    else
-      # explorer.exe exits non-zero even when it opens the file.
-      explorer.exe "$(wslpath -w "$file")" || true
-    fi
-  elif [[ "$(uname -s)" == "Darwin" ]]; then
-    open "$file"
-  elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$file" >/dev/null 2>&1
-  else
-    return 1
-  fi
-}
 
 if $html; then
   [[ -n "$out" ]] || out="${TMPDIR:-/tmp}"

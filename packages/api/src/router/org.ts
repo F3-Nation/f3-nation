@@ -842,6 +842,19 @@ export const orgRouter = {
           message: "Parent ID or ID is required",
         });
       }
+      // The vault sync treats only a literal true as enabled, so a string or
+      // number here would turn the vault off while looking like a yes. Null,
+      // like a missing key, means off.
+      if (
+        input.meta &&
+        Object.hasOwn(input.meta, "password_vault_enabled") &&
+        input.meta.password_vault_enabled !== null &&
+        typeof input.meta.password_vault_enabled !== "boolean"
+      ) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "meta.password_vault_enabled must be true, false or null",
+        });
+      }
 
       // Verify a create's parent exists before authorization: checkHasRoleOnOrg
       // returns the same UNAUTHORIZED for a nonexistent org as for an existing

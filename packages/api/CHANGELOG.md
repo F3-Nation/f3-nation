@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.18.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.17.0...pkg-api@0.18.0) (2026-11-24)
+
+
+### Features
+
+* **admin,api,shared:** let region editors opt in to the password vault ([#1750](https://github.com/F3-Nation/f3-nation/issues/1750)) ([811efa7](https://github.com/F3-Nation/f3-nation/commit/811efa70c4ef0af27e48f4c185bb05e513b83210))
+* **api,admin,shared,validators,db:** several roles per org, password roles in admin ([#1749](https://github.com/F3-Nation/f3-nation/issues/1749)) ([f2b061c](https://github.com/F3-Nation/f3-nation/commit/f2b061cc90a27db8a66448a8fda5c4d1cf29a965))
+* **api,shared:** accept originating app claims before client rollout ([#1778](https://github.com/F3-Nation/f3-nation/issues/1778)) ([612b277](https://github.com/F3-Nation/f3-nation/commit/612b277ec1fcda8336803d3b0e5bee139051a5a6))
+* **api,shared:** add ADR 0002 permission checks and use them for Slack messages ([#1682](https://github.com/F3-Nation/f3-nation/issues/1682)) ([ac9bfbc](https://github.com/F3-Nation/f3-nation/commit/ac9bfbcd24a56cc085ed0b986a3fc82021d939c2))
+* **api:** resolve Slack members to F3 user IDs ([#1758](https://github.com/F3-Nation/f3-nation/issues/1758)) ([963b8a0](https://github.com/F3-Nation/f3-nation/commit/963b8a0d84724839c7f72a6b8e58e4f7474a916d))
+* **db:** add attendance.attendance_type with a sync trigger and batched backfill ([#1742](https://github.com/F3-Nation/f3-nation/issues/1742)) ([3818ab7](https://github.com/F3-Nation/f3-nation/commit/3818ab7cec908b09be90655519b880320f59b917))
+* **homepage:** add Table view to /org directory ([#1705](https://github.com/F3-Nation/f3-nation/issues/1705)) ([845716a](https://github.com/F3-Nation/f3-nation/commit/845716a9e286bc5506ddea542ee280fc31cc9968))
+* **slackbot,api,db:** read Slack bot tokens through one rotation-ready store ([#1619](https://github.com/F3-Nation/f3-nation/issues/1619)) ([646827b](https://github.com/F3-Nation/f3-nation/commit/646827b6f226035292fdb97331e5a9f9f8b37d16))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.3.1
+    * @acme/db bumped to 0.12.0
+    * @acme/shared bumped to 0.8.0
+    * @acme/validators bumped to 0.6.0
+
 ## [0.17.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.16.0...pkg-api@0.17.0) (2026-11-17)
 
 

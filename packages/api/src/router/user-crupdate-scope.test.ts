@@ -49,6 +49,7 @@ import {
   cleanup,
   createAdminSession,
   createEditorSession,
+  createNationAdminSession,
   createTestClient,
   db,
   getOrCreateF3NationOrg,
@@ -174,18 +175,20 @@ describe("user.crupdate org scoping", () => {
     expect(after?.homeRegionId).toBeNull();
   });
 
-  it("writes the profile of a user with no home region who holds a role in the caller's org", async () => {
+  it("rejects a profile write to a user with no home region who holds a role in the caller's org", async () => {
     const target = await createUser({ homeRegionId: null });
     await grantRole(target.id, regionA.id, "editor");
     await mockAuthWithSession(editorOf(regionA));
 
-    await createTestClient().user.crupdate({
-      id: target.id,
-      f3Name: "Renamed",
-      roles: [{ orgId: regionA.id, roleName: "editor" }],
-    });
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        f3Name: "Renamed",
+        roles: [{ orgId: regionA.id, roleName: "editor" }],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
-    expect((await readUser(target.id))?.f3Name).toBe("Renamed");
+    expect((await readUser(target.id))?.f3Name).toBe("Original");
   });
 
   it("rejects moving a user's home region into an org the caller can't edit", async () => {
@@ -400,7 +403,7 @@ describe("user.crupdate org scoping", () => {
       await createTestClient().user.crupdate({
         id: target.id,
         f3Name: "Corrected",
-        email: `Corrected.Member.${target.id}@Example.com`,
+        email: target.email.toUpperCase(),
         homeRegionId: regionB.id,
         roles: [{ orgId: regionB.id, roleName: "editor" }],
       });
@@ -408,7 +411,7 @@ describe("user.crupdate org scoping", () => {
       expect(await readUser(target.id)).toMatchObject({
         homeRegionId: regionB.id,
         f3Name: "Corrected",
-        email: `corrected.member.${target.id}@example.com`,
+        email: target.email,
       });
       expect((await readUser(target.id))?.meta).toEqual(
         optOut ? { home_region_nudge_opt_out: true } : null,
@@ -1129,6 +1132,202 @@ describe("user.crupdate org scoping", () => {
       const after = await readUser(target.id);
       expect(after?.email).toBe(target.email);
       expect(after?.phone).toBe("555-0100");
+    });
+  });
+
+  describe("changing a user's email", () => {
+    const VERIFIED_AT = "2026-01-01T00:00:00.000Z";
+
+    const createHomedUser = () =>
+      createUser({ homeRegionId: regionA.id, emailVerified: VERIFIED_AT });
+
+    const changeEmail = (target: { id: number }, email: string) =>
+      createTestClient().user.crupdate({ id: target.id, email, roles: [] });
+
+    const expectEmailChangeRejected = async (target: {
+      id: number;
+      email: string;
+      emailVerified: string | null;
+    }) => {
+      await expect(
+        changeEmail(target, `${uniqueId()}@attacker.example`),
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: ERRORS.MUST_BE_NATION_ADMIN_TO_CHANGE_EMAIL,
+      });
+      const after = await readUser(target.id);
+      expect(after?.email).toBe(target.email);
+      expect(after?.emailVerified).toBe(target.emailVerified);
+      expect(target.emailVerified).not.toBeNull();
+    };
+
+    const sessionWithRole = (
+      org: { id: number; name: string | null },
+      roleName: "editor" | "admin",
+    ): Session => {
+      const roles = [{ orgId: org.id, orgName: org.name ?? "", roleName }];
+      const session = editorOf(regionA);
+      return { ...session, roles, user: { ...session.user, roles } };
+    };
+
+    it("rejects a home-region editor changing the email of a user with no roles", async () => {
+      const target = await createHomedUser();
+      await mockAuthWithSession(editorOf(regionA));
+
+      await expectEmailChangeRejected(target);
+    });
+
+    it("rejects a home-region admin changing the email of a user with no roles", async () => {
+      const target = await createHomedUser();
+      await mockAuthWithSession(sessionWithRole(regionA, "admin"));
+
+      await expectEmailChangeRejected(target);
+    });
+
+    it("rejects an admin of an org above the home region", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [area] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Scope Area ${uniqueId()}`,
+          orgType: "area",
+          parentId: nation.id,
+          isActive: true,
+        })
+        .returning({ id: schema.orgs.id, name: schema.orgs.name });
+      if (!area) throw new Error("Failed to create area");
+      createdOrgIds.push(area.id);
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Scope Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: area.id,
+          isActive: true,
+        })
+        .returning({ id: schema.orgs.id });
+      if (!region) throw new Error("Failed to create region");
+      createdOrgIds.push(region.id);
+      const target = await createUser({
+        homeRegionId: region.id,
+        emailVerified: VERIFIED_AT,
+      });
+      await mockAuthWithSession(sessionWithRole(area, "admin"));
+
+      await expectEmailChangeRejected(target);
+    });
+
+    it("rejects an editor of F3 Nation", async () => {
+      const target = await createHomedUser();
+      const nationAdmin = await createNationAdminSession();
+      if (!nationAdmin.roles?.length) {
+        throw new Error("Nation admin session has no roles");
+      }
+      const roles = nationAdmin.roles.map((role) => ({
+        ...role,
+        roleName: "editor" as const,
+      }));
+      await mockAuthWithSession({
+        ...nationAdmin,
+        roles,
+        user: { ...nationAdmin.user, roles },
+      });
+
+      await expectEmailChangeRejected(target);
+    });
+
+    it("rejects a user changing their own email", async () => {
+      const target = await createHomedUser();
+      await grantRole(target.id, regionA.id, "admin");
+      await mockAuthWithSession({
+        ...sessionWithRole(regionA, "admin"),
+        id: target.id,
+      });
+
+      await expect(
+        createTestClient().user.crupdate({
+          id: target.id,
+          email: `${uniqueId()}@example.com`,
+          roles: [{ orgId: regionA.id, roleName: "admin" }],
+        }),
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: ERRORS.MUST_BE_NATION_ADMIN_TO_CHANGE_EMAIL,
+      });
+      const after = await readUser(target.id);
+      expect(after?.email).toBe(target.email);
+      expect(after?.emailVerified).toBe(target.emailVerified);
+    });
+
+    it("still lets an editor rename a user while resending the same email in different case", async () => {
+      const target = await createHomedUser();
+      await mockAuthWithSession(editorOf(regionA));
+
+      await createTestClient().user.crupdate({
+        id: target.id,
+        f3Name: "Renamed",
+        email: target.email.toUpperCase(),
+        roles: [],
+      });
+
+      const after = await readUser(target.id);
+      expect(after?.f3Name).toBe("Renamed");
+      expect(after?.email).toBe(target.email);
+      expect(after?.emailVerified).toBe(target.emailVerified);
+    });
+
+    it("lets a nation admin change a region admin's email and clears its verification", async () => {
+      const target = await createHomedUser();
+      await grantRole(target.id, regionA.id, "admin");
+      await mockAuthWithSession(await createNationAdminSession());
+      const email = `${uniqueId()}@example.com`;
+
+      await createTestClient().user.crupdate({
+        id: target.id,
+        email,
+        roles: [{ orgId: regionA.id, roleName: "admin" }],
+      });
+
+      const after = await readUser(target.id);
+      expect(after?.email).toBe(email);
+      expect(after?.emailVerified).toBeNull();
+    });
+
+    it("clears verification when a nation admin changes email in a home-region correction", async () => {
+      const target = await createHomedUser();
+      await mockAuthWithSession(await createNationAdminSession());
+      const email = `${uniqueId()}@example.com`;
+
+      await createTestClient().user.crupdate({
+        id: target.id,
+        email,
+        homeRegionId: regionB.id,
+        roles: [],
+      });
+
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        "api.user.home_region_corrected",
+        expect.objectContaining({ userId: target.id, toOrgId: regionB.id }),
+      );
+      const after = await readUser(target.id);
+      expect(after?.email).toBe(email);
+      expect(after?.homeRegionId).toBe(regionB.id);
+      expect(after?.emailVerified).toBeNull();
+    });
+
+    it("lets a nation admin change their own email and clears its verification", async () => {
+      const target = await createHomedUser();
+      await mockAuthWithSession({
+        ...(await createNationAdminSession()),
+        id: target.id,
+      });
+      const email = `${uniqueId()}@example.com`;
+
+      await changeEmail(target, email);
+
+      const after = await readUser(target.id);
+      expect(after?.email).toBe(email);
+      expect(after?.emailVerified).toBeNull();
     });
   });
 

@@ -1,4 +1,4 @@
-import type { UserRole } from "./enums";
+import type { OrgType, UserRole } from "./enums";
 
 export interface PermissionDefinition {
   /** The stable id, in `resource.action` form. */
@@ -64,3 +64,25 @@ export const roleHasPermission = (
 ): boolean =>
   Object.hasOwn(ROLE_PERMISSIONS, roleName) &&
   ROLE_PERMISSIONS[roleName].some(({ name }) => name === permission.name);
+
+/**
+ * The org types a role can be given on. A role not listed here can be given on
+ * an org of any type. The API refuses a grant outside these types, and the
+ * admin site offers each role only where it is allowed.
+ */
+export const ROLE_ORG_TYPES: Partial<Record<UserRole, readonly OrgType[]>> = {
+  // The password vault keeps one collection per region.
+  password_manager: ["region"],
+  password_reader: ["region"],
+};
+
+/** True when `roleName` can be given on an org of type `orgType`. */
+export const roleAllowedOnOrgType = (
+  roleName: UserRole,
+  orgType: OrgType,
+): boolean => {
+  const allowed = Object.hasOwn(ROLE_ORG_TYPES, roleName)
+    ? ROLE_ORG_TYPES[roleName]
+    : undefined;
+  return allowed === undefined || allowed.includes(orgType);
+};

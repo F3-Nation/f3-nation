@@ -196,6 +196,26 @@ class Event_Category(enum.Enum):
     third_f = 3
 
 
+class Attendance_Type(enum.Enum):
+    """
+    Enum representing the capacity in which a user attends an event instance.
+
+    Stored as one value per attendance record in `attendance.attendance_type`.
+    While the `attendance_x_attendance_types` link table still exists, a
+    database trigger derives the value from it, taking the highest by the
+    precedence q, then co_q, then pax.
+
+    Attributes:
+        pax: a regular attendee (the Slack bot's "HC")
+        q: the leader
+        co_q: a co-leader
+    """
+
+    pax = 1
+    q = 2
+    co_q = 3
+
+
 class Request_Type(enum.Enum):
     """
     Enum representing the type of request.
@@ -358,6 +378,11 @@ class SlackSpace(Base):
         team_id (str): The Slack-internal unique identifier for the Slack team.
         workspace_name (Optional[str]): The name of the Slack workspace.
         bot_token (Optional[str]): The bot token for the Slack workspace.
+        bot_id (Optional[str]): The Slack bot ID for the workspace's installation.
+        bot_user_id (Optional[str]): The Slack user ID of the workspace's bot user.
+        bot_scopes (Optional[str]): The bot's granted scopes, comma-separated as the Slack SDK stores them.
+        bot_token_expires_at (Optional[datetime]): When the bot token expires. Null means the token does not rotate.
+        bot_refresh_token_encrypted (Optional[str]): The Slack refresh token as ciphertext only; never plaintext.
         settings (Optional[Dict[str, Any]]): Slack Bot settings for the Slack workspace.
         created (datetime): The timestamp when the record was created.
         updated (datetime): The timestamp when the record was last updated.
@@ -369,6 +394,11 @@ class SlackSpace(Base):
     team_id: Mapped[str] = mapped_column(VARCHAR, unique=True)
     workspace_name: Mapped[Optional[str]]
     bot_token: Mapped[Optional[str]]
+    bot_id: Mapped[Optional[str]]
+    bot_user_id: Mapped[Optional[str]]
+    bot_scopes: Mapped[Optional[str]]
+    bot_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    bot_refresh_token_encrypted: Mapped[Optional[str]] = mapped_column(TEXT)
     settings: Mapped[Optional[Dict[str, Any]]]
     created: Mapped[dt_create]
     updated: Mapped[dt_update]
@@ -1155,6 +1185,9 @@ class Attendance(Base):
         event_instance_id (int): The ID of the associated event instance.
         user_id (Optional[int]): The ID of the associated user.
         is_planned (bool): Whether this is planned attendance (True) vs actual attendance (False).
+        attendance_type (Attendance_Type): The record's single type. While the attendance types link table
+            exists, a database trigger derives it from the link rows and overwrites it whenever they change,
+            so a writer that sets this column must also write the matching link rows.
         meta (Optional[Dict[str, Any]]): Additional metadata for the attendance.
         created (datetime): The timestamp when the record was created.
         updated (datetime): The timestamp when the record was last updated.
@@ -1178,6 +1211,7 @@ class Attendance(Base):
     event_instance_id: Mapped[int] = mapped_column(ForeignKey("event_instances.id", onupdate="CASCADE"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     is_planned: Mapped[bool]
+    attendance_type: Mapped[Attendance_Type] = mapped_column(server_default=Attendance_Type.pax.name)
     meta: Mapped[Optional[Dict[str, Any]]]
     created: Mapped[dt_create]
     updated: Mapped[dt_update]

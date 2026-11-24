@@ -1,289 +1,82 @@
-# F3 Nation API Reference
+# Calling the F3 API from the bot
 
-**Live deployed spec**: `https://api.f3nation.com/docs/openapi.json`
-**Local spec**: `<F3_API_BASE_URL>/docs/openapi.json`
-**Interactive docs**: `https://api.f3nation.com/docs`
-**API version**: 4.2.2
+How the Slack bot talks to the F3 API: where to find what the API offers, the
+client the bot uses, and how to run the bot against a local API. The rules
+for moving a feature onto the API are in [API_MIGRATION.md](API_MIGRATION.md).
 
-> This file is a curated summary for AI agents and developers. It covers auth,
-> conventions, and the domains relevant to this Slack bot. For full schema details,
-> fetch the live OpenAPI JSON above.
+## Where the contract lives
 
----
+The API publishes its own OpenAPI spec, generated from the router's schemas
+and descriptions, so its paths, parameters and field shapes match the code.
+The spec's overview prose (such as its authentication section) is written by
+hand; when it disagrees with a procedure, the router is right:
 
-## Authentication
+- **Spec:** `/docs/openapi.json` on any API host, for example
+  `https://api.f3nation.com/docs/openapi.json`, or
+  `$F3_API_BASE_URL/docs/openapi.json` for the API the bot is configured to
+  use.
+- **Interactive docs:** `/docs` on the same host.
+- **Source:** the routers in [`packages/api/src/router/`](../../../packages/api/src/router/).
+  Each procedure's input and output schemas, and its `description`, are what
+  the spec is built from.
 
-Every request requires **both** of the following headers:
+Read paths, parameters, envelope keys and field names there. This folder
+doesn't copy them, because a copy goes stale the next time an endpoint
+changes.
 
-```
-Authorization: Bearer <F3_API_KEY>
-Client: f3-nation-slack-bot
-```
+## The client
 
-- `F3_API_KEY` — env var; never commit to source control.
-- `Client` — identifies this application; must be a non-empty string.
-- **Rate limit**: 500 requests per 60 seconds → `429 Too Many Requests`.
+`get_f3_api_client()` in
+[`infrastructure/api_client/client.py`](../infrastructure/api_client/client.py)
+returns one shared client per process, so every call reuses the same
+connection pool. It sends the API key and the bot's client name on every
+request, and reads its configuration from the environment:
 
-See `infrastructure/api_client/client.py` for the implementation.
+- `F3_API_KEY`: the bot's API key. The client won't start without it, and
+  the key's role decides which operations succeed.
+- `F3_API_BASE_URL`: which API to call. Unset, it calls production.
 
----
+The client raises the exceptions in
+[`exceptions.py`](../infrastructure/api_client/exceptions.py) instead of
+returning error responses. Catch `F3ApiNotFoundError` where a missing record
+is an expected outcome. Other errors must reach the user, as
+[the bot's reliability rules](../AGENTS.md#reliability-and-data) require,
+never a log line followed by a success message.
 
-## Response Conventions
+### Lists
 
-### Envelope keys
+A list request without `pageIndex` or `pageSize` returns only the first page,
+not every matching row. When the bot needs every row, use `fetch_all_pages`
+in [`pagination.py`](../infrastructure/api_client/pagination.py), whose page
+size must stay equal to the API's maximum.
 
-Most endpoints wrap results in a typed envelope key:
+## Running against a local API
 
-| Domain         | List key     | Single key  |
-| -------------- | ------------ | ----------- |
-| event-tag      | `eventTags`  | `eventTag`  |
-| event-type     | `eventTypes` | `eventType` |
-| org            | `orgs`       | `org`       |
-| location       | `locations`  | `location`  |
-| event          | `events`     | `event`     |
-| event-instance | _(varies)_   | _(varies)_  |
-| user           | `users`      | `user`      |
-| position       | `positions`  | `position`  |
+`pnpm local:setup` creates `apps/slackbot/.env` from
+[`.env.example`](../.env.example), which points `F3_API_BASE_URL` at the local
+API and sets `F3_API_KEY` to the key the local seed data creates for the bot.
+Start the API alongside the bot from the repository root:
 
-### Field naming
-
-API responses use **camelCase** (`specificOrgId`, `isActive`). Some older or alternative
-payloads may use snake_case. Repository implementations must handle both:
-
-```python
-raw.get("specificOrgId", raw.get("specific_org_id"))
-```
-
-### Create vs Update (crupdate pattern)
-
-Most domains use a single `POST` endpoint for both create and update:
-
-- **Omit `id`** → creates a new record.
-- **Include `id`** → updates the existing record.
-
-### Soft delete
-
-`DELETE` operations mark records as `isActive: false` rather than removing them.
-The response returns the deleted record's ID (e.g., `{ "eventTagId": 42 }`).
-
-### Pagination
-
-List endpoints accept `pageIndex` (0-based) and `pageSize`. Responses include `totalCount`.
-
----
-
-## Domains
-
-### event-tag
-
-| Method   | Path                        | Purpose                                                         |
-| -------- | --------------------------- | --------------------------------------------------------------- |
-| `GET`    | `/v1/event-tag`             | List all tags (paginated, filterable by `orgIds`, `statuses`)   |
-| `POST`   | `/v1/event-tag`             | Create or update a tag (crupdate)                               |
-| `GET`    | `/v1/event-tag/org/{orgId}` | All tags for an org (global + org-specific; filter client-side) |
-| `GET`    | `/v1/event-tag/id/{id}`     | Single tag by ID                                                |
-| `DELETE` | `/v1/event-tag/id/{id}`     | Soft delete                                                     |
-
-**Create/update payload:**
-
-```json
-{ "name": "CSAUP", "color": "#32CD32", "specificOrgId": 123, "isActive": true }
+```bash
+pnpm dev --include-py
 ```
 
-**Update additionally requires:** `"id": 42`
+Check that the API the bot is configured for answers by requesting
+`/v1/ping` on the `F3_API_BASE_URL` in `apps/slackbot/.env`; it needs no key.
+On the default ports:
 
-**Response object fields:**
-`id`, `name`, `description`, `color`, `specificOrgId`, `isActive`, `created`, `updated`
-
-> **Important**: `GET /v1/event-tag/org/{orgId}` returns **both** global (nation-wide) and
-> org-specific tags. Filter to `specificOrgId == orgId` to get only org-specific ones.
-> See `infrastructure/api_client/event_tag_repository.py`.
-
----
-
-### org
-
-Organizations are hierarchical: `nation → sector → territory → area → region → ao`
-
-| Method   | Path                  | Purpose                                                      |
-| -------- | --------------------- | ------------------------------------------------------------ |
-| `GET`    | `/v1/org`             | List orgs (filter by `orgTypes`, `parentOrgIds`, `statuses`) |
-| `POST`   | `/v1/org`             | Create or update an org                                      |
-| `GET`    | `/v1/org/id/{id}`     | Single org by ID                                             |
-| `GET`    | `/v1/org/accessible`  | Orgs the caller has editor/admin role on                     |
-| `GET`    | `/v1/org/mine`        | Orgs where the caller has any role                           |
-| `DELETE` | `/v1/org/delete/{id}` | Soft delete (cascades to AO events/instances)                |
-| `GET`    | `/v1/org/count`       | Count matching orgs                                          |
-
-**Response object fields:**
-`id`, `parentId`, `name`, `orgType`, `defaultLocationId`, `description`, `isActive`,
-`logoUrl`, `website`, `email`, `twitter`, `facebook`, `instagram`, `lastAnnualReview`,
-`meta`, `created`, `updated`, `aoCount`, `parentOrgName`, `parentOrgType`
-
-`GET /v1/org` and `GET /v1/org/count` accept optional
-`activeAncestorsOnly=true` to require the organization and all ancestors to be
-active. Omitted or `false` preserves signed-in status filtering; anonymous
-listing always requires active ancestors.
-
-**`orgType` values:** `"ao"` | `"region"` | `"area"` | `"territory"` | `"sector"` | `"nation"`
-
----
-
-### location
-
-| Method   | Path                           | Purpose                                            |
-| -------- | ------------------------------ | -------------------------------------------------- |
-| `GET`    | `/v1/location`                 | List locations (filter by `regionIds`, `statuses`) |
-| `POST`   | `/v1/location`                 | Create or update a location                        |
-| `GET`    | `/v1/location/id/{id}`         | Single location by ID                              |
-| `DELETE` | `/v1/location/delete/{id}`     | Soft delete (admin role required)                  |
-| `GET`    | `/v1/location/in-bounding-box` | Locations within lat/lng bounds                    |
-
-**Response object fields:**
-`id`, `locationName`, `orgId`, `regionId`, `regionName`, `description`, `isActive`,
-`latitude`, `longitude`, `email`, `addressStreet`, `addressStreet2`, `addressCity`,
-`addressState`, `addressZip`, `addressCountry`, `meta`, `created`, `updated`
-
----
-
-### event
-
-Recurring series events. Future instances are auto-generated on create/update.
-
-| Method   | Path                    | Purpose                                                              |
-| -------- | ----------------------- | -------------------------------------------------------------------- |
-| `GET`    | `/v1/event`             | List events (filter by `regionIds`, `aoIds`, `eventTypeNames`, etc.) |
-| `POST`   | `/v1/event`             | Create or update an event (crupdate)                                 |
-| `GET`    | `/v1/event/id/{id}`     | Single event by ID                                                   |
-| `DELETE` | `/v1/event/delete/{id}` | Soft delete (future instances also deleted)                          |
-| `GET`    | `/v1/event/count`       | Count matching events                                                |
-
-**Create/update required fields:** `isActive`, `highlight`, `startDate`, `name`, `regionId`, `aoId`, `eventTypeIds`
-
-**`recurrencePattern` values:** `"weekly"` | `"monthly"`  
-**`dayOfWeek` values:** `"monday"` | `"tuesday"` | … | `"sunday"`  
-**`startTime` / `endTime` format:** 4-digit string, e.g. `"0600"`
-
----
-
-### event-instance
-
-Individual occurrences of events (can be standalone or part of a series).
-
-| Method   | Path                                        | Purpose                                                                |
-| -------- | ------------------------------------------- | ---------------------------------------------------------------------- |
-| `GET`    | `/v1/event-instance`                        | List instances (filter by `regionOrgId`, `aoOrgId`, `startDate`, etc.) |
-| `POST`   | `/v1/event-instance`                        | Create or update an instance                                           |
-| `GET`    | `/v1/event-instance/id/{id}`                | Single instance by ID                                                  |
-| `DELETE` | `/v1/event-instance/id/{id}`                | Hard delete                                                            |
-| `GET`    | `/v1/event-instance/calendar-home-schedule` | Calendar home view (user attendance + Q info)                          |
-| `GET`    | `/v1/event-instance/upcoming-qs`            | Instances where user is Q/Co-Q (for preblast)                          |
-| `GET`    | `/v1/event-instance/past-qs`                | Past instances where user is Q/Co-Q (for backblast)                    |
-| `GET`    | `/v1/event-instance/without-q`              | Past instances with no Q assigned                                      |
-
-**Instance-specific fields:** `preblast`, `preblastRich`, `preblastTs`, `backblast`,
-`backblastRich`, `backblastTs`, `paxCount`, `fngCount`, `seriesException`
-
-**`seriesException` values:** `"closed"` | `"different-time"` | `"miscellaneous"`
-
----
-
-### event-type
-
-| Method   | Path                         | Purpose                                                               |
-| -------- | ---------------------------- | --------------------------------------------------------------------- |
-| `GET`    | `/v1/event-type`             | List event types (filter by `orgIds`, `ignoreNationEventTypes`, etc.) |
-| `POST`   | `/v1/event-type`             | Create or update an event type                                        |
-| `GET`    | `/v1/event-type/org/{orgId}` | Event types for a specific org                                        |
-| `GET`    | `/v1/event-type/id/{id}`     | Single event type by ID                                               |
-| `DELETE` | `/v1/event-type/id/{id}`     | Soft delete (removes event associations)                              |
-
-**`eventCategory` values:** `"first_f"` | `"second_f"` | `"third_f"`
-
----
-
-### attendance
-
-| Method   | Path                                                            | Purpose                                          |
-| -------- | --------------------------------------------------------------- | ------------------------------------------------ |
-| `GET`    | `/v1/attendance/event-instance/{eventInstanceId}`               | All attendance for an instance                   |
-| `POST`   | `/v1/attendance`                                                | Create planned attendance (HC)                   |
-| `POST`   | `/v1/attendance/actual`                                         | Create actual attendance (backblast)             |
-| `DELETE` | `/v1/attendance/event-instance/{eventInstanceId}/actual`        | Delete all actual attendance (for re-submission) |
-| `DELETE` | `/v1/attendance/event-instance/{eventInstanceId}/user/{userId}` | Remove planned attendance                        |
-| `PATCH`  | `/v1/attendance/{attendanceId}/types`                           | Update attendance types                          |
-| `POST`   | `/v1/attendance/take-q`                                         | Sign up as Q                                     |
-| `DELETE` | `/v1/attendance/remove-q`                                       | Remove Q status (keeps HC)                       |
-| `PUT`    | `/v1/attendance/assign-q`                                       | Assign Q + Co-Qs (demotes existing Q to HC)      |
-
----
-
-### user
-
-User responses omit every top-level `strava_*` metadata key, even with PII
-access. Profile writes supplying those keys fail with `BAD_REQUEST`. The
-Strava integration uses its server-only credential store, not these endpoints.
-
-| Method   | Path                     | Purpose                                              |
-| -------- | ------------------------ | ---------------------------------------------------- |
-| `GET`    | `/v1/user`               | List users (filter by `orgIds`, `roles`, `statuses`) |
-| `POST`   | `/v1/user`               | Create or update a user                              |
-| `GET`    | `/v1/user/id/{id}`       | Single user by ID                                    |
-| `GET`    | `/v1/user/email/{email}` | User by email address                                |
-| `GET`    | `/v1/user/orgs`          | Users by org (includes descendants)                  |
-| `DELETE` | `/v1/user/delete/{id}`   | Permanent delete (nation admin only)                 |
-
-**Role values:** `"user"` | `"editor"` | `"admin"`
-
-**PII fields** (`email`, `phone`, `emergencyContact`, etc.) require `includePii=true`
-query param and admin role.
-
-For `POST /v1/user`, a key with its own administrator access to an existing
-member's current home region can correct that region without editing rights
-in the destination. The destination must be an active region with active
-ancestors. Role assignments and private fields keep their existing permission
-checks; a correction does not transfer roles or notify the member. If the
-member's record changes or is deleted while the correction is being processed,
-it returns `409 CONFLICT`; reload the member and retry. The API does not compare
-against a version the client read earlier. See the
-[home-region correction spec](../../../docs/specs/admin-user-home-region.md).
-
----
-
-### position
-
-| Method   | Path                                                                       | Purpose                                       |
-| -------- | -------------------------------------------------------------------------- | --------------------------------------------- |
-| `GET`    | `/v1/position`                                                             | List positions (filter by `orgId`, `orgType`) |
-| `POST`   | `/v1/position`                                                             | Create or update a position                   |
-| `GET`    | `/v1/position/org/{orgId}`                                                 | Org-specific positions                        |
-| `GET`    | `/v1/position/id/{id}`                                                     | Single position by ID                         |
-| `DELETE` | `/v1/position/id/{id}`                                                     | Soft delete                                   |
-| `GET`    | `/v1/position/assignments/{orgId}`                                         | Positions + assigned users for an org         |
-| `POST`   | `/v1/position/assignments`                                                 | Add a single user→position assignment         |
-| `DELETE` | `/v1/position/assignments/org/{orgId}/position/{positionId}/user/{userId}` | Remove assignment                             |
-| `GET`    | `/v1/position/assignments/user/{userId}`                                   | All assignments for a user                    |
-
----
-
-### ping
-
-```
-GET /v1/ping
+```bash
+curl http://localhost:3001/v1/ping
 ```
 
-No auth required. Returns `{ "alive": true, "timestamp": "..." }`.
+**Slotted checkouts.** In a second checkout or worktree set up with
+`pnpm local:setup --slot N`, every port moves up by 100 × N, and setup
+rewrites `F3_API_BASE_URL` in the bot's `.env` to that slot's API port. The
+bot then calls its own checkout's API and database rather than the main
+checkout's. See
+[running several checkouts at once](../../../docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees).
 
----
-
-## Error Handling
-
-| HTTP Status     | Meaning                                  | Python exception            |
-| --------------- | ---------------------------------------- | --------------------------- |
-| 401 / 403       | Invalid/expired key or insufficient role | `F3ApiAuthError`            |
-| 404             | Resource not found                       | `F3ApiNotFoundError`        |
-| 429             | Rate limit exceeded                      | `F3ApiError`                |
-| 5xx             | Server error                             | `F3ApiError`                |
-| network failure | DNS / connection error                   | `F3ApiError(status_code=0)` |
-
-See `infrastructure/api_client/exceptions.py`.
+`local:setup` replaces `apps/slackbot/.env` each time it runs and keeps the
+previous file as `.env.bak.<timestamp>`, so copy your Slack credentials back
+from the backup afterwards. The Slack app setup itself is in the
+[bot's README](../README.md).

@@ -1,10 +1,8 @@
 # ---------- Stage 1: Prune monorepo ----------
-ARG TURBO_VERSION=2
 # Node 25+ images no longer bundle Corepack; install it so pnpm comes from
 # the root packageManager pin (version and hash).
 ARG COREPACK_VERSION=0.36.0
-FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS builder
-ARG TURBO_VERSION
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS builder
 
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/pnpm"
@@ -15,13 +13,15 @@ WORKDIR /app
 
 ARG COREPACK_VERSION
 RUN npm install -g corepack@${COREPACK_VERSION} && corepack enable
-RUN npm install -g turbo@${TURBO_VERSION}
 
 COPY . .
-RUN turbo prune f3-api --docker
+# turbo comes from the root lockfile (exact version and integrity hash), not a
+# global npm install that would resolve whatever the registry serves today.
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter=f3-nation && \
+    node_modules/.bin/turbo prune f3-api --docker
 
 # ---------- Stage 2: Install + bundle ----------
-FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS installer
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS installer
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -65,7 +65,7 @@ RUN cp -r apps/api/dist /bundle && \
 # Boots the bundle in the runner's layout and checks /health,
 # /docs/openapi.json, /favicon.ico and SIGTERM shutdown. BuildKit only builds
 # stages the target depends on, so the runner copies this stage's marker file.
-FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS smoke
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS smoke
 WORKDIR /app
 COPY --from=installer /bundle ./dist
 COPY --from=installer /app/apps/api/public ./public
@@ -73,7 +73,7 @@ COPY --from=installer /app/apps/api/scripts/smoke.mjs ./smoke.mjs
 RUN SKIP_ENV_VALIDATION=1 NODE_ENV=production node smoke.mjs && touch /tmp/smoke-ok
 
 # ---------- Stage 4: Production runner ----------
-FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS runner
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app

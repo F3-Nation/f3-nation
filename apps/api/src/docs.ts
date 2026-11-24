@@ -3,7 +3,11 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 
 import { router } from "@acme/api";
 import { UserRole } from "@acme/shared/app/enums";
-import { Permission, roleHasPermission } from "@acme/shared/app/permissions";
+import {
+  Permission,
+  ROLE_ORG_TYPES,
+  roleHasPermission,
+} from "@acme/shared/app/permissions";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { getBaseUrl } from "~/lib/get-base-url";
@@ -44,8 +48,8 @@ interface OpenAPISpec {
 }
 
 /**
- * The docs' role and permission table, built from `Permission` and
- * `ROLE_PERMISSIONS`, so it always matches the role map.
+ * The docs' role and permission table, built from `Permission`,
+ * `ROLE_PERMISSIONS` and `ROLE_ORG_TYPES`, so it always matches the role map.
  */
 const rolesAndPermissionsMarkdown = (): string => {
   const header = `| Permission | What it allows | ${UserRole.join(" | ")} |`;
@@ -64,6 +68,12 @@ const rolesAndPermissionsMarkdown = (): string => {
     ...rows,
     "",
     "A permission is checked only by endpoints that list it in a **Required permission(s)** line in their description.",
+    "",
+    `Some roles can be given only on certain org types: ${Object.entries(
+      ROLE_ORG_TYPES,
+    )
+      .map(([role, orgTypes]) => `\`${role}\` (${orgTypes.join(", ")})`)
+      .join(", ")}.`,
   ].join("\n");
 };
 
@@ -81,13 +91,13 @@ export async function openApiJson(request: Request): Promise<Response> {
       version: packageJson.version,
       description: `# Authentication
 
-All API endpoints require authentication via a Bearer token passed in the Authorization header.
+Most endpoints require a Bearer token passed in the Authorization header. Public endpoints, including the reads described under **Public Reads Need No Key**, need no token.
 
 ## Required Headers
 
-Every request must include the following headers:
+Requests include the following headers:
 
-### 1. Authorization Header (Required)
+### 1. Authorization Header (Required except for public reads)
 \`\`\`
 Authorization: Bearer YOUR_API_KEY
 \`\`\`
@@ -119,18 +129,21 @@ curl -X GET "https://api.f3nation.com/v1/ping" \\
 \`\`\`
 
 ### Step 3: Make API Calls
-Include both headers in every request to the F3 Nation API.
+Include both headers in every request that needs a key, and the \`Client\` header in every request.
+
+## Public Reads Need No Key
+
+Read endpoints that serve public data, such as the map and the org chart, work without an API key; an endpoint that needs a key answers 401 without one. Call public reads with just the \`Client\` header. Without a key they leave out inactive and private records and withhold contact details that are not meant for the public; the org chart shows organization contact details, because they are its public contact.
 
 ## Role-Based Access
 
 ${rolesAndPermissionsMarkdown()}
 
-As of February 1, 2026, regional admins can only create read-only API keys. If you want an API Key edit access to your region, you will need to contact an F3 Nation admin. Right now, regional edit access is highly restrcited. This is because the API is still new and there are almost certainly gaps in security - meaning that a region has the potential to mess up data for other regions.
+A regional admin can create keys with roles on the organizations they administer. Creating a key requires at least one role; a key with no editor or admin role grants nothing beyond a request without a key.
 
 ## Best Practices
 
-1. **Keep Keys Secure**: Never commit API keys to version control. Use environment variables instead.
-    a. Read-Only keys are an exception. We realize many regions use systems that require storing the key in a config file or in plain text on the front-end. Read-Only keys are much less risky to expose.
+1. **Keep Keys Secure**: Never commit API keys to version control or ship them in front-end code. Use environment variables instead. A site that only needs public data should send no key.
 2. **Use Expiration Dates**: Set expiration dates on keys to limit exposure window in case of compromise.
 
 ## Error Handling

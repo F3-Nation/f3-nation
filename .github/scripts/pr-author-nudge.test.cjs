@@ -6,6 +6,8 @@ const assert = require("node:assert/strict");
 const {
   parseMarker,
   summarize,
+  collectFacts,
+  readCodeowners,
   decide,
   nudgeBody,
   warnMessage,
@@ -166,19 +168,38 @@ test("a nudge from an earlier stretch doesn't count toward closing", () => {
   assert.equal(run(pr, 15.1, oldNudge).action, "nudge");
 });
 
-test("drafts are the author's turn but are never nudged, warned or closed", () => {
+test("a draft is the author's turn: nudged, warned and closed on the usual days", () => {
   const pr = basePr({ isDraft: true });
-  // Still the author's turn, so the codeowners' report leaves it out.
   assert.deepEqual(
     summarize(pr, ["ci"], null).reasons.map((r) => r.kind),
     ["draft"],
   );
-  assert.equal(run(pr, 60).why, "draft");
-  assert.equal(run(pr, 60, { nudgedAt: at(5.1) }).action, "none");
+  assert.equal(run(pr, 4.9).action, "none");
+  assert.equal(run(pr, 5.1).action, "nudge");
+  assert.equal(run(pr, 9.2, { nudgedAt: at(5.1) }).action, "warn");
   assert.equal(
-    run(pr, 60, { nudgedAt: at(5.1), warnedAt: at(9.2) }).action,
-    "none",
+    run(pr, 10.2, { nudgedAt: at(5.1), warnedAt: at(9.2) }).action,
+    "close",
   );
+});
+
+test("an outside contributor's draft is nudged at 3 days", () => {
+  const pr = basePr({ isDraft: true, authorAssociation: "CONTRIBUTOR" });
+  assert.equal(run(pr, 2.9).action, "none");
+  assert.equal(run(pr, 3.1).action, "nudge");
+});
+
+test("a push to a draft restarts its clock", () => {
+  const pr = basePr({ isDraft: true, commits: pushedAt(4) });
+  assert.equal(run(pr, 8.9).action, "none");
+  assert.equal(run(pr, 9.1).action, "nudge");
+});
+
+test("a draft's reminder tells the author it is still a draft", () => {
+  const facts = summarize(basePr({ isDraft: true }), ["ci"], null);
+  const now = T0 + 5.1 * DAY;
+  const body = nudgeBody(facts, decide(facts, now), now);
+  assert.match(body, /^- It's still a Draft\./m);
 });
 
 test("a drive-by commenter's thread doesn't start the clock", () => {
@@ -882,6 +903,43 @@ test("anyone with push access gets the team timings, whatever GitHub's associati
   assert.deepEqual(notes, []);
 });
 
+test("a codeowner gets the team timings even when collaborators leave them out", async () => {
+  // GitHub reports a private org owner as a CONTRIBUTOR to the workflow's
+  // token and leaves them out of its collaborator list.
+  const github = fakeGithub(null, {
+    authorAssociation: "CONTRIBUTOR",
+    author: { login: "Pax", __typename: "User" },
+  });
+  const facts = async (codeowners) => {
+    const collected = await collectFacts({
+      github,
+      owner: "F3-Nation",
+      repo: "f3-nation",
+      codeowners,
+    });
+    return collected.factsFor(collected.prs[0]);
+  };
+  assert.equal((await facts([])).tier, "outside");
+  assert.equal((await facts(["pax"])).tier, "team");
+});
+
+test("readCodeowners lists each @handle once, lowercased, without teams or comments", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codeowners-"));
+  const file = path.join(dir, "CODEOWNERS");
+  fs.writeFileSync(
+    file,
+    "# @nobody\n* @Amy @dan # @later\n/apps/ @amy @F3-Nation/core\n",
+  );
+  assert.deepEqual(readCodeowners(file), ["amy", "dan"]);
+  assert.equal(readCodeowners(path.join(dir, "missing")), null);
+  fs.rmSync(dir, { recursive: true });
+  // The repo's own file names at least one codeowner.
+  assert.ok(readCodeowners().length > 0);
+});
+
 test("if collaborators can't be listed, the run notes it and uses the association", async () => {
   const github = fakeGithub(
     null,
@@ -947,10 +1005,7 @@ test("without the collaborator list, outside-timing heads-ups and closes are hel
     const github = fakeGithub(state, outside, unknown);
     const { rows } = await liveRun(github, nowDays);
     assert.ok(rows[0].failed);
-    assert.equal(
-      rows[0].outcome,
-      `FAILED: ${action} held, collaborators unknown`,
-    );
+    assert.equal(rows[0].outcome, `FAILED: ${action} held, team unknown`);
     assert.equal(github.writes.length, 0);
   }
   // A known member's PR isn't held: its association already says team.
@@ -960,6 +1015,31 @@ test("without the collaborator list, outside-timing heads-ups and closes are hel
     unknown,
   );
   const { rows } = await liveRun(member, 10.1);
+  assert.equal(rows[0].outcome, "closed");
+});
+
+test("without the codeowner list, outside-timing heads-ups and closes are held", async () => {
+  const outside = { authorAssociation: "CONTRIBUTOR" };
+  for (const [state, nowDays, action] of [
+    [{ nudgedAt: at(3) }, 6.1, "warn"],
+    [{ nudgedAt: at(3), warnedAt: at(6.1) }, 7.1, "close"],
+  ]) {
+    const github = fakeGithub(state, outside, []);
+    const { rows, notes } = await liveRun(github, nowDays, {
+      codeowners: null,
+    });
+    assert.ok(rows[0].failed);
+    assert.equal(rows[0].outcome, `FAILED: ${action} held, team unknown`);
+    assert.equal(github.writes.length, 0);
+    assert.match(notes[0], /Couldn't read \.github\/CODEOWNERS/);
+  }
+  // With the list read, the same PR closes on the outside timings.
+  const github = fakeGithub(
+    { nudgedAt: at(3), warnedAt: at(6.1) },
+    outside,
+    [],
+  );
+  const { rows } = await liveRun(github, 7.1, { codeowners: [] });
   assert.equal(rows[0].outcome, "closed");
 });
 
@@ -987,12 +1067,27 @@ test("the run reports whether the heads-up reached Slack", async () => {
   assert.ok(failed.slackNote);
 });
 
-test("a reminded PR moved back to draft records a pause", async () => {
-  const github = fakeGithub({ nudgedAt: at(5) }, { isDraft: true });
-  const { rows } = await liveRun(github, 9.5);
-  assert.equal(rows[0].outcome, "draft, paused");
-  assert.equal(github.writes.length, 1);
-  assert.match(github.writes[0].params.body, /"pausedAt"/);
+test("a reminded PR moved back to draft needs a new reminder, whoever moves it", async () => {
+  const moved = {
+    isDraft: true,
+    timelineItems: {
+      nodes: [
+        {
+          __typename: "ConvertToDraftEvent",
+          createdAt: at(6),
+          actor: { login: "taterhead247" },
+        },
+      ],
+    },
+  };
+  const early = fakeGithub({ nudgedAt: at(5) }, moved);
+  const { rows } = await liveRun(early, 9.5);
+  assert.equal(rows[0].outcome, "author's turn, under the limit");
+  assert.equal(early.writes.length, 0);
+
+  const later = fakeGithub({ nudgedAt: at(5) }, moved);
+  const { rows: laterRows } = await liveRun(later, 11.1);
+  assert.equal(laterRows[0].outcome, "nudged");
 });
 
 test("a commit dated in the future can't hold the PR open", () => {
@@ -1236,8 +1331,8 @@ test("PRs held for unknown collaborators don't take the run's slots", async () =
   assert.deepEqual(
     rows.map((r) => r.outcome),
     [
-      "FAILED: close held, collaborators unknown",
-      "FAILED: close held, collaborators unknown",
+      "FAILED: close held, team unknown",
+      "FAILED: close held, team unknown",
       "closed",
     ],
   );

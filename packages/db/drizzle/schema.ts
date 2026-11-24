@@ -25,6 +25,7 @@ import {
 
 import {
   AchievementCadence,
+  AttendanceType,
   DayOfWeek,
   EventCadence,
   EventCategory,
@@ -63,6 +64,7 @@ export const achievementCadence = pgEnum(
   "achievement_cadence",
   AchievementCadence,
 );
+export const attendanceType = pgEnum("attendance_type", AttendanceType);
 
 export const citext = customType<{ data: string }>({
   fromDriver(value) {
@@ -171,6 +173,14 @@ export const slackSpaces = pgTable(
     teamId: varchar("team_id").notNull(),
     workspaceName: varchar("workspace_name"),
     botToken: varchar("bot_token"),
+    botId: varchar("bot_id"),
+    botUserId: varchar("bot_user_id"),
+    botScopes: varchar("bot_scopes"),
+    botTokenExpiresAt: timestamp("bot_token_expires_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
+    botRefreshTokenEncrypted: text("bot_refresh_token_encrypted"),
     settings: jsonb().$type<SlackSpacesMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -365,6 +375,9 @@ export const attendance = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     eventInstanceId: integer("event_instance_id").notNull(),
+    // Kept in step with attendance_x_attendance_types by the
+    // sync_attendance_type trigger until every writer sets it directly.
+    attendanceType: attendanceType("attendance_type").default("pax").notNull(),
   },
   (table) => [
     index("idx_attendance_event_instance_id").using(

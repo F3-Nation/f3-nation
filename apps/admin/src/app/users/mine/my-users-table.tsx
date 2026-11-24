@@ -2,7 +2,7 @@
 
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { useQuery } from "@tanstack/react-query";
-import type { TableOptions } from "@tanstack/react-table";
+import type { CellContext, TableOptions } from "@tanstack/react-table";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -34,10 +34,11 @@ import { orpc } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { useAdminSession } from "~/lib/auth/client";
 import {
-  ADMIN_VISIBLE_ROLES,
-  adminRoleOrgNames,
-  isAdminRoleName,
-} from "~/lib/auth/session";
+  ROLE_DISPLAY,
+  ROLES_IN_DISPLAY_ORDER,
+  uniqueOrgNames,
+} from "~/lib/roles";
+import { RoleBadges } from "~/app/_components/role-badges";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "../org-filter";
@@ -75,7 +76,7 @@ const UserRoleFilter = ({
             <CommandInput placeholder="Search roles..." />
             <CommandEmpty>No roles found.</CommandEmpty>
             <CommandGroup>
-              {ADMIN_VISIBLE_ROLES.map((role) => (
+              {ROLES_IN_DISPLAY_ORDER.map((role) => (
                 <CommandItem
                   key={role}
                   value={role}
@@ -91,7 +92,7 @@ const UserRoleFilter = ({
                         : "opacity-0",
                     )}
                   />
-                  {role.charAt(0).toUpperCase() + role.slice(1)}
+                  {ROLE_DISPLAY[role].label}
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -330,10 +331,17 @@ export const MyUsersTable = () => {
   );
 };
 
-const columns: TableOptions<
-  MdTableFeatures,
-  RouterOutputs["user"]["byOrgs"]["users"][number]
->["columns"] = [
+type UserRow = RouterOutputs["user"]["byOrgs"]["users"][number];
+
+/** Email and phone, which the API withholds for some rows (`piiVisible`). */
+const PiiCell = (cell: CellContext<MdTableFeatures, UserRow, unknown>) =>
+  cell.row.original.piiVisible ? (
+    <Cell {...cell} />
+  ) : (
+    <Cell className="text-muted-foreground">Hidden</Cell>
+  );
+
+const columns: TableOptions<MdTableFeatures, UserRow>["columns"] = [
   {
     accessorKey: "name",
     meta: { name: "Name" },
@@ -350,40 +358,7 @@ const columns: TableOptions<
     accessorKey: "roles",
     meta: { name: "Roles" },
     header: Header,
-    cell: ({ row }) => {
-      const roleStyles = {
-        admin: "bg-purple-100 text-purple-700 border-purple-200",
-        editor: "bg-blue-100 text-blue-700 border-blue-200",
-        user: "bg-green-100 text-green-700 border-green-200",
-      } as const;
-
-      const roleLabels = {
-        admin: "Admin",
-        editor: "Editor",
-        user: "User",
-      } as const;
-
-      return (
-        <div className="flex flex-wrap items-center justify-start">
-          {row.original.roles.map(
-            (role: { orgId: number; orgName: string; roleName: UserRole }) => {
-              // Roles not surfaced in admin (e.g. password_manager) are skipped.
-              if (!isAdminRoleName(role.roleName)) return null;
-              return (
-                <span
-                  key={role.orgId}
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-                    roleStyles[role.roleName]
-                  }`}
-                >
-                  {role.orgName} ({roleLabels[role.roleName]})
-                </span>
-              );
-            },
-          )}
-        </div>
-      );
-    },
+    cell: ({ row }) => <RoleBadges roles={row.original.roles} />,
   },
   {
     accessorKey: "status",
@@ -416,13 +391,13 @@ const columns: TableOptions<
     accessorKey: "email",
     meta: { name: "Email" },
     header: Header,
-    cell: (cell) => <Cell {...cell} />,
+    cell: PiiCell,
   },
   {
     accessorKey: "phone",
     meta: { name: "Phone" },
     header: Header,
-    cell: (cell) => <Cell {...cell} />,
+    cell: PiiCell,
   },
   {
     accessorKey: "homeRegion",
@@ -442,7 +417,7 @@ const columns: TableOptions<
     header: Header,
     cell: (cell) => (
       <Cell {...cell}>
-        {adminRoleOrgNames(cell.row.original.roles).join(", ")}
+        {uniqueOrgNames(cell.row.original.roles).join(", ")}
       </Cell>
     ),
   },

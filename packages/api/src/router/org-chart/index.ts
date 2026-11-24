@@ -8,6 +8,7 @@ import {
   countDistinct,
   desc,
   eq,
+  exists,
   ilike,
   inArray,
   isNotNull,
@@ -21,9 +22,10 @@ import {
   ancestorOrgsAreActive,
   orgAndAncestorsAreActive,
 } from "../../org-activity";
-import { protectedProcedure } from "../../shared";
+import { logIfOrgTreeExceedsMaxDepth } from "../../org-tree";
+import { publicReadProcedure } from "../../shared";
 
-/** Roles the Table lists: who to contact, not access grants. */
+/** Roles the directory lists: who to contact, not access grants. */
 const LEADERSHIP_ROLE_NAMES = ["admin", "editor"] as const;
 
 interface OrgRow {
@@ -51,7 +53,7 @@ interface RoleRow {
 }
 
 export const orgChartRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .route({
       method: "GET",
       path: "/",
@@ -100,6 +102,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const orgsPromise = ctx.db
         .select({
           id: schema.orgs.id,
@@ -129,6 +132,7 @@ export const orgChartRouter = {
           and(
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            orgAndAncestorsAreActive(schema.events.orgId),
           ),
         )
         .groupBy(schema.events.locationId);
@@ -148,6 +152,7 @@ export const orgChartRouter = {
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            orgAndAncestorsAreActive(schema.events.orgId),
           ),
         )
         .innerJoin(
@@ -277,7 +282,7 @@ export const orgChartRouter = {
       return { orgs: orgSummaries };
     }),
 
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         orgId: z.coerce
@@ -332,6 +337,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [org] = await ctx.db
         .select({
           id: schema.orgs.id,
@@ -345,7 +351,13 @@ export const orgChartRouter = {
           instagram: schema.orgs.instagram,
         })
         .from(schema.orgs)
-        .where(eq(schema.orgs.id, input.orgId));
+        // The chart lists only active orgs, so a retired one is not found.
+        .where(
+          and(
+            eq(schema.orgs.id, input.orgId),
+            orgAndAncestorsAreActive(schema.orgs.id),
+          ),
+        );
 
       if (!org) {
         throw new ORPCError("NOT_FOUND", {
@@ -389,9 +401,14 @@ export const orgChartRouter = {
           avatarUrl: schema.users.avatarUrl,
         })
         .from(schema.rolesXUsersXOrg)
+        // Only the contact roles: other grants (password access, plain user)
+        // are access rights, not directory contacts.
         .innerJoin(
           schema.roles,
-          eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+          and(
+            eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+            inArray(schema.roles.name, LEADERSHIP_ROLE_NAMES),
+          ),
         )
         .innerJoin(
           schema.users,
@@ -430,7 +447,7 @@ export const orgChartRouter = {
       };
     }),
 
-  leadership: protectedProcedure
+  leadership: publicReadProcedure
     .route({
       method: "GET",
       path: "/leadership",
@@ -469,6 +486,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const orgFilter = and(
         eq(schema.orgs.isActive, true),
         ne(schema.orgs.orgType, "ao"),
@@ -596,7 +614,7 @@ export const orgChartRouter = {
       };
     }),
 
-  byLocation: protectedProcedure
+  byLocation: publicReadProcedure
     .input(
       z.object({
         locationId: z.coerce
@@ -643,6 +661,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [location] = await ctx.db
         .select({
           id: schema.locations.id,
@@ -655,6 +674,22 @@ export const orgChartRouter = {
           and(
             eq(schema.locations.id, input.locationId),
             eq(schema.locations.isActive, true),
+            orgAndAncestorsAreActive(schema.locations.orgId),
+            // A location is public only while it hosts a public workout, so a
+            // venue whose workouts are all private or retired stays hidden.
+            exists(
+              ctx.db
+                .select({ one: sql`1` })
+                .from(schema.events)
+                .where(
+                  and(
+                    eq(schema.events.locationId, schema.locations.id),
+                    eq(schema.events.isActive, true),
+                    eq(schema.events.isPrivate, false),
+                    orgAndAncestorsAreActive(schema.events.orgId),
+                  ),
+                ),
+            ),
           ),
         );
 
@@ -689,6 +724,7 @@ export const orgChartRouter = {
             eq(schema.events.locationId, input.locationId),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            orgAndAncestorsAreActive(schema.events.orgId),
           ),
         )
         .groupBy(
@@ -774,7 +810,7 @@ export const orgChartRouter = {
       };
     }),
 
-  aos: protectedProcedure
+  aos: publicReadProcedure
     .input(
       z.object({
         searchTerm: z
@@ -810,6 +846,7 @@ export const orgChartRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 
@@ -867,6 +904,8 @@ export const orgChartRouter = {
           and(
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+            orgAndAncestorsAreActive(schema.events.orgId),
+            orgAndAncestorsAreActive(schema.locations.orgId),
             ilike(aoOrg.name, `%${input.searchTerm}%`),
           ),
         )

@@ -685,6 +685,35 @@ test("unreadable Slack IDs leave a warning and no mentions", async () => {
   assert.match(message, / · @dan · /);
 });
 
+test("a fork whose approvals triage couldn't read is named in a warning, and its PRs stay listed", async () => {
+  const github = fakeGithub({
+    routes: slackIdsRoute,
+    advisories: { draft: [advisory(GHSA_A, FORK_A), advisory(GHSA_B, FORK_B)] },
+    prsByRepo: {
+      "f3-nation-ghsa-aaaa-bbbb-cccc": [prNode(FORK_A)],
+      "f3-nation-ghsa-dddd-eeee-ffff": [prNode(FORK_B)],
+    },
+  });
+  const report = async (marked) =>
+    text(
+      await build(github, (fork) => ({
+        ...boardFor(fork),
+        ...(fork === marked ? { reviewDecisionsMissing: true } : {}),
+      })),
+    );
+
+  const message = await report(FORK_B);
+  assert.equal(message.match(/couldn't read approvals/g)?.length, 1);
+  assert.match(
+    message,
+    /⚠️ GitHub couldn't read approvals for GHSA-dddd-eeee-ffff's fix PRs, so approved ones show as needing approval\./,
+  );
+  assert.match(message, /GHSA-aaaa-bbbb-cccc #1 fix/);
+  assert.match(message, /GHSA-dddd-eeee-ffff #1 fix/);
+
+  assert.doesNotMatch(await report(null), /couldn't read approvals/);
+});
+
 test("a title or summary can't notify the channel or start its own link", async () => {
   const github = fakeGithub({
     routes: slackIdsRoute,

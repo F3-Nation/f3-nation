@@ -29,8 +29,9 @@ import { isDevelopment } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { checkHasPermissionsOnOrg } from "./check-has-role-on-org";
+import { toAuditSource } from "./audit-source";
 import { jwksFetchFailure } from "./jwks-failure";
-import { logError, logWarn } from "./logger";
+import { logError, logInfo, logWarn } from "./logger";
 import { getProxiedClientIp } from "./proxied-client-ip";
 import { trustedClientIds } from "./trusted-client-ids";
 import { trustedIssuers } from "./trusted-issuers";
@@ -52,6 +53,13 @@ export interface Context extends BaseContext {
  * its anonymous branches run locally exactly as in production.
  */
 const DEV_MOCK_SESSION_ID = 0;
+
+/**
+ * `session.id` of every API-key session. A key is not a person, so its session
+ * names no user: this matches no `users` row, and each check that compares the
+ * caller with a user id treats a key as nobody in particular.
+ */
+export const API_KEY_SESSION_USER_ID = -1;
 
 const getDevMockSession = (): Session => ({
   id: DEV_MOCK_SESSION_ID,
@@ -186,7 +194,7 @@ const withSessionAndDb = base.use(async ({ context, next }) => {
         session?.apiKey || session?.devMode || ambiguousLegacyIdentity
           ? null
           : userId,
-      source: null,
+      source: toAuditSource(context.reqHeaders?.get(Header.Client)),
     },
     () => next({ context: newContext }),
   );
@@ -450,9 +458,7 @@ const getSession = async ({ context }: { context: BaseContext }) => {
       apiKeyId: schema.apiKeys.id,
       ownerId: schema.apiKeys.ownerId,
       apiKey: schema.apiKeys.key,
-      userId: schema.users.id,
-      email: schema.users.email,
-      f3Name: schema.users.f3Name,
+      name: schema.apiKeys.name,
       revokedAt: schema.apiKeys.revokedAt,
       expiresAt: schema.apiKeys.expiresAt,
     })
@@ -478,7 +484,7 @@ const getSession = async ({ context }: { context: BaseContext }) => {
   }
 
   // Get orgs and roles associated with this API key via join table
-  const orgRoles = await db
+  const grants = await db
     .select({
       orgId: schema.orgs.id,
       orgName: schema.orgs.name,
@@ -492,23 +498,38 @@ const getSession = async ({ context }: { context: BaseContext }) => {
     )
     .where(eq(schema.rolesXApiKeysXOrg.apiKeyId, apiKeyRecord.apiKeyId));
 
-  const roles =
-    orgRoles.length > 0
-      ? orgRoles.map((or) => ({
-          orgId: or.orgId,
-          orgName: or.orgName,
-          roleName: or.roleName,
-        }))
-      : [];
+  // Only editor and admin grants authorize anything, matching what `create`
+  // accepts; other role names on a key are ignored.
+  const orgRoles = grants.filter(
+    (grant) => grant.roleName === "editor" || grant.roleName === "admin",
+  );
 
+  // A key with no role grants authorizes nothing, so it resolves to no
+  // session and its caller is treated as anonymous. A session here would pass
+  // `protectedProcedure` and see the fields reads hide from anonymous callers.
+  if (orgRoles.length === 0) {
+    logInfo("api.auth.api_key_without_roles", {
+      apiKeyId: apiKeyRecord.apiKeyId,
+      appClient,
+    });
+    return null;
+  }
+
+  const roles = orgRoles.map((or) => ({
+    orgId: or.orgId,
+    orgName: or.orgName,
+    roleName: or.roleName,
+  }));
+
+  // The key acts only through its own role grants, never as its owner:
+  // `ownerId` records whose key it is, but the session carries no user id or
+  // email, so nothing that reads the caller's identity gets the owner.
   session = {
-    id: apiKeyRecord.userId,
-    email: apiKeyRecord.email,
+    id: API_KEY_SESSION_USER_ID,
+    email: undefined,
     roles,
     user: {
-      id: apiKeyRecord.ownerId?.toString() ?? undefined,
-      email: apiKeyRecord.email,
-      name: apiKeyRecord.f3Name ?? undefined,
+      name: apiKeyRecord.name,
       roles,
     },
     apiKey: {
