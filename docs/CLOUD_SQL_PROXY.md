@@ -52,9 +52,9 @@ winget install Google.CloudSDK
 
 Then download `cloud-sql-proxy.x64.exe` from
 <https://cloud.google.com/sql/docs/postgres/sql-proxy#install>, rename it to
-`cloud-sql-proxy.exe`, and put it in a folder on your `PATH` (or run it as
-`.\cloud-sql-proxy.exe` from the folder it's in). Open a new PowerShell window
-after installing so both commands are found.
+`cloud-sql-proxy.exe`, and put it in a folder on your `PATH`, so the commands
+below work as written. Open a new PowerShell window after installing so both
+commands are found.
 
 ## Sign in (once per machine)
 
