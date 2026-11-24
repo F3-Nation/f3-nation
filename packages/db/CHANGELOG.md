@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.12.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.11.0...pkg-db@0.12.0) (2026-11-24)
+
+
+### Features
+
+* **api,admin,shared,validators,db:** several roles per org, password roles in admin ([#1749](https://github.com/F3-Nation/f3-nation/issues/1749)) ([f2b061c](https://github.com/F3-Nation/f3-nation/commit/f2b061cc90a27db8a66448a8fda5c4d1cf29a965))
+* **api,shared:** accept originating app claims before client rollout ([#1778](https://github.com/F3-Nation/f3-nation/issues/1778)) ([612b277](https://github.com/F3-Nation/f3-nation/commit/612b277ec1fcda8336803d3b0e5bee139051a5a6))
+* **db:** add attendance.attendance_type with a sync trigger and batched backfill ([#1742](https://github.com/F3-Nation/f3-nation/issues/1742)) ([3818ab7](https://github.com/F3-Nation/f3-nation/commit/3818ab7cec908b09be90655519b880320f59b917))
+* **release:** merge the release and test plan skills into one release skill ([#1736](https://github.com/F3-Nation/f3-nation/issues/1736)) ([5408353](https://github.com/F3-Nation/f3-nation/commit/540835395762ff5d92e2aa6106137f4215f95ffe))
+* **slackbot,api,db:** read Slack bot tokens through one rotation-ready store ([#1619](https://github.com/F3-Nation/f3-nation/issues/1619)) ([646827b](https://github.com/F3-Nation/f3-nation/commit/646827b6f226035292fdb97331e5a9f9f8b37d16))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.8.0
+
 ## [0.11.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.10.2...pkg-db@0.11.0) (2026-11-17)
 
 
