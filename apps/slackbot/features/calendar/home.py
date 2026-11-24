@@ -53,13 +53,16 @@ from utilities.slack import actions, orm
 SLACK_MODAL_BLOCK_LIMIT = 100
 # Events requested per page. A page renders fewer when they and their date headers would pass the modal limit.
 HOME_PAGE_SIZE = 90
+# Metadata key under which a modal opened from the calendar carries the calendar's filter state.
+HOME_STATE_KEY = "home_state"
 FILTER_ACTIONS = {
     actions.CALENDAR_HOME_AO_FILTER,
     actions.CALENDAR_HOME_EVENT_TYPE_FILTER,
     actions.CALENDAR_HOME_DATE_FILTER,
     actions.CALENDAR_HOME_Q_FILTER,
 }
-# Actions that redraw the calendar in place, with no loading view behind them.
+# Calendar controls that only redraw the calendar: paging, the Filters button and the filter inputs. Event-menu
+# actions also redraw in place but go on to update the preblast post, so they don't raise on a rejected redraw.
 IN_PLACE_ACTIONS = FILTER_ACTIONS | {
     actions.CALENDAR_HOME_SHOW_MORE,
     actions.CALENDAR_HOME_SHOW_FIRST,
@@ -211,6 +214,13 @@ def _filters_open(action_id: str | None, were_shown: bool) -> bool:
     return were_shown
 
 
+def _home_state(body: dict) -> dict:
+    """The calendar's filters and filter visibility, for a modal opened on top of it to hand back when it redraws the
+    calendar."""
+    stored = _parse_view_private_metadata(body)
+    return {"filters": safe_get(stored, "filters") or {}, "filters_open": bool(safe_get(stored, "filters_open"))}
+
+
 def _filters_button_label(filters_open: bool, active_count: int) -> str:
     if filters_open:
         return ":gear: Hide filters"
@@ -260,9 +270,16 @@ def build_home_form(
     metadata["offset"] = offset
     # Filter values and visibility live in private_metadata so they survive while the inputs are hidden.
     same_view = bool(view_id) and safe_get(body, "view", "id") == view_id
-    stored = _parse_view_private_metadata(body) if same_view else {}
+    if same_view:
+        stored = _parse_view_private_metadata(body)
+    else:
+        # A modal stacked on the calendar (Assign Q, Close Event) carries the calendar's filter state in its own
+        # metadata, since its view holds none of the calendar's.
+        stored = safe_get(_parse_view_private_metadata(body), HOME_STATE_KEY) or {}
     filter_inputs_were_shown = same_view and _filter_inputs_were_shown(body, action_id, stored)
-    filters_open = _filters_open(action_id, filter_inputs_were_shown)
+    filters_open = _filters_open(
+        action_id, filter_inputs_were_shown if same_view else bool(safe_get(stored, "filters_open"))
+    )
 
     start_time = time.time()
     group_by_option = region_record.calendar_group_by_option or "ao"
@@ -458,8 +475,7 @@ def build_home_form(
             callback_id=actions.CALENDAR_HOME_CALLBACK_ID,
             submit_button_text="None",
             parent_metadata=metadata,
-            # Paging, the Filters button and filter changes have no loading view to fall back on, so a rejected update
-            # must reach the dispatcher.
+            # A rejected redraw from paging, the Filters button or a filter change must reach the dispatcher.
             raise_on_error=view_id == safe_get(body, actions.LOADING_ID) or action_id in IN_PLACE_ACTIONS,
         )
     else:
@@ -595,6 +611,7 @@ def build_assign_q_form(
         "update_view_id": update_view_id,
         "event_instance_name": event_instance.name,
         "event_instance_date": event_instance.start_date.strftime("%A, %B %d"),
+        HOME_STATE_KEY: _home_state(body),
     }
     form.post_modal(
         client=client,
@@ -821,7 +838,7 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             callback_id=actions.EVENT_CLOSE_HOME_CALLBACK_ID,
             title_text="Close Event",
             submit_button_text="Close Event",
-            parent_metadata={"event_instance_id": event_instance_id},
+            parent_metadata={"event_instance_id": event_instance_id, HOME_STATE_KEY: _home_state(body)},
             new_or_add="add",
             close_button_text="Cancel",
         )

@@ -451,6 +451,83 @@ def test_filters_stay_shown_and_count_active_filters_after_a_filter_change():
     assert "event_instances.highlight IS true" in compiled
 
 
+HOME_FILTERS = {
+    actions.CALENDAR_HOME_AO_FILTER: ["11"],
+    actions.CALENDAR_HOME_Q_FILTER: [actions.FILTER_SPECIAL_EVENTS],
+}
+
+
+def _home_body(action_id: str, *, filters_open: bool) -> dict:
+    """An event-menu action taken in a Calendar Home whose saved filters are HOME_FILTERS."""
+    return {
+        "user": {"id": "U_TEST"},
+        "trigger_id": "TRIGGER",
+        "actions": [{"action_id": action_id, "selected_option": {"value": action_id}}],
+        "view": {
+            "id": "V_TEST",
+            "private_metadata": json.dumps({"filters": HOME_FILTERS, "filters_open": filters_open, "offset": 0}),
+            "state": {"values": {}},
+        },
+    }
+
+
+def test_close_event_modal_carries_the_calendar_filters():
+    body = _home_body("Close Event", filters_open=True)
+    body["actions"][0]["action_id"] = "home_7"
+    client = MagicMock()
+
+    with patch("features.calendar.home.get_user", return_value=SimpleNamespace(user_id=1)):
+        home.handle_home_event(body, client, MagicMock(), {}, SimpleNamespace(org_id=1, team_id="T_TEST"))
+
+    metadata = json.loads(client.views_push.call_args.kwargs["view"]["private_metadata"])
+    assert metadata == {"event_instance_id": 7, "home_state": {"filters": HOME_FILTERS, "filters_open": True}}
+
+
+def test_assign_q_modal_carries_the_calendar_filters():
+    event = SimpleNamespace(name="Event 7", start_date=FUTURE, start_time="0530", org=SimpleNamespace(name="The Forge"))
+    client = MagicMock()
+
+    with patch.object(home, "DbManager") as database:
+        database.get.return_value = event
+        database.find_records.return_value = []
+        home.build_assign_q_form(
+            _home_body("Assign Q", filters_open=False),
+            client,
+            MagicMock(),
+            {},
+            SimpleNamespace(org_id=1, team_id="T_TEST"),
+            event_instance_id=7,
+            update_view_id="V_TEST",
+        )
+
+    metadata = json.loads(client.views_push.call_args.kwargs["view"]["private_metadata"])
+    assert metadata["home_state"] == {"filters": HOME_FILTERS, "filters_open": False}
+
+
+@pytest.mark.parametrize("filters_open", [False, True])
+def test_redraw_from_a_stacked_modal_keeps_the_calendar_filters(filters_open):
+    # Assign Q and Close Event submit from their own view, which carries the calendar's state in its metadata.
+    child_body = {
+        "user": {"id": "U_TEST"},
+        "view": {
+            "id": "V_CHILD",
+            "previous_view_id": "V_TEST",
+            "private_metadata": json.dumps(
+                {"event_instance_id": 7, "home_state": {"filters": HOME_FILTERS, "filters_open": filters_open}}
+            ),
+            "state": {"values": {}},
+        },
+    }
+
+    view, schedule_query = _render([], child_body, update_view_id="V_TEST")
+
+    assert _summary(view) == "Showing: 1 AO · Special events only"
+    assert "event_instances.highlight IS true" in [str(f) for f in schedule_query.call_args.args[1]]
+    assert bool(_filter_inputs(view)) is filters_open
+    saved = json.loads(view["private_metadata"])
+    assert (saved["filters"], saved["filters_open"]) == (HOME_FILTERS, filters_open)
+
+
 def test_other_options_offer_special_events_and_not_nearby_regions():
     view, _ = _render([], _filter_body({}, action_id=actions.CALENDAR_HOME_FILTERS))
 
@@ -550,6 +627,8 @@ def test_changing_a_filter_returns_to_the_first_page():
     _, schedule_query = _render(_busy_schedule(5), body)
 
     assert schedule_query.call_args.kwargs["offset"] == 0
+    compiled = [str(f) for f in schedule_query.call_args.args[1]]
+    assert "event_instances.highlight IS true" not in compiled
 
 
 def test_last_page_has_no_show_more_button():

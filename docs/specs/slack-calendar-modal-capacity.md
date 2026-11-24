@@ -140,6 +140,6 @@ permissions continue to determine which event actions are available.
 ## 8. Observability
 
 - Emit `slack.modal.update_failed` for rejected modal updates.
-- Safe context may include the Slack error code and constraint messages.
+- Safe context may include the Slack error code and the block paths (JSON pointers) that Slack's validation messages name; never the message text, which can quote rejected content.
 - Do not record Slack payloads, response URLs, trigger IDs, view IDs, user IDs,
   tokens, or other sensitive request data.

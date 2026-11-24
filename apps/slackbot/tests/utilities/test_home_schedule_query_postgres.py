@@ -155,6 +155,10 @@ def schedule(engine):
             session.add_all(
                 [Attendance_x_AttendanceType(attendance_id=attendance_id, attendance_type_id=t) for t in types]
             )
+        # Event 1 has a planned HC but no Q, so it stays in "open Q only" and must carry its headcount there.
+        session.add(Attendance(id=5, event_instance_id=1, user_id=3, is_planned=True))
+        session.flush()
+        session.add(Attendance_x_AttendanceType(attendance_id=5, attendance_type_id=HC))
         session.commit()
     return engine
 
@@ -243,6 +247,9 @@ def test_attendance_filters_list_each_event_once(schedule, kwargs, expected_ids)
         assert sorted(t.name for t in results[0].event_types) == ["Bootcamp", "Ruck"]
         # This path carries the attendance summary through the page, so it must match the unfiltered path.
         assert (results[0].hc_count, results[0].planned_qs, results[0].user_attending) == (3, "Chip", 1)
+    if kwargs.get("open_q_only"):
+        event_1 = next(r for r in results if r.event.id == 1)
+        assert (event_1.hc_count, event_1.planned_qs, event_1.user_attending) == (1, None, 0)
 
 
 def test_attendance_filters_page_with_offset(schedule):
