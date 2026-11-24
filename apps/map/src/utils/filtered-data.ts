@@ -8,6 +8,22 @@ import type { FiltersType } from "./store/filter";
 import { dayjs } from "./frontendDayjs";
 import { TimeSelection } from "./store/filter";
 
+/**
+ * The days the day filters allow, empty when none is set. "This weekend" adds
+ * Saturday and Sunday to whatever days are picked.
+ */
+export const selectedDaysOfWeek = (filters: FiltersType): Set<DayOfWeek> => {
+  const days = new Set<DayOfWeek>();
+  if (filters.daySu || filters.weekend) days.add("sunday");
+  if (filters.dayM) days.add("monday");
+  if (filters.dayTu) days.add("tuesday");
+  if (filters.dayW) days.add("wednesday");
+  if (filters.dayTh) days.add("thursday");
+  if (filters.dayF) days.add("friday");
+  if (filters.daySa || filters.weekend) days.add("saturday");
+  return days;
+};
+
 export const filterData = <
   T extends {
     events: {
@@ -20,36 +36,14 @@ export const filterData = <
   allLocationMarkers: T[],
   filters: FiltersType,
 ): T[] => {
+  const days = selectedDaysOfWeek(filters);
   const filteredLocationMarkers = allLocationMarkers.map((locationMarker) => {
     const filteredEvents = locationMarker.events.filter((event) => {
-      // Check if at least one of the selected day filters matches the station's day
-
-      const noDayFilters = [
-        filters.daySu,
-        filters.dayM,
-        filters.dayTu,
-        filters.dayW,
-        filters.dayTh,
-        filters.dayF,
-        filters.daySa,
-        // filters.todayVar,
-        // filters.tomorrowVar,
-      ].every((f) => f === false);
-
-      const specificDayFilterMatch = [
-        filters.daySu && event.dayOfWeek === "sunday",
-        filters.dayM && event.dayOfWeek === "monday",
-        filters.dayTu && event.dayOfWeek === "tuesday",
-        filters.dayW && event.dayOfWeek === "wednesday",
-        filters.dayTh && event.dayOfWeek === "thursday",
-        filters.dayF && event.dayOfWeek === "friday",
-        filters.daySa && event.dayOfWeek === "saturday",
-        // filters.today && event.dayOfWeek === currentDay,
-        // filters.tomorrow && event.dayOfWeek === getNextDay(currentDay),
-      ].some((f) => f === true);
-
+      // No day filter means every day; otherwise the event's day must be one
+      // of the picked days (or Saturday/Sunday for "This weekend").
       const includeThisLocationMarkerOnDays =
-        noDayFilters || specificDayFilterMatch;
+        days.size === 0 ||
+        (event.dayOfWeek != null && days.has(event.dayOfWeek));
 
       const startDayjs = dayjs(event.startTime, START_END_TIME_DB_FORMAT);
       const startIsAM = startDayjs.format("a") === "am";

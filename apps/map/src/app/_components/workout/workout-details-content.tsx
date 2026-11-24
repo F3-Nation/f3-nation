@@ -1,37 +1,50 @@
-import gte from "lodash/gte";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo } from "react";
+import {
+  ArrowRight,
+  CalendarPlus,
+  Link as LinkIcon,
+  Navigation,
+} from "lucide-react";
 
 import { isProd } from "@acme/shared/common/constants";
-import { isTruthy } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
-import {
-  dateToDayOfWeek,
-  getWhenFromWorkout,
-  sortUpcomingInstancesByDate,
-} from "~/utils/date";
+import { dateToDayOfWeek, sortUpcomingInstancesByDate } from "~/utils/date";
 import {
   buildEventStatusMap,
   findNextExceptionNotice,
   selectStatusInstances,
+  statusLabel,
 } from "~/utils/event-status-map";
+import { dayjs } from "~/utils/frontendDayjs";
+import { getStatusSolidBg } from "~/utils/map-status-colors";
+import { formatTagDate, statusTagText } from "~/utils/status-tag";
+import {
+  buildWorkoutIcs,
+  durationMinutes,
+  formatDays,
+  formatScheduleBanner,
+  formatTimeRange,
+  groupLocationWorkouts,
+  safeExternalUrl,
+} from "~/utils/workout-schedule";
 import { getEndDateLabel } from "~/utils/get-end-date-label";
 import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
 import { reportQueryError } from "~/utils/report-query-error";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { ModalType, openModal } from "~/utils/store/modal";
+import { setSelectedItem } from "~/utils/store/selected-item";
 import textLink from "~/utils/text-link";
 import { ContactLinks } from "../contact-links";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
-import { EventChip } from "../map/event-chip";
 import { ScheduleChangesNotice } from "../map/schedule-changes-notice";
+import { StatusTagBadge } from "../map/status-tag-badge";
 import { WorkoutDetailsSkeleton } from "../modal/workout-details-skeleton";
 import { DeletedWorkoutWarning } from "./deleted-workout-warning";
-import { ExceptionNotice } from "./exception-notice";
 import { UpdatesCallout } from "./updates-callout";
 import type { MapStatus } from "~/utils/types";
 
@@ -88,16 +101,19 @@ export function createWorkoutEventFromInstance(
   };
 }
 
+/** Linked from the "First time?" card; f3nation.com's own page for new men. */
+const WHAT_TO_EXPECT_URL = "https://f3nation.com/what-to-expect";
+const FIRST_TIME_COPY =
+  "Free and open to all men. No sign-up, no gear, no experience. Get there a few minutes early and introduce yourself.";
+
 export interface WorkoutDetailsContentProps {
   locationId: number;
   providedEventId: number | null;
-  chipSize: "small" | "medium" | "large";
 }
 
 export const WorkoutDetailsContent = ({
   locationId,
   providedEventId,
-  chipSize,
 }: WorkoutDetailsContentProps) => {
   const { data: results, isLoading } = useQuery(
     orpc.map.location.locationWorkout.queryOptions({
@@ -340,10 +356,6 @@ export const WorkoutDetailsContent = ({
   // Update the search params when the panel is open
   useUpdateEventSearchParams(location?.id ?? null, selectedEventId);
 
-  const isLongNotes = useMemo(() => {
-    return gte(event?.description?.length, 300);
-  }, [event?.description]);
-
   const onCopyLink = useCallback(async () => {
     if (location?.id == null || event?.id == null) {
       toast.error("No location or event found");
@@ -368,16 +380,6 @@ export const WorkoutDetailsContent = ({
     [location],
   );
 
-  const hasAoContact = useMemo(
-    () => !!aoContact && Object.values(aoContact).some(Boolean),
-    [aoContact],
-  );
-
-  const whenText = useMemo(
-    () => (event ? getWhenFromWorkout(event) : ""),
-    [event],
-  );
-
   const endDateLabel = useMemo(
     () => getEndDateLabel(event?.endDate),
     [event?.endDate],
@@ -388,99 +390,71 @@ export const WorkoutDetailsContent = ({
     [event, upcomingInstancesData],
   );
 
-  const workoutFields = useMemo(
-    () =>
-      event && location
-        ? {
-            Name: (
-              <>
-                {event.name}
-                {!isProd ? (
-                  <p className="text-xs text-muted-foreground">
-                    event: {event.id}; loc: {location.id}
-                  </p>
-                ) : null}
-              </>
-            ),
-            What: event.eventTypes.map((type) => type.name).join(", "),
-            Where: [
-              <Link
-                key="fullAddress"
-                href={`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lon}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                {location.fullAddress ?? "Directions"}
-              </Link>,
-              location.locationDescription ? (
-                <p
-                  key="locationDescription"
-                  className="text-sm text-muted-foreground"
-                >
-                  {location.locationDescription}
-                </p>
-              ) : null,
-            ].filter(isTruthy),
-            When:
-              whenText || endDateLabel || whenException ? (
-                <>
-                  {whenText}
-                  {endDateLabel ? (
-                    <p className="text-sm">{endDateLabel}</p>
-                  ) : null}
-                  {whenException ? (
-                    <ExceptionNotice notice={whenException} />
-                  ) : null}
-                </>
-              ) : null,
-            Contact:
-              hasAoContact && aoContact ? (
-                <ContactLinks contact={aoContact} iconSize="sm" />
-              ) : null,
-            Notes: event.description ? textLink(event.description) : null,
-          }
-        : {},
-    [
-      event,
-      location,
-      aoContact,
-      hasAoContact,
-      whenText,
-      endDateLabel,
-      whenException,
-    ],
+  const workoutGroups = useMemo(
+    () => groupLocationWorkouts(displayedEvents),
+    [displayedEvents],
   );
 
-  const hasMultipleWorkouts = (results?.location?.events.length ?? 0) > 1;
-  const shouldShowAOSection = hasMultipleWorkouts && event?.aoName;
-
-  const regionContact = useMemo(
+  // The selected workout, folded with its other days, plus every other
+  // schedule of the same workout here (e.g. Saturday at a later time).
+  const selectedGroup = useMemo(
     () =>
-      location
-        ? {
-            website: location.regionWebsite,
-            email: location.regionEmail,
-            phone: location.regionPhone,
-            twitter: location.regionTwitter,
-            facebook: location.regionFacebook,
-            instagram: location.regionInstagram,
-          }
-        : null,
-    [location],
+      workoutGroups.find((group) =>
+        group.events.some((e) => e.id === (event?.id ?? selectedEventId)),
+      ),
+    [workoutGroups, event?.id, selectedEventId],
   );
+  const bannerGroups = useMemo(() => {
+    if (!selectedGroup) {
+      return event
+        ? [
+            {
+              days: event.dayOfWeek ? [event.dayOfWeek] : [],
+              startTime: event.startTime,
+              endTime: event.endTime,
+            },
+          ]
+        : [];
+    }
+    return workoutGroups.filter(
+      (group) =>
+        group === selectedGroup ||
+        (selectedGroup.id > 0 &&
+          group.id > 0 &&
+          group.name === selectedGroup.name &&
+          group.aoName === selectedGroup.aoName),
+    );
+  }, [workoutGroups, selectedGroup, event]);
 
-  const hasRegionContact = useMemo(
-    () =>
-      regionContact &&
-      (regionContact.website ??
-        regionContact.email ??
-        regionContact.phone ??
-        regionContact.twitter ??
-        regionContact.facebook ??
-        regionContact.instagram),
-    [regionContact],
-  );
+  const onAddToCalendar = useCallback(() => {
+    if (!event || !location || !event.startTime) return;
+    const days =
+      selectedGroup?.days ?? (event.dayOfWeek ? [event.dayOfWeek] : []);
+    const ics = buildWorkoutIcs(
+      {
+        id: event.id,
+        name: event.name,
+        days,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        startDate: selectedInstance?.startDate ?? event.startDate,
+        endDate: event.endDate,
+        oneOff: event.id < 0,
+        location: location.fullAddress,
+        description: FIRST_TIME_COPY,
+        url: `${window.location.origin}/?locationId=${location.id}&eventId=${event.id}`,
+      },
+      dayjs().format("YYYY-MM-DD"),
+    );
+    const href = URL.createObjectURL(
+      new Blob([ics], { type: "text/calendar;charset=utf-8" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = `${event.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "f3-workout"}.ics`;
+    anchor.click();
+    URL.revokeObjectURL(href);
+  }, [event, location, selectedGroup, selectedInstance]);
 
   if (isLoading) {
     return <WorkoutDetailsSkeleton />;
@@ -497,210 +471,268 @@ export const WorkoutDetailsContent = ({
     return <DeletedWorkoutWarning text="Event is unavailable." />;
   }
 
+  const title =
+    location.parentName ?? event?.aoName ?? event?.name ?? "Workout";
+  const regionTitle = location.regionName
+    ? /^f3\b/i.test(location.regionName)
+      ? location.regionName
+      : `F3 ${location.regionName}`
+    : null;
+  const subtitle = [
+    event?.eventTypes.map((type) => type.name).join(", "),
+    regionTitle,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const headerLogo =
+    location.parentLogo ?? location.regionLogo ?? "/f3_logo.png";
+  const aoPageUrl = safeExternalUrl(event?.aoWebsite ?? location.parentWebsite);
+  const statusTag = whenException
+    ? {
+        status: whenException.status,
+        text: statusTagText({
+          status: whenException.status,
+          kind: "instance",
+          date: whenException.startDate,
+          startTime: whenException.overrideStartTime,
+          closedThrough: null,
+        }),
+      }
+    : null;
+
   return (
-    <>
-      <div className="flex flex-row flex-wrap items-center justify-start gap-x-2">
-        <div className="flex shrink-0 flex-col items-center">
-          <button
-            className="cursor-pointer"
-            onClick={() =>
-              openModal(ModalType.FULL_IMAGE, {
-                title: `${location.parentName} logo`,
-                src:
-                  location.parentLogo ?? location.regionLogo ?? "/f3_logo.png",
-                fallbackSrc: "/f3_logo.png",
-                alt: `Logo for ${location.parentName ?? "F3"}`,
-              })
-            }
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-row items-center gap-3">
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer"
+          onClick={() =>
+            openModal(ModalType.FULL_IMAGE, {
+              title: `${location.parentName} logo`,
+              src: headerLogo,
+              fallbackSrc: "/f3_logo.png",
+              alt: `Logo for ${location.parentName ?? "F3"}`,
+            })
+          }
+        >
+          <ImageWithFallback
+            key={headerLogo}
+            src={headerLogo}
+            fallbackSrc="/f3_logo.png"
+            loading="lazy"
+            width={56}
+            height={56}
+            alt={`Logo for ${location.parentName ?? "F3"}`}
+            className="size-14 rounded-md border border-border bg-black object-contain"
+          />
+        </button>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl leading-tight font-extrabold break-words uppercase">
+            {title}
+          </h2>
+          {event && event.name !== title ? (
+            <p className="text-sm font-semibold">{event.name}</p>
+          ) : null}
+          {subtitle ? (
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
+          ) : null}
+          {!isProd && event ? (
+            <p className="text-[10px] text-muted-foreground">
+              event: {event.id}; loc: {location.id}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {bannerGroups.length ? (
+        <div className="flex flex-col items-start gap-1">
+          {bannerGroups.map((group, index) => {
+            const text = formatScheduleBanner(group);
+            return text ? (
+              <span
+                key={index}
+                className="bg-primary px-3 py-1 text-[11px] font-bold tracking-wider text-primary-foreground uppercase [clip-path:polygon(6px_0,100%_0,calc(100%-6px)_100%,0_100%)]"
+              >
+                {text}
+              </span>
+            ) : null;
+          })}
+          {endDateLabel ? (
+            <span className="text-xs text-muted-foreground">
+              {endDateLabel}
+            </span>
+          ) : null}
+          {statusTag ? (
+            <StatusTagBadge tag={statusTag} className="mt-1" />
+          ) : null}
+        </div>
+      ) : null}
+
+      {selectedEventUpdates.length || isUpcomingInstancesError ? (
+        <div className="-mt-3 flex flex-col gap-2">
+          <UpdatesCallout instances={selectedEventUpdates} />
+          <ScheduleChangesNotice className="m-0 w-full" />
+        </div>
+      ) : null}
+
+      <section className="flex flex-col gap-1">
+        <SectionLabel>Where</SectionLabel>
+        <p className="text-sm font-bold">
+          {location.fullAddress ?? location.locationName}
+        </p>
+        {location.locationDescription ? (
+          <p className="text-xs whitespace-pre-line text-muted-foreground">
+            {location.locationDescription}
+          </p>
+        ) : null}
+        <div className="mt-2 flex flex-row items-center gap-2">
+          <Link
+            href={`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lon}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:bg-primary-hover flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full bg-primary px-3 text-xs font-bold tracking-wide whitespace-nowrap text-primary-foreground uppercase transition-colors"
           >
-            <ImageWithFallback
-              key={location.parentLogo ?? location.regionLogo}
-              src={location.parentLogo ?? location.regionLogo ?? "/f3_logo.png"}
-              fallbackSrc="/f3_logo.png"
-              loading="lazy"
-              width={64}
-              height={64}
-              alt={`Logo for ${location.parentName ?? "F3"}`}
-              className="rounded-lg bg-black"
-            />
-          </button>
+            <Navigation aria-hidden className="size-4 shrink-0" />
+            Get directions
+          </Link>
+          {event?.startTime ? (
+            <IconButton label="Add to calendar" onClick={onAddToCalendar}>
+              <CalendarPlus aria-hidden className="size-4" />
+            </IconButton>
+          ) : null}
+          {event ? (
+            <IconButton label="Copy Link to Event" onClick={onCopyLink}>
+              <LinkIcon aria-hidden className="size-4" />
+            </IconButton>
+          ) : null}
         </div>
-        <div className="line-clamp-2 flex-1 text-left text-2xl leading-tight font-bold sm:text-4xl">
-          {event?.name ?? location.parentName ?? "Workout Information"}
-        </div>
-      </div>
+      </section>
 
-      <UpdatesCallout instances={selectedEventUpdates} />
-      <ScheduleChangesNotice className="m-0 mt-2 w-full" />
-
-      <div>
-        {displayedEvents.length > 1 ? (
-          <span className="text-sm">
-            There are {displayedEvents.length} workouts at this location
-          </span>
-        ) : (
-          <div className="h-1" />
-        )}
-        <div className="flex flex-row flex-wrap gap-1">
-          {displayedEvents.map((locEvent) => (
-            <EventChip
-              key={locEvent.id}
-              selected={(event?.id ?? selectedEventId) === locEvent.id}
-              mapStatus={eventStatusMap.get(locEvent.id) ?? null}
-              event={{
-                id: locEvent.id,
-                name: locEvent.name,
-                locationId: location.id,
-                dayOfWeek: locEvent.dayOfWeek,
-                startTime: locEvent.startTime,
-                endTime: locEvent.endTime,
-                eventTypes: locEvent.eventTypes,
-              }}
-              location={{
-                lat: location.lat,
-                lon: location.lon,
-                id: location.id,
-              }}
-              size={chipSize}
-              hideName={displayedEvents.length === 1}
-            />
-          ))}
-        </div>
-      </div>
-
-      {event && (
-        <div className="mt-2 w-full">
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-4 break-words sm:grid-cols-2">
-            {Object.keys(workoutFields)
-              .filter(
-                (field) => !!workoutFields[field as keyof typeof workoutFields],
-              )
-              .map((field) => {
-                return (
-                  <div
-                    key={field}
-                    className={cn("col-span-2 sm:col-span-1", {
-                      "col-span-2 sm:col-span-2":
-                        // Since website is before notes
-                        isLongNotes &&
-                        (field === "Notes" || field === "Website"),
-                    })}
-                  >
-                    <dt className="text-sm font-medium text-muted-foreground">
-                      {field}
-                    </dt>
-                    <dd className="mt-1 text-sm whitespace-pre-line text-foreground">
-                      {workoutFields[field as keyof typeof workoutFields]}
-                    </dd>
-                  </div>
-                );
-              })}
-
-            <div className="col-span-2 sm:col-span-2">
-              <dt className="text-sm font-medium text-muted-foreground">How</dt>
-              <dd className="mt-1 max-w-prose space-y-5 text-sm text-foreground">
-                All F3 events are free and open to all men. If this is your
-                first time, simply show up at the time and place and join us. Be
-                prepared to sweat! We look forward to meeting you.
-                <p className="mt-2">
-                  <Link
-                    href="https://f3nation.com/about-f3"
-                    target="_blank"
-                    className="inline-flex items-center gap-1 text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
-                  >
-                    FAQs and more about F3 Nation
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="lucide lucide-external-link"
-                    >
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                      <polyline points="15 3 21 3 21 9"></polyline>
-                      <line x1="10" y1="14" x2="21" y2="3"></line>
-                    </svg>
-                  </Link>
-                </p>
-              </dd>
-            </div>
-          </dl>
-        </div>
-      )}
-
-      {shouldShowAOSection && (
-        <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
-          <div className="mb-3 flex items-start gap-3">
-            {event.aoLogo ? (
+      {workoutGroups.length > 1 ? (
+        <section className="flex flex-col gap-2">
+          <SectionLabel>
+            {workoutGroups.length} workouts at this location
+          </SectionLabel>
+          {workoutGroups.map((group) => {
+            const viewing = group === selectedGroup;
+            const status = group.events
+              .map((e) => eventStatusMap.get(e.id) ?? null)
+              .find(Boolean);
+            const instance =
+              group.id < 0
+                ? locationInstances.find((i) => i.id === -group.id)
+                : undefined;
+            const when = [
+              instance
+                ? formatTagDate(instance.startDate)
+                : formatDays(group.days),
+              formatTimeRange(group.startTime, group.endTime),
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            const duration = durationMinutes(group.startTime, group.endTime);
+            const detail = [
+              group.eventTypes.map((t) => t.name).join(", "),
+              duration ? `${duration} min` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
               <button
-                className="cursor-pointer"
-                onClick={() =>
-                  openModal(ModalType.FULL_IMAGE, {
-                    title: event.aoName ?? "AO logo",
-                    src: event.aoLogo ?? "/f3_logo.png",
-                    fallbackSrc: "/f3_logo.png",
-                    alt: event.aoName ?? "AO logo",
-                  })
-                }
+                key={group.id}
+                type="button"
+                data-testid={`workout-${group.id}`}
+                aria-current={viewing ? "true" : undefined}
+                onClick={() => {
+                  setSelectedItem({
+                    locationId: location.id,
+                    eventId: group.id,
+                    showPanel: true,
+                  });
+                }}
+                className={cn(
+                  "relative flex flex-col items-start rounded-md border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted",
+                  { "border-foreground/40": viewing },
+                )}
               >
-                <ImageWithFallback
-                  key={event.aoLogo}
-                  src={event.aoLogo}
-                  fallbackSrc="/f3_logo.png"
-                  loading="lazy"
-                  width={48}
-                  height={48}
-                  alt={event.aoName ?? "AO logo"}
-                  className="rounded-lg bg-black"
-                />
+                {status ? (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "absolute top-2 bottom-2 left-0 w-[3px] rounded-r",
+                      getStatusSolidBg(status),
+                    )}
+                  />
+                ) : null}
+                <span className="flex w-full flex-row items-center justify-between gap-2">
+                  <span className="text-sm font-extrabold uppercase">
+                    {group.name}
+                  </span>
+                  {viewing ? (
+                    <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase">
+                      Viewing
+                    </span>
+                  ) : null}
+                </span>
+                {when ? (
+                  <span className="text-xs font-semibold">{when}</span>
+                ) : null}
+                {detail ? (
+                  <span className="text-[11px] text-muted-foreground">
+                    {detail}
+                  </span>
+                ) : null}
+                {status ? (
+                  <span className="mt-1 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+                    {statusLabel(status)}
+                  </span>
+                ) : null}
               </button>
-            ) : null}
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold">About {event.aoName}</h3>
-              <p className="text-sm text-muted-foreground">
-                This workout is part of the {event.aoName} AO (Area of
-                Operation)
-              </p>
-            </div>
-          </div>
-          {event.aoWebsite && (
-            <Link
-              href={event.aoWebsite}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
-            >
-              Visit AO Website
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-              </svg>
-            </Link>
-          )}
-        </div>
-      )}
+            );
+          })}
+        </section>
+      ) : null}
 
-      <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
-        <div className="mb-3 flex items-start gap-3">
-          {location.regionLogo && (
+      {event?.description ? (
+        <section className="flex flex-col gap-1">
+          <SectionLabel>Notes</SectionLabel>
+          <div className="text-sm whitespace-pre-line">
+            {textLink(event.description)}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="rounded-md bg-card p-4">
+        <h3 className="text-sm font-extrabold uppercase">
+          First time? Just show up.
+        </h3>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          {FIRST_TIME_COPY}
+        </p>
+        <Link
+          href={WHAT_TO_EXPECT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold tracking-wider uppercase hover:text-primary"
+        >
+          What to expect
+          <ArrowRight aria-hidden className="size-3.5" />
+        </Link>
+      </section>
+
+      {aoContact && Object.values(aoContact).some(Boolean) ? (
+        <section className="flex flex-col gap-2">
+          <SectionLabel>Contact {location.parentName ?? "the AO"}</SectionLabel>
+          <ContactLinks contact={aoContact} iconSize="sm" />
+        </section>
+      ) : null}
+
+      {regionTitle ? (
+        <section className="flex flex-col gap-3 border-t pt-4">
+          <div className="flex flex-row items-center gap-3">
             <button
-              className="cursor-pointer"
+              type="button"
+              className="shrink-0 cursor-pointer"
               onClick={() =>
                 openModal(ModalType.FULL_IMAGE, {
                   title: location.regionName ?? "Region logo",
@@ -712,84 +744,73 @@ export const WorkoutDetailsContent = ({
             >
               <ImageWithFallback
                 key={location.regionLogo}
-                src={location.regionLogo}
+                src={location.regionLogo ?? "/f3_logo.png"}
                 fallbackSrc="/f3_logo.png"
                 loading="lazy"
-                width={48}
-                height={48}
+                width={36}
+                height={36}
                 alt={location.regionName ?? "Region logo"}
-                className="rounded-lg bg-black"
+                className="size-9 rounded-full border border-border bg-black object-contain"
               />
             </button>
-          )}
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold">
-              About F3 {location.regionName}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              This workout is part of the F3 {location.regionName} region
-            </p>
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase">
+                Region
+              </p>
+              <h3 className="text-sm font-extrabold">{regionTitle}</h3>
+            </div>
           </div>
-        </div>
-        {location.regionWebsite && (
-          <Link
-            href={location.regionWebsite}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
-          >
-            Visit Region Website
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-              <polyline points="15 3 21 3 21 9"></polyline>
-              <line x1="10" y1="14" x2="21" y2="3"></line>
-            </svg>
-          </Link>
-        )}
-        {hasRegionContact && regionContact && (
           <ContactLinks
-            contact={regionContact}
+            contact={{
+              website: location.regionWebsite,
+              email: location.regionEmail,
+              phone: location.regionPhone,
+              twitter: location.regionTwitter,
+              facebook: location.regionFacebook,
+              instagram: location.regionInstagram,
+            }}
             iconSize="sm"
-            className="mt-3"
           />
-        )}
-      </div>
+        </section>
+      ) : null}
 
-      {event && (
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onCopyLink}
-            className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="lucide lucide-link"
-            >
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-            </svg>
-            <span>Copy Link to Event</span>
-          </button>
-        </div>
-      )}
-    </>
+      {aoPageUrl ? (
+        <Link
+          href={aoPageUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex w-fit items-center gap-1 text-[11px] font-bold tracking-wider uppercase hover:text-primary"
+        >
+          {location.parentName ?? "AO"} page
+          <ArrowRight aria-hidden className="size-3.5" />
+        </Link>
+      ) : null}
+    </div>
   );
 };
+
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <h3 className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+    {children}
+  </h3>
+);
+
+const IconButton = ({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={label}
+    className="flex size-10 shrink-0 items-center justify-center rounded-full border border-input text-foreground transition-colors hover:bg-muted"
+  >
+    {children}
+    <span className="sr-only">{label}</span>
+  </button>
+);

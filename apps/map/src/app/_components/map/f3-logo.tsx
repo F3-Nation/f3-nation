@@ -13,16 +13,16 @@ export const F3Logo = ({
     <Link
       href="https://f3nation.com/"
       target="_blank"
-      className={cn("-m-2 transition-all", className)}
+      className={cn("shrink-0 transition-all", className)}
       style={{ zIndex: Z_INDEX.F3_LOGO }}
       {...rest}
     >
       <Image
         src="/f3_logo.png"
         alt="F3 Logo"
-        width={64}
-        height={64}
-        className="rounded-lg"
+        width={40}
+        height={40}
+        className="size-10 rounded-full"
       />
     </Link>
   );

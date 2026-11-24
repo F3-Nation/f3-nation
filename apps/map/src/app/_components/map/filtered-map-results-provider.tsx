@@ -15,7 +15,10 @@ import { MAP_DATASET_STALE_TIME_MS } from "~/orpc/query-client";
 import { orpc, useQuery } from "~/orpc/react";
 import { dateToDayOfWeek } from "~/utils/date";
 import type { StatusInstanceSummary } from "~/utils/event-status-map";
-import { getMapEventStatus, instanceMapStatus } from "~/utils/event-status-map";
+import {
+  getMapEventStatusDetail,
+  instanceMapStatus,
+} from "~/utils/event-status-map";
 import { filterData } from "~/utils/filtered-data";
 import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
 import { filterStore } from "~/utils/store/filter";
@@ -174,6 +177,7 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
           list.push({
             seriesException: instance.seriesException,
             startDate: instance.startDate,
+            startTime: instance.startTime,
           });
           instancesBySeriesId.set(instance.seriesId, list);
         }
@@ -201,13 +205,15 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
               startDate: event[7],
               endDate: event[8],
             };
+            const statusDetail = getMapEventStatusDetail(
+              eventObj,
+              instancesBySeriesId,
+              todayIso,
+            );
             return {
               ...eventObj,
-              mapStatus: getMapEventStatus(
-                eventObj,
-                instancesBySeriesId,
-                todayIso,
-              ),
+              mapStatus: statusDetail?.status ?? null,
+              statusDetail,
             };
           }),
         };

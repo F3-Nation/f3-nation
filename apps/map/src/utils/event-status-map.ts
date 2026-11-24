@@ -23,6 +23,8 @@ export interface StatusInstance {
 export interface StatusInstanceSummary {
   seriesException: SeriesException | null;
   startDate: string;
+  /** The instance's own start time, for tags that name the changed time. */
+  startTime?: string | null;
 }
 
 /**
@@ -183,15 +185,29 @@ export function buildEventStatusMap(
   return map;
 }
 
-export function getMapEventStatus(
+/**
+ * The upcoming change that decides an event's status, with what a tag needs to
+ * describe it: `ends` and `starts` come from the series' own end and start
+ * dates, `instance` from an exception or one-off on `date`.
+ */
+export interface MapEventStatusDetail {
+  status: NonNullable<MapStatus>;
+  kind: "ends" | "starts" | "instance";
+  date: string;
+  startTime: string | null;
+  /** For closed instances: the last consecutive closed date in the horizon. */
+  closedThrough: string | null;
+}
+
+export function getMapEventStatusDetail(
   event: { id: number; startDate: string | null; endDate: string | null },
   instanceLookup: ReadonlyMap<number, StatusInstanceSummary[]>,
   todayIso: string = dayjs().format("YYYY-MM-DD"),
-): MapStatus {
+): MapEventStatusDetail | null {
   const horizonIso = dayjs(todayIso)
     .add(HORIZON_DAYS, "day")
     .format("YYYY-MM-DD");
-  const candidates: { date: string; status: NonNullable<MapStatus> }[] = [];
+  const candidates: MapEventStatusDetail[] = [];
 
   if (event.endDate) {
     // A series that has not started yet is "upcoming", not "closing".
@@ -201,7 +217,13 @@ export function getMapEventStatus(
       event.endDate >= todayIso &&
       event.endDate <= horizonIso
     ) {
-      candidates.push({ date: event.endDate, status: "closed" });
+      candidates.push({
+        date: event.endDate,
+        status: "closed",
+        kind: "ends",
+        startTime: null,
+        closedThrough: null,
+      });
     }
   }
 
@@ -210,19 +232,59 @@ export function getMapEventStatus(
     event.startDate > todayIso &&
     event.startDate <= horizonIso
   ) {
-    candidates.push({ date: event.startDate, status: "different-time" });
+    candidates.push({
+      date: event.startDate,
+      status: "different-time",
+      kind: "starts",
+      startTime: null,
+      closedThrough: null,
+    });
   }
 
-  for (const instance of instanceLookup.get(event.id) ?? []) {
+  const instances = instanceLookup.get(event.id) ?? [];
+  for (const instance of instances) {
     candidates.push({
       date: instance.startDate,
       status: instanceMapStatus(instance.seriesException),
+      kind: "instance",
+      startTime: instance.startTime ?? null,
+      closedThrough: null,
     });
   }
 
   if (candidates.length === 0) return null;
 
-  return candidates.reduce((nearest, candidate) =>
-    candidate.date < nearest.date ? candidate : nearest,
-  ).status;
+  const nearest = candidates.reduce((best, candidate) =>
+    candidate.date < best.date ? candidate : best,
+  );
+  if (nearest.kind !== "instance" || nearest.status !== "closed") {
+    return nearest;
+  }
+
+  // A run of weekly closures reads as one range ("Closed Nov 22 – Nov 29"):
+  // follow the closed dates no more than a week apart.
+  const closedDates = instances
+    .filter((i) => instanceMapStatus(i.seriesException) === "closed")
+    .map((i) => i.startDate)
+    .filter((d) => d >= nearest.date)
+    .sort();
+  let through = nearest.date;
+  for (const date of closedDates) {
+    if (dayjs(date).diff(dayjs(through), "day") <= 7) through = date;
+    else break;
+  }
+  return {
+    ...nearest,
+    closedThrough: through === nearest.date ? null : through,
+  };
+}
+
+export function getMapEventStatus(
+  event: { id: number; startDate: string | null; endDate: string | null },
+  instanceLookup: ReadonlyMap<number, StatusInstanceSummary[]>,
+  todayIso: string = dayjs().format("YYYY-MM-DD"),
+): MapStatus {
+  return (
+    getMapEventStatusDetail(event, instanceLookup, todayIso)?.status ?? null
+  );
 }

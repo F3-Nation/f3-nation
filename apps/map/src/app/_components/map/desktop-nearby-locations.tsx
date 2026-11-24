@@ -45,30 +45,35 @@ export const DesktopNearbyLocations = ({
   }, [nearbyLocationCenter]);
 
   return (
-    <>
-      <div className="flex flex-row justify-center py-2">
-        <NearbyLocationContent nearbyLocationCenter={nearbyLocationCenter} />
-        {hasMovedAwayFromLocation && (
-          <button
-            className="ml-2 self-end text-sm text-foreground underline"
-            onClick={() => {
-              mapStore.setState({
-                nearbyLocationCenter: {
-                  ...center,
-                  type: "manual-update",
-                  name: null,
-                },
-              });
-            }}
-          >
-            Update
-          </button>
-        )}
+    <div className={cn("flex min-h-0 flex-1 flex-col", className)} {...rest}>
+      <div className="flex flex-row items-center justify-between gap-2 px-4 pt-3 pb-2">
+        <h2 className="bg-primary px-3 py-1 text-[11px] font-bold tracking-wider text-primary-foreground uppercase [clip-path:polygon(6px_0,100%_0,calc(100%-6px)_100%,0_100%)]">
+          Nearby workouts
+        </h2>
+        <div className="flex flex-row items-center gap-2 text-[11px] text-muted-foreground">
+          {hasMovedAwayFromLocation ? (
+            <button
+              className="font-semibold text-foreground underline underline-offset-2"
+              onClick={() => {
+                mapStore.setState({
+                  nearbyLocationCenter: {
+                    ...center,
+                    type: "manual-update",
+                    name: null,
+                  },
+                });
+              }}
+            >
+              Update
+            </button>
+          ) : null}
+          <span>Closest first</span>
+        </div>
       </div>
+      <NearbyLocationContent nearbyLocationCenter={nearbyLocationCenter} />
       <div
-        className={cn("flex flex-1 flex-col overflow-y-scroll", className)}
+        className="flex flex-1 flex-col overflow-y-auto border-t"
         ref={nearbyLocationScrollRef}
-        {...rest}
       >
         <div
           className="flex flex-col justify-center divide-y divide-solid"
@@ -79,7 +84,7 @@ export const DesktopNearbyLocations = ({
               <DesktopNearbyLocationItemSkeleton key={index} />
             ))
           ) : aoGroupedLocationMarkers.length === 0 ? (
-            <div className="py-4 text-center text-sm text-muted-foreground">
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               No locations found{" "}
               {isAnyFilterActive(filters) ? "matching your filters" : ""}
             </div>
@@ -93,7 +98,7 @@ export const DesktopNearbyLocations = ({
         </div>
       </div>
       <WithLove />
-    </>
+    </div>
   );
 };
 
@@ -104,15 +109,19 @@ const NearbyLocationContent = ({
 }) => {
   if (!nearbyLocationCenter)
     return (
-      <div className="text-center text-sm">Loading nearby locations...</div>
+      <p className="px-4 pb-2 text-xs text-muted-foreground">
+        Loading nearby workouts…
+      </p>
     );
 
-  if (!nearbyLocationCenter.name)
-    return <div className="text-center text-sm">Nearby locations</div>;
+  if (!nearbyLocationCenter.name) return null;
 
   return (
-    <div className="text-center text-sm">
-      Locations near <b>{nearbyLocationCenter.name}</b>
-    </div>
+    <p className="line-clamp-1 px-4 pb-2 text-xs text-muted-foreground">
+      Near{" "}
+      <span className="font-semibold text-foreground">
+        {nearbyLocationCenter.name}
+      </span>
+    </p>
   );
 };

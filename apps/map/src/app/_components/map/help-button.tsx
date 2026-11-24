@@ -1,21 +1,17 @@
 import { CircleQuestionMark } from "lucide-react";
 import Link from "next/link";
 
-import { filterButtonClassName } from "@acme/shared/app/constants";
 import { cn } from "@acme/ui";
 
-export const HelpButton = () => {
+export const HelpButton = ({ className }: { className?: string }) => {
   return (
-    <div className="m-2">
+    <div className={cn("m-2.5", className)}>
       <Link
         href="/help?back=%2Fmap"
-        className={cn(
-          filterButtonClassName,
-          "flex w-auto bg-foreground whitespace-nowrap text-background",
-        )}
+        className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-full border bg-background px-3 text-xs font-bold whitespace-nowrap text-foreground shadow-sm transition-colors hover:bg-muted"
       >
-        <CircleQuestionMark strokeWidth={2} className={cn("size-4")} />
-        <div className="whitespace-nowrap">Help / feedback</div>
+        <CircleQuestionMark aria-hidden strokeWidth={2} className="size-3.5" />
+        Help / feedback
       </Link>
     </div>
   );

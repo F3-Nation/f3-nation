@@ -19,7 +19,7 @@ import { expect, test } from "@playwright/test";
  * Local Test Territory → Local Territory Area → Local Territory Region.
  * Every seeded AO has exactly one
  * weekly Bootcamp named "<AO name> Bootcamp" on Monday at 05:30 (AM). That
- * makes the AM/PM quick filters deterministic (PM → empty, AM → everything)
+ * makes the Morning/Evening filters deterministic (Evening → empty, Morning → everything)
  * regardless of the day the suite runs, so test 4 filters by time of day
  * rather than the "Today" day filter.
  *
@@ -61,11 +61,16 @@ test.describe("map browse & search (anonymous)", () => {
     await expect(page.getByTestId("map")).toBeVisible();
     expect(new URL(page.url()).pathname).toBe("/");
 
-    // The search placeholder swaps its "5000+" fallback for the live count
-    // once the workoutCount query resolves — this proves the whole
+    // The search box's accessible name swaps its "5000+" fallback for the
+    // live count once the workoutCount query resolves — this proves the whole
     // map → api → seeded-db chain is up (AC-2).
-    await expect(page.getByTestId("map-searchbox-input")).toHaveAttribute(
+    const search = page.getByTestId("map-searchbox-input");
+    await expect(search).toHaveAttribute(
       "placeholder",
+      "City, zip, or AO name",
+    );
+    await expect(search).toHaveAttribute(
+      "aria-label",
       /^Search \d+ free, peer-led workouts$/,
       { timeout: 30_000 },
     );
@@ -87,7 +92,8 @@ test.describe("map browse & search (anonymous)", () => {
 
     const selectedItem = await searchAndSelectWorkout(page, "The Foundry");
 
-    // Clicking the selected item opens the location detail panel (AC-8).
+    // Clicking the selected item opens the location detail in the left panel
+    // (AC-8).
     await selectedItem.click();
     const panel = page.getByTestId("panel");
     await expect(panel).toBeVisible();
@@ -99,11 +105,13 @@ test.describe("map browse & search (anonymous)", () => {
       panel.locator('a[href*="google.com/maps"]').first(),
     ).toBeVisible();
 
+    // The back link returns to the nearby list.
     await page.getByRole("button", { name: "Close location panel" }).click();
     await expect(panel).not.toBeVisible();
+    await expect(page.getByTestId("nearby-locations")).toBeVisible();
   });
 
-  test("AM/PM quick filters change the nearby list and Reset restores it", async ({
+  test("Morning/Evening filters change the nearby list and Reset restores it", async ({
     page,
   }) => {
     await page.goto("/");
@@ -114,40 +122,44 @@ test.describe("map browse & search (anonymous)", () => {
       timeout: 30_000,
     });
 
-    // The mobile filter bar renders the same buttons CSS-hidden at desktop
-    // width, so scope every control lookup to visible elements.
-    const amButton = page
-      .getByRole("button", { name: "AM", exact: true })
+    // One Filters button opens the filters inline in the left panel. The
+    // mobile layout renders its own copy CSS-hidden at desktop width, so
+    // scope every control lookup to visible elements.
+    const filtersButton = page
+      .getByRole("button", { name: /^Filters/ })
       .filter({ visible: true });
-    const pmButton = page
-      .getByRole("button", { name: "PM", exact: true })
+    await filtersButton.click();
+
+    const morning = page
+      .getByRole("button", { name: "Morning", exact: true })
+      .filter({ visible: true });
+    const evening = page
+      .getByRole("button", { name: "Evening", exact: true })
       .filter({ visible: true });
 
-    // Every seeded event is at 05:30 (AM), so PM deterministically empties
-    // the list (AC-12 empty state).
-    await pmButton.click();
+    // Every seeded event is at 05:30 (AM), so Evening deterministically
+    // empties the list (AC-12 empty state).
+    await evening.click();
     // Note: isAnyFilterActive() deliberately excludes am/pm, so this empty
     // state renders WITHOUT the "matching your filters" suffix.
     await expect(nearby.getByText(/No locations found/)).toBeVisible();
     await expect(nearby.getByText("The Dark Tower")).toBeHidden();
+    await expect(filtersButton).toHaveText(/Filters · 1/);
 
-    // AM deactivates PM (mutually exclusive, AC-13) and matches everything.
-    await amButton.click();
-    await expect(amButton).toHaveClass(/bg-red-500/);
-    await expect(pmButton).not.toHaveClass(/bg-red-500/);
+    // Morning replaces Evening (one time-of-day choice, AC-13) and matches
+    // everything.
+    await morning.click();
+    await expect(morning).toHaveAttribute("aria-pressed", "true");
+    await expect(evening).toHaveAttribute("aria-pressed", "false");
     await expect(nearby.getByText("The Dark Tower")).toBeVisible();
 
-    // Reset (inside the "All filters" drawer) restores the unfiltered state
-    // and closes the drawer (AC-13).
-    await page
-      .getByRole("button", { name: "All filters" })
-      .filter({ visible: true })
-      .click();
+    // Reset restores the unfiltered state and closes the filters (AC-13).
     await page
       .getByRole("button", { name: "Reset", exact: true })
       .filter({ visible: true })
       .click();
-    await expect(amButton).not.toHaveClass(/bg-red-500/);
+    await expect(morning).toBeHidden();
+    await expect(filtersButton).toHaveText(/^Filters$/);
     await expect(nearby.getByText("The Dark Tower")).toBeVisible();
   });
 });

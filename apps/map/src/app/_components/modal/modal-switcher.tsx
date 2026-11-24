@@ -104,7 +104,8 @@ export const ModalSwitcher = () => {
     case ModalType.DELETE_AO:
       return <DeleteAoModal data={data as DataType[ModalType.DELETE_AO]} />;
     case ModalType.WORKOUT_DETAILS:
-      return width >= Number(BreakPoints.LG) ? null : (
+      // From the panel breakpoint up, workout details open in the left panel.
+      return width >= Number(BreakPoints.PANEL) ? null : (
         <WorkoutDetailsModal
           data={data as DataType[ModalType.WORKOUT_DETAILS]}
         />

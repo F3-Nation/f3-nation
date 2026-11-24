@@ -5,17 +5,16 @@ import {
 } from "@vis.gl/react-google-maps";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 import { cn } from "@acme/ui";
 import { toast } from "@acme/ui/toast";
 
 import { groupMarkerClick } from "~/utils/actions/group-marker-click";
+import type { MapStatus } from "~/utils/types";
+import { dayLabelSegments } from "~/utils/day-label-segments";
 import {
   getDominantStatus,
-  getSelectedBg,
-  getSelectedBorder,
-  getStatusBase,
-  STATUS_BASE_DEFAULT,
+  getStatusSolidBg,
+  getStatusTextColor,
 } from "~/utils/map-status-colors";
 import { appStore } from "~/utils/store/app";
 import { mapStore } from "~/utils/store/map";
@@ -26,12 +25,12 @@ import {
 } from "~/utils/store/selected-item";
 import { useTouchDevice } from "~/utils/touch-device-provider";
 import { useFilteredMapResults } from "../map/filtered-map-results-provider";
-import { FeaturesClusterMarker } from "../marker-clusters/features-cluster-marker";
 
 interface TreeMarkerProps {
   position: google.maps.LatLngLiteral;
   featureId: string;
-  isClose: boolean;
+  /** From DAY_LABEL_ZOOM up the pin shows its workout days. */
+  showDayLabels: boolean;
   onMarkerClick?: (
     marker: google.maps.marker.AdvancedMarkerElement,
     featureId: string,
@@ -41,7 +40,7 @@ interface TreeMarkerProps {
 export const FeatureMarker = ({
   position: _position,
   featureId,
-  isClose,
+  showDayLabels,
 }: TreeMarkerProps) => {
   const mode = appStore.use.mode();
   const { filteredLocationMarkers } = useFilteredMapResults();
@@ -62,8 +61,6 @@ export const FeatureMarker = ({
   )?.events;
   const isCurrentSelectedLocation = selectedLocationId === id;
   const isCurrentPanelLocation = panelLocationId === id;
-  const noSelectedEvent = selectedEventId == null;
-  const noSelectedPanelEvent = panelEventId == null;
 
   const handleClick = useCallback(
     ({ locationId, eventId }: { locationId: number; eventId?: number }) => {
@@ -106,25 +103,54 @@ export const FeatureMarker = ({
   );
 
   const dominantStatus = events?.length ? getDominantStatus(events) : null;
+  const segments = dayLabelSegments(events ?? []);
+  // The location open in the panel is drawn outlined and raised.
+  const isRaised =
+    isCurrentPanelLocation || (touchDevice && isCurrentSelectedLocation);
 
-  return !events?.length ? null : !isClose ? (
-    <FeaturesClusterMarker
-      clusterId={id}
-      position={position}
-      size={1}
-      sizeAsText={"1"}
-      statusColor={dominantStatus}
-      onMarkerClick={() => {
-        const eventId = events.find(
-          (event) => event.id === selectedEventId,
-        )?.id;
-        handleClick({
-          locationId: id,
-          eventId: eventId ?? events[0]?.id,
-        });
-      }}
-    />
-  ) : (
+  const clickLocation = () => {
+    const eventId = events?.find((event) => event.id === selectedEventId)?.id;
+    handleClick({
+      locationId: id,
+      eventId: eventId ?? events?.[0]?.id,
+    });
+  };
+
+  if (!events?.length) return null;
+
+  if (!showDayLabels) {
+    return (
+      <AdvancedMarker
+        position={position}
+        anchorLeft="-50%"
+        anchorTop="-100%"
+        className="marker feature"
+        draggable={mode === "edit"}
+        onDragEnd={handleDragEnd}
+        zIndex={
+          isCurrentSelectedLocation || isCurrentPanelLocation
+            ? Z_INDEX.SELECTED_MARKER
+            : Z_INDEX.PLAIN_MAP_MARKER
+        }
+        onClick={(e) => {
+          clickLocation();
+          // Must call stop to prevent the map from being clicked
+          e.stop();
+        }}
+      >
+        <PinShape
+          aria-label={events[0]?.aoName ?? "Workout location"}
+          status={dominantStatus}
+          className={cn(
+            "w-[18px] cursor-pointer drop-shadow-sm transition-transform",
+            (isRaised || isCurrentSelectedLocation) && "scale-125",
+          )}
+        />
+      </AdvancedMarker>
+    );
+  }
+
+  return (
     <AdvancedMarker
       ref={markerRef}
       draggable={mode === "edit"}
@@ -137,13 +163,7 @@ export const FeatureMarker = ({
         // There are some places on the icon where the button is not clicked
         // but the marker is clicked (bottom left and right corners)
         // This is also necessary for mobile edit mode clicks
-        const eventId = events.find(
-          (event) => event.id === selectedEventId,
-        )?.id;
-        handleClick({
-          locationId: id,
-          eventId: eventId ?? events[0]?.id,
-        });
+        clickLocation();
 
         // Must call stop to prevent the map from being clicked
         e.stop();
@@ -156,28 +176,41 @@ export const FeatureMarker = ({
             : Z_INDEX.NON_HOVERED_MAP_MARKER
       }
     >
-      <div className="relative flex flex-col">
+      <div
+        className={cn(
+          "relative flex flex-col items-center transition-transform",
+          isRaised && "-translate-y-1 scale-110",
+        )}
+      >
         <div
-          className={cn("flex flex-row rounded-full ring-[1px] ring-gray-700")}
-          style={{ zIndex: 1, width: `${events.length * 30 + 4}px` }}
+          className={cn(
+            "flex flex-row overflow-hidden rounded-full bg-primary shadow-md",
+            isRaised
+              ? "shadow-xl ring-2 ring-white dark:ring-white"
+              : isCurrentSelectedLocation
+                ? "ring-2 ring-foreground/70"
+                : "ring-1 ring-black/30",
+          )}
+          style={{ zIndex: 1 }}
         >
-          {events.map((event, eventIdx, eventArray) => {
-            const isCurrentPanelLocation = panelLocationId === id;
-            const isCurrentPanelEvent = panelEventId === event.id;
-            const isCurrentSelectedEvent = selectedEventId === event.id;
-            const dotw = event.dayOfWeek;
-            const isStart = eventIdx === 0;
-            const isEnd = eventIdx === eventArray.length - 1;
-            const dayText = dotw ? dayOfWeekToShortDayOfWeek(dotw) : " ";
+          {segments.map((segment, index) => {
+            const isCurrentPanelEvent =
+              panelEventId != null && segment.eventIds.includes(panelEventId);
+            const isCurrentSelectedEvent =
+              selectedEventId != null &&
+              segment.eventIds.includes(selectedEventId);
+            const segmentEventId =
+              (isCurrentSelectedEvent ? selectedEventId : null) ??
+              segment.eventIds[0];
             return (
               <button
-                key={id + "-" + event.id}
+                key={`${id}-${segment.day ?? "none"}`}
                 onClick={(e) => {
-                  handleClick({ locationId: id, eventId: event.id });
+                  handleClick({ locationId: id, eventId: segmentEventId });
                   e.stopPropagation();
                 }}
                 onMouseEnter={(e) => {
-                  handleHover({ locationId: id, eventId: event.id });
+                  handleHover({ locationId: id, eventId: segmentEventId });
                   e.stopPropagation();
                 }}
                 onMouseLeave={(e) => {
@@ -185,58 +218,65 @@ export const FeatureMarker = ({
                   e.stopPropagation();
                 }}
                 className={cn(
-                  // min-h-[32.5px] so it doesn't collapse with no text
-                  "min-h-[32.5px] flex-1 cursor-pointer bg-foreground py-2 text-center text-background",
-                  "border-t-2 border-r-2 border-b-2 border-l-2 border-foreground",
-                  `google-eventid-${event.id}`,
-                  (event.mapStatus && getStatusBase(event.mapStatus)) ??
-                    STATUS_BASE_DEFAULT,
-                  {
-                    "rounded-r-full": isEnd,
-                    "rounded-l-full": isStart,
-                  },
-                  (isCurrentSelectedEvent ||
-                    (isCurrentSelectedLocation && noSelectedEvent)) &&
-                    getSelectedBorder(event.mapStatus),
-                  ((touchDevice && isCurrentSelectedEvent) ||
-                    isCurrentPanelEvent ||
-                    (isCurrentPanelLocation && noSelectedPanelEvent)) && [
-                    getSelectedBg(event.mapStatus),
-                    "font-bold",
-                  ],
+                  "min-w-[26px] cursor-pointer px-1.5 py-1.5 text-center text-xs leading-none font-bold text-white",
+                  segment.status
+                    ? getStatusSolidBg(segment.status)
+                    : "hover:bg-primary-hover bg-primary",
+                  index > 0 && "border-l border-black/15",
+                  `google-eventid-${segment.eventIds[0]}`,
+                  (isCurrentPanelEvent ||
+                    (touchDevice && isCurrentSelectedEvent)) &&
+                    "underline decoration-2 underline-offset-2",
                 )}
               >
-                {dayText}
+                {segment.label}
               </button>
             );
           })}
         </div>
         <svg
-          viewBox="0 0 40 40"
-          className="-mt-[10.5px] w-[28px] self-center"
+          viewBox="0 0 12 8"
+          aria-hidden
+          className={cn(
+            "-mt-px w-3",
+            dominantStatus
+              ? getStatusTextColor(dominantStatus)
+              : "text-primary",
+          )}
           style={{ zIndex: 0 }}
         >
-          <path
-            className="fill-foreground"
-            d={
-              events.length === 1
-                ? "M34 10 L26 24.249 Q20 34.641 14 24.249 L6 10"
-                : "M34 14.5 L26 24.249 Q20 34.641 14 24.249 L6 14.5"
-            }
-            stroke="none"
-          />
-          <path
-            d={
-              events.length === 1
-                ? "M34 10 L26 24.249 Q20 34.641 14 24.249 L6 10"
-                : "M34 15 L26 24.249 Q20 34.641 14 24.249 L6 15"
-            }
-            stroke="background"
-            strokeWidth={0.5}
-            fill="none"
-          />
+          <path d="M0 0 L12 0 L6 8 Z" fill="currentColor" />
         </svg>
       </div>
     </AdvancedMarker>
   );
 };
+
+/** A plain map pin in F3 red, or the location's status color. */
+const PinShape = ({
+  status,
+  className,
+  ...rest
+}: {
+  status: MapStatus;
+  className?: string;
+  "aria-label"?: string;
+}) => (
+  <svg
+    viewBox="0 0 24 32"
+    role="img"
+    className={cn(
+      status ? getStatusTextColor(status) : "text-primary",
+      className,
+    )}
+    {...rest}
+  >
+    <path
+      d="M12 0C5.4 0 0 5.2 0 11.7 0 20.4 12 32 12 32s12-11.6 12-20.3C24 5.2 18.6 0 12 0Z"
+      fill="currentColor"
+      stroke="rgba(0,0,0,0.35)"
+      strokeWidth={1}
+    />
+    <circle cx="12" cy="11.5" r="4" fill="white" />
+  </svg>
+);

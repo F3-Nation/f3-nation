@@ -22,10 +22,10 @@ export default defineConfig({
         // instrumentation-client.ts back into the denominator with tests of
         // their own (see tooling/vitest/coverage.ts) — net upward.
         autoUpdate: true,
-        statements: 48,
-        branches: 44.39,
-        functions: 41.91,
-        lines: 47.89,
+        statements: 54.26,
+        branches: 50.96,
+        functions: 50.51,
+        lines: 54.04,
       },
     },
     exclude: [

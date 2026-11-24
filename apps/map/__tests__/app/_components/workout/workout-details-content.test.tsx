@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RouterOutputs } from "~/orpc/types";
 import * as modal from "~/utils/store/modal";
+import * as selectedItem from "~/utils/store/selected-item";
 
 type UpcomingInstance =
   RouterOutputs["map"]["location"]["upcomingInstances"][number];
@@ -79,13 +80,8 @@ vi.mock("~/orpc/react", () => {
   };
 });
 
-// The chips and the URL sync are exercised elsewhere; stubbing them keeps this
-// suite on the event-resolution branches.
-vi.mock("~/app/_components/map/event-chip", () => ({
-  EventChip: ({ event }: { event: { id: number; name?: string } }) => (
-    <div data-testid={`chip-${event.id}`}>{event.name}</div>
-  ),
-}));
+// The URL sync is exercised elsewhere; stubbing it keeps this suite on the
+// event-resolution branches.
 vi.mock("~/utils/hooks/use-update-event-search-params", () => ({
   useUpdateEventSearchParams: vi.fn(),
 }));
@@ -177,11 +173,7 @@ const locationWorkout = (
 
 const renderPanel = (providedEventId: number | null) =>
   render(
-    <WorkoutDetailsContent
-      locationId={10}
-      providedEventId={providedEventId}
-      chipSize="small"
-    />,
+    <WorkoutDetailsContent locationId={10} providedEventId={providedEventId} />,
   );
 
 const warning = () => screen.queryByText("Event is unavailable.");
@@ -206,9 +198,20 @@ describe("WorkoutDetailsContent event resolution", () => {
     renderPanel(1);
 
     expect(warning()).toBeNull();
-    expect(screen.getByTestId("chip-1")).toBeTruthy();
-    expect(screen.getByText("Bootcamp")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Alpha AO" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Monday Bootcamp")).toBeTruthy();
+    expect(screen.getByText("Bootcamp · F3 Metro")).toBeTruthy();
+    expect(screen.getByText("MON · 5:30–6:15 AM")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /get directions/i })
+        .getAttribute("href"),
+    ).toBe("https://www.google.com/maps/search/?api=1&query=35.5,-80.5");
     expect(screen.getByText("Copy Link to Event")).toBeTruthy();
+    // One workout here, so there is no list to choose from.
+    expect(screen.queryByText(/workouts at this location/i)).toBeNull();
   });
 
   // The fallback is a multi-join lookup behind an authenticated endpoint. It
@@ -302,13 +305,7 @@ describe("WorkoutDetailsContent event resolution", () => {
     queryStates.set("eventById", { isError: true, error });
 
     const { rerender } = renderPanel(999);
-    rerender(
-      <WorkoutDetailsContent
-        locationId={10}
-        providedEventId={999}
-        chipSize="small"
-      />,
-    );
+    rerender(<WorkoutDetailsContent locationId={10} providedEventId={999} />);
 
     expect(captureException).toHaveBeenCalledTimes(1);
     expect(captureException).toHaveBeenCalledWith(error, {
@@ -407,7 +404,7 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
     renderPanel(-5);
 
     expect(warning()).toBeNull();
-    expect(screen.getByTestId("chip--5")).toBeTruthy();
+    expect(screen.getAllByText("Third F Gathering").length).toBeGreaterThan(0);
     expect(screen.getByText("Copy Link to Event")).toBeTruthy();
   });
 
@@ -477,7 +474,7 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
     });
 
     const regionHeading = (region: string) =>
-      screen.queryByText(`About F3 ${region}`);
+      screen.queryByText(`F3 ${region}`);
     const aoContactLink = (ao: string) =>
       document.querySelector(
         `a[href^="https://${ao.toLowerCase().replace(/ /g, "-")}.example"]`,
@@ -498,24 +495,12 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
       expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
       expect(regionHeading("Metro")).toBeTruthy();
 
-      rerender(
-        <WorkoutDetailsContent
-          locationId={10}
-          providedEventId={-6}
-          chipSize="small"
-        />,
-      );
+      rerender(<WorkoutDetailsContent locationId={10} providedEventId={-6} />);
       expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
       expect(regionHeading("Uptown")).toBeTruthy();
       expect(aoContactLink("Bravo AO")).toBeTruthy();
 
-      rerender(
-        <WorkoutDetailsContent
-          locationId={10}
-          providedEventId={-5}
-          chipSize="small"
-        />,
-      );
+      rerender(<WorkoutDetailsContent locationId={10} providedEventId={-5} />);
       expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
       expect(regionHeading("Metro")).toBeTruthy();
       expect(aoContactLink("Alpha AO")).toBeTruthy();
@@ -740,15 +725,14 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
         const { rerender } = renderPanel(-6);
 
         expectOrgs(oneOffOrgs, recurringOrgs);
-        expect(screen.getByTestId("chip-1")).toBeTruthy();
-        expect(screen.getByTestId("chip--6")).toBeTruthy();
+        expect(screen.getByTestId("workout-1")).toBeTruthy();
+        expect(screen.getByTestId("workout--6")).toBeTruthy();
 
         for (const providedEventId of [1, -6]) {
           rerender(
             <WorkoutDetailsContent
               locationId={10}
               providedEventId={providedEventId}
-              chipSize="small"
             />,
           );
           expectOrgs(
@@ -773,7 +757,6 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
               <WorkoutDetailsContent
                 locationId={10}
                 providedEventId={providedEventId}
-                chipSize="small"
               />,
             );
             fireEvent.click(
@@ -852,6 +835,135 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
         },
       );
     });
+  });
+});
+
+describe("WorkoutDetailsContent panel content", () => {
+  beforeEach(() => {
+    queryStates.clear();
+    enabledCalls.length = 0;
+    queryStates.set("upcomingInstances", { data: [] });
+  });
+
+  const roost = (id: number, dayOfWeek: "tuesday" | "thursday") =>
+    locationEvent({
+      id,
+      name: "The Roost",
+      dayOfWeek,
+      startTime: "0515",
+      endTime: "0600",
+      aoName: "The Roost",
+    });
+  const havoc = locationEvent({
+    id: 3,
+    name: "Havoc",
+    dayOfWeek: "saturday",
+    startTime: "0600",
+    endTime: "0700",
+    aoName: "Havoc",
+  });
+
+  it("lists each workout here once, folding days, and marks the one on view", () => {
+    queryStates.set("locationWorkout", {
+      data: locationWorkout([roost(1, "tuesday"), roost(2, "thursday"), havoc]),
+    });
+
+    renderPanel(2);
+
+    expect(screen.getByText("2 workouts at this location")).toBeTruthy();
+    const viewing = screen.getByTestId("workout-1");
+    expect(viewing.getAttribute("aria-current")).toBe("true");
+    expect(viewing.textContent).toContain("Tuesday / Thursday · 5:15–6:00 AM");
+    expect(viewing.textContent).toContain("Bootcamp · 45 min");
+    expect(viewing.textContent).toContain("Viewing");
+    expect(
+      screen.getByTestId("workout-3").getAttribute("aria-current"),
+    ).toBeNull();
+    expect(screen.getByText("TUE / THU · 5:15–6:00 AM")).toBeTruthy();
+  });
+
+  it("switches the panel to another workout here when it is picked", () => {
+    queryStates.set("locationWorkout", {
+      data: locationWorkout([roost(1, "tuesday"), havoc]),
+    });
+    const select = vi
+      .spyOn(selectedItem, "setSelectedItem")
+      .mockImplementation(() => undefined);
+    try {
+      renderPanel(1);
+      fireEvent.click(screen.getByTestId("workout-3"));
+      expect(select).toHaveBeenCalledWith({
+        locationId: 10,
+        eventId: 3,
+        showPanel: true,
+      });
+    } finally {
+      select.mockRestore();
+    }
+  });
+
+  it("links an AO page only when the AO has a website", () => {
+    queryStates.set("locationWorkout", {
+      data: locationWorkout([locationEvent()]),
+    });
+    const { unmount } = renderPanel(1);
+    expect(screen.queryByRole("link", { name: /alpha ao page/i })).toBeNull();
+    unmount();
+
+    queryStates.set("locationWorkout", {
+      data: locationWorkout([locationEvent()], [], {
+        parentWebsite: "alpha.example",
+      }),
+    });
+    renderPanel(1);
+    expect(
+      screen.getByRole("link", { name: /alpha ao page/i }).getAttribute("href"),
+    ).toBe("https://alpha.example/");
+  });
+
+  it("points first-timers at f3nation.com's what-to-expect page", () => {
+    queryStates.set("locationWorkout", {
+      data: locationWorkout([locationEvent()]),
+    });
+    renderPanel(1);
+    expect(screen.getByText("First time? Just show up.")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /what to expect/i })
+        .getAttribute("href"),
+    ).toBe("https://f3nation.com/what-to-expect");
+  });
+
+  it("downloads a weekly calendar file for the workout", async () => {
+    queryStates.set("locationWorkout", {
+      data: locationWorkout([roost(1, "tuesday"), roost(2, "thursday")]),
+    });
+    const blobs: Blob[] = [];
+    const createObjectURL = vi.fn((blob: Blob) => {
+      blobs.push(blob);
+      return "blob:ics";
+    });
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal(
+      "URL",
+      Object.assign(URL, { createObjectURL, revokeObjectURL }),
+    );
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    try {
+      renderPanel(1);
+      fireEvent.click(screen.getByRole("button", { name: "Add to calendar" }));
+
+      expect(click).toHaveBeenCalledOnce();
+      const ics = await blobs[0]?.text();
+      expect(ics).toContain("RRULE:FREQ=WEEKLY;BYDAY=TU,TH");
+      expect(ics).toContain("SUMMARY:The Roost");
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:ics");
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });
 
