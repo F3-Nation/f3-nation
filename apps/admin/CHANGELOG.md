@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.12.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.11.0...admin@2.12.0) (2026-11-24)
+
+
+### Features
+
+* **admin,api,shared:** let region editors opt in to the password vault ([#1750](https://github.com/F3-Nation/f3-nation/issues/1750)) ([811efa7](https://github.com/F3-Nation/f3-nation/commit/811efa70c4ef0af27e48f4c185bb05e513b83210))
+* **api,admin,shared,validators,db:** several roles per org, password roles in admin ([#1749](https://github.com/F3-Nation/f3-nation/issues/1749)) ([f2b061c](https://github.com/F3-Nation/f3-nation/commit/f2b061cc90a27db8a66448a8fda5c4d1cf29a965))
+* **api,shared:** accept originating app claims before client rollout ([#1778](https://github.com/F3-Nation/f3-nation/issues/1778)) ([612b277](https://github.com/F3-Nation/f3-nation/commit/612b277ec1fcda8336803d3b0e5bee139051a5a6))
+
+
+### Bug Fixes
+
+* **admin:** fix suppressed react-hooks lint violations ([#1454](https://github.com/F3-Nation/f3-nation/issues/1454)) ([a018ec8](https://github.com/F3-Nation/f3-nation/commit/a018ec8b5805e97be10dd918154a72cd0b84e049))
+* **admin:** skip the closeModal click restore once the document is gone ([#1730](https://github.com/F3-Nation/f3-nation/issues/1730)) ([27db41a](https://github.com/F3-Nation/f3-nation/commit/27db41a8ca596fb87425f39fcf8961a9b7ad695c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.18.0
+    * @acme/shared bumped to 0.8.0
+    * @acme/ui bumped to 0.3.2
+    * @acme/validators bumped to 0.6.0
+
 ## [2.11.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.10.0...admin@2.11.0) (2026-11-17)
 
 
