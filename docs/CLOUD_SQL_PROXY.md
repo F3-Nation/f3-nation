@@ -44,17 +44,19 @@ the `cloud-sql-proxy` binary for your platform from
 <https://cloud.google.com/sql/docs/postgres/sql-proxy#install>, make it
 executable (`chmod +x cloud-sql-proxy`) and put it on your `PATH`.
 
-### Windows (PowerShell)
+### Windows (WSL 2)
 
-```powershell
-winget install Google.CloudSDK
-```
+Run everything inside WSL 2, as for the rest of this repo (see "Environment
+Setup" in `AGENTS.md`): follow the **Linux** steps above in your WSL terminal,
+and start the proxy there too.
 
-Then download `cloud-sql-proxy.x64.exe` from
-<https://cloud.google.com/sql/docs/postgres/sql-proxy#install>, rename it to
-`cloud-sql-proxy.exe`, and put it in a folder on your `PATH`, so the commands
-below work as written. Open a new PowerShell window after installing so both
-commands are found.
+A proxy started in PowerShell on the Windows side can't be reached from WSL at
+`127.0.0.1` in WSL's default networking mode, so the scripts get
+`connection refused`. Pointing them at the Windows host's IP doesn't help
+either: that isn't a loopback address, so they ask for SSL and the proxy's
+local port refuses it. Only use a PowerShell-side proxy for tools you also run
+on Windows (such as psql), or with WSL set to mirrored networking
+(`networkingMode=mirrored` in `%UserProfile%\.wslconfig`).
 
 ## Sign in (once per machine)
 

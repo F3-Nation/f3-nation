@@ -66,7 +66,7 @@
  *
  * Running it against staging or prod:
  *   1. Start a cloud-sql-proxy for that database and leave it running. Setup
- *      for macOS, Linux and Windows is in docs/CLOUD_SQL_PROXY.md.
+ *      for macOS, Linux and WSL 2 is in docs/CLOUD_SQL_PROXY.md.
  *   2. Create apps/auth/.env.staging (or .env.prod; both are gitignored):
  *        DATABASE_HOST=127.0.0.1
  *        DATABASE_PORT=5482            (5481 for prod)
