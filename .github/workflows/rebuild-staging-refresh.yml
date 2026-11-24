@@ -61,6 +61,11 @@ jobs:
           echo "::error::Run this from main (--ref main), not ${GITHUB_REF}."
           exit 1
 
+      # For scripts/wait-for-check-runs.sh. The step above limits this to main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       # A dispatch soon after a push to main can start before CI has created
       # its checks, and the wait below fails when none of them exist. So first
       # wait for every required check to appear on this commit. `test-coverage`
@@ -72,20 +77,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          attempts=60 interval=15
-          for _ in $(seq 1 "${attempts}"); do
-            names="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
-              --jq '.check_runs[].name')"
-            missing=""
-            for name in ${REQUIRED}; do
-              [[ "${name}" == test-coverage ]] && continue
-              grep -qxF "${name}" <<<"${names}" || missing="${missing} ${name}"
-            done
-            if [[ -z "${missing}" ]]; then exit 0; fi
-            sleep "${interval}"
+          names=()
+          for name in ${REQUIRED}; do
+            [[ "${name}" == test-coverage ]] || names+=("${name}")
           done
-          echo "::error::CI didn't start these checks on ${GITHUB_SHA} within $((attempts * interval / 60)) minutes:${missing}"
-          exit 1
+          bash scripts/wait-for-check-runs.sh exist 60 15 "${names[@]}"
 
       - name: Wait for CI to pass on this commit
         uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
@@ -103,16 +99,7 @@ jobs:
       - name: Wait for test-coverage to finish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          attempts=20 interval=15
-          for _ in $(seq 1 "${attempts}"); do
-            finished="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
-              --jq '.check_runs[] | select(.name == "test-coverage" and .status == "completed") | .id')"
-            if [[ -n "${finished}" ]]; then exit 0; fi
-            sleep "${interval}"
-          done
-          echo "::error::test-coverage did not finish on ${GITHUB_SHA} within $((attempts * interval / 60)) minutes"
-          exit 1
+        run: bash scripts/wait-for-check-runs.sh completed 20 15 test-coverage
 
       # The wait above fails only when none of the named checks exist, so also
       # require each one: present on this commit, and its latest run green.
