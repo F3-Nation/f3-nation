@@ -85,7 +85,8 @@ def test_unlinked_region_never_reads_or_writes_settings(monkeypatch):
 
     assert f3versary_announcements._load_f3versary_settings(SlackSettings(team_id="T1", org_id=6)) is None
     assert (
-        f3versary_announcements._save_f3versary_settings(SlackSettings(team_id="T1", org_id=6), True, "C1", 14) is False
+        f3versary_announcements._save_f3versary_settings(SlackSettings(team_id="T1", org_id=6), True, "C1", 14, 90)
+        is False
     )
     session.execute.assert_not_called()
     session.commit.assert_not_called()
@@ -96,7 +97,7 @@ def test_missing_region_id_fails_closed_before_database_access(monkeypatch):
     monkeypatch.setattr(f3versary_announcements, "get_session", get_session)
 
     assert f3versary_announcements._load_f3versary_settings(SlackSettings(team_id="T1")) is None
-    assert f3versary_announcements._save_f3versary_settings(SlackSettings(team_id="T1"), True, "C1", 14) is False
+    assert f3versary_announcements._save_f3versary_settings(SlackSettings(team_id="T1"), True, "C1", 14, 90) is False
     get_session.assert_called()
     get_session.return_value.__enter__.return_value.query.assert_not_called()
 
@@ -108,7 +109,9 @@ def test_settings_save_reports_failure_if_linked_workspace_disappears(monkeypatc
     session.execute.return_value.rowcount = 0
     monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
 
-    assert not f3versary_announcements._save_f3versary_settings(SlackSettings(team_id="T1", org_id=6), True, "C1", 14)
+    assert not f3versary_announcements._save_f3versary_settings(
+        SlackSettings(team_id="T1", org_id=6), True, "C1", 14, 90
+    )
     session.rollback.assert_called_once()
     session.commit.assert_not_called()
 
@@ -448,3 +451,17 @@ def test_unsupported_activity_submission_does_not_save(monkeypatch, activity_day
     save.assert_not_called()
     assert update.call_args.kwargs["title"] == "Invalid attendance requirement"
     assert update.call_args.kwargs["level"] == constants.AlertLevel.ERROR
+
+
+@pytest.mark.parametrize("stored", [None, False, True, 90.0, "0", 120, -1, {}])
+def test_form_read_defaults_invalid_activity_requirement(monkeypatch, stored):
+    session = MagicMock()
+    session.__enter__.return_value = session
+    linked_query = MagicMock()
+    linked_query.join.return_value.filter.return_value.one_or_none.return_value = (10,)
+    settings_query = MagicMock()
+    settings_query.filter.return_value.one_or_none.return_value = ({"f3versary_announcements_activity_days": stored},)
+    session.query.side_effect = [linked_query, settings_query]
+    monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
+    settings = f3versary_announcements._load_f3versary_settings(SlackSettings(team_id="T1", org_id=6))
+    assert settings["activity_days"] == 90

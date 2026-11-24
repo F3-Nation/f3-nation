@@ -141,7 +141,11 @@ def _load_settings(
     activity_days = settings.f3versary_announcements_activity_days
     if type(activity_days) is not int or activity_days not in F3VERSARY_ACTIVITY_DAYS:
         if activity_days is not None:
-            logger.warning("Invalid F3versary attendance requirement; using default")
+            logger.warning(
+                "Invalid F3versary attendance requirement (org_id=%s, type=%s); using default",
+                org.id,
+                type(activity_days).__name__,
+            )
         activity_days = DEFAULT_F3VERSARY_ACTIVITY_DAYS
     return F3versaryConfig(
         activity_days=activity_days,

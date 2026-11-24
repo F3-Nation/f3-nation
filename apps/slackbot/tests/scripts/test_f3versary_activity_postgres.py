@@ -175,3 +175,9 @@ def test_settings_submission_persists_and_reopens_without_overwriting_other_keys
         block["element"] for block in blocks if block.get("block_id") == actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS
     )
     assert dropdown["initial_option"]["value"] == str(days)
+
+
+def test_default_processing_date_keeps_attendance_on_cutoff(isolated_postgres):
+    _seed(isolated_postgres, date(2026, 6, 3))
+    result = f3versary_announcements.get_f3versary_candidates(_config(90), date(2026, 9, 15))
+    assert [pax.user_id for pax in result] == [1]

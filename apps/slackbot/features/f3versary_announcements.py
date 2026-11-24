@@ -85,7 +85,7 @@ def _save_f3versary_settings(
     enabled: bool,
     channel: str | None,
     lead_days: int,
-    activity_days: int = constants.DEFAULT_F3VERSARY_ACTIVITY_DAYS,
+    activity_days: int,
 ) -> bool:
     """Atomically merge only this feature's keys into SlackSpace.settings."""
     with get_session() as session:
