@@ -199,5 +199,8 @@ describe("sslFor", () => {
     expect(sslFor("prod", "db.example.com")).toBe("require");
     expect(sslFor("prod", "127.0.0.2")).toBe("require");
     expect(sslFor("prod", "db.example.com:5432")).toBe("require");
+    expect(sslFor("prod", "127.0.0.10")).toBe("require");
+    expect(sslFor("prod", "localhost.example.com")).toBe("require");
+    expect(sslFor("staging", "127.0.0.1.nip.io")).toBe("require");
   });
 });

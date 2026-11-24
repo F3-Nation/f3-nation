@@ -109,5 +109,7 @@ psql "host=127.0.0.1 port=5482 dbname=f3_staging user=YOUR_DB_USER sslmode=disab
   for a different account. Re-run `gcloud auth application-default login`.
 - **`password authentication failed`:** the proxy is fine; the database user
   or password is wrong.
-- **`The server does not support SSL connections`:** the client asked for SSL.
-  Turn it off (`sslmode=disable`) for a connection through the proxy.
+- **SSL errors** (psql: `server does not support SSL, but SSL was required`;
+  the Node migration scripts: a TLS or socket error right after connecting):
+  the client asked for SSL. Turn it off (`sslmode=disable`) for a connection
+  through the proxy.
