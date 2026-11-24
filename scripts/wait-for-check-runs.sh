@@ -23,7 +23,7 @@ case "${mode}" in exist | completed) ;; *) usage ;; esac
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must be set}" "${GITHUB_SHA:?GITHUB_SHA must be set}"
 
 missing=""
-for attempt in $(seq 1 "${attempts}"); do
+for _ in $(seq 1 "${attempts}"); do
   if ! runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
     --jq '.check_runs[] | [.name, .status] | @tsv')"; then
     echo "::error::Could not read the check runs on ${GITHUB_SHA}."
@@ -40,7 +40,9 @@ for attempt in $(seq 1 "${attempts}"); do
     fi
   done
   if [[ -z "${missing}" ]]; then exit 0; fi
-  if [[ "${attempt}" -lt "${attempts}" ]]; then sleep "${interval}"; fi
+  # Also after the last attempt, so the wait lasts the full ATTEMPTS x INTERVAL
+  # that the timeout message reports.
+  sleep "${interval}"
 done
 
 minutes=$((attempts * interval / 60))
