@@ -28,10 +28,18 @@ cat "$dir/responses/$count" 2>/dev/null || true
 STUB
 chmod +x "$tmp_dir/gh"
 
+# Records each sleep's duration instead of waiting, so the tests run instantly
+# and can still count the sleeps.
+cat >"$tmp_dir/sleep" <<'STUB'
+#!/usr/bin/env bash
+echo "$1" >>"$(dirname "$0")/sleeps"
+STUB
+chmod +x "$tmp_dir/sleep"
+
 # Each argument is one poll's response, with "|" between lines and ":" between
 # name and status; FAIL makes that poll's gh call fail.
 set_responses() {
-  rm -rf "$tmp_dir/responses" "$tmp_dir/calls"
+  rm -rf "$tmp_dir/responses" "$tmp_dir/calls" "$tmp_dir/sleeps"
   mkdir "$tmp_dir/responses"
   local i=0 response
   for response in "$@"; do
@@ -109,6 +117,23 @@ set_responses
 assert_eq "a non-numeric attempt count is a usage error" \
   "2 calls=0: usage: ${wait_script} exist|completed ATTEMPTS INTERVAL_SECONDS CHECK_NAME..." \
   "$(run_wait exist many 0 build)"
+
+# Prints the recorded sleep durations, comma-separated ("" for none).
+sleeps() {
+  paste -sd, "$tmp_dir/sleeps" 2>/dev/null || true
+}
+
+set_responses "lint:queued" "lint:queued" "lint:queued"
+run_wait exist 3 7 build >/dev/null
+assert_eq "a timeout sleeps after every attempt, for the given interval" "7,7,7" "$(sleeps)"
+
+set_responses "" "build:queued"
+run_wait exist 3 7 build >/dev/null
+assert_eq "finding the check on the second poll sleeps once" "7" "$(sleeps)"
+
+set_responses "build:queued"
+run_wait exist 3 7 build >/dev/null
+assert_eq "finding the check on the first poll never sleeps" "" "$(sleeps)"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} test(s) failed"
