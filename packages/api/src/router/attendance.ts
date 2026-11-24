@@ -1,8 +1,9 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import { and, eq, inArray, schema, sql } from "@acme/db";
+import { and, eq, inArray, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { AttendanceType } from "@acme/shared/app/enums";
 import { queryBooleanSchema } from "@acme/shared/app/functions";
 
 import {
@@ -12,26 +13,22 @@ import {
 import { protectedProcedure } from "../shared";
 
 /**
- * Get attendance type IDs by type name from the database
+ * Fixed ids of the `attendance_types` rows, which writers still link
+ * attendance records to and the `attendanceTypes` response field still
+ * reports. They are the same in production and in the local and test seeds.
  */
-async function getAttendanceTypeIds(db: Pick<AppDb, "select">) {
-  const types = await db
-    .select({
-      id: schema.attendanceTypes.id,
-      type: schema.attendanceTypes.type,
-    })
-    .from(schema.attendanceTypes);
+const ATTENDANCE_TYPE_IDS = { PAX: 1, Q: 2, COQ: 3 } as const;
 
-  const typeMap = Object.fromEntries(
-    types.map((t) => [t.type, t.id]),
-  ) as Record<string, number>;
-
-  return {
-    PAX: typeMap.PAX ?? 0,
-    Q: typeMap.Q ?? 0,
-    COQ: typeMap["Co-Q"] ?? 0,
-  };
-}
+/**
+ * The `attendance_types` row each `attendance.attendance_type` value stands
+ * for, reported in the `attendanceTypes` response field for callers that
+ * still read type ids.
+ */
+const LEGACY_ATTENDANCE_TYPES = {
+  pax: { id: ATTENDANCE_TYPE_IDS.PAX, type: "PAX" },
+  q: { id: ATTENDANCE_TYPE_IDS.Q, type: "Q" },
+  co_q: { id: ATTENDANCE_TYPE_IDS.COQ, type: "Co-Q" },
+} as const satisfies Record<AttendanceType, { id: number; type: string }>;
 
 /**
  * Refuses a write that would give `userId` the Q type on an event instance
@@ -46,26 +43,20 @@ async function assertNoOtherQ(
     eventInstanceId,
     userId,
     isPlanned,
-    qTypeId,
   }: {
     eventInstanceId: number;
     userId: number;
     isPlanned: boolean;
-    qTypeId: number;
   },
 ) {
   const existingQ = await db
     .select({ userId: schema.attendance.userId })
     .from(schema.attendance)
-    .innerJoin(
-      schema.attendanceXAttendanceTypes,
-      eq(schema.attendanceXAttendanceTypes.attendanceId, schema.attendance.id),
-    )
     .where(
       and(
         eq(schema.attendance.eventInstanceId, eventInstanceId),
         eq(schema.attendance.isPlanned, isPlanned),
-        eq(schema.attendanceXAttendanceTypes.attendanceTypeId, qTypeId),
+        eq(schema.attendance.attendanceType, "q"),
       ),
     );
 
@@ -106,6 +97,57 @@ export const attendanceRouter = {
       description:
         "Get all attendance records for an event instance with user info and types",
     })
+    .output(
+      z.object({
+        attendance: z
+          .array(
+            z.object({
+              id: z.number().describe("Attendance record ID"),
+              userId: z.number().describe("Attending user ID"),
+              eventInstanceId: z.number().describe("Event instance ID"),
+              isPlanned: z
+                .boolean()
+                .describe(
+                  "True for planned attendance (preblast), false for actual attendance (backblast)",
+                ),
+              meta: z
+                .record(z.string(), z.unknown())
+                .nullable()
+                .describe("Free-form attendance metadata"),
+              created: z.string().describe("When the record was created (UTC)"),
+              user: z
+                .object({
+                  id: z.number().describe("User ID"),
+                  f3Name: z.string().nullable().describe("User's F3 name"),
+                })
+                .nullable()
+                .describe("The attending user"),
+              attendanceType: z
+                .enum(AttendanceType)
+                .describe(
+                  "The capacity the user attends in: `pax`, `q` (leader) or `co_q` (co-leader)",
+                ),
+              attendanceTypes: z
+                .array(
+                  z.object({
+                    id: z.number().describe("Attendance type ID"),
+                    type: z
+                      .enum(
+                        Object.values(LEGACY_ATTENDANCE_TYPES).map(
+                          (t) => t.type,
+                        ),
+                      )
+                      .describe("Attendance type name"),
+                  }),
+                )
+                .describe(
+                  "Deprecated: one entry naming `attendanceType` by its numeric type ID. Read `attendanceType` instead.",
+                ),
+            }),
+          )
+          .describe("Attendance records for the event instance"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       // Get attendance records with user info
       const attendanceRecords = await ctx.db
@@ -120,46 +162,21 @@ export const attendanceRouter = {
             id: schema.users.id,
             f3Name: schema.users.f3Name,
           },
-          attendanceTypes: sql<{ id: number; type: string }[]>`COALESCE(
-            json_agg(
-              DISTINCT jsonb_build_object(
-                'id', ${schema.attendanceTypes.id},
-                'type', ${schema.attendanceTypes.type}
-              )
-            )
-            FILTER (
-              WHERE ${schema.attendanceTypes.id} IS NOT NULL
-            ),
-            '[]'
-          )`,
+          attendanceType: schema.attendance.attendanceType,
         })
         .from(schema.attendance)
         .leftJoin(schema.users, eq(schema.users.id, schema.attendance.userId))
-        .leftJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
-        )
-        .leftJoin(
-          schema.attendanceTypes,
-          eq(
-            schema.attendanceTypes.id,
-            schema.attendanceXAttendanceTypes.attendanceTypeId,
-          ),
-        )
         .where(
           and(
             eq(schema.attendance.eventInstanceId, input.eventInstanceId),
             eq(schema.attendance.isPlanned, input.isPlanned),
           ),
-        )
-        .groupBy(schema.attendance.id, schema.users.id, schema.users.f3Name);
+        );
 
       return {
         attendance: attendanceRecords.map((record) => ({
           ...record,
+          attendanceTypes: [LEGACY_ATTENDANCE_TYPES[record.attendanceType]],
           user: record.user
             ? {
                 id: record.user.id,
@@ -198,13 +215,11 @@ export const attendanceRouter = {
         message: "You are not authorized to create planned attendance",
       });
 
-      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
       if (input.attendanceTypeIds.includes(ATTENDANCE_TYPE_IDS.Q)) {
         await assertNoOtherQ(ctx.db, {
           eventInstanceId: input.eventInstanceId,
           userId: input.userId,
           isPlanned: true,
-          qTypeId: ATTENDANCE_TYPE_IDS.Q,
         });
       }
 
@@ -499,13 +514,11 @@ export const attendanceRouter = {
         message: "You are not authorized to update attendance types",
       });
 
-      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
       if (input.attendanceTypeIds.includes(ATTENDANCE_TYPE_IDS.Q)) {
         await assertNoOtherQ(ctx.db, {
           eventInstanceId: attendance.eventInstanceId,
           userId: attendance.userId,
           isPlanned: attendance.isPlanned,
-          qTypeId: ATTENDANCE_TYPE_IDS.Q,
         });
       }
 
@@ -558,18 +571,18 @@ export const attendanceRouter = {
         message: "You are not authorized to take Q for this event",
       });
 
-      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
-
       await assertNoOtherQ(ctx.db, {
         eventInstanceId: input.eventInstanceId,
         userId: input.userId,
         isPlanned: true,
-        qTypeId: ATTENDANCE_TYPE_IDS.Q,
       });
 
       // Check if user already has attendance
       const existingAttendance = await ctx.db
-        .select({ id: schema.attendance.id })
+        .select({
+          id: schema.attendance.id,
+          attendanceType: schema.attendance.attendanceType,
+        })
         .from(schema.attendance)
         .where(
           and(
@@ -585,20 +598,7 @@ export const attendanceRouter = {
         attendanceId = existingAttendance[0]!.id;
 
         // Add Q type to existing attendance (keep other types)
-        const existingType = await ctx.db
-          .select({ id: schema.attendanceXAttendanceTypes.attendanceTypeId })
-          .from(schema.attendanceXAttendanceTypes)
-          .where(
-            and(
-              eq(schema.attendanceXAttendanceTypes.attendanceId, attendanceId),
-              eq(
-                schema.attendanceXAttendanceTypes.attendanceTypeId,
-                ATTENDANCE_TYPE_IDS.Q,
-              ),
-            ),
-          );
-
-        if (existingType.length === 0) {
+        if (existingAttendance[0]!.attendanceType !== "q") {
           await ctx.db.insert(schema.attendanceXAttendanceTypes).values({
             attendanceId,
             attendanceTypeId: ATTENDANCE_TYPE_IDS.Q,
@@ -658,8 +658,6 @@ export const attendanceRouter = {
         targetUserId: input.userId,
         message: "You are not authorized to remove Q status",
       });
-
-      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
 
       // Find the attendance record
       const [attendance] = await ctx.db
@@ -726,13 +724,12 @@ export const attendanceRouter = {
       });
 
       return ctx.db.transaction(async (tx) => {
-        const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(tx);
-
         // Get all existing planned attendance for this event
         const existingAttendance = await tx
           .select({
             id: schema.attendance.id,
             userId: schema.attendance.userId,
+            attendanceType: schema.attendance.attendanceType,
           })
           .from(schema.attendance)
           .where(
@@ -742,41 +739,27 @@ export const attendanceRouter = {
             ),
           );
 
-        // Get existing Q/Co-Q type assignments
-        const existingQCoQAssignments = await tx
-          .select({
-            attendanceId: schema.attendanceXAttendanceTypes.attendanceId,
-            attendanceTypeId:
-              schema.attendanceXAttendanceTypes.attendanceTypeId,
-          })
-          .from(schema.attendanceXAttendanceTypes)
-          .where(
-            and(
-              inArray(
-                schema.attendanceXAttendanceTypes.attendanceId,
-                existingAttendance.map((a) => a.id),
-              ),
-              inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
-                ATTENDANCE_TYPE_IDS.Q,
-                ATTENDANCE_TYPE_IDS.COQ,
-              ]),
-            ),
-          );
+        // Existing Q/Co-Q holders
+        const existingQCoQAttendanceIds = existingAttendance
+          .filter((a) => a.attendanceType !== "pax")
+          .map((a) => a.id);
 
         // Remove all existing Q/Co-Q type assignments
-        if (existingQCoQAssignments.length > 0) {
-          await tx.delete(schema.attendanceXAttendanceTypes).where(
-            and(
-              inArray(
-                schema.attendanceXAttendanceTypes.attendanceId,
-                existingQCoQAssignments.map((a) => a.attendanceId),
+        if (existingQCoQAttendanceIds.length > 0) {
+          await tx
+            .delete(schema.attendanceXAttendanceTypes)
+            .where(
+              and(
+                inArray(
+                  schema.attendanceXAttendanceTypes.attendanceId,
+                  existingQCoQAttendanceIds,
+                ),
+                inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
+                  ATTENDANCE_TYPE_IDS.Q,
+                  ATTENDANCE_TYPE_IDS.COQ,
+                ]),
               ),
-              inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
-                ATTENDANCE_TYPE_IDS.Q,
-                ATTENDANCE_TYPE_IDS.COQ,
-              ]),
-            ),
-          );
+            );
         }
 
         const assignedUserIds = new Set([
@@ -787,9 +770,7 @@ export const attendanceRouter = {
           .filter(
             (attendance) =>
               !assignedUserIds.has(attendance.userId) &&
-              existingQCoQAssignments.some(
-                (assignment) => assignment.attendanceId === attendance.id,
-              ),
+              attendance.attendanceType !== "pax",
           )
           .map((attendance) => attendance.id);
 

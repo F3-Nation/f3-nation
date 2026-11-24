@@ -935,9 +935,6 @@ export const eventInstanceRouter = {
     .handler(async ({ context: ctx, input }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
 
-      // Attendance type IDs: 2 = Q, 3 = Co-Q
-      const qAttendanceTypeIds = [2, 3];
-
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split("T")[0]!;
 
@@ -951,10 +948,7 @@ export const eventInstanceRouter = {
         eq(schema.attendance.userId, input.userId),
         eq(schema.attendance.isPlanned, true),
         // Attendance is Q or Co-Q type
-        inArray(
-          schema.attendanceXAttendanceTypes.attendanceTypeId,
-          qAttendanceTypeIds,
-        ),
+        inArray(schema.attendance.attendanceType, ["q", "co_q"]),
         // Event is in the region or a child org of the region
         or(
           eq(schema.eventInstances.orgId, input.regionOrgId),
@@ -984,13 +978,6 @@ export const eventInstanceRouter = {
         .innerJoin(
           schema.attendance,
           eq(schema.attendance.eventInstanceId, schema.eventInstances.id),
-        )
-        .innerJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
         )
         .where(and(...whereConditions))
         .orderBy(
@@ -1029,9 +1016,6 @@ export const eventInstanceRouter = {
     .handler(async ({ context: ctx, input }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
 
-      // Attendance type IDs: 2 = Q, 3 = Co-Q
-      const qAttendanceTypeIds = [2, 3];
-
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split("T")[0]!;
 
@@ -1045,10 +1029,7 @@ export const eventInstanceRouter = {
         eq(schema.attendance.userId, input.userId),
         eq(schema.attendance.isPlanned, true),
         // Attendance is Q or Co-Q type
-        inArray(
-          schema.attendanceXAttendanceTypes.attendanceTypeId,
-          qAttendanceTypeIds,
-        ),
+        inArray(schema.attendance.attendanceType, ["q", "co_q"]),
         // Event is in the region or a child org of the region
         or(
           eq(schema.eventInstances.orgId, input.regionOrgId),
@@ -1078,13 +1059,6 @@ export const eventInstanceRouter = {
         .innerJoin(
           schema.attendance,
           eq(schema.attendance.eventInstanceId, schema.eventInstances.id),
-        )
-        .innerJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
         )
         .where(and(...whereConditions))
         .orderBy(
@@ -1130,17 +1104,10 @@ export const eventInstanceRouter = {
       const eventsWithQ = ctx.db
         .selectDistinct({ eventInstanceId: schema.attendance.eventInstanceId })
         .from(schema.attendance)
-        .innerJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
-        )
         .where(
           and(
             eq(schema.attendance.isPlanned, true),
-            inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [2, 3]),
+            inArray(schema.attendance.attendanceType, ["q", "co_q"]),
           ),
         );
 
@@ -1329,10 +1296,9 @@ export const eventInstanceRouter = {
               SELECT string_agg(u.f3_name, ', ')
               FROM attendance a
               JOIN users u ON u.id = a.user_id
-              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
               WHERE a.event_instance_id = ${schema.eventInstances.id}
                 AND a.is_planned = true
-                AND axat.attendance_type_id IN (2, 3)
+                AND a.attendance_type IN ('q', 'co_q')
             )`,
             userAttending: sql<boolean>`EXISTS(
               SELECT 1 FROM attendance a
@@ -1342,11 +1308,10 @@ export const eventInstanceRouter = {
             )`,
             userIsQ: sql<boolean>`EXISTS(
               SELECT 1 FROM attendance a
-              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
               WHERE a.event_instance_id = ${schema.eventInstances.id}
                 AND a.user_id = ${input.userId}
                 AND a.is_planned = true
-                AND axat.attendance_type_id IN (2, 3)
+                AND a.attendance_type IN ('q', 'co_q')
             )`,
           })
           .from(schema.eventInstances)
@@ -1421,10 +1386,9 @@ export const eventInstanceRouter = {
               SELECT string_agg(u.f3_name, ', ')
               FROM attendance a
               JOIN users u ON u.id = a.user_id
-              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
               WHERE a.event_instance_id = ${schema.eventInstances.id}
                 AND a.is_planned = true
-                AND axat.attendance_type_id IN (2, 3)
+                AND a.attendance_type IN ('q', 'co_q')
             )`,
             userAttending: sql<boolean>`EXISTS(
               SELECT 1 FROM attendance a
@@ -1434,11 +1398,10 @@ export const eventInstanceRouter = {
             )`,
             userIsQ: sql<boolean>`EXISTS(
               SELECT 1 FROM attendance a
-              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
               WHERE a.event_instance_id = ${schema.eventInstances.id}
                 AND a.user_id = ${input.userId}
                 AND a.is_planned = true
-                AND axat.attendance_type_id IN (2, 3)
+                AND a.attendance_type IN ('q', 'co_q')
             )`,
           })
           .from(schema.eventInstances)

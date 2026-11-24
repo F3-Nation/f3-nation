@@ -10,7 +10,7 @@
 import type { Session } from "@acme/auth";
 import type { OrgType } from "@acme/shared/app/enums";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { db } from "@acme/db/client";
 
 /**
@@ -41,6 +41,27 @@ export const getOrCreateRoles = async (): Promise<void> => {
         .values({ name: roleName, description: `${roleName} role` });
     }
   }
+};
+
+/**
+ * Ensures the PAX, Q and Co-Q attendance types exist with the fixed ids
+ * (1, 2, 3) that production uses and the API writes, then moves the id
+ * sequence past them so a test inserting its own type gets a free id.
+ * Returns their ids.
+ */
+export const ensureAttendanceTypes = async () => {
+  await db
+    .insert(schema.attendanceTypes)
+    .values([
+      { id: 1, type: "PAX" },
+      { id: 2, type: "Q" },
+      { id: 3, type: "Co-Q" },
+    ])
+    .onConflictDoNothing();
+  await db.execute(
+    sql`SELECT setval('attendance_types_id_seq', GREATEST((SELECT max(id) FROM attendance_types), (SELECT last_value FROM attendance_types_id_seq)))`,
+  );
+  return { PAX: 1, Q: 2, COQ: 3 } as const;
 };
 
 export interface FixtureOrg {
