@@ -178,7 +178,7 @@ def test_award_achievements_reports_failed_client_lookup_and_continues(monkeypat
     assert installed_client.chat_postMessage.call_args.kwargs["channel"] == "C-T2"
 
 
-def _post_one_workspace(monkeypatch, send_option, client, dry_run=False):
+def _post_one_workspace(monkeypatch, send_option, client, dry_run=False, channel="C-T1", known_achievement=True):
     """Run `post_achievements` for achievement 7 awarded to users 1 and 2 in workspace T1."""
     candidates = [
         award_achievements.CandidateAward(achievement_id=7, user_id=user_id, award_year=2026, award_period=1, metric=5)
@@ -193,11 +193,12 @@ def _post_one_workspace(monkeypatch, send_option, client, dry_run=False):
     session = MagicMock()
     session.scalars.side_effect = [
         MagicMock(all=lambda: users),
-        MagicMock(all=lambda: [achievement]),
+        MagicMock(all=lambda: [achievement] if known_achievement else []),
         MagicMock(all=lambda: slack_users),
     ]
     space = _slack_space("T1")
     space.settings["achievement_send_option"] = send_option
+    space.settings["achievement_channel"] = channel
     session.execute.return_value.all.return_value = [(10, space)]
     monkeypatch.setattr(award_achievements, "slack_client_for_team", lambda team_id, **kwargs: client)
     return award_achievements.post_achievements(session, candidates, dry_run=dry_run)
@@ -287,3 +288,30 @@ def test_achievement_dry_run_lists_counts_without_member_identity(monkeypatch, c
     output = _assert_no_member_identity(caplog, capsys)
     assert "Ironman (achievement 7): 2 member(s)" in output
     client.chat_postMessage.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "send_option,channel,known_achievement,expected",
+    [
+        ("post_summary", None, True, (0, 0)),
+        ("post_individually", None, True, (0, 0)),
+        ("post_summary", "C-T1", False, (0, 0)),
+        ("post_individually", "C-T1", False, (0, 0)),
+        ("send_in_dms_only", "C-T1", False, (0, 0)),
+        ("unrecognized_option", "C-T1", True, (1, 0)),
+    ],
+)
+def test_achievement_region_without_sends_still_reports_counts(
+    monkeypatch, caplog, send_option, channel, known_achievement, expected
+):
+    caplog.set_level("INFO")
+    client = MagicMock()
+
+    assert (
+        _post_one_workspace(monkeypatch, send_option, client, channel=channel, known_achievement=known_achievement)
+        == []
+    )
+
+    summary = _region_summary(caplog)
+    assert (summary["messages_sent"], summary["messages_failed"]) == expected
+    assert client.chat_postMessage.call_count == expected[0]

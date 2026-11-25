@@ -1315,6 +1315,10 @@ def test_log_error_event_drops_sqlalchemy_statement_and_parameters():
     "response_data,expected",
     [
         ({"ok": False, "error": "channel_not_found", "token": "xoxb-synthetic-token"}, "channel_not_found"),
+        ({"ok": False, "error": "token_revoked"}, "token_revoked"),
+        ({"ok": False, "error": "token_expired"}, "token_expired"),
+        ({"ok": False, "error": "xoxb_synthetic"}, "unclassified"),
+        ({"ok": False, "error": "xapp_synthetic"}, "unclassified"),
         ({"ok": False, "error": "xoxb-synthetic-token"}, "unclassified"),
         ({"ok": False, "error": "member@example.invalid"}, "unclassified"),
         ({"ok": False, "error": "x" * 65}, "unclassified"),
@@ -1365,3 +1369,25 @@ def test_log_error_event_bounds_the_exception_class_name(name, expected):
 
     assert record.json_fields["error_type"] == expected
     assert "member@example.invalid" not in output
+
+
+def test_log_error_event_logs_at_the_requested_level():
+    error = _raise_and_catch(RuntimeError(SENSITIVE_TEXT))
+    logger = logging.getLogger("tests.log_error_event.level")
+    records = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    collector = _Collect()
+    logger.addHandler(collector)
+    try:
+        helper_functions.log_error_event(logger, "slack.test.retrying", error, level=logging.WARNING, org_id=3)
+    finally:
+        logger.removeHandler(collector)
+
+    (record,) = records
+    assert record.levelno == logging.WARNING
+    assert record.json_fields["event"] == "slack.test.retrying"
+    assert SENSITIVE_TEXT not in repr(record.__dict__)

@@ -335,7 +335,11 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
             except Exception as e:
                 all_attempts_rejected = _slack_attempt_was_rejected(e)
                 log_error_event(
-                    logger, "slack.calendar_images.message_update_failed", e, team_id=slack_app_settings["team_id"]
+                    logger,
+                    "slack.calendar_images.message_update_failed",
+                    e,
+                    level=logging.WARNING,
+                    team_id=slack_app_settings["team_id"],
                 )
                 response = client.chat_postMessage(
                     channel=slack_app_settings["q_image_posting_channel"],

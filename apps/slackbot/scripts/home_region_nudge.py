@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import sys
 from collections import defaultdict
@@ -221,7 +222,9 @@ def send_home_region_nudges(force: bool = False):
             )
             sent_count += 1
         except SlackApiError as e:
-            print(f"Error sending DM to user {user_id} ({slack_user.slack_id}): {e.response['error']}")
+            log_error_event(
+                logging.getLogger(__name__), "slack.home_region_nudge.dm_failed", e, team_id=team_id, user_id=user_id
+            )
 
     print(f"Home region nudge complete. Sent {sent_count} DMs.")
     if failed_team_ids:

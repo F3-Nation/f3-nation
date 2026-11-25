@@ -284,7 +284,13 @@ def send_q_lineup_message(
             except Exception as e:
                 context = {"team_id": slack_settings.team_id, "org_id": org.id}
                 if channel_id and attempt == 0:
-                    log_error_event(logging.getLogger(__name__), "slack.q_lineups.send_failed_retrying", e, **context)
+                    log_error_event(
+                        logging.getLogger(__name__),
+                        "slack.q_lineups.send_failed_retrying",
+                        e,
+                        level=logging.WARNING,
+                        **context,
+                    )
                     slack_client.conversations_join(channel=channel_id)
                 else:
                     log_error_event(logging.getLogger(__name__), "slack.q_lineups.send_failed", e, **context)

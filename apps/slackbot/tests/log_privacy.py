@@ -42,10 +42,10 @@ def assert_private(caplog, capsys) -> str:
     return output
 
 
-def error_events(caplog, event: str) -> list[logging.LogRecord]:
-    """The ERROR records for `event`, so callers assert the count and the IDs each carries."""
+def error_events(caplog, event: str, level: int = logging.ERROR) -> list[logging.LogRecord]:
+    """The records for `event` at `level`, so callers assert the count and the IDs each carries."""
     return [
         record
         for record in caplog.records
-        if getattr(record, "json_fields", {}).get("event") == event and record.levelno == logging.ERROR
+        if getattr(record, "json_fields", {}).get("event") == event and record.levelno == level
     ]

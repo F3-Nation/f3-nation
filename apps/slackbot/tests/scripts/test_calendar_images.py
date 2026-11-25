@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import threading
@@ -1726,8 +1727,9 @@ def test_failed_message_update_logs_privately_then_posts_new_message(slack_post,
     post()
 
     log_privacy.assert_private(caplog, capsys)
-    (record,) = log_privacy.error_events(caplog, "slack.calendar_images.message_update_failed")
+    (record,) = log_privacy.error_events(caplog, "slack.calendar_images.message_update_failed", level=logging.WARNING)
     assert record.json_fields["team_id"] == "T123"
+    assert not log_privacy.error_events(caplog, "slack.calendar_images.message_update_failed")
     assert record.json_fields["error_type"] == type(client.chat_update.side_effect).__name__
     assert settings["q_image_posting_ts"] == "new-ts"
     assert not log_privacy.error_events(caplog, "slack.calendar_images.post_failed")
@@ -1742,7 +1744,7 @@ def test_failed_new_post_logs_privately_and_raises(slack_post, caplog, capsys):
         post()
 
     log_privacy.assert_private(caplog, capsys)
-    (update,) = log_privacy.error_events(caplog, "slack.calendar_images.message_update_failed")
+    (update,) = log_privacy.error_events(caplog, "slack.calendar_images.message_update_failed", level=logging.WARNING)
     (failed,) = log_privacy.error_events(caplog, "slack.calendar_images.post_failed")
     assert update.json_fields["slack_error"] == "message_not_found"
     assert failed.json_fields == {

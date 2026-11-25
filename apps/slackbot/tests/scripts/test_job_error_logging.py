@@ -143,8 +143,9 @@ def test_failed_lineup_send_logs_privately_then_joins_and_resends(lineup, caplog
     send()
 
     log_privacy.assert_private(caplog, capsys)
-    (record,) = log_privacy.error_events(caplog, "slack.q_lineups.send_failed_retrying")
+    (record,) = log_privacy.error_events(caplog, "slack.q_lineups.send_failed_retrying", level=logging.WARNING)
     assert (record.json_fields["team_id"], record.json_fields["org_id"]) == ("T123", 21)
+    assert not log_privacy.error_events(caplog, "slack.q_lineups.send_failed_retrying")
     assert not log_privacy.error_events(caplog, "slack.q_lineups.send_failed")
     client.conversations_join.assert_called_once_with(channel="C123")
     assert org.meta == {"q_lineup_ts": "1700000000.000200"}
@@ -157,7 +158,7 @@ def test_failed_lineup_resend_logs_privately_and_stops(lineup, caplog, capsys):
     send()
 
     log_privacy.assert_private(caplog, capsys)
-    (retrying,) = log_privacy.error_events(caplog, "slack.q_lineups.send_failed_retrying")
+    (retrying,) = log_privacy.error_events(caplog, "slack.q_lineups.send_failed_retrying", level=logging.WARNING)
     assert retrying.json_fields["slack_error"] == "not_in_channel"
     (failed,) = log_privacy.error_events(caplog, "slack.q_lineups.send_failed")
     assert (failed.json_fields["org_id"], failed.json_fields["error_type"]) == (21, "StatementError")
@@ -250,3 +251,50 @@ def test_failed_home_region_message_update_logs_privately_and_keeps_the_choice(
     else:
         update.assert_called_once_with(home_region_nudge.User, 41, expected_update)
         assert record.json_fields["user_id"] == 41
+
+
+def test_failed_home_region_nudge_dm_logs_ids_privately_and_nudges_the_next_member(monkeypatch, caplog, capsys):
+    from contextlib import contextmanager
+
+    rows = [
+        SimpleNamespace(user_id=user_id, home_region_id=100, region_id=200, posts_30=10, posts_90=10)
+        for user_id in (51, 52)
+    ]
+
+    class _Query:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: self
+
+        def all(self):
+            return rows
+
+    @contextmanager
+    def session():
+        yield SimpleNamespace(query=lambda *args: _Query())
+
+    db = home_region_nudge.DbManager
+    monkeypatch.setattr(home_region_nudge, "get_session", session)
+    monkeypatch.setattr(
+        db,
+        "find_join_records2",
+        lambda *args, **kwargs: [(SimpleNamespace(team_id="T123"), SimpleNamespace(org_id=100))],
+    )
+    monkeypatch.setattr(db, "find_records", lambda *args, **kwargs: [])
+    monkeypatch.setattr(db, "get", lambda cls, record_id: SimpleNamespace(meta={}, f3_name="Synthetic Member Name"))
+    monkeypatch.setattr(
+        db,
+        "find_first_record",
+        lambda cls, filters: SimpleNamespace(slack_id=f"U_SYNTHETIC_{len(client.chat_postMessage.call_args_list)}"),
+    )
+    client = MagicMock()
+    client.chat_postMessage.side_effect = [log_privacy.slack_error("user_not_found"), {"ok": True}]
+    monkeypatch.setattr(home_region_nudge, "slack_client_for_team", lambda *args, **kwargs: client)
+
+    home_region_nudge.send_home_region_nudges(force=True)
+
+    output = log_privacy.assert_private(caplog, capsys)
+    assert "U_SYNTHETIC_" not in output
+    (record,) = log_privacy.error_events(caplog, "slack.home_region_nudge.dm_failed")
+    assert (record.json_fields["team_id"], record.json_fields["user_id"]) == ("T123", 51)
+    assert record.json_fields["slack_error"] == "user_not_found"
+    assert client.chat_postMessage.call_count == 2
