@@ -214,79 +214,85 @@ const latestRegionInput = () =>
     .find(([input]) => input.orgTypes[0] === "region")?.[0];
 
 describe("Region filters with real hierarchy paging", () => {
-  it.each(["desktop", "mobile"])(
-    "filters both Territory branches before Region pagination through %s controls",
-    async (surface) => {
-      mount();
-      await screen.findByRole("button", { name: "Territory: Paged Territory" });
-      expect(mocks.all).toHaveBeenCalledWith({
-        orgTypes: ["area", "territory", "sector", "nation"],
-        statuses: ["active", "inactive"],
-        pageIndex: 1,
-        pageSize: 100,
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Next Region page" }));
-      await waitFor(() => expect(latestRegionInput()?.pageIndex).toBe(1));
+  const expectPagedTerritoryFilter = async (surface: "desktop" | "mobile") => {
+    mount();
+    await screen.findByRole("button", { name: "Territory: Paged Territory" });
+    expect(mocks.all).toHaveBeenCalledWith({
+      orgTypes: ["area", "territory", "sector", "nation"],
+      statuses: ["active", "inactive"],
+      pageIndex: 1,
+      pageSize: 100,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next Region page" }));
+    await waitFor(() => expect(latestRegionInput()?.pageIndex).toBe(1));
 
-      if (surface === "mobile")
-        fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
-      const controls =
-        surface === "mobile" ? within(screen.getByRole("dialog")) : screen;
-      expect(
-        controls.getByRole("button", { name: "Sector: Selected Sector" }),
-      ).toBeTruthy();
-      expect(
-        controls.getByRole("button", { name: "Area: Paged Area" }),
-      ).toBeTruthy();
-      fireEvent.click(
-        controls.getByRole("button", { name: "Territory: Paged Territory" }),
-      );
+    if (surface === "mobile")
+      fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+    const controls =
+      surface === "mobile" ? within(screen.getByRole("dialog")) : screen;
+    expect(
+      controls.getByRole("button", { name: "Sector: Selected Sector" }),
+    ).toBeTruthy();
+    expect(
+      controls.getByRole("button", { name: "Area: Paged Area" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      controls.getByRole("button", { name: "Territory: Paged Territory" }),
+    );
 
-      await waitFor(() => expect(rowIds()).toEqual([12, 16]));
-      expect(screen.getByTestId("region-total").textContent).toBe("3");
-      expect(screen.getByTestId("region-page").textContent).toBe("0");
-      expect(latestRegionInput()).toMatchObject({
-        pageIndex: 0,
-        pageSize: 2,
-      });
-      expect(latestRegionInput()?.parentOrgIds).toEqual(
-        expect.arrayContaining([8, 13, 14]),
-      );
-      expect(
-        controls.queryByRole("button", { name: "Area: Inactive Area" }),
-      ).toBeNull();
-      expect(
-        controls.queryByRole("button", { name: "Area: Other Area" }),
-      ).toBeNull();
-      expect(
-        controls.queryByRole("button", { name: "Area: Direct Sector Area" }),
-      ).toBeNull();
-      expect(
-        controls.queryByRole("button", {
-          name: "Territory: Inactive Territory",
-        }),
-      ).toBeNull();
+    await waitFor(() => expect(rowIds()).toEqual([12, 16]));
+    expect(screen.getByTestId("region-total").textContent).toBe("3");
+    expect(screen.getByTestId("region-page").textContent).toBe("0");
+    expect(latestRegionInput()).toMatchObject({
+      pageIndex: 0,
+      pageSize: 2,
+    });
+    expect(latestRegionInput()?.parentOrgIds).toEqual(
+      expect.arrayContaining([8, 13, 14]),
+    );
+    expect(
+      controls.queryByRole("button", { name: "Area: Inactive Area" }),
+    ).toBeNull();
+    expect(
+      controls.queryByRole("button", { name: "Area: Other Area" }),
+    ).toBeNull();
+    expect(
+      controls.queryByRole("button", { name: "Area: Direct Sector Area" }),
+    ).toBeNull();
+    expect(
+      controls.queryByRole("button", {
+        name: "Territory: Inactive Territory",
+      }),
+    ).toBeNull();
+    return controls;
+  };
+  const expectPagedAreaFilter = async (
+    controls: Awaited<ReturnType<typeof expectPagedTerritoryFilter>>,
+  ) => {
+    fireEvent.click(controls.getByRole("button", { name: "Area: Paged Area" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("region-total").textContent).toBe("1"),
+    );
+    expect(rowIds()).toEqual([17]);
+    expect(latestRegionInput()).toMatchObject({
+      pageIndex: 0,
+      parentOrgIds: [14],
+    });
+  };
 
-      if (surface === "desktop") {
-        fireEvent.click(
-          screen.getByRole("button", { name: "Next Region page" }),
-        );
-        await waitFor(() => expect(rowIds()).toEqual([17]));
-        expect(screen.getByTestId("region-total").textContent).toBe("3");
-      }
-      fireEvent.click(
-        controls.getByRole("button", { name: "Area: Paged Area" }),
-      );
-      await waitFor(() =>
-        expect(screen.getByTestId("region-total").textContent).toBe("1"),
-      );
-      expect(rowIds()).toEqual([17]);
-      expect(latestRegionInput()).toMatchObject({
-        pageIndex: 0,
-        parentOrgIds: [14],
-      });
-    },
-  );
+  it("filters both Territory branches before Region pagination through desktop controls", async () => {
+    const controls = await expectPagedTerritoryFilter("desktop");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next Region page" }));
+    await waitFor(() => expect(rowIds()).toEqual([17]));
+    expect(screen.getByTestId("region-total").textContent).toBe("3");
+
+    await expectPagedAreaFilter(controls);
+  });
+
+  it("filters both Territory branches before Region pagination through mobile controls", async () => {
+    await expectPagedAreaFilter(await expectPagedTerritoryFilter("mobile"));
+  });
 
   it.each([
     { name: "Area alone", selectSector: false },

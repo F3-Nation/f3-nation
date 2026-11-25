@@ -1128,42 +1128,51 @@ describe("Area display through persisted intermediate Areas", () => {
     mocks.queryInputs = [];
   });
 
+  const renderAreaBehindOffPageArea = (
+    ancestorType: "sector" | "territory",
+  ) => {
+    const ancestor = {
+      id: 900,
+      parentId: null,
+      orgType: ancestorType,
+      name: "Resolved ancestor",
+      isActive: true,
+    };
+    const intermediate = {
+      id: 901,
+      parentId: 900,
+      orgType: "area",
+      name: "Off-page Area",
+      isActive: false,
+    };
+    const row = {
+      id: 902,
+      parentId: 901,
+      orgType: "area",
+      name: "Visible Area",
+      isActive: true,
+    };
+    mocks.hierarchyOrgs = [ancestor, intermediate];
+    mocks.resultOrgs = [row];
+    render(<OrgTable orgType="area" />);
+    return { ancestor, row };
+  };
+
   it.each(["sector", "territory"] as const)(
     "resolves %s through an inactive Area outside the current result page",
     (ancestorType) => {
-      const ancestor = {
-        id: 900,
-        parentId: null,
-        orgType: ancestorType,
-        name: "Resolved ancestor",
-        isActive: true,
-      };
-      const intermediate = {
-        id: 901,
-        parentId: 900,
-        orgType: "area",
-        name: "Off-page Area",
-        isActive: false,
-      };
-      const row = {
-        id: 902,
-        parentId: 901,
-        orgType: "area",
-        name: "Visible Area",
-        isActive: true,
-      };
-      mocks.hierarchyOrgs = [ancestor, intermediate];
-      mocks.resultOrgs = [row];
-      render(<OrgTable orgType="area" />);
+      const { ancestor, row } = renderAreaBehindOffPageArea(ancestorType);
       expect(JSON.parse(screen.getByTestId("table-data").textContent)).toEqual([
         { ...row, [ancestorType]: ancestor.name },
       ]);
-      if (ancestorType === "sector") {
-        fireEvent.click(screen.getByTestId("sector-900"));
-        expect(latestResultQuery()?.parentOrgIds).toEqual([900]);
-      }
     },
   );
+
+  it("filters by a sector resolved through an inactive Area outside the current result page", () => {
+    renderAreaBehindOffPageArea("sector");
+    fireEvent.click(screen.getByTestId("sector-900"));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([900]);
+  });
 
   it.each([20, 21])(
     "keeps the display depth limit with %i Area parent edges",

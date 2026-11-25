@@ -382,8 +382,8 @@ describe.each([
       meta: null,
     });
     expect(payload.id).toBeUndefined();
-    if (type === "area") expect(payload.logoUrl).toBeNull();
-    else expect(payload).not.toHaveProperty("logoUrl");
+    expect(Object.hasOwn(payload, "logoUrl")).toBe(type === "area");
+    expect(payload.logoUrl).toBe(type === "area" ? null : undefined);
     expect(mocks.save).toHaveBeenCalledTimes(1);
   });
 
@@ -493,8 +493,9 @@ describe.each([
     async (id) => {
       mocks.byId.mockResolvedValue({ org: { ...record, isActive: false } });
       mount(type, id);
-      if (id)
-        await waitFor(() => expect(field("Name").value).toBe(record.name));
+      await waitFor(() =>
+        expect(field("Name").value).toBe(id ? record.name : initialName),
+      );
       expect(
         screen.queryByRole("button", { name: `Deactivate ${label}` }),
       ).toBeNull();
@@ -757,18 +758,20 @@ describe("Region Area or Territory parent selection", () => {
     {
       saved: undefined,
       title: "Turn on the password vault?",
+      notice: /within the next hour/,
       action: "Turn on",
       enabled: true,
     },
     {
       saved: true,
       title: "Turn off the password vault?",
+      notice: /Passwords will not be deleted/,
       action: "Turn off",
       enabled: false,
     },
   ])(
     "confirms then saves password vault $enabled, keeping other metadata",
-    async ({ saved, title, action, enabled }) => {
+    async ({ saved, title, notice, action, enabled }) => {
       const meta = { ...record.meta, password_vault_enabled: saved };
       mocks.byId.mockResolvedValue({ org: { ...record, parentId: 2, meta } });
       mount("region", record.id);
@@ -778,16 +781,12 @@ describe("Region Area or Territory parent selection", () => {
 
       fireEvent.click(checkbox);
       expect(await screen.findByText(title)).toBeTruthy();
-      if (enabled) {
-        expect(screen.getByText(/within the next hour/)).toBeTruthy();
-        expect(
-          within(screen.getByRole("alertdialog")).getByRole("link", {
-            name: "help.passwords.f3nation.com",
-          }),
-        ).toBeTruthy();
-      } else {
-        expect(screen.getByText(/Passwords will not be deleted/)).toBeTruthy();
-      }
+      expect(screen.getByText(notice)).toBeTruthy();
+      expect(
+        within(screen.getByRole("alertdialog")).queryAllByRole("link", {
+          name: "help.passwords.f3nation.com",
+        }),
+      ).toHaveLength(enabled ? 1 : 0);
       fireEvent.click(screen.getByRole("button", { name: action }));
       await waitFor(() =>
         expect(checkbox.getAttribute("aria-checked")).toBe(String(enabled)),
@@ -1371,11 +1370,9 @@ describe("Region Area or Territory parent selection", () => {
       );
       expect(parentSelect().value).toBe("12");
       expect(parentSelect().disabled).toBe(true);
-      if (mode === "create") {
-        expect(
-          screen.queryByRole("button", { name: "Keep current parent" }),
-        ).toBeNull();
-      }
+      expect(
+        screen.queryAllByRole("button", { name: "Keep current parent" }),
+      ).toHaveLength(mode === "create" ? 0 : 1);
       save();
 
       await waitFor(() =>
@@ -1662,8 +1659,9 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
         id: 60,
         logoUrl: withFile ? "https://example.com/new-logo.png" : null,
       });
-      if (withFile)
-        expect(mocks.upload).toHaveBeenCalledWith({ file, orgId: 60 });
+      expect(mocks.upload.mock.calls).toEqual(
+        withFile ? [[{ file, orgId: 60 }]] : [],
+      );
       expect(mocks.success).toHaveBeenCalledWith(
         `Successfully ${type === "ao" ? "updated" : "added"} ${type}`,
       );
@@ -2154,9 +2152,9 @@ it("keeps the AO fake-data action restricted to development", async () => {
 });
 
 describe.each([
-  { mode: "create", id: undefined },
-  { mode: "edit", id: record.id },
-])("AO fake-data parent selection in $mode mode", ({ id }) => {
+  { mode: "create", id: undefined, initialParent: "3" },
+  { mode: "edit", id: record.id, initialParent: String(record.parentId) },
+])("AO fake-data parent selection in $mode mode", ({ id, initialParent }) => {
   const inactiveParents = [
     { id: 21, name: "Other Inactive", orgType: "region", isActive: false },
     {
@@ -2191,7 +2189,7 @@ describe.each([
     });
     mount("ao", id, false);
     await waitFor(() => expect(parentOptions()).toHaveLength(id ? 2 : 1));
-    if (id) expect(parentSelect().value).toBe(String(record.parentId));
+    expect(parentSelect().value).toBe(initialParent);
 
     fillFakeData();
     save();
