@@ -124,7 +124,7 @@ export async function softDeleteFutureInstancesForOrg(
  * Soft delete future event instances for a series (starting from today or specified date)
  */
 export async function softDeleteFutureInstancesForSeries(
-  db: AppDb,
+  db: Pick<AppDb, "update">,
   seriesId: number,
   startDate?: string,
 ): Promise<number> {

@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AdminRequestsModal from "~/app/_components/modal/admin-requests-modal";
 import { ORPCError } from "~/orpc/react";
 
-const { toastMock, validateMutateAsync, rejectMutateAsync } = vi.hoisted(
-  () => ({
+const { toastMock, validateMutateAsync, rejectMutateAsync, requestQuery } =
+  vi.hoisted(() => ({
     toastMock: {
       success: vi.fn(),
       error: vi.fn(),
@@ -14,8 +14,18 @@ const { toastMock, validateMutateAsync, rejectMutateAsync } = vi.hoisted(
     },
     validateMutateAsync: vi.fn(),
     rejectMutateAsync: vi.fn(),
-  }),
-);
+    // TanStack Query returns the same data object across renders until it
+    // changes; the modal resets the picked logo when that object changes.
+    requestQuery: {
+      data: {
+        request: {
+          id: "request-1",
+          requestType: "edit_event",
+          regionId: 1,
+        },
+      },
+    },
+  }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -72,15 +82,7 @@ vi.mock("~/orpc/react", () => ({
   invalidateQueries: vi.fn(),
   useQuery: (options: { queryKey: string[] }) => {
     if (options.queryKey.includes("request.byId")) {
-      return {
-        data: {
-          request: {
-            id: "request-1",
-            requestType: "edit_event",
-            regionId: 1,
-          },
-        },
-      };
+      return requestQuery;
     }
     return { data: [] };
   },

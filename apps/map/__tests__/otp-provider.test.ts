@@ -2,12 +2,19 @@ import type * as NodeCrypto from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OtpProvider from "@acme/auth/lib/otp-provider";
-import { sendOtpVerificationRequestServer } from "@acme/auth/lib/send-otp-verification-request-server";
+import { sendOtpEmail } from "@acme/auth/lib/send-otp-email";
 import { ProviderId } from "@acme/shared/common/enums";
 
-const { randomInt } = vi.hoisted(() => ({
-  randomInt: vi.fn<(min: number, max: number) => number>(),
-}));
+const { randomInt, createTransport, sendMail } = vi.hoisted(() => {
+  const sendMail = vi.fn();
+  return {
+    randomInt: vi.fn<(min: number, max: number) => number>(),
+    createTransport: vi.fn(() => ({ sendMail })),
+    sendMail,
+  };
+});
+
+vi.mock("nodemailer", () => ({ createTransport }));
 
 vi.mock("node:crypto", async (importOriginal) => ({
   ...(await importOriginal<typeof NodeCrypto>()),
@@ -88,8 +95,48 @@ describe("OTP verification tokens", () => {
       server: "smtp://localhost:1025",
       maxAge: 300,
     });
-    expect(OtpProvider.sendVerificationRequest).toBe(
-      sendOtpVerificationRequestServer,
+    expect(OtpProvider.sendVerificationRequest).toBe(sendOtpEmail);
+  });
+});
+
+describe("OTP email delivery", () => {
+  const forgedHostUrl =
+    "https://attacker.example/api/auth/callback/otp?token=AB12CD";
+
+  beforeEach(() => {
+    createTransport.mockClear();
+    sendMail.mockReset();
+    sendMail.mockResolvedValue({ rejected: [], pending: [] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        throw new Error("OTP delivery must not make an HTTP request");
+      }),
     );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("mails the code through the configured SMTP server without an HTTP relay", async () => {
+    await OtpProvider.sendVerificationRequest({
+      identifier: "user@example.com",
+      url: forgedHostUrl,
+      token: "AB12CD",
+      expires: new Date(),
+      provider: { server: OtpProvider.server, from: OtpProvider.from },
+      theme: {},
+      request: new Request(forgedHostUrl),
+    } as unknown as Parameters<typeof OtpProvider.sendVerificationRequest>[0]);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(createTransport).toHaveBeenCalledWith("smtp://localhost:1025");
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    expect(sendMail.mock.calls[0]?.[0]).toMatchObject({
+      to: "user@example.com",
+      from: "test@f3local.dev",
+      subject: "Authentication code: AB12CD",
+    });
   });
 });

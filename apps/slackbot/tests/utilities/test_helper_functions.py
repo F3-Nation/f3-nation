@@ -14,7 +14,7 @@ from sqlalchemy.exc import OperationalError
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from utilities import helper_functions
-from utilities.helper_functions import is_deactivated_slack_user, safe_get
+from utilities.helper_functions import is_deactivated_slack_user, safe_get, usable_invite_link
 
 
 def test_safe_get():
@@ -1163,3 +1163,75 @@ def test_cached_database_diagnostic_extraction_cannot_leak_or_raise(monkeypatch,
         expected_sqlstate="none" if diagnostic == "throws" else "other",
         expected_constraint="none" if diagnostic == "throws" else "other",
     )
+
+
+INVITE_URL = "https://join.slack.com/t/f3boone/shared_invite/zt-abc"
+
+
+@pytest.mark.parametrize(
+    "saved, expected",
+    [
+        (INVITE_URL, INVITE_URL),
+        (f"  {INVITE_URL}  ", INVITE_URL),
+        (
+            f"Join me on Slack -- it\u2019s a faster, simpler way to work. Sign up here, from any device: {INVITE_URL}",
+            INVITE_URL,
+        ),
+        (f"Join us ({INVITE_URL}).", INVITE_URL),
+        ("Join me on Slack -- sign up here", None),
+        ("join.slack.com/t/f3boone", None),
+        ("https://", None),
+        ("https://[::1", None),
+        ("https:///join.slack.com/t/f3boone", None),
+        ("Sign up: https://.", None),
+        ("", None),
+        ("   ", None),
+        (None, None),
+    ],
+)
+def test_usable_invite_link_keeps_only_the_url(saved, expected):
+    assert usable_invite_link(saved) == expected
+
+
+def _raise_through(depth: int) -> None:
+    if depth == 0:
+        raise ValueError("bob@example.com")
+    _raise_through(depth - 1)
+
+
+def _caught(depth: int) -> BaseException:
+    try:
+        _raise_through(depth)
+    except ValueError as exc:
+        return exc
+    raise AssertionError("expected ValueError")
+
+
+def test_error_stack_lists_innermost_frame_first_without_the_message():
+    def _inner():
+        raise ValueError("bob@example.com")
+
+    def _middle():
+        _inner()
+
+    def _outer():
+        _middle()
+
+    try:
+        _outer()
+    except ValueError as exc:
+        stack = helper_functions.error_stack(exc)
+
+    frames = [frame.rsplit(":", 1)[1] for frame in stack.split(" <- ")]
+    assert frames == ["_inner", "_middle", "_outer", "test_error_stack_lists_innermost_frame_first_without_the_message"]
+    assert all(frame.startswith("test_helper_functions.py:") for frame in stack.split(" <- "))
+    assert "bob@example.com" not in stack
+
+
+def test_error_stack_keeps_only_the_five_innermost_frames():
+    stack = helper_functions.error_stack(_caught(depth=10))
+
+    frames = [frame.rsplit(":", 1)[1] for frame in stack.split(" <- ")]
+    assert frames == ["_raise_through"] * 5
+    assert "_caught" not in stack
+    assert "bob@example.com" not in stack

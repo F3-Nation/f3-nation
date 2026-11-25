@@ -2,13 +2,23 @@
 
 import { UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import type { UserRole } from "@acme/shared/app/enums";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@acme/ui/alert-dialog";
 import { Button } from "@acme/ui/button";
 import {
   Dialog,
@@ -44,52 +54,94 @@ import {
   invalidateQueries,
   orpc,
   useMutation,
-  useQueries,
   useQuery,
 } from "~/orpc/react";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
-import { isAdminRoleName, toGrantableRoleEntries } from "~/lib/auth/session";
+import { isUserRole, toRoleAssignments } from "~/lib/roles";
+import { RoleBadges } from "~/app/_components/role-badges";
 import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
-import {
-  canEditUserProfile,
-  roleOrgIdsNeedingParent,
-} from "./user-editor-config";
+import { EmailChangeHint } from "~/app/_components/email-change-hint";
+import { canEditUserProfile } from "./user-editor-config";
 
 export default function UserModal({
   data,
 }: {
   data: DataType[ModalType.ADMIN_USERS];
 }) {
+  const [correction, setPendingCorrection] = useState<{
+    input: z.infer<typeof CrupdateUserSchema>;
+    destinationName: string;
+    userSnapshot: typeof userResponse;
+  } | null>(null);
   const { data: session, update } = useAdminSession();
-  const { data: userResponse } = useQuery(
-    orpc.user.byId.queryOptions({
+  const {
+    data: userResponse,
+    refetch: refetchUser,
+    isFetching,
+    isError,
+  } = useQuery({
+    ...orpc.user.byId.queryOptions({
       input: {
         id: data.id ?? -1,
         includePii: true, // Request PII to check if we have access
       },
       enabled: gte(data.id, 0),
     }),
-  );
+    // Show member-load failures in this form instead of replacing the page
+    // with the error boundary; saving stays blocked while the query has failed.
+    throwOnError: false,
+  });
 
   const user = userResponse?.user;
+  const pendingCorrection =
+    correction?.userSnapshot === userResponse ? correction : null;
+  const isExistingUserUnavailable =
+    data.id != null && (!user || isFetching || isError);
+  const isMemberMissing = data.id != null && userResponse?.user === null;
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
-  const { data: regions } = useFetchAllPages({
+  const {
+    data: regions,
+    refetch: refetchRegions,
+    isError: isRegionsError,
+    isFetching: isRegionsFetching,
+    isPending: isRegionsPending,
+  } = useFetchAllPages({
+    throwOnError: false,
     path: ["org", "all"],
-    queryKey: ["org.all.everyRegion"],
+    queryKey: ["org.all.activeHomeRegions"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
         orgTypes: ["region"],
+        activeAncestorsOnly: true,
         pageIndex,
         pageSize,
       });
       return { items: orgs, total };
     },
   });
+
+  const isRegionsUnavailable =
+    isRegionsError || isRegionsFetching || isRegionsPending;
+  const homeRegionOptions = (regions ?? []).map((region) => ({
+    value: String(region.id),
+    label: region.name,
+  }));
+  if (
+    user?.homeRegionId != null &&
+    !homeRegionOptions.some(
+      (option) => option.value === String(user.homeRegionId),
+    )
+  ) {
+    homeRegionOptions.push({
+      value: String(user.homeRegionId),
+      label: user.homeRegion?.homeRegionName ?? "Current home region",
+    });
+  }
 
   // Get orgs where user has admin role (required to manage access)
   const { data: accessibleOrgs } = useFetchAllPages({
@@ -122,24 +174,14 @@ export default function UserModal({
     return { orgs: adminOrgs };
   }, [accessibleOrgsData]);
 
-  const roleOrgParentQueries = useQueries({
-    queries: roleOrgIdsNeedingParent({
-      user,
-      editableOrgs: orgs.orgs,
-    }).map((id) => orpc.org.byId.queryOptions({ input: { id } })),
-  });
-  const roleOrgParentIds = new Map(
-    roleOrgParentQueries.flatMap(({ data }) =>
-      data?.org ? [[data.org.id, data.org.parentId] as const] : [],
-    ),
-  );
-
   const canEditUser = canEditUserProfile({
     user,
     sessionUserId: session?.id,
     editableOrgs: orgs.orgs,
-    roleOrgParentIds,
   });
+
+  // The API lets only nation admins change an existing user's email.
+  const canChangeEmail = !user?.id || isNationAdminFromSession(session ?? null);
 
   const isHomeRegionDisabled = !canEditUser;
 
@@ -153,46 +195,48 @@ export default function UserModal({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: toGrantableRoleEntries(user?.roles),
+      roles: toRoleAssignments(user?.roles),
       homeRegionId: user?.homeRegionId ?? null,
       status: user?.status ?? "active",
     },
   });
 
-  useEffect(() => {
-    if (!user) return;
+  const resetUserForm = useCallback(
+    (currentUser: NonNullable<typeof user>) => {
+      form.reset({
+        id: currentUser.id,
+        f3Name: currentUser.f3Name ?? "",
+        firstName: currentUser.firstName ?? "",
+        lastName: currentUser.lastName ?? "",
+        email: currentUser.email ?? "",
+        roles: toRoleAssignments(currentUser.roles),
+        homeRegionId: currentUser.homeRegionId ?? null,
+        status: currentUser.status ?? "active",
+        phone: currentUser.phone ?? "",
+      });
+    },
+    [form],
+  );
 
-    form.reset({
-      id: user.id,
-      f3Name: user.f3Name ?? "",
-      firstName: user.firstName ?? "",
-      lastName: user.lastName ?? "",
-      email: user.email ?? "",
-      roles: toGrantableRoleEntries(user.roles),
-      homeRegionId: user.homeRegionId ?? null,
-      status: user.status ?? "active",
-      phone: user.phone ?? "",
-    });
-  }, [form, user]);
+  useEffect(() => {
+    if (user) resetUserForm(user);
+  }, [resetUserForm, user]);
 
   const crupdateUser = useMutation(
     orpc.user.crupdate.mutationOptions({
       onSuccess: async (data) => {
         await invalidateQueries("user");
-        const roles: AdminSessionRole[] = data.roles.flatMap((role) => {
-          if (!role.orgName || !isAdminRoleName(role.roleName)) return [];
-          return [
-            {
-              orgId: role.orgId,
-              orgName: role.orgName,
-              roleName: role.roleName,
-            },
-          ];
-        });
-        // Update the live session for self-edits even when the filtered
-        // visible-role list is now empty: if an admin edits themselves down to
-        // only dormant/hidden roles, the client must drop the stale visible
-        // grants it still holds rather than wait for a refetch.
+        const roles: AdminSessionRole[] = data.roles.flatMap((role) =>
+          role.orgName && isUserRole(role.roleName)
+            ? [
+                {
+                  orgId: role.orgId,
+                  orgName: role.orgName,
+                  roleName: role.roleName,
+                },
+              ]
+            : [],
+        );
         if (session?.id === data.id) {
           await update({ ...session, roles });
         }
@@ -200,14 +244,38 @@ export default function UserModal({
         toast.success("Successfully updated user");
         router.refresh();
       },
-      onError: (err) => {
+      onError: async (err) => {
         toast.error(
           err instanceof ORPCError
-            ? err.code === "UNAUTHORIZED"
-              ? "You are not authorized to update this user"
-              : err.message || "Failed to update user"
+            ? err.code === "CONFLICT"
+              ? "This profile or its home region changed. Reloading the latest values replaces your unsaved edits."
+              : err.code === "UNAUTHORIZED"
+                ? "You are not authorized to update this user"
+                : err.message || "Failed to update user"
             : "Failed to update user",
         );
+        if (err instanceof ORPCError && err.code === "CONFLICT") {
+          // Reload both the member and destination choices before another informed save.
+          const [refreshed, refreshedRegions] = await Promise.all([
+            refetchUser(),
+            refetchRegions(),
+          ]);
+          // Structural sharing can preserve an unchanged member object on a
+          // hierarchy-only conflict, so reset explicitly after a successful read.
+          if (!refreshed.isError && refreshed.data?.user) {
+            resetUserForm(refreshed.data.user);
+          }
+          if (refreshedRegions.isError) {
+            toast.error(
+              "Unable to reload home regions. Close and reopen the form before trying again.",
+            );
+          }
+          if (refreshed.isError) {
+            toast.error(
+              "Unable to reload this member. Close and reopen the form before trying again.",
+            );
+          }
+        }
       },
     }),
   );
@@ -220,14 +288,38 @@ export default function UserModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            {!canEditUser ? "View" : user?.id ? "Edit" : "Add"} User
+            {data.id == null ? "Add" : !canEditUser ? "View" : "Edit"} User
           </DialogTitle>
         </DialogHeader>
 
+        {isMemberMissing && (
+          <p role="alert" className="text-destructive">
+            This member no longer exists. Close the form.
+          </p>
+        )}
+        {isRegionsError && (
+          <p role="alert" className="text-destructive">
+            Unable to load home regions. Close and reopen the form to try again.
+          </p>
+        )}
+        {isError && (
+          <p role="alert" className="text-destructive">
+            Unable to load this member. Close and reopen the form to try again.
+          </p>
+        )}
+
         <Form {...form}>
           <form
+            hidden={isMemberMissing}
             onSubmit={form.handleSubmit(
               (data) => {
+                if (
+                  crupdateUser.isPending ||
+                  pendingCorrection ||
+                  isExistingUserUnavailable ||
+                  isRegionsUnavailable
+                )
+                  return;
                 // Only exclude PII fields when editing an existing user without PII access
                 let submitData: typeof data;
                 if (!hasPiiAccess && user?.id) {
@@ -247,6 +339,27 @@ export default function UserModal({
                 } else {
                   // For new users or users with PII access, send all data
                   submitData = data;
+                }
+                if (
+                  user &&
+                  submitData.homeRegionId != null &&
+                  submitData.homeRegionId !== user.homeRegionId
+                ) {
+                  const destination = regions.find(
+                    (region) => region.id === submitData.homeRegionId,
+                  );
+                  if (!destination) {
+                    toast.error(
+                      "The selected home region is no longer available. Choose another region.",
+                    );
+                    return;
+                  }
+                  setPendingCorrection({
+                    userSnapshot: userResponse,
+                    input: submitData,
+                    destinationName: destination.name,
+                  });
+                  return;
                 }
                 crupdateUser.mutate(submitData);
               },
@@ -354,11 +467,14 @@ export default function UserModal({
                             <Input
                               placeholder="Email"
                               type="email"
-                              disabled={!canEditUser}
+                              disabled={!canEditUser || !canChangeEmail}
                               {...field}
                               value={field.value ?? ""}
                             />
                           </FormControl>
+                          {canEditUser && !canChangeEmail && (
+                            <EmailChangeHint />
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -430,18 +546,23 @@ export default function UserModal({
                             {user?.homeRegion?.homeRegionName}
                           </div>
                         ) : (
+                          // Remount when unavailable to close any open popup; the
+                          // combobox disabled prop only disables its trigger.
                           <VirtualizedCombobox
+                            key={
+                              isRegionsUnavailable || isExistingUserUnavailable
+                                ? "unavailable"
+                                : "available"
+                            }
+                            disabled={
+                              isRegionsUnavailable || isExistingUserUnavailable
+                            }
                             value={
                               field.value === null || field.value === undefined
                                 ? undefined
                                 : String(field.value)
                             }
-                            options={
-                              regions?.map((region) => ({
-                                value: region.id.toString(),
-                                label: region.name,
-                              })) ?? []
-                            }
+                            options={homeRegionOptions}
                             searchPlaceholder="Select a home region"
                             onSelect={(value) => {
                               if (Array.isArray(value)) {
@@ -484,7 +605,16 @@ export default function UserModal({
                     {canEditUser ? "Cancel" : "Close"}
                   </Button>
                   {canEditUser && (
-                    <Button type="submit" className="w-full">
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={
+                        isExistingUserUnavailable ||
+                        isRegionsUnavailable ||
+                        crupdateUser.isPending ||
+                        !!pendingCorrection
+                      }
+                    >
                       Save Changes
                     </Button>
                   )}
@@ -500,45 +630,7 @@ export default function UserModal({
                           <p className="text-sm font-medium text-foreground">
                             Current Roles
                           </p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {user.roles.map(
-                              (role: {
-                                orgId: number;
-                                orgName: string;
-                                roleName: UserRole;
-                              }) => {
-                                const roleStyles = {
-                                  admin:
-                                    "bg-purple-100 text-purple-700 border-purple-200",
-                                  editor:
-                                    "bg-blue-100 text-blue-700 border-blue-200",
-                                  user: "bg-green-100 text-green-700 border-green-200",
-                                } as const;
-
-                                const roleLabels = {
-                                  admin: "Admin",
-                                  editor: "Editor",
-                                  user: "User",
-                                } as const;
-
-                                // Roles not surfaced in admin (e.g.
-                                // password_manager) are skipped.
-                                if (!isAdminRoleName(role.roleName))
-                                  return null;
-
-                                return (
-                                  <span
-                                    key={`${role.orgId}-${role.roleName}`}
-                                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-                                      roleStyles[role.roleName]
-                                    }`}
-                                  >
-                                    {role.orgName} ({roleLabels[role.roleName]})
-                                  </span>
-                                );
-                              },
-                            )}
-                          </div>
+                          <RoleBadges roles={user.roles} className="gap-2" />
                         </div>
                       )}
                       <Button
@@ -565,6 +657,60 @@ export default function UserModal({
           </form>
         </Form>
       </DialogContent>
+      <AlertDialog
+        open={pendingCorrection !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingCorrection(null);
+        }}
+      >
+        <AlertDialogContent
+          // This confirmation must sit above the scrollable editor's overlay.
+          style={{ zIndex: Z_INDEX.DIALOG_OVERLAY + 1 }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change home region?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Move this member to {pendingCorrection?.destinationName}? You may
+              lose edit access to this member after saving.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                crupdateUser.isPending ||
+                isExistingUserUnavailable ||
+                isRegionsUnavailable
+              }
+              onClick={() => {
+                if (
+                  !pendingCorrection ||
+                  crupdateUser.isPending ||
+                  isExistingUserUnavailable ||
+                  isRegionsUnavailable
+                )
+                  return;
+                if (
+                  !regions.some(
+                    (region) =>
+                      region.id === pendingCorrection.input.homeRegionId,
+                  )
+                ) {
+                  toast.error(
+                    "The selected home region is no longer available. Choose another region.",
+                  );
+                  setPendingCorrection(null);
+                  return;
+                }
+                crupdateUser.mutate(pendingCorrection.input);
+                setPendingCorrection(null);
+              }}
+            >
+              Confirm change
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

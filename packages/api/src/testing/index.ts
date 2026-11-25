@@ -9,6 +9,7 @@
 
 import type { Session } from "@acme/auth";
 import type { OrgType } from "@acme/shared/app/enums";
+import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 
@@ -163,6 +164,23 @@ export const createAdminSession = async (): Promise<Session> => {
     roles: [{ orgId: nationOrg.id, orgName, roleName: "admin" }],
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
   };
+};
+
+/**
+ * A session that passes isNationAdminFromSession, which also requires the
+ * role's orgName to contain "f3 nation". createAdminSession carries the seeded
+ * nation's name ("Test Nation"), so it fails that check.
+ */
+export const createNationAdminSession = async (): Promise<Session> => {
+  const session = await createAdminSession();
+  const roles = [
+    {
+      orgId: F3_NATION_ORG_ID,
+      orgName: "F3 Nation",
+      roleName: "admin" as const,
+    },
+  ];
+  return { ...session, roles, user: { ...session.user, roles } };
 };
 
 /**

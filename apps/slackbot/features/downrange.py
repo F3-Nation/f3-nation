@@ -1,7 +1,6 @@
 import copy
 import json
 import re
-import ssl
 from logging import Logger
 
 from f3_data_models.models import Org, Org_x_SlackSpace, SlackSpace, User
@@ -19,6 +18,7 @@ from utilities.helper_functions import (
     safe_convert,
     safe_get,
     update_local_region_records,
+    usable_invite_link,
 )
 from utilities.slack import actions
 from utilities.slack.orm import (
@@ -35,8 +35,10 @@ from utilities.slack.orm import (
     PlainTextInputElement,
     RadioButtonsElement,
     SectionBlock,
+    URLInputElement,
     as_selector_options,
 )
+from utilities.slack_tokens.client import slack_client_for_team
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Private helpers
@@ -57,30 +59,28 @@ def _is_admin(body: dict, region_record: SlackSettings, client: WebClient, logge
 
 
 def _get_target_region_info(org_id: int, logger: Logger) -> tuple:
-    """Return (team_id, bot_token, SlackSettings) for a region org, or (None, None, None) if not on Slack."""
+    """Return (team_id, SlackSettings) for a region org, or (None, None) if not on Slack."""
     ox = DbManager.find_first_record(Org_x_SlackSpace, [Org_x_SlackSpace.org_id == org_id])
     if not ox:
-        return None, None, None
+        return None, None
     slack_space = DbManager.get(SlackSpace, ox.slack_space_id)
     if not slack_space:
-        return None, None, None
+        return None, None
     team_id = slack_space.team_id
-    bot_token = slack_space.bot_token
     settings = REGION_RECORDS.get(team_id)
     if not settings and slack_space.settings:
         try:
             settings = SlackSettings(**slack_space.settings)
         except Exception as e:
             logger.warning(f"Could not load SlackSettings for team {team_id}: {e}")
-    return team_id, bot_token, settings
+    return team_id, settings
 
 
-def _get_space_for_team(team_id: str):
-    """Resolve a workspace credential from trusted server-side storage."""
+def _client_for_team(team_id: str):
+    """A Slack client for an installed workspace, resolved from server-side storage; None if not installed."""
     if not team_id:
         return None
-    slack_space = DbManager.find_first_record(SlackSpace, [SlackSpace.team_id == team_id])
-    return slack_space if slack_space and slack_space.bot_token else None
+    return slack_client_for_team(team_id)
 
 
 def _log_slack_call_error(logger: Logger, event: str, error: Exception) -> None:
@@ -201,12 +201,12 @@ def _build_region_info_blocks(
     if (
         target_settings
         and target_settings.downrange_invite_sharing == "proactive"
-        and target_settings.downrange_invite_link
+        and usable_invite_link(target_settings.downrange_invite_link)
     ):
         blocks.append(
             SectionBlock(label=f":white_check_mark: *{selected_org_name}* is on Slack! Here is their invite link:")
         )
-        blocks.append(SectionBlock(label=target_settings.downrange_invite_link))
+        blocks.append(SectionBlock(label=usable_invite_link(target_settings.downrange_invite_link)))
         blocks.append(
             ContextBlock(
                 element=ContextElement(
@@ -355,13 +355,6 @@ def _update_request_modal_for_resubmit(body: dict, client: WebClient, logger: Lo
         logger.info("Downrange resubmission guidance could not be displayed")
 
 
-def _ssl_context():
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
-
-
 # Blocks for the admin settings section (appended below the search when user is admin)
 DOWNRANGE_ADMIN_BLOCKS = [
     DividerBlock(),
@@ -386,7 +379,7 @@ DOWNRANGE_ADMIN_BLOCKS = [
     InputBlock(
         label="Slack invite link",
         action=actions.DOWNRANGE_INVITE_LINK,
-        element=PlainTextInputElement(
+        element=URLInputElement(
             placeholder="https://join.slack.com/t/your-workspace/...",
         ),
         optional=True,
@@ -440,7 +433,7 @@ def build_downrange_menu(body: dict, client: WebClient, logger: Logger, context:
         form.set_initial_values(
             {
                 actions.DOWNRANGE_INVITE_SHARING: region_record.downrange_invite_sharing or "request_only",
-                actions.DOWNRANGE_INVITE_LINK: region_record.downrange_invite_link or "",
+                actions.DOWNRANGE_INVITE_LINK: usable_invite_link(region_record.downrange_invite_link) or "",
                 actions.DOWNRANGE_CHANNEL_POSTING: region_record.downrange_channel_posting or "off",
                 actions.DOWNRANGE_CHANNEL: region_record.downrange_channel,
             }
@@ -504,7 +497,7 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
         requester_region_name = region_org.name if region_org else None
 
     # Look up target region
-    target_team_id, target_bot_token, target_settings = _get_target_region_info(selected_org_id, logger)
+    target_team_id, target_settings = _get_target_region_info(selected_org_id, logger)
     org = DbManager.get(Org, selected_org_id)
 
     # Rebuild the form with the selection preserved
@@ -537,8 +530,10 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
                 actions.DOWNRANGE_INVITE_SHARING: _get_radio_value(current_values, actions.DOWNRANGE_INVITE_SHARING)
                 or region_record.downrange_invite_sharing
                 or "request_only",
-                actions.DOWNRANGE_INVITE_LINK: _get_text_value(current_values, actions.DOWNRANGE_INVITE_LINK)
-                or region_record.downrange_invite_link
+                actions.DOWNRANGE_INVITE_LINK: usable_invite_link(
+                    _get_text_value(current_values, actions.DOWNRANGE_INVITE_LINK)
+                )
+                or usable_invite_link(region_record.downrange_invite_link)
                 or "",
                 actions.DOWNRANGE_CHANNEL_POSTING: _get_radio_value(current_values, actions.DOWNRANGE_CHANNEL_POSTING)
                 or region_record.downrange_channel_posting
@@ -589,8 +584,9 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
         _update_request_modal_for_resubmit(body, client, logger)
         return
 
-    resolved_team_id, target_bot_token, _ = _get_target_region_info(target_org_id, logger)
-    if resolved_team_id != target_team_id or not target_bot_token:
+    resolved_team_id, _ = _get_target_region_info(target_org_id, logger)
+    target_client = _client_for_team(resolved_team_id) if resolved_team_id == target_team_id else None
+    if target_client is None:
         logger.info("handle_invite_request: workspace changed; resubmit from Downrange")
         _update_request_modal_for_resubmit(body, client, logger)
         return
@@ -621,7 +617,7 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
         return
 
     # Get the target region's current invite-sharing setting to determine DM format
-    _, _, target_settings = _get_target_region_info(target_org_id, logger)
+    _, target_settings = _get_target_region_info(target_org_id, logger)
     is_direct_email = target_settings and target_settings.downrange_invite_sharing == "direct_email"
     if is_direct_email and not requester_email:
         BlockView(
@@ -721,7 +717,6 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
         ]
 
     try:
-        target_client = WebClient(token=target_bot_token, ssl=_ssl_context())
         dm = target_client.conversations_open(users=",".join(admin_slack_ids))
         dm_channel = safe_get(dm, "channel", "id")
         target_client.chat_postMessage(
@@ -763,7 +758,7 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    invite_link = region_record.downrange_invite_link
+    invite_link = usable_invite_link(region_record.downrange_invite_link)
 
     if not invite_link:
         # Admin needs to set the invite link first
@@ -804,14 +799,13 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
         ).as_form_field(),
     ]
 
-    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
-    if not requester_space or not requester_user_id:
+    send_client = _client_for_team(requester_team_id) if requester_team_id else None
+    if send_client is None or not requester_user_id:
         logger.info("handle_invite_approve: legacy or unresolved request; requester must resubmit")
         _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} has been approved!",
@@ -849,14 +843,13 @@ def handle_invite_deny(body: dict, client: WebClient, logger: Logger, context: d
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
-    if not requester_space or not requester_user_id:
+    send_client = _client_for_team(requester_team_id) if requester_team_id else None
+    if send_client is None or not requester_user_id:
         logger.info("handle_invite_deny: legacy or unresolved request; requester must resubmit")
         _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} was not approved at this time.",
@@ -902,18 +895,19 @@ def handle_invite_link_broken(
     requester_user_id = safe_get(body, "user", "id")
 
     # Notify the target region admins that the link didn't work
+    target_client = None
     if target_org_id:
-        resolved_team_id, target_bot_token, _ = _get_target_region_info(target_org_id, logger)
-    else:
-        resolved_team_id, target_bot_token = None, None
-    if resolved_team_id == target_team_id and target_bot_token:
+        resolved_team_id, _ = _get_target_region_info(target_org_id, logger)
+        if resolved_team_id == target_team_id:
+            target_client = _client_for_team(resolved_team_id)
+    verified = target_client is not None
+    if verified:
         admin_users = get_admin_users(target_org_id, target_team_id)
         admin_slack_ids = [
             au[1].slack_id for au in admin_users if au[1] and au[1].slack_id and au[1].slack_id != "USLACKBOT"
         ]
         if admin_slack_ids:
             try:
-                target_client = WebClient(token=target_bot_token, ssl=_ssl_context())
                 dm = target_client.conversations_open(users=",".join(admin_slack_ids))
                 dm_channel = safe_get(dm, "channel", "id")
                 target_client.chat_postMessage(
@@ -938,7 +932,7 @@ def handle_invite_link_broken(
             text=(
                 f"We've notified the admins of *{target_org_name}* that the link didn't work. "
                 "They'll send you an updated link shortly."
-                if resolved_team_id == target_team_id and target_bot_token
+                if verified
                 else "This request could not be verified. Please resubmit it from the Downrange menu."
             ),
         )
@@ -957,14 +951,13 @@ def handle_invite_mark_done(body: dict, client: WebClient, logger: Logger, conte
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
-    if not requester_space or not requester_user_id:
+    send_client = _client_for_team(requester_team_id) if requester_team_id else None
+    if send_client is None or not requester_user_id:
         logger.info("handle_invite_mark_done: legacy or unresolved request; requester must resubmit")
         _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite to {target_org_name} has been sent — check your email!",
@@ -1009,7 +1002,15 @@ def handle_downrange_settings(
     form_data = BlockView(blocks=copy.deepcopy(DOWNRANGE_ADMIN_BLOCKS)).get_selected_values(body)
 
     region_record.downrange_invite_sharing = safe_get(form_data, actions.DOWNRANGE_INVITE_SHARING) or "request_only"
-    region_record.downrange_invite_link = safe_get(form_data, actions.DOWNRANGE_INVITE_LINK) or None
+    submitted_link = safe_get(form_data, actions.DOWNRANGE_INVITE_LINK)
+    invite_link = usable_invite_link(submitted_link)
+    if submitted_link and not invite_link:
+        # Keep the saved link rather than clear it as a side effect of unusable input; an empty box still clears it.
+        logger.warning(
+            f"Downrange settings for team {region_record.team_id}: invite link had no usable URL, kept the saved one"
+        )
+        invite_link = usable_invite_link(region_record.downrange_invite_link)
+    region_record.downrange_invite_link = invite_link
     region_record.downrange_channel_posting = safe_get(form_data, actions.DOWNRANGE_CHANNEL_POSTING) or "off"
     region_record.downrange_channel = safe_get(form_data, actions.DOWNRANGE_CHANNEL) or None
 

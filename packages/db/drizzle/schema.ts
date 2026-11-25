@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   customType,
@@ -24,6 +25,7 @@ import {
 
 import {
   AchievementCadence,
+  AttendanceType,
   DayOfWeek,
   EventCadence,
   EventCategory,
@@ -62,6 +64,7 @@ export const achievementCadence = pgEnum(
   "achievement_cadence",
   AchievementCadence,
 );
+export const attendanceType = pgEnum("attendance_type", AttendanceType);
 
 export const citext = customType<{ data: string }>({
   fromDriver(value) {
@@ -170,6 +173,14 @@ export const slackSpaces = pgTable(
     teamId: varchar("team_id").notNull(),
     workspaceName: varchar("workspace_name"),
     botToken: varchar("bot_token"),
+    botId: varchar("bot_id"),
+    botUserId: varchar("bot_user_id"),
+    botScopes: varchar("bot_scopes"),
+    botTokenExpiresAt: timestamp("bot_token_expires_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
+    botRefreshTokenEncrypted: text("bot_refresh_token_encrypted"),
     settings: jsonb().$type<SlackSpacesMeta>(),
     created: timestamp({ mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
@@ -364,6 +375,9 @@ export const attendance = pgTable(
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     eventInstanceId: integer("event_instance_id").notNull(),
+    // Kept in step with attendance_x_attendance_types by the
+    // sync_attendance_type trigger until every writer sets it directly.
+    attendanceType: attendanceType("attendance_type").default("pax").notNull(),
   },
   (table) => [
     index("idx_attendance_event_instance_id").using(
@@ -514,6 +528,26 @@ export const users = pgTable(
       name: "users_home_region_id_fkey",
     }),
     unique("users_email_key").on(table.email),
+  ],
+);
+
+export const userStravaCredentials = pgTable(
+  "user_strava_credentials",
+  {
+    userId: integer("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    athleteId: bigint("athlete_id", { mode: "number" }).notNull(),
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    unique("user_strava_credentials_athlete_id_key").on(table.athleteId),
+    check(
+      "user_strava_credentials_complete",
+      sql`${table.athleteId} > 0 AND ${table.expiresAt} > 0 AND length(${table.accessToken}) > 0 AND length(${table.refreshToken}) > 0`,
+    ),
   ],
 );
 
@@ -1183,6 +1217,27 @@ export const authVerificationTokens = pgTable(
       columns: [table.identifier, table.token],
       name: "auth_verification_tokens_pkey",
     }),
+  ],
+);
+
+// One row per sign-in email the map's auth adapter allowed. Kept apart from
+// auth_verification_tokens, whose rows are deleted on redemption, so
+// redeeming a code can't erase its send from the per-address limit.
+export const authVerificationSends = pgTable(
+  "auth_verification_sends",
+  {
+    id: serial().primaryKey().notNull(),
+    identifier: varchar().notNull(),
+    created: timestamp({ mode: "string" })
+      .default(sql`timezone('utc'::text, now())`)
+      .notNull(),
+  },
+  (table) => [
+    index("idx_auth_verification_sends_identifier_created").using(
+      "btree",
+      table.identifier.asc().nullsLast().op("text_ops"),
+      table.created.asc().nullsLast().op("timestamp_ops"),
+    ),
   ],
 );
 

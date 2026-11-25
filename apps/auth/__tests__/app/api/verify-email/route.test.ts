@@ -9,6 +9,7 @@ const { rateLimit } = vi.hoisted(() => ({
 
 vi.mock("~/lib/rate-limit", () => ({ rateLimit }));
 vi.mock("~/lib/email-mfa", () => ({
+  EmailCodeRateLimitedError: class EmailCodeRateLimitedError extends Error {},
   sendEmailCode: vi.fn(),
   verifyEmailCode: vi.fn(),
 }));
@@ -16,6 +17,9 @@ vi.mock("~/lib/logging", () => ({ logError: vi.fn() }));
 vi.mock("~/env", () => ({ env: { NODE_ENV: "production" } }));
 
 const { POST } = await import("~/app/api/verify-email/route");
+const { EmailCodeRateLimitedError, sendEmailCode } =
+  await import("~/lib/email-mfa");
+const { logError } = await import("~/lib/logging");
 
 function verifyEmail(headers?: HeadersInit) {
   return POST(
@@ -51,5 +55,33 @@ describe("POST /api/verify-email rate-limit key", () => {
       "verify-email:unknown",
       "verify-email:unknown",
     ]);
+  });
+});
+
+describe("POST /api/verify-email code sends", () => {
+  it("answers 429 when the address has had too many codes, without logging an error", async () => {
+    rateLimit.mockReturnValueOnce({ allowed: true });
+    vi.mocked(sendEmailCode).mockRejectedValueOnce(
+      new EmailCodeRateLimitedError(),
+    );
+
+    const res = await verifyEmail();
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error:
+        "Too many codes requested. Please wait a few minutes and try again.",
+    });
+    expect(logError).not.toHaveBeenCalled();
+  });
+
+  it("still answers 500 when sending fails for another reason", async () => {
+    rateLimit.mockReturnValueOnce({ allowed: true });
+    vi.mocked(sendEmailCode).mockRejectedValueOnce(new Error("smtp down"));
+
+    const res = await verifyEmail();
+
+    expect(res.status).toBe(500);
+    expect(logError).toHaveBeenCalledTimes(1);
   });
 });

@@ -147,4 +147,5 @@ Add a **Migration** section:
 - Any `openapi.golden.json` change (step 5).
 - A line saying a human must sign off before merge.
 
-Sign the PR body `_written by <model>_` (see the `github` skill).
+Sign the PR body `_written by <model>_`, following the repo's
+[GitHub write rules](../../../AGENTS.md#writing-to-github).

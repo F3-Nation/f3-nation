@@ -15,6 +15,7 @@ import {
 
 const mocks = vi.hoisted(() => {
   vi.stubEnv("AUTH_TRUSTED_ISSUERS", "https://auth.example.test");
+  vi.stubEnv("AUTH_TRUSTED_CLIENT_IDS", "f3-me-test");
   return { key: vi.fn(), limit: vi.fn(), warn: vi.fn(), error: vi.fn() };
 });
 
@@ -38,7 +39,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 import { getSessionFromHeaders } from "@acme/auth";
 import { eq, inArray, schema } from "@acme/db";
 import { db } from "@acme/db/client";
-import { protectedProcedure } from "../../shared";
+import { API_KEY_SESSION_USER_ID, protectedProcedure } from "../../shared";
 import { meRouter } from "./index";
 
 const clientFor = (token?: string) =>
@@ -140,7 +141,7 @@ describe("Personal operations authentication", () => {
       expires: string,
       privateKey = pair.privateKey,
     ) =>
-      new SignJWT({ token_use: tokenUse })
+      new SignJWT({ token_use: tokenUse, client_id: "f3-me-test" })
         .setProtectedHeader({ alg: "RS256" })
         .setIssuer("https://auth.example.test")
         .setSubject(String(userId))
@@ -221,34 +222,50 @@ describe("Personal operations authentication", () => {
       client.me.deletePosition({ positionId, orgId }),
   };
 
-  it.each(["unprivileged", "admin"] as const)(
-    "resolves the %s key from the database but denies personal access",
-    async (name) => {
-      const client = clientFor(keys[name]);
-      const identity = await client.identity();
-      expect(identity.id).toBe(ownerId);
-      expect(identity.apiKeyId).toBeTypeOf("number");
-      expect(identity.roles).toHaveLength(name === "admin" ? 1 : 0);
-      const before = await state(ownerId);
-      for (const operation of Object.values(operations)) {
-        mocks.warn.mockClear();
-        await expect(operation(client)).rejects.toMatchObject({
-          code: "UNAUTHORIZED",
-          message: "Sign in with your user account to access this endpoint.",
-        });
-        expect(mocks.warn).toHaveBeenCalledExactlyOnceWith(
-          "api.auth.personal_endpoint_api_key_denied",
-          { apiKeyId: identity.apiKeyId },
-        );
-        expect(await state(ownerId)).toEqual(before);
-      }
-      // Lookup routes retain their existing policy.
-      await expect(client.me.regions()).resolves.toHaveProperty("orgs");
-      await expect(client.me.users({ userId })).resolves.toHaveProperty(
-        "users",
+  it("resolves a key with a role from the database but denies personal access", async () => {
+    const client = clientFor(keys.admin);
+    const identity = await client.identity();
+    // The key's session names no user, least of all its owner.
+    expect(identity.id).toBe(API_KEY_SESSION_USER_ID);
+    expect(identity.apiKeyId).toBeTypeOf("number");
+    expect(identity.roles).toHaveLength(1);
+    const before = await state(ownerId);
+    for (const operation of Object.values(operations)) {
+      mocks.warn.mockClear();
+      await expect(operation(client)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "Sign in with your user account to access this endpoint.",
+      });
+      expect(mocks.warn).toHaveBeenCalledExactlyOnceWith(
+        "api.auth.personal_endpoint_api_key_denied",
+        { apiKeyId: identity.apiKeyId },
       );
-    },
-  );
+      expect(await state(ownerId)).toEqual(before);
+    }
+    // Lookup routes retain their existing policy.
+    await expect(client.me.regions()).resolves.toHaveProperty("orgs");
+    await expect(client.me.users({ userId })).resolves.toHaveProperty("users");
+  });
+
+  it("treats a key with no role as no credential on every me route", async () => {
+    const client = clientFor(keys.unprivileged);
+    const before = await state(ownerId);
+    for (const operation of [
+      ...Object.values(operations),
+      (c: typeof client) => c.identity(),
+      (c: typeof client) => c.me.regions(),
+      (c: typeof client) => c.me.users({ userId }),
+    ]) {
+      await expect(operation(client)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+    }
+    expect(mocks.warn).not.toHaveBeenCalledWith(
+      "api.auth.personal_endpoint_api_key_denied",
+      expect.anything(),
+    );
+    expect(await state(ownerId)).toEqual(before);
+  });
 
   it.each(["expired", "revoked", "unknown"] as const)(
     "preserves existing session-resolution rejection of a %s key",
@@ -316,7 +333,7 @@ describe("Personal operations authentication", () => {
     await expect(clientFor(expiredToken).identity()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
     });
-    await clientFor(keys.unprivileged).identity();
+    await clientFor(keys.admin).identity();
     expect(
       mocks.error.mock.calls.map(([event]) => String(event)),
     ).not.toContain("api.auth.jwks_unavailable");

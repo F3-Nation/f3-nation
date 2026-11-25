@@ -17,7 +17,7 @@ import type { AppDb } from "./client";
 import type { LocalTargetAction } from "./migrate-guards";
 import { logInfo, logWarn } from "./lib/logging";
 import { LOCAL_PG_CONTAINER } from "./local-docker";
-import { LOCAL_API_KEY_REGION_NAMES } from "./local-seed-lib/data";
+import { LOCAL_SEED_REGION_NAMES } from "./local-seed-lib/data";
 import { resetAllSequences } from "./local-seed-lib/sequences";
 import { DISPOSABLE_MARKER, DISPOSABLE_REMEDY } from "./migrate-guards";
 
@@ -314,6 +314,8 @@ export const LIST_ARGS = [...EXEC_STDIN, CONTAINER, "pg_restore", "-l"];
  * against the manifest, are restored: that leaves out large objects, and
  * SEQUENCE SET, whose setval survives a rollback (the loader resets
  * sequences after the commit instead).
+ * tooling/scripts/src/obfuscate-db.verify.ts replays these steps to check a
+ * published file; change both together.
  */
 const RESTORE_SCRIPT = `set -euo pipefail
 d=$(mktemp) l=$(mktemp) f=$(mktemp)
@@ -361,13 +363,19 @@ export interface LoadDb {
   newestMigration: () => Promise<number | null>;
   analyze: () => Promise<void>;
   recomputeAoCounts: () => Promise<void>;
+  /** Whether the procedure `recomputeAttendanceTypes` calls exists. */
+  hasAttendanceTypeBackfill: () => Promise<boolean>;
+  recomputeAttendanceTypes: () => Promise<void>;
   resetAllSequences: () => Promise<number>;
   nationIds: () => Promise<number[]>;
   regionIdsByName: (names: string[]) => Promise<Record<string, number>>;
 }
 
 export interface Seeders {
-  seedDevUsers: (nationId: number) => Promise<{
+  seedDevUsers: (
+    nationId: number,
+    regionIds: Record<string, number>,
+  ) => Promise<{
     adminUserId: number;
     roleIds: { adminId: number; editorId: number };
   }>;
@@ -503,8 +511,11 @@ async function seedDevLogins(deps: LoadDeps): Promise<void> {
       `Expected exactly one nation org in the snapshot, found ${nations.length}.`,
     );
   }
-  const { adminUserId, roleIds } = await deps.seeders.seedDevUsers(nationId);
-  const regionIds = await deps.db.regionIdsByName(LOCAL_API_KEY_REGION_NAMES);
+  const regionIds = await deps.db.regionIdsByName(LOCAL_SEED_REGION_NAMES);
+  const { adminUserId, roleIds } = await deps.seeders.seedDevUsers(
+    nationId,
+    regionIds,
+  );
   const skipped = await deps.seeders.seedApiKeys(
     adminUserId,
     nationId,
@@ -555,13 +566,21 @@ export async function runLoad(
     assertDumpMatchesManifest(toc.stdout, manifest);
     assertColumns(manifest, await deps.db.localColumns(tables));
     assertMigration(await deps.db.newestMigration(), manifest);
+    // A local database and snapshot that are both older than the procedure
+    // pass the checks above, but post-load setup calls it after the restore
+    // has committed.
+    if (!(await deps.db.hasAttendanceTypeBackfill())) {
+      throw new Error(
+        "Your local database is missing the attendance-type migration. Run `pnpm db:migrate:local`, then load again.",
+      );
+    }
 
     if (!args.yes) {
       if (!deps.isTTY) {
         throw new Error("Not a terminal: pass --yes to load without a prompt.");
       }
       const answer = await deps.confirm(
-        `Replace the data in ${tables.length} tables of the local "${PG_DB}" database with a snapshot exported ${age.text} (${rows} rows)? This also empties anything that references them (attendance, API keys, OAuth tokens, sign-in sessions); dev users and keys are re-created. [y/N] `,
+        `Replace the data in ${tables.length} tables of the local "${PG_DB}" database with a snapshot exported ${age.text} (${rows} rows)? This also empties every table that references them, such as API keys, OAuth tokens and sign-in sessions; dev users and keys are re-created. [y/N] `,
       );
       if (!["y", "yes"].includes(answer.trim().toLowerCase())) {
         throw new Error("Load cancelled");
@@ -582,6 +601,7 @@ export async function runLoad(
     try {
       await deps.db.analyze();
       await deps.db.recomputeAoCounts();
+      await deps.db.recomputeAttendanceTypes();
       await deps.db.resetAllSequences();
       await seedDevLogins(deps);
     } catch (err) {
@@ -660,6 +680,21 @@ export function createLoadDb(db: AppDb, migrationsTable: string): LoadDb {
     // The trigger that keeps ao_count current is off during a restore.
     async recomputeAoCounts() {
       await db.execute(sql`SELECT public.recount_org_ao_counts()`);
+    },
+
+    async hasAttendanceTypeBackfill() {
+      const [row] = await db.execute<{ present: boolean }>(
+        sql`SELECT to_regprocedure('public.backfill_attendance_type(integer)') IS NOT NULL AS present`,
+      );
+      return row?.present === true;
+    },
+
+    // The trigger that keeps attendance.attendance_type current is off during
+    // a restore, and a snapshot without that column loads every record as
+    // pax. The procedure commits per batch, so it must not run inside a
+    // transaction block.
+    async recomputeAttendanceTypes() {
+      await db.execute(sql`CALL public.backfill_attendance_type()`);
     },
 
     resetAllSequences: () => resetAllSequences(db),

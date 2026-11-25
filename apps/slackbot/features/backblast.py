@@ -1,7 +1,6 @@
 import copy
 import json
 import os
-import ssl
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -59,6 +58,7 @@ from utilities.helper_functions import (
 )
 from utilities.slack import actions, forms
 from utilities.slack import orm as slack_orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 META_EXCLUDE_FROM_PAX_VAULT = "exclude_from_pax_vault"
 
@@ -1261,10 +1261,6 @@ COUNT: {count}
         existing_by_team = {p["team_id"]: p for p in existing_dr_posts}
         new_dr_posts = list(existing_by_team.values())  # preserve existing; updated in-place below
 
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-
         region_org = DbManager.get(Org, region_record.org_id)
         region_name = region_org.name if region_org else region_record.workspace_name
 
@@ -1273,7 +1269,7 @@ COUNT: {count}
             if not ox:
                 continue
             dr_slack_space = DbManager.get(SlackSpace, ox.slack_space_id)
-            if not dr_slack_space or not dr_slack_space.bot_token:
+            if not dr_slack_space:
                 continue
 
             dr_settings = REGION_RECORDS.get(dr_slack_space.team_id)
@@ -1322,7 +1318,9 @@ COUNT: {count}
             )
 
             try:
-                dr_client = WebClient(token=dr_slack_space.bot_token, ssl=ssl_ctx)
+                dr_client = slack_client_for_team(dr_slack_space.team_id)
+                if dr_client is None:
+                    continue
                 existing_post = existing_by_team.get(dr_slack_space.team_id)
 
                 if create_or_edit == "edit" and existing_post:

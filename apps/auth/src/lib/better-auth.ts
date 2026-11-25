@@ -39,7 +39,7 @@
  */
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, formCsrfMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins/bearer";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
@@ -50,7 +50,8 @@ import {
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { z } from "zod";
 
 // Type-only — erased at compile time, so this does NOT import ~/lib/db (and
 // its DATABASE_* env requirement) as a module-load side effect. See getAuth's
@@ -166,6 +167,23 @@ export interface CreateAuthInstanceOptions {
     options: { consume: boolean },
   ) => Promise<boolean>;
   /**
+   * Reserves one send to `email` under the per-address send limit and
+   * returns whether it was allowed. It runs before Better Auth generates and
+   * stores the code, so a refused request gets a 429 and leaves the code a
+   * parallel request emailed in place. Production wires this to email-mfa.ts's
+   * reserveEmailCodeSend, the limit /api/verify-email's sends count against
+   * too; sendVerificationOTP then attaches the code to the reservation. See
+   * SEND_VERIFICATION_OTP_PATH below.
+   */
+  reserveOtpSend: (email: string) => Promise<boolean>;
+  /**
+   * Marks `users.emailVerified` once an email-code sign-in succeeds, as the
+   * legacy sign-in in email-mfa.ts does. user.crupdate clears it whenever a
+   * user's email changes, and the OAuth `email_verified` claim reads it.
+   * Production builds it with markF3EmailVerifiedInDb.
+   */
+  markEmailVerified: (f3UserId: number, email: string) => Promise<void>;
+  /**
    * Returns whether the given F3 `users.id` currently holds the nation-admin
    * role — the same check `nationAdminProcedure` uses (packages/api/src/
    * shared.ts), just against a raw user id instead of a `Session`, since
@@ -232,34 +250,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Stands in for the scope of an authorize request that didn't ask for
- * `openid`. No client can be registered for it (registration only accepts
- * the provider's `scopes`), so the plugin rejects it with `invalid_scope`.
- */
-export const OPENID_REQUIRED_SCOPE = "openid_required";
-
-/**
- * auth3 is an OpenID Connect provider only, so an authorize request must
- * name its scopes and include `openid` (OIDC Core §3.1.2.1).
- */
-function requestsOpenId(scope: unknown): boolean {
-  return typeof scope === "string" && scope.split(" ").includes("openid");
-}
-
-/**
- * Fills the default resource, drops an empty nonce and enforces the
- * `openid` scope on one authorize parameter object. Edits in place: a
- * hook's returned context is merged with the original as defaults, so it
- * can't remove a key.
+ * Fills the default resource and drops an empty nonce on one authorize
+ * parameter object. Edits in place: a hook's returned context is merged
+ * with the original as defaults, so it can't remove a key.
  *
- * Without a scope the plugin grants every scope the client is registered
- * for, `offline_access` included, so a client would get a refresh token it
- * never asked for. Rather than answer here, the scope is replaced with
- * OPENID_REQUIRED_SCOPE: the plugin validates the client and redirect_uri
- * first, then sends `invalid_scope` back to the client with its `state`.
- * `offline_access` is therefore granted only when requested, and with every
- * client on skipConsent, a registered and requested `offline_access` is the
- * condition that permits it (OIDC Core §11).
+ * The `openid` scope itself is enforced by the plugin's requireOpenId
+ * option (see oauthProvider below).
  */
 function normalizeAuthorizeParams(
   params: Record<string, unknown>,
@@ -267,7 +263,6 @@ function normalizeAuthorizeParams(
 ) {
   params.resource ??= resource;
   if (params.nonce === "") delete params.nonce;
-  if (!requestsOpenId(params.scope)) params.scope = OPENID_REQUIRED_SCOPE;
 }
 
 async function findProfileForUser(
@@ -300,10 +295,10 @@ function f3ProfileClaims(profile: F3Profile, scopes: string[]) {
  * Every emailOTP endpoint that checks a submitted code. Each is checked
  * against the shared budget (claimOtpAttempt), where a wrong code spends an
  * attempt, before Better Auth's own check runs. Only sign-in codes are
- * recorded in that budget, so the other code types, which nothing in this app
- * sends, are refused here as well. A flow that starts sending them has to
- * record its codes there too (deliverBetterAuthOtp), or every one of its
- * codes will be refused.
+ * recorded as checkable in that budget, so the other code types, which
+ * nothing in this app sends, are refused here as well. A flow that starts
+ * sending them has to record its codes as checkable too
+ * (deliverBetterAuthOtp), or every one of its codes will be refused.
  */
 const OTP_VERIFYING_PATHS = new Set([
   "/sign-in/email-otp",
@@ -312,6 +307,25 @@ const OTP_VERIFYING_PATHS = new Set([
   "/email-otp/reset-password",
   "/email-otp/change-email",
 ]);
+
+/**
+ * emailOTP endpoints that email a code this app never uses: only sign-in
+ * codes are recorded as checkable (see OTP_VERIFYING_PATHS), passwords are
+ * off (emailAndPassword) and so is change-email. They are listed in
+ * `disabledPaths`, which Better Auth answers with a 404 before hooks run, so
+ * nothing can reach them to spend an address's send limit without a usable
+ * code being emailed. A flow that starts using one has to take it out of
+ * here and reserve its sends in hooks.before only once the request is known
+ * to send (valid body, signed-in caller where required).
+ */
+const UNUSED_OTP_SENDING_PATHS = [
+  "/email-otp/request-password-reset",
+  "/forget-password/email-otp",
+  "/email-otp/request-email-change",
+];
+
+/** The only emailOTP send this app makes, reserved in hooks.before. */
+const SEND_VERIFICATION_OTP_PATH = "/email-otp/send-verification-otp";
 
 /**
  * Hops that may append themselves to X-Forwarded-For after the client's own
@@ -365,6 +379,7 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
     secret: options.secret,
     database: options.database,
     emailAndPassword: { enabled: false },
+    disabledPaths: [...UNUSED_OTP_SENDING_PATHS],
     advanced: {
       ipAddress: { trustedProxies: TRUSTED_PROXIES },
     },
@@ -390,6 +405,39 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         }
         if (ctx.path === "/oauth2/token" && isRecord(ctx.body)) {
           ctx.body.resource ??= resource;
+          return;
+        }
+        // Reserves a send under the per-address limit (reserveOtpSend) before
+        // Better Auth generates the code: its own limiter counts per IP, so
+        // without this, requests spread across IPs could flood one inbox and
+        // keep minting fresh guess budgets. Hooks run before the endpoint
+        // validates its body and runs its CSRF check, so only a request the
+        // endpoint will act on, and that will email a code, is counted;
+        // anything else falls through to the endpoint's own refusal.
+        // sign-in is the only type that always sends (sign-up is on, so even
+        // an unknown address gets its code) and the only one whose codes can
+        // be checked (OTP_VERIFYING_PATHS).
+        if (ctx.path === SEND_VERIFICATION_OTP_PATH) {
+          const body = (ctx.body ?? {}) as { email?: unknown; type?: unknown };
+          if (typeof body.email !== "string") return;
+          if (body.type !== "sign-in") {
+            // Same refusal the endpoint gives a change-email send.
+            throw new APIError("BAD_REQUEST", {
+              message: "Invalid OTP type",
+            });
+          }
+          // The endpoint lowercases before validating; mirror it.
+          const email = body.email.toLowerCase();
+          if (!z.email().safeParse(email).success) return;
+          await formCsrfMiddleware(ctx);
+          if (!(await options.reserveOtpSend(email))) {
+            // Same wording /api/verify-email gives, which the login form shows.
+            throw new APIError("TOO_MANY_REQUESTS", {
+              code: "TOO_MANY_OTP_REQUESTS",
+              message:
+                "Too many codes requested. Please wait a few minutes and try again.",
+            });
+          }
           return;
         }
         if (!OTP_VERIFYING_PATHS.has(ctx.path)) return;
@@ -437,6 +485,19 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         } catch (err) {
           // Not the error itself: Drizzle puts the bound email in its message.
           logError("auth.better_auth.otp_consume_failed", {
+            errorName: err instanceof Error ? err.name : typeof err,
+            code: sqlState(err),
+          });
+        }
+        // Better Auth's user id is the F3 users.id (see databaseHooks below).
+        // Same reasoning as above: a failure here must not undo the sign-in.
+        try {
+          await options.markEmailVerified(
+            Number(ctx.context.newSession.user.id),
+            body.email,
+          );
+        } catch (err) {
+          logError("auth.better_auth.email_verified_mark_failed", {
             errorName: err instanceof Error ? err.name : typeof err,
             code: sqlState(err),
           });
@@ -524,6 +585,16 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
             !(await findProfileForUser(options, user.id))?.onboardingCompleted,
         },
         scopes: [...SUPPORTED_OAUTH_SCOPES],
+        // auth3 is an OpenID Connect provider only (OIDC Core §3.1.2.1). Once
+        // the client and redirect_uri are validated, an authorize request
+        // without `openid`, or with no scope at all, goes back to the client
+        // as invalid_scope with its `state`. Without this, a request with no
+        // scope would be granted every scope the client is registered for,
+        // `offline_access` included, so a client would get a refresh token it
+        // never asked for. With every client on skipConsent, a registered and
+        // requested `offline_access` is the condition that permits it
+        // (OIDC Core §11).
+        requireOpenId: true,
         accessTokenExpiresIn: 3600, // matches ACCESS_TOKEN_TTL in apps/auth/src/lib/oauth.ts
         idTokenExpiresIn: 3600, // matches signIdToken's ACCESS_TOKEN_TTL lifetime in lib/oauth.ts
         // Merged over Better Auth's own claims, which read better_auth_user.
@@ -707,6 +778,28 @@ export async function isNationAdminForUser(
   return isNationAdminFromSession({ roles: userRoles });
 }
 
+/**
+ * Production's markEmailVerified. Writes only while the user's current email
+ * is the one just proven, so a sign-in can't verify an address the record no
+ * longer holds, and only when unset, matching email-mfa.ts.
+ */
+export function markF3EmailVerifiedInDb(
+  database: AuthDb,
+): CreateAuthInstanceOptions["markEmailVerified"] {
+  return async (f3UserId, email) => {
+    await database
+      .update(users)
+      .set({ emailVerified: new Date().toISOString() })
+      .where(
+        and(
+          eq(users.id, f3UserId),
+          eq(users.email, email.toLowerCase().trim()),
+          isNull(users.emailVerified),
+        ),
+      );
+  };
+}
+
 /** Production's findF3Profile, split out so it's testable with a stubbed db. */
 export async function findF3ProfileInDb(
   database: AuthDb,
@@ -769,7 +862,8 @@ export async function getAuth() {
   const { db } = await import("~/lib/db");
   const { env } = await import("~/env");
   const { deliverBetterAuthOtp } = await import("~/lib/better-auth-email");
-  const { claimEmailCode } = await import("~/lib/email-mfa");
+  const { claimEmailCode, reserveEmailCodeSend } =
+    await import("~/lib/email-mfa");
 
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error(
@@ -811,6 +905,8 @@ export async function getAuth() {
       return existing ? existing.id : null;
     },
     claimOtpAttempt: claimEmailCode,
+    reserveOtpSend: reserveEmailCodeSend,
+    markEmailVerified: markF3EmailVerifiedInDb(db),
     isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
     allowClientAction: allowProductionClientAction,
     findF3Profile: (f3UserId) => findF3ProfileInDb(db, f3UserId),

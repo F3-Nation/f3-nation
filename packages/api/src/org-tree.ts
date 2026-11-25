@@ -41,7 +41,7 @@ export const resetDepthScanThrottleForTests = (): void => {
  * (`void logIfOrgTreeExceedsMaxDepth(ctx.db)`); tests can await it directly.
  */
 export const logIfOrgTreeExceedsMaxDepth = async (
-  db: Context["db"],
+  db: Pick<Context["db"], "execute">,
 ): Promise<void> => {
   const now = Date.now();
   if (now - lastDepthScanAt < DEPTH_SCAN_INTERVAL_MS) return;

@@ -1,5 +1,4 @@
 import os
-import ssl
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -27,6 +26,7 @@ from sqlalchemy import and_, case, func, literal, select, union_all
 
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import safe_get
+from utilities.slack_tokens.client import slack_client_for_team
 
 
 @dataclass
@@ -171,14 +171,20 @@ def _add_glow_effects(ax, n_glow_lines: int = 10, diff_linewidth: float = 1.05, 
 
 
 def upload_files_to_slack(file_paths: List[str], settings: SlackSettings, text: str, channel: str):
-    if not settings.bot_token or not file_paths or not channel:
-        print("Slack bot token or reporting channel not configured; skipping upload")
+    if not file_paths or not channel:
+        print("Reporting channel not configured; skipping upload")
         return
 
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    client = WebClient(token=settings.bot_token, ssl=ssl_context)
+    try:
+        client = slack_client_for_team(settings.team_id)
+    except Exception as e:
+        # Re-raised so the scheduled run records the region as failed; a missing installation
+        # (None) is not an error and is skipped below.
+        print(f"Error getting Slack client for team {settings.team_id}: {type(e).__name__}")
+        raise
+    if client is None:
+        print(f"No Slack installation for team {settings.team_id}; skipping upload")
+        return
 
     file_list = []
     for fp in file_paths:
@@ -247,7 +253,15 @@ def run_reporting_single_org(body: dict, client: WebClient, logger: any, context
 
 
 def cycle_all_orgs(run_org_id: int = None):
+    """
+    Post monthly summary charts for every region, and its AOs when enabled.
+
+    A region that raises, including a failed token lookup, is logged and recorded, the remaining
+    regions still get their reports, and a ``RuntimeError`` afterward reports how many regions
+    failed so the hourly runner records the incomplete run.
+    """
     current_time = datetime.now(pytz.timezone("US/Central"))
+    failed_org_ids: list[int] = []
     if run_org_id or (current_time.day == 2 and current_time.hour == 20):
         records = DbManager.find_join_records3(Org_x_SlackSpace, Org, SlackSpace, filters=[Org.is_active])
         region_orgs: List[Org] = [r[1] for r in records]
@@ -293,8 +307,12 @@ def cycle_all_orgs(run_org_id: int = None):
                                 channel=channel,
                             )
                 except Exception as e:
-                    print(f"Error processing org {org.name} ({org.id}): {e}")
+                    print(f"Error processing org {org.id}: {type(e).__name__}")
+                    failed_org_ids.append(org.id)
                     continue
+
+    if failed_org_ids:
+        raise RuntimeError(f"Monthly reports skipped for {len(failed_org_ids)} region(s)")
 
 
 def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:

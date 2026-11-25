@@ -26,7 +26,7 @@ def test_nonproduction_sync_returns_before_database_or_slack_calls(monkeypatch, 
     monkeypatch.setattr(update_slack_users.DbManager, "find_records", find_records)
     monkeypatch.setattr(update_slack_users.DbManager, "find_join_records2", find_join_records2)
     monkeypatch.setattr(update_slack_users.DbManager, "update_record", update_record)
-    monkeypatch.setattr(update_slack_users, "WebClient", web_client)
+    monkeypatch.setattr(update_slack_users, "slack_client_for_team", web_client)
 
     update_slack_users.update_slack_users(force=force)
 
@@ -58,6 +58,44 @@ def test_script_skips_home_region_refresh_outside_production(monkeypatch, caplog
     sync.assert_called_once_with()
     home_regions.assert_not_called()
     assert "Skipping home-region refresh outside production." in caplog.text
+
+
+def test_script_refreshes_home_regions_when_user_sync_fails(monkeypatch):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    sync = Mock(side_effect=RuntimeError("Slack user sync failed for 1 workspace(s)"))
+    home_regions = Mock()
+    monkeypatch.setattr(update_slack_users, "update_slack_users", sync)
+    monkeypatch.setattr(update_slack_users, "update_home_regions", home_regions)
+
+    with pytest.raises(RuntimeError, match="Slack user sync failed"):
+        update_slack_users.main()
+
+    home_regions.assert_called_once_with()
+
+
+def test_script_raises_sync_error_and_logs_home_region_error_when_both_fail(monkeypatch, caplog):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    caplog.set_level("ERROR")
+    sync = Mock(side_effect=RuntimeError("Slack user sync failed for 1 workspace(s)"))
+    home_regions = Mock(side_effect=ValueError("secret query detail"))
+    monkeypatch.setattr(update_slack_users, "update_slack_users", sync)
+    monkeypatch.setattr(update_slack_users, "update_home_regions", home_regions)
+
+    with pytest.raises(RuntimeError, match="Slack user sync failed"):
+        update_slack_users.main()
+
+    home_regions.assert_called_once_with()
+    assert "slack.home_region.refresh_failed error_type=ValueError" in caplog.text
+    assert "secret query detail" not in caplog.text
+
+
+def test_script_raises_home_region_error_when_sync_succeeds(monkeypatch):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    monkeypatch.setattr(update_slack_users, "update_slack_users", Mock())
+    monkeypatch.setattr(update_slack_users, "update_home_regions", Mock(side_effect=ValueError("boom")))
+
+    with pytest.raises(ValueError, match="boom"):
+        update_slack_users.main()
 
 
 def test_script_validates_environment_before_running_jobs(monkeypatch):
@@ -111,7 +149,7 @@ def test_production_sync_imports_slack_name_and_avatar(monkeypatch, caplog, init
             }
         ]
     }
-    monkeypatch.setattr(update_slack_users, "WebClient", Mock(return_value=client))
+    monkeypatch.setattr(update_slack_users, "slack_client_for_team", Mock(return_value=client))
 
     update_slack_users.update_slack_users()
 
@@ -152,7 +190,9 @@ def test_sync_scopes_updates_and_creation_to_active_workspace(monkeypatch, caplo
         "profile": {"display_name": "Updated Name", "image_512": "updated-avatar"},
     }
     monkeypatch.setattr(
-        update_slack_users, "WebClient", lambda **_k: SimpleNamespace(users_list=lambda: {"members": [member, member]})
+        update_slack_users,
+        "slack_client_for_team",
+        lambda *_a, **_k: SimpleNamespace(users_list=lambda: {"members": [member, member]}),
     )
     updates = []
     monkeypatch.setattr(update_slack_users.DbManager, "update_record", lambda *a: updates.append(a))
@@ -236,7 +276,9 @@ def test_sync_failure_logs_safe_context_and_continues(monkeypatch, caplog, error
         completed.append("continued")
         return {"members": []}
 
-    monkeypatch.setattr(update_slack_users, "WebClient", lambda **_kwargs: SimpleNamespace(users_list=users_list))
+    monkeypatch.setattr(
+        update_slack_users, "slack_client_for_team", lambda *_a, **_kwargs: SimpleNamespace(users_list=users_list)
+    )
     with caplog.at_level(logging.ERROR, logger=update_slack_users.__name__):
         assert update_slack_users.update_slack_users() is None
     assert completed == ["failed", "continued"]
@@ -268,3 +310,40 @@ def test_sync_failure_logs_safe_context_and_continues(monkeypatch, caplog, error
     recorded = json.dumps(record.__dict__, default=str)
     for private in ("fabricated-token", "private-member@f3local.dev", "U_PRIVATE", "Private Member"):
         assert private not in stream.getvalue() + serialized + recorded + caplog.text
+
+
+@pytest.mark.parametrize("failing_step", ["client_lookup", "users_list"])
+def test_unexpected_failure_syncs_remaining_workspaces_then_raises(monkeypatch, caplog, failing_step):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
+    monkeypatch.setattr(update_slack_users.DbManager, "find_records", lambda **_kwargs: [])
+    spaces = [
+        (SimpleNamespace(team_id=team, settings={}), SimpleNamespace(org_id=1)) for team in ("T_BROKEN", "T_NEXT")
+    ]
+    monkeypatch.setattr(update_slack_users.DbManager, "find_join_records2", lambda *_args, **_kwargs: spaces)
+    synced = []
+
+    def users_list(team_id):
+        if failing_step == "users_list" and team_id == "T_BROKEN":
+            raise RuntimeError("fabricated-token database detail")
+        synced.append(team_id)
+        return {"members": []}
+
+    def client_for_team(team_id):
+        if failing_step == "client_lookup" and team_id == "T_BROKEN":
+            raise RuntimeError("fabricated-token database detail")
+        return SimpleNamespace(users_list=lambda: users_list(team_id))
+
+    monkeypatch.setattr(update_slack_users, "slack_client_for_team", client_for_team)
+
+    with caplog.at_level(logging.ERROR, logger=update_slack_users.__name__):
+        with pytest.raises(RuntimeError, match=r"^Slack user sync failed for 1 workspace\(s\)$"):
+            update_slack_users.update_slack_users()
+
+    assert synced == ["T_NEXT"]
+    failures = [
+        record.json_fields
+        for record in caplog.records
+        if getattr(record, "json_fields", {}).get("event") == "slack.identity.sync_failed"
+    ]
+    assert failures == [{"event": "slack.identity.sync_failed", "team_id": "T_BROKEN", "error_type": "RuntimeError"}]
+    assert "fabricated-token" not in caplog.text

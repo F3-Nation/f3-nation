@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useSyncExternalStore } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import { APIProvider, ControlPosition, Map } from "@vis.gl/react-google-maps";
 
@@ -20,7 +20,9 @@ import { closePanel, setSelectedItem } from "~/utils/store/selected-item";
 import { MapEventListener } from "../map-event-listener";
 import { MapLayoutItems } from "../map-layout-items";
 import { ClusteredMarkers } from "../marker-clusters/clustered-markers";
+import { GoogleMapsAuthFailureBoundary } from "./google-maps-auth-failure-boundary";
 import { useInitialLocation } from "./initial-location-provider";
+import { useGoogleMapsAuthFailed } from "./use-google-maps-auth-failure";
 import { PlaceResultIconPane } from "./place-result-icon-pane";
 import { UpdatePane } from "./update-pane";
 
@@ -60,20 +62,36 @@ const MAP_CONFIGS: MapConfig[] = [
   },
 ];
 
+const subscribe = () => () => undefined;
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export const GoogleMapComponent = () => {
   const { initialCenter, initialZoom } = useInitialLocation();
   const { googleApiKey, status } = useRuntimeConfig();
+  const googleMapsAuthFailed = useGoogleMapsAuthFailed();
 
   // Key loads async; show a loader/error instead of a blank screen until it's ready.
   if (!googleApiKey) return <MapConfigFallback status={status} />;
 
+  // Google disables its markers when it rejects the key, so any marker the map
+  // mounts or moves afterwards throws: unmount the map. The boundary stays
+  // mounted across that switch so it can catch marker errors React flushes
+  // while making it.
+  const authFailureFallback = <MapConfigFallback status="auth_failure" />;
   return (
-    <APIProvider apiKey={googleApiKey}>
-      <ProvidedGoogleMapComponent
-        defaultZoom={initialZoom}
-        defaultCenter={initialCenter}
-      />
-    </APIProvider>
+    <GoogleMapsAuthFailureBoundary fallback={authFailureFallback}>
+      {googleMapsAuthFailed ? (
+        authFailureFallback
+      ) : (
+        <APIProvider apiKey={googleApiKey}>
+          <ProvidedGoogleMapComponent
+            defaultZoom={initialZoom}
+            defaultCenter={initialCenter}
+          />
+        </APIProvider>
+      )}
+    </GoogleMapsAuthFailureBoundary>
   );
 };
 
@@ -102,8 +120,6 @@ const ProvidedGoogleMapComponent = memo(
 
     const [width, height] = useWindowSize();
 
-    // Memoize zoom control position to prevent object recreation
-    // Keep this memoized as Map component might optimize on prop changes
     const zoomControlOptions = useMemo(
       () => ({
         position: isMobileWidth
@@ -113,7 +129,6 @@ const ProvidedGoogleMapComponent = memo(
       [isMobileWidth],
     );
 
-    // Memoize onClick handler to prevent function recreation
     const handleMapClick = useCallback(
       (
         e: Parameters<
@@ -134,16 +149,16 @@ const ProvidedGoogleMapComponent = memo(
           closePanel();
         }
       },
-      [], // Stable dependencies - appStore and functions don't change
+      [],
     );
 
-    // Client-side mounting to prevent SSR mismatch
-    // We have to manage mounting the map otherwise there is a mismatch in rendered size
-    // Causing it to render as a blank screen. Not sure why "use client" isn't working
-    const [isMounted, setIsMounted] = useState(false);
-    useEffect(() => {
-      setIsMounted(true);
-    }, []);
+    // Keep the map hidden during SSR and the initial hydration render.
+    const isMounted = useSyncExternalStore(
+      subscribe,
+      getClientSnapshot,
+      getServerSnapshot,
+    );
+
     if (!isMounted) {
       return <div style={{ height: "100vh", width: "100%" }} />;
     }
@@ -198,15 +213,20 @@ const UrlUpdater = () => {
   return null;
 };
 
-const MapConfigFallback = ({ status }: { status: RuntimeConfigStatus }) => {
-  const isError = status === "error";
+const MapConfigFallback = ({
+  status,
+}: {
+  status: RuntimeConfigStatus | "auth_failure";
+}) => {
+  const isError = status === "error" || status === "auth_failure";
   return (
     <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background text-center">
       {isError ? (
         <>
-          <p className="max-w-sm text-sm text-foreground/70">
-            We couldn&apos;t load the map right now. We&apos;ll keep trying, or
-            you can reload the page.
+          <p role="alert" className="max-w-sm text-sm text-foreground/70">
+            {status === "auth_failure"
+              ? "Google Maps isn't available right now, so we can't show the map. Please try again later."
+              : "We couldn't load the map right now. We'll keep trying, or you can reload the page."}
           </p>
           <Button variant="outline" onClick={() => window.location.reload()}>
             Try again

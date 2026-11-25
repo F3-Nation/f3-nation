@@ -7,15 +7,15 @@ describe("isDevModeSignInAllowed", () => {
     vi.unstubAllEnvs();
   });
 
-  it.each(["local", "ci", "branch", "dev", "staging"])(
+  it.each(["local", "ci", "branch", "dev"])(
     "allows the %s channel",
     (channel) => {
       expect(isDevModeSignInAllowed(channel)).toBe(true);
     },
   );
 
-  it("never allows the prod channel", () => {
-    expect(isDevModeSignInAllowed("prod")).toBe(false);
+  it.each(["prod", "staging"])("never allows the %s channel", (channel) => {
+    expect(isDevModeSignInAllowed(channel)).toBe(false);
   });
 
   it.each(["", "Prod", "production", "unknown"])(
@@ -35,13 +35,13 @@ describe("isDevModeSignInAllowed", () => {
     vi.stubEnv("F3_CHANNEL", "prod");
     expect(isDevModeSignInAllowed()).toBe(false);
 
-    vi.stubEnv("F3_CHANNEL", "staging");
+    vi.stubEnv("F3_CHANNEL", "dev");
     expect(isDevModeSignInAllowed()).toBe(true);
   });
 
   it("ignores NEXT_PUBLIC_CHANNEL", () => {
     vi.stubEnv("F3_CHANNEL", "prod");
-    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "staging");
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "dev");
     expect(isDevModeSignInAllowed()).toBe(false);
   });
 });
@@ -67,15 +67,18 @@ describe("dev-mode provider registration", () => {
     });
   };
 
-  it("registers dev-mode on staging", async () => {
-    vi.stubEnv("F3_CHANNEL", "staging");
+  it("registers dev-mode on dev", async () => {
+    vi.stubEnv("F3_CHANNEL", "dev");
     expect(await registeredProviderIds()).toContain("dev-mode");
   });
 
-  it.each(["prod", "unknown"])("omits dev-mode on %s", async (channel) => {
-    vi.stubEnv("F3_CHANNEL", channel);
-    expect(await registeredProviderIds()).not.toContain("dev-mode");
-  });
+  it.each(["prod", "staging", "unknown"])(
+    "omits dev-mode on %s",
+    async (channel) => {
+      vi.stubEnv("F3_CHANNEL", channel);
+      expect(await registeredProviderIds()).not.toContain("dev-mode");
+    },
+  );
 
   it("omits dev-mode when F3_CHANNEL is unset", async () => {
     vi.stubEnv("F3_CHANNEL", undefined);
@@ -83,7 +86,7 @@ describe("dev-mode provider registration", () => {
   });
 
   it("refuses to authorize if F3_CHANNEL becomes prod after registration", async () => {
-    vi.stubEnv("F3_CHANNEL", "staging");
+    vi.stubEnv("F3_CHANNEL", "dev");
     vi.resetModules();
     vi.stubEnv("SKIP_ENV_VALIDATION", "1");
     const { authConfig } = await import("@acme/auth/config");

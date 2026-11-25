@@ -1,6 +1,5 @@
 import copy
 import os
-import ssl
 from logging import Logger
 
 from f3_data_models.models import Org, Org_Type, Org_x_SlackSpace, Role, Role_x_User_x_Org, SlackSpace
@@ -23,6 +22,7 @@ from utilities.helper_functions import (
     trigger_map_revalidation,
 )
 from utilities.slack import actions, orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 
 def build_db_admin_form(
@@ -218,27 +218,6 @@ def handle_make_org(
     )
 
 
-def handle_update_bot_token(
-    body: dict,
-    client: WebClient,
-    logger: Logger,
-    context: dict,
-    region_record: SlackSettings,
-):
-    bot_token = safe_get(context, "bot_token")
-
-    if bot_token:
-        region_record.bot_token = bot_token
-        DbManager.update_records(
-            cls=SlackSpace,
-            filters=[SlackSpace.team_id == region_record.team_id],
-            fields={
-                SlackSpace.bot_token: bot_token,
-                SlackSpace.settings: region_record.__dict__,
-            },
-        )
-
-
 def handle_send_admin_announcement(
     body: dict,
     client: WebClient,
@@ -260,12 +239,20 @@ def handle_send_admin_announcement(
             org_x_slack_space = record[1]
             admin_users = get_admin_users(org_x_slack_space.org_id, slack_space.team_id)
             slack_admin_ids = {safe_get(u, 1, "slack_id") for u in admin_users if safe_get(u, 1, "slack_id")}
+            if not slack_admin_ids:
+                continue
+            try:
+                slack_client = slack_client_for_team(slack_space.team_id)
+            except Exception as e:
+                logger.error(f"Slack client lookup failed for {slack_space.workspace_name}: {type(e).__name__}")
+                continue
+            if slack_client is None:
+                logger.error(
+                    f"No Slack installation for {slack_space.workspace_name}; admin announcement not sent there"
+                )
+                continue
             for slack_user_id in slack_admin_ids:
                 try:
-                    ssl_context = ssl.create_default_context()
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = ssl.CERT_NONE
-                    slack_client = WebClient(slack_space.settings.get("bot_token"), ssl=ssl_context)
                     slack_client.chat_postMessage(
                         channel=slack_user_id,
                         blocks=[announcement_text],
@@ -364,10 +351,6 @@ DB_ADMIN_FORM = orm.BlockView(
                 orm.ButtonElement(
                     label="Trigger Map Revalidation",
                     action=actions.SECRET_MENU_TRIGGER_MAP_REVALIDATION,
-                ),
-                orm.ButtonElement(
-                    label="Update Bot Token",
-                    action=actions.SECRET_MENU_UPDATE_BOT_TOKEN,
                 ),
                 orm.ButtonElement(
                     label="Refresh Cache",

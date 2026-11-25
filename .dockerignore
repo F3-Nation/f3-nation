@@ -6,6 +6,9 @@
 .turbo  
 .vscode
 
+# Agent worktrees are full checkouts nested in the repo; keep them out of the build context.
+.claude/worktrees
+
 .dockerignore
 
 node_modules

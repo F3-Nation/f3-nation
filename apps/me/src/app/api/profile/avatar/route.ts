@@ -8,6 +8,7 @@ import {
   getMyProfile,
 } from "@/lib/api/client";
 import { logError } from "@/lib/logging";
+import { env } from "@/env";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
       "me.avatar.upload_failed",
       {
         sessionUserId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
+        apiBaseUrl: env.F3_API_BASE_URL,
       },
       err,
     );

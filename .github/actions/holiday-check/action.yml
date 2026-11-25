@@ -1,0 +1,41 @@
+name: Holiday check
+description: >-
+  Say whether today is a holiday listed in .github/holidays.json, for
+  scheduled workflows that post a greeting instead of their usual message on
+  holidays. Needs the repository checked out first. Sets up Node from
+  .nvmrc, which later steps in the job then use too. Fails on a malformed
+  holidays file rather than skipping the check.
+
+inputs:
+  holidays-file:
+    description: Path to the holidays file, relative to the workspace.
+    required: false
+    default: .github/holidays.json
+  time-zone:
+    description: IANA time zone whose calendar date is checked.
+    required: false
+    default: America/Chicago
+
+outputs:
+  name:
+    description: The holiday's name, or empty on a normal day.
+    value: ${{ steps.check.outputs.name }}
+  greeting:
+    description: A greeting naming the holiday, or empty on a normal day.
+    value: ${{ steps.check.outputs.greeting }}
+
+runs:
+  using: composite
+  steps:
+    # The script has no dependencies, so this skips .github/actions/setup's
+    # pnpm install.
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+
+    - id: check
+      shell: bash
+      env:
+        HOLIDAYS_FILE: ${{ inputs.holidays-file }}
+        TIME_ZONE: ${{ inputs.time-zone }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/holidays.cjs"

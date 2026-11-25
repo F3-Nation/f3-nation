@@ -103,18 +103,19 @@ The logs never contain row data: counts, table and key names only.
 You don't need to clean anything up: either staging wasn't touched, or the
 job rolled it back. Common reasons it stops:
 
-| `!! STOPPED:` says                                                         | Do this                                                                                                                                                                                                  |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `migration gate: prod is at … but staging is at …`                         | Wait until prod and staging run the same release, then run it again.                                                                                                                                     |
-| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Ask whoever maintains it to run the full `tooling/scripts/staging-refresh/setup.sh` (with `STAGING_REFRESH_RUNNERS`) from a checkout of the release Production runs. |
-| `obfuscate-db failed` with `column(s) nobody has reviewed for PII`         | A migration added a column without classifying it. That needs a code change (see [Review gate](#review-gate)), then a new image.                                                                         |
-| `copy and staging tables differ`                                           | Prod and staging have different columns on a table. Usually the same fix as the migration gate: wait for both to run the same release.                                                                   |
-| `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                                                                                  |
-| `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                                                                                   |
-| `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                                                                                      |
-| `the job's login doesn't own …`                                            | A migration added a table owned by a role the job's login isn't in. Re-run `setup.sh` so `staging-login.sql` grants the new owner role, then run again.                                                  |
-| `system triggers are left on …`                                            | A `DEFERRABLE` unique/exclusion constraint leaves a system trigger the job can't disable. Make it `NOT DEFERRABLE` on staging, or have `dropFksAndTruncate` drop and re-add it, then run again.          |
-| `trigger(s) not in the default enabled state`                              | Someone disabled a trigger on staging (or set it to `REPLICA` / `ALWAYS`). Set it back or drop it, then run again.                                                                                       |
+| `!! STOPPED:` says                                                         | Do this                                                                                                                                                                                         |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `migration gate: prod is at … but staging is at …`                         | Wait until prod and staging run the same release, then run it again.                                                                                                                            |
+| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Anyone with write access to the repo runs [Rebuild the image](#rebuild-the-image-after-a-prod-migration), then runs it again.                               |
+| `permission denied` from `pg_dump`                                         | A migration took away the refresh login's read access. An `f3data` Owner runs the full setup, then the rebuild ([Migrations that need the full setup](#migrations-that-need-the-full-setup)).   |
+| `obfuscate-db failed` with `column(s) nobody has reviewed for PII`         | A migration added a column without classifying it. That needs a code change (see [Review gate](#review-gate)), then a new image.                                                                |
+| `copy and staging tables differ`                                           | Prod and staging have different columns on a table. Usually the same fix as the migration gate: wait for both to run the same release.                                                          |
+| `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                                                                         |
+| `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                                                                          |
+| `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                                                                             |
+| `the job's login doesn't own …`                                            | A migration added a table owned by a role the job's login isn't in. Re-run `setup.sh` so `staging-login.sql` grants the new owner role, then run again.                                         |
+| `system triggers are left on …`                                            | A `DEFERRABLE` unique/exclusion constraint leaves a system trigger the job can't disable. Make it `NOT DEFERRABLE` on staging, or have `dropFksAndTruncate` drop and re-add it, then run again. |
+| `trigger(s) not in the default enabled state`                              | Someone disabled a trigger on staging (or set it to `REPLICA` / `ALWAYS`). Set it back or drop it, then run again.                                                                              |
 
 **`ROLLBACK FAILED`** means the load failed and putting staging back failed
 too (e.g. staging was unreachable), three times. Staging's loaded tables may
@@ -178,11 +179,86 @@ It creates:
   setup lacks it, the script prints the one
   `gcloud storage buckets add-iam-policy-binding` command for someone who has it.
 
-Re-run the full setup after any Production release that adds a migration:
-it rebuilds the image so it knows prod's migrations and columns, and it
-re-applies `prod-login.sql`, whose read access a migration can undo.
-`--image-only` is only for a code-only rebuild. It prints the one permission
-it can't grant: restarting the slackbot in `f3-slackbot-staging`.
+`setup.sh --image-only` rebuilds and redeploys only the image, for an Owner
+working from a local checkout. It prints the one permission it can't grant:
+restarting the slackbot in `f3-slackbot-staging`.
+
+The full setup also lets the
+[Rebuild Staging refresh image](../.github/workflows/rebuild-staging-refresh.yml)
+workflow do its one job. It creates the service account
+`staging-refresh-deploy@f3data.iam.gserviceaccount.com`, which may push to the
+`cloud-run-builds` repository (`roles/artifactregistry.writer`; the repository
+holds other images too, which their deploys pin by digest), update only this
+job (`roles/run.developer` on the job) and act as the job's service account.
+GitHub Actions may act as it only through its own workload identity pool,
+`staging-refresh-gh`, whose one provider (`github-main`) accepts only tokens
+from `refs/heads/main` in this repo's `staging-refresh` environment. A run
+from a branch or a tag can't sign in, even with an edited copy of the
+workflow. The full setup also grants that trust only while the environment
+exists and allows `main` alone (GitHub creates a missing environment,
+unprotected, the first time a job names it), checked with `gh`. Without it,
+it withholds the trust and warns; with a loosened policy, a re-run takes the
+trust back.
+
+Order, once: a repo admin creates the GitHub environment `staging-refresh`
+with deployment branches `main` only and no required reviewers. Then an Owner
+runs the full setup. The workflow names the provider and account itself (not
+through variables, which would fall back to the organization-level ones), so
+there is nothing to set in GitHub after that.
+
+### Rebuild the image after a prod migration
+
+The job refuses to run while prod has a migration its image doesn't know
+(`… migration(s) this build's … _journal.json doesn't know`), so rebuild it
+after every prod migration. `pnpm db:migrate:prod` starts it for you when it
+applies one, with your own `gh` login, and prints the link to the workflow's
+runs. If it can't start it, it prints why and the command instead. Anyone
+with write access to the repo can run it, with no Google Cloud access:
+
+```bash
+gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main
+```
+
+(or Actions > **Rebuild Staging refresh image** > Run workflow, on `main`). It
+waits for CI on main's newest commit, builds the image from it, and points the job
+at it; nothing else about the job changes. It can only build `main`: the
+credentials go only to the `staging-refresh` environment, which only `main`
+may use.
+
+The workflow waits for the CI checks named in its `ci-gate` job (the deploy
+gate's required checks plus `obfuscate-db-verify`) on that commit, and fails,
+leaving the job's image as it was, if anything under `packages/db/drizzle` or
+`tooling/scripts` changes on main while it runs (a new migration, for instance).
+Run it again then.
+
+### Migrations that need the full setup
+
+A migration can take away the refresh login's access, and only the full setup
+re-grants it (it needs the `spuds` passwords, so an `f3data` Owner runs it).
+That applies when a new `.sql` file:
+
+- creates a table or schema (`CREATE TABLE`, `CREATE SCHEMA`),
+- changes an owner (`OWNER TO`),
+- revokes privileges (`REVOKE`), or
+- calls `audit.enable_tracking`.
+
+The same list is `FULL_SETUP_NOTE` in `packages/db/src/migrate-remote.ts` and
+`REFRESH_SETUP_PATTERN` in `.agents/skills/release/scripts/release-facts.sh`;
+change all three together.
+
+Then the Owner runs the full setup, and someone with write access starts the
+rebuild once more after it, even if `pnpm db:migrate:prod` already started
+one: the full setup also deploys an image from its own checkout, so the
+rebuild goes last.
+Running the full setup when it wasn't needed is harmless. Missing it shows up
+as `permission denied` from `pg_dump` or `the job's login doesn't own …`.
+
+Row-level security is different: neither the full setup nor a policy fixes it.
+If a migration enables it (`ENABLE ROW LEVEL SECURITY`) on a table the refresh
+reads, the refresh stops: `pg_dump` runs without `--enable-row-security`, so a
+login that neither owns the table nor bypasses RLS can't dump it. That needs a
+change to the refresh first (dump with `--enable-row-security`, plus a policy
+that lets the read-only login read every row), shipped before the migration.
 
 The job's command is `pnpm -F @acme/scripts staging-refresh`
 (`tooling/scripts/src/staging-refresh.ts`), which also runs outside Cloud Run
@@ -224,12 +300,16 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
    emptied. The trim refuses if a kept table has a foreign key into an
    emptied one. Private event series (and series under them) and private
    event instances (and instances of a private series) are deleted with
-   their link rows. `event_instances` keeps only `start_date` from 30 days
-   back to 90 days ahead (about 150k of ~1.76M rows), with their link rows.
-   `preblast`, `backblast`, `preblast_rich` and `backblast_rich` are set to
-   NULL; `pax_count` and `fng_count` are kept. `users.meta` is set to NULL:
-   the obfuscator only scrubs emails and phones in it, and its profile
-   answers are free text. Before trimming, the job refuses if a kept table
+   their link rows. `event_instances` keeps only `start_date` inside
+   `SNAPSHOT_WINDOW` (days before and after the export date), with their
+   link rows. `attendance` is a link row too, so it keeps only rows on a
+   kept instance, and `attendance_x_attendance_types` goes with it;
+   `achievements_x_users` is not windowed. `preblast`, `backblast`,
+   `preblast_rich` and `backblast_rich` are set to NULL; `pax_count` and
+   `fng_count` are kept. `users.meta`, `attendance.meta` and
+   `achievements_x_users.meta` are set to NULL: the obfuscator only scrubs
+   emails and phones in the first two and copies award rows untouched, and
+   the rest is free text. Before trimming, the job refuses if a kept table
    has a column that isn't in `obfuscate-db.columns.txt`.
 6. **Leak scan, package and publish.**
    - verify-target runs again on the trimmed copy, so the scan covers
@@ -237,9 +317,8 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
      other than `dev.staging-email-sink+<tag>@f3nation.local`, any phone
      number that isn't one of the obfuscator's `555-` fakes, and any Slack
      mention (`<@U…>` / `<@W…>`) whose id isn't an obfuscator `Uf3…` id.
-   - `orgs`, `users`, `event_types`, `events` and `event_instances` must
-     each have rows (`SNAPSHOT_REQUIRED_TABLES`), so an empty copy can't
-     replace a good snapshot.
+   - Every table in `SNAPSHOT_REQUIRED_TABLES` must have rows, so an empty
+     copy can't replace a good snapshot.
    - If either check fails, nothing is built or uploaded. Otherwise a
      `pg_dump --data-only --format=custom` of the kept tables, plus
      `manifest.json`, goes into one uncompressed tar:
@@ -259,9 +338,10 @@ The job has no schedule: a maintainer runs the command above when a fresh
 snapshot is wanted. Publishing is a hand-run sequence for whoever runs
 production operations:
 
-1. Run the full setup (not `--image-only`) if the job's service account
-   doesn't have the `dev-snapshots/` write access yet or a Production release
-   added a migration, so the image is current.
+1. Run the full setup first if the job's service account doesn't have the
+   `dev-snapshots/` write access yet. Then, if a Production release added a
+   migration, make sure the image is current
+   ([Rebuild the image](#rebuild-the-image-after-a-prod-migration)).
 2. Execute the job with `--args=--snapshot-only` and confirm the execution's
    logs contain `DEV SNAPSHOT: OK`.
 3. Attach the tar's `manifest.json` and the job log's leak-scan output to the
@@ -331,6 +411,10 @@ it is, learned on the hand-run refreshes.
    `already exists` errors from the restore are expected). The copy must not
    be _ahead_ of the code that classifies it: the job compares prod's applied
    migrations with the image's `packages/db/drizzle/meta/_journal.json`.
+   Non-object user metadata aborts sanitization and identifies only the user
+   row id. Discard any copy from a failed sanitization run; it can still contain
+   credentials or PII. Correct the source data through an authorized process
+   and start again from a fresh copy before loading or distributing it.
 3. **Load** the _obfuscated_ copy into `f3data-nonprod`. Learned on the
    first real run (2026-09-22):
    - **Match staging's migration level**, not the repo's. Staging's
@@ -563,9 +647,10 @@ URL repointed at its staging equivalent; **KEEP**: non-PII, left untouched.
 | `users`                                                                                                                                        | `phone`                                                      | OBFUSCATE (phone)          |                                                                                                                                                                                                                                                                                                                                                                             |
 | `users`                                                                                                                                        | `avatar_url`                                                 | NULL OUT                   | Personal photo URL                                                                                                                                                                                                                                                                                                                                                          |
 | `users`                                                                                                                                        | `emergency_contact`, `emergency_phone`, `emergency_notes`    | NULL OUT                   | Highly sensitive free text                                                                                                                                                                                                                                                                                                                                                  |
-| `users`                                                                                                                                        | `meta` (json)                                                | SCRUB                      | May carry emails/free text                                                                                                                                                                                                                                                                                                                                                  |
+| `users`                                                                                                                                        | `meta` (json)                                                | SCRUB                      | Remove every top-level `strava_*` key, then apply normal text scrubbing; also applies to preserved local fixtures.                                                                                                                                                                                                                                                          |
 | `users`                                                                                                                                        | `email_verified`, `status`, `home_region_id`, ids/timestamps | KEEP                       |                                                                                                                                                                                                                                                                                                                                                                             |
 | `slack_spaces`, `slack_users`, `orgs_x_slack_spaces`                                                                                           | all                                                          | TRUNCATE                   | Not replicated: prod's workspaces are no use on staging, and the staging slackbot acts on what it finds. Staging keeps its own rows (`staging-slack`, step 3)                                                                                                                                                                                                               |
+| `user_strava_credentials`                                                                                                                      | all                                                          | TRUNCATE                   | Strava connections never cross environment boundaries, including preserved local fixtures.                                                                                                                                                                                                                                                                                  |
 | `orgs`                                                                                                                                         | `email`                                                      | OBFUSCATE (email)          | Region/AO contact inboxes are often personal                                                                                                                                                                                                                                                                                                                                |
 | `orgs`                                                                                                                                         | `phone`                                                      | OBFUSCATE (phone)          |                                                                                                                                                                                                                                                                                                                                                                             |
 | `orgs`                                                                                                                                         | `description`                                                | REPLACE (lorem)            | Free text; names survive any regex. Deterministic lorem ipsum, see below                                                                                                                                                                                                                                                                                                    |
@@ -594,10 +679,12 @@ URL repointed at its staging equivalent; **KEEP**: non-PII, left untouched.
 | `expansions`                                                                                                                                   | `area`, `pinned_lat`, `pinned_lon`                           | KEEP                       | Proposed public location                                                                                                                                                                                                                                                                                                                                                    |
 | `expansions_x_users`                                                                                                                           | `notes`                                                      | NULL OUT                   | Free text                                                                                                                                                                                                                                                                                                                                                                   |
 | `attendance`                                                                                                                                   | `meta` (json)                                                | SCRUB                      |                                                                                                                                                                                                                                                                                                                                                                             |
+| `attendance`                                                                                                                                   | `attendance_type`                                            | KEEP                       | Role at the event (PAX, Q, Co-Q), no PII                                                                                                                                                                                                                                                                                                                                    |
 | `positions`                                                                                                                                    | `description`                                                | SCRUB                      | Names are role titles (Nant'an, Site Q) — KEEP                                                                                                                                                                                                                                                                                                                              |
 | `achievements`                                                                                                                                 | `description`, `meta` (json)                                 | SCRUB                      |                                                                                                                                                                                                                                                                                                                                                                             |
 | `auth_sessions`                                                                                                                                | all                                                          | TRUNCATE                   | Live session tokens                                                                                                                                                                                                                                                                                                                                                         |
 | `auth_verification_tokens`                                                                                                                     | all                                                          | TRUNCATE                   | Magic-link tokens                                                                                                                                                                                                                                                                                                                                                           |
+| `auth_verification_sends`                                                                                                                      | all                                                          | TRUNCATE                   | Sign-in email addresses and send times                                                                                                                                                                                                                                                                                                                                      |
 | `auth_accounts`                                                                                                                                | all                                                          | TRUNCATE                   | OAuth refresh/access/id tokens per user                                                                                                                                                                                                                                                                                                                                     |
 | `api_keys`                                                                                                                                     | all                                                          | DELETE                     | Live API secrets; cascades `roles_x_api_keys_x_org`. Staging gets its own keys. With `--preserve-local-seed`, `local-*` keys survive                                                                                                                                                                                                                                        |
 | `permissions`, `roles`, `event_types`, `event_tags`, `attendance_types`, join tables (`*_x_*` except `orgs_x_slack_spaces`), `alembic_version` | all                                                          | KEEP                       | Reference data / integer-FK join rows, no PII                                                                                                                                                                                                                                                                                                                               |
@@ -684,7 +771,8 @@ singular session/token family above are **not** written to by any active code
 path — they pre-date the repo's current NextAuth adapter
 (`packages/auth/src/lib/md-pg-drizzzle-adapter.ts`'s `MDPGDrizzleAdapter`,
 which reads/writes the plural tables above instead: `public.users` plus
-`auth_accounts`/`auth_sessions`/`auth_verification_tokens`). They're still
+`auth_accounts`/`auth_sessions`/`auth_verification_tokens`/
+`auth_verification_sends`). They're still
 physically present on prod (2026-07-10 real-data finding), so the script must
 still classify and obfuscate them, but they're frozen/orphaned data, not an
 actively-growing table.
@@ -746,10 +834,14 @@ legacy. Two things are specific to them:
    so the real-copy suite is exercised on every PR too.
 5. Checks the developer snapshot on a clone of the planted sandbox,
    obfuscated with the `@f3nation.local` sink: the trim keeps exactly the
-   −30/+90-day window (with link rows and counts) and nulls every blast; it
-   empties every other table; the leak scan passes; an unreviewed column on
-   a kept table is refused; and a planted address stops the run before the
-   file is built or delivered. It then runs `staging-refresh --snapshot-only`
+   `SNAPSHOT_WINDOW` window (with link rows, counts and attendance), nulls
+   every blast and the `meta` of users, attendance and awards; it empties
+   every other table; the leak scan passes; the manifest lists attendance,
+   its types and awards with rows; the published file, restored the way
+   `pnpm db:load:snapshot` restores it (before the loader seeds dev logins),
+   matches the manifest's row counts and every foreign key resolves; an unreviewed column on a kept table is
+   refused; and a planted address stops the run before the file is built or
+   delivered. It then runs `staging-refresh --snapshot-only`
    itself, with `STAGING_DATABASE_URL` pointing at a listener that counts
    connections: preflight completes, and staging gets no connection.
 6. Tears the container down and restores `packages/env/.env`.

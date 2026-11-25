@@ -101,13 +101,39 @@ pnpm lint --filter f3-map
 - User authentication
 - Responsive design
 
+## Embedding the map
+
+Sites embed the map in an iframe (see `iframe-test.html`). URL options:
+
+- `lat`, `lon` (or `lng`): center there, at street level (`CLOSE_ZOOM`).
+- `locationId`: open that workout's panel, at street level. Add `eventId` to
+  select one of its events.
+- `zoom`: starting zoom. With `lat`/`lon` or `locationId`, it replaces street
+  level. Without them, it also sets the zoom of the first jump to the
+  visitor's location.
+
+With no options, the map centers on the visitor (if they allow location) at
+`USER_LOCATION_ZOOM` (10, a regional view; how far it reaches depends on the screen or iframe size). The theme defaults to
+dark; a visitor's choice in Settings overrides it.
+
 ## Email sign-in
 
 Emailed sign-in codes and links are single-use, including simultaneous attempts:
 the shared auth adapter deletes the token in the same statement that reads it.
-An incorrect, expired, or already-used token shows the auth error page's
-`Verification` message. A database failure shows its `Configuration`
-(server error) message, because Auth.js treats adapter errors as server faults.
+Only the newest code or link sent to an address works, and one wrong guess
+ends it, so each email allows a single attempt. An address is sent at most 5
+codes or links an hour, and none within 30 seconds of the last. Each allowed
+send is recorded in `auth_verification_sends`, which redeeming a code doesn't
+touch, so redeemed codes still count. The `signIn` callback enforces the
+limit before Auth.js sends anything, so a refused request sends no email and
+leaves the address's live code working. Sends and redemptions for one address
+run under a database lock, so these limits hold across instances and parallel
+requests.
+
+An incorrect, expired, superseded or already-used token shows the auth error
+page's `Verification` message. A refused send redirects to its `AccessDenied`
+message. A database failure shows its `Configuration` (server error) message,
+because Auth.js treats adapter errors as server faults.
 
 ## Contributing Map Changes
 

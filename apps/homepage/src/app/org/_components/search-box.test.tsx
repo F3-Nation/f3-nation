@@ -134,6 +134,20 @@ describe("SearchBox", () => {
     },
   );
 
+  it("searches orgs only, without AOs, when onSelectAo is omitted", () => {
+    render(
+      <SearchBox
+        presentLayers={["region", "sector"]}
+        getResults={getResults}
+        onSelect={vi.fn()}
+      />,
+    );
+    const input = screen.getByRole("searchbox");
+    expect(input.getAttribute("placeholder")).toBe("Sectors, Regions…");
+    fireEvent.change(input, { target: { value: "boot" } });
+    expect(screen.queryByText("Bootcamp")).toBeNull();
+  });
+
   it("updates the placeholder when the available layers change", () => {
     const props = { getResults, onSelect: vi.fn(), onSelectAo: vi.fn() };
     const layers = Object.freeze(["region", "area", "sector"] as const);
@@ -238,7 +252,7 @@ describe("SearchBox", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
-  it("closes the list on a click outside the search box", () => {
+  it("closes the list on a click outside it and keeps it open on one inside", () => {
     render(
       <SearchBox
         presentLayers={["region", "area", "sector"]}
@@ -247,9 +261,10 @@ describe("SearchBox", () => {
         onSelectAo={vi.fn()}
       />,
     );
-    fireEvent.change(screen.getByRole("searchbox"), {
-      target: { value: "Char" },
-    });
+    const input = screen.getByRole("searchbox");
+    fireEvent.change(input, { target: { value: "Char" } });
+
+    fireEvent.click(input);
     expect(screen.getByRole("listbox")).toBeTruthy();
 
     fireEvent.click(document.body);

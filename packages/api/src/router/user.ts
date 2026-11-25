@@ -1,25 +1,30 @@
-import { and, eq, schema } from "@acme/db";
+import { getTableColumns } from "drizzle-orm";
+import { lockHomeRegion } from "../lib/lock-home-region";
+import { rejectStravaMetadata } from "../lib/user-metadata";
+import chunk from "lodash/chunk";
+import { and, eq, inArray, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
-import { GrantableUserRole } from "@acme/shared/app/enums";
-import type { UserRole } from "@acme/shared/app/enums";
+import {
+  ROLE_ORG_TYPES,
+  roleAllowedOnOrgType,
+} from "@acme/shared/app/permissions";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
+import type { OrgType } from "@acme/shared/app/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
 import { CrupdateUserSchema, UserSelectSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-interface RoleInput {
-  orgId: number;
-  roleName: UserRole;
-}
-
 import {
   checkHasRoleOnAllOrgs,
   checkHasRoleOnOrg,
 } from "../check-has-role-on-org";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
-import { logDebug, logError, logWarn } from "../logger";
+import { logDebug, logError, logInfo, logWarn } from "../logger";
 import {
   buildSingleUserQuery,
   buildUserListQuery,
@@ -29,6 +34,7 @@ import {
   hasRoleOnAny,
   isDuplicateEmailError,
   isForeignKeyViolationError,
+  isProfileEditorOf,
   shapeUserPii,
   userDetailOutputSchema,
   userListInputSchema,
@@ -123,7 +129,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "List users by organization",
       description:
-        "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations.",
+        "Get a paginated list of users associated with the specified organizations and all their descendant organizations through their roles. PII fields (email, phone, emergency contacts) are only included if the requester is an admin for all of the specified organizations, and only for users whose home region is one of those organizations or below one, or for every user when the nation is one of them; each user's piiVisible says which.",
     })
     .output(
       z.object({
@@ -172,10 +178,20 @@ export const userRouter = {
         orgIds: allOrgIds,
       };
 
+      // An admin of the requested orgs is a profile editor of the users homed
+      // in them or below them, and of every user when one of them is the
+      // nation. Users matched only through a role keep their PII hidden.
+      const coversNation =
+        includePii &&
+        (await getProfileScopeOrgIds(ctx, null)).some((nationId) =>
+          allOrgIds.includes(nationId),
+        );
+
       return buildUserListQuery({
         ctx,
         input: inputWithDescendants,
         includePii,
+        piiHomeRegionIds: coversNation ? undefined : allOrgIds,
       });
     }),
   byId: editorProcedure
@@ -187,7 +203,7 @@ export const userRouter = {
           .optional()
           .default(false)
           .describe(
-            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
           ),
       }),
     )
@@ -197,7 +213,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by ID",
       description:
-        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
     })
     .output(
       z.object({
@@ -226,7 +242,7 @@ export const userRouter = {
           .optional()
           .default(false)
           .describe(
-            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
           ),
       }),
     )
@@ -236,7 +252,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by email",
       description:
-        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it.",
     })
     .output(
       z.object({
@@ -331,7 +347,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Create or update user",
       description:
-        "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
+        "Create a new user or update an existing one, including role assignments for organizations. Administrators of an existing member's current home region may correct it to another active region without destination editing rights; API keys use only their own roles. Changed non-null home regions must be active regions with active ancestors. Administrator corrections send no member notifications. A source-administrator correction returns CONFLICT if the member row changes or is deleted during the request. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (the nation, for a user with none) or an org above it. Changing an existing user's email, including the requester's own, requires the F3 Nation admin role and marks the new email unverified until its owner next signs in through F3 Auth.",
     })
     .output(
       UserSelectSchema.partial({
@@ -355,17 +371,24 @@ export const userRouter = {
           .record(z.string(), z.unknown())
           .nullable()
           .optional()
-          .describe("User metadata"),
+          .describe(
+            "User metadata. Top-level strava_* keys are rejected with BAD_REQUEST.",
+          ),
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      if (!ctx.session) throw new ORPCError("UNAUTHORIZED");
+      rejectStravaMetadata(input.meta);
       // emailVerified is set by the sign-in flow, never by callers.
-      const { roles: rawRoles, emailVerified: _emailVerified, ...rest } = input;
-      const roles = rawRoles as RoleInput[];
+      const { roles, emailVerified: _emailVerified, ...rest } = input;
 
       const [existingUser] = input.id
         ? await ctx.db
-            .select()
+            .select({
+              ...getTableColumns(schema.users),
+              // Request-local row version detects intervening updates, even A → B → A.
+              rowVersion: sql<string>`${schema.users}.xmin::text`,
+            })
             .from(schema.users)
             .where(eq(schema.users.id, input.id))
         : [];
@@ -379,31 +402,20 @@ export const userRouter = {
             .where(eq(schema.rolesXUsersXOrg.userId, input.id))
         : [];
 
-      // An API key's session.id is its owner, so keys never edit "themselves".
+      // An API key is not a person, so it never edits "itself".
       const isSelf =
-        !ctx.session?.apiKey &&
+        !ctx.session.apiKey &&
         input.id !== undefined &&
-        ctx.session?.id === input.id;
+        ctx.session.id === input.id;
 
-      const roleOrgIds = existingRoles.map((role) => role.orgId);
       const isProfileEditor =
-        !!existingUser &&
-        (await hasRoleOnAny(
-          ctx,
-          await getProfileScopeOrgIds(
-            ctx,
-            existingUser.homeRegionId,
-            roleOrgIds,
-          ),
-          "editor",
-        ));
+        !!existingUser && (await isProfileEditorOf(ctx, existingUser));
       const canEditProfile = isSelf || !existingUser || isProfileEditor;
 
       // PII access: for an existing user, the checkUserPiiAccess rule (profile
-      // editor, or admin on one of their orgs); for a new user, admin on any
-      // org being assigned.
+      // editor); for a new user, admin on any org being assigned.
       const hasPiiAccess = existingUser
-        ? isProfileEditor || (await hasRoleOnAny(ctx, roleOrgIds, "admin"))
+        ? isProfileEditor
         : await hasRoleOnAny(
             ctx,
             roles.map((role) => role.orgId),
@@ -412,44 +424,82 @@ export const userRouter = {
 
       // Clients resend the whole form, so only reject fields that change. A
       // PII field sent as "" was hidden by the form and is never written.
-      if (existingUser) {
-        const changedKeys = Object.entries(rest)
-          .filter(([key, value]) => {
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Object.entries drops undefined from optional props
-            if (key === "id" || value === undefined) return false;
-            if (PII_FIELDS.has(key) && value === "") return false;
-            if (key === "email" && typeof value === "string") {
-              return (
-                normalizeEmail(value) !== normalizeEmail(existingUser.email)
-              );
-            }
-            const stored = existingUser[key as keyof typeof existingUser];
-            return !isSameProfileValue(value, stored);
-          })
-          .map(([key]) => key);
-        if (!hasPiiAccess && changedKeys.some((key) => PII_FIELDS.has(key))) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message: "You are not authorized to change this user's PII",
-          });
-        }
-        if (!canEditProfile && changedKeys.length > 0) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message: "You are not authorized to edit this user's profile",
-          });
-        }
+      const changedKeys = existingUser
+        ? Object.entries(rest)
+            .filter(([key, value]) => {
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Object.entries drops undefined from optional props
+              if (key === "id" || value === undefined) return false;
+              if (PII_FIELDS.has(key) && value === "") return false;
+              if (key === "email" && typeof value === "string") {
+                return (
+                  normalizeEmail(value) !== normalizeEmail(existingUser.email)
+                );
+              }
+              const stored = existingUser[key as keyof typeof existingUser];
+              return !isSameProfileValue(value, stored);
+            })
+            .map(([key]) => key)
+        : [];
+      // Sign-in is by emailed code, so whoever sets a user's email controls
+      // the account. Only nation admins may change one, their own included.
+      const isEmailChange = changedKeys.includes("email");
+      if (isEmailChange && !isNationAdminFromSession(ctx.session)) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: ERRORS.MUST_BE_NATION_ADMIN_TO_CHANGE_EMAIL,
+        });
+      }
+      if (!hasPiiAccess && changedKeys.some((key) => PII_FIELDS.has(key))) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "You are not authorized to change this user's PII",
+        });
+      }
+      if (!canEditProfile && changedKeys.length > 0) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "You are not authorized to edit this user's profile",
+        });
       }
 
       const newHomeRegionId = rest.homeRegionId;
-      if (
-        !isSelf &&
-        canEditProfile &&
+      const homeRegionChanged =
         newHomeRegionId != null &&
-        newHomeRegionId !== existingUser?.homeRegionId &&
-        !(await hasRoleOnAny(ctx, [newHomeRegionId], "editor"))
-      ) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to set this home region",
-        });
+        newHomeRegionId !== existingUser?.homeRegionId;
+      let sourceAdminCorrection = false;
+      if (homeRegionChanged) {
+        void logIfOrgTreeExceedsMaxDepth(ctx.db);
+        const [destination] = await ctx.db
+          .select({
+            orgType: schema.orgs.orgType,
+            isActive: orgAndAncestorsAreActive(schema.orgs.id),
+          })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, newHomeRegionId));
+        if (!destination) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Home region not found",
+          });
+        }
+        if (destination.orgType !== "region" || !destination.isActive) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "Home region must be an active region with active ancestors",
+          });
+        }
+        // Administrators can correct members currently homed in their region.
+        // API-key sessions carry only the key's grants; owner roles never count.
+        sourceAdminCorrection =
+          !isSelf &&
+          existingUser?.homeRegionId != null &&
+          (await hasRoleOnAny(ctx, [existingUser.homeRegionId], "admin"));
+        if (
+          !isSelf &&
+          canEditProfile &&
+          !sourceAdminCorrection &&
+          !(await hasRoleOnAny(ctx, [newHomeRegionId], "editor"))
+        ) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to set this home region",
+          });
+        }
       }
 
       const dbRoles = await ctx.db.select().from(schema.roles);
@@ -460,7 +510,6 @@ export const userRouter = {
         },
         {} as Record<string, number>,
       );
-      const idToRoleName = new Map(dbRoles.map((role) => [role.id, role.name]));
 
       const newRolesToInsert = roles.filter(
         (role) =>
@@ -472,42 +521,15 @@ export const userRouter = {
       );
       logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
 
-      const rolesToDelete = existingRoles.filter((existingRole) => {
-        // Never delete assignments for dormant/non-grantable roles (e.g.
-        // password_*). The admin UI hides them and callers only ever submit
-        // grantable roles, so their absence from the payload means "not
-        // shown", not "remove it" — deleting them would silently revoke a
-        // grant the editor could not even see.
-        const existingName = idToRoleName.get(existingRole.roleId);
-        if (
-          existingName &&
-          !(GrantableUserRole as readonly string[]).includes(existingName)
-        )
-          return false;
-        return !roles.some(
-          (role) =>
-            roleNameToId[role.roleName] === existingRole.roleId &&
-            role.orgId === existingRole.orgId,
-        );
-      });
+      const rolesToDelete = existingRoles.filter(
+        (existingRole) =>
+          !roles.some(
+            (role) =>
+              roleNameToId[role.roleName] === existingRole.roleId &&
+              role.orgId === existingRole.orgId,
+          ),
+      );
       logDebug("api.user.roles_to_delete", { rolesToDelete });
-
-      // The submitted list is validated for one-role-per-org, but dormant
-      // roles (password_*) are hidden from the form and preserved above
-      // rather than deleted. Inserting a grantable role on an org where such
-      // a hidden role is retained would leave the user with two roles on that
-      // org, silently bypassing the one-role-per-org rule. Reject it instead.
-      const retainedRoles = existingRoles.filter(
-        (existingRole) => !rolesToDelete.includes(existingRole),
-      );
-      const conflictingInsert = newRolesToInsert.find((role) =>
-        retainedRoles.some((retained) => retained.orgId === role.orgId),
-      );
-      if (conflictingInsert) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: ERRORS.ROLE_CONFLICTS_WITH_HIDDEN_ROLE,
-        });
-      }
 
       const requireAdminOn = async (orgIds: number[], message: string) => {
         if (
@@ -529,6 +551,42 @@ export const userRouter = {
         rolesToDelete.map((role) => role.orgId),
         ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
       );
+
+      // Some roles can be given only on certain org types. Only new grants
+      // are checked, so saving a user who already holds an assignment from
+      // before a restriction existed isn't refused.
+      const restrictedInserts = newRolesToInsert.filter((role) =>
+        Object.hasOwn(ROLE_ORG_TYPES, role.roleName),
+      );
+      if (restrictedInserts.length > 0) {
+        const orgTypeById = new Map<number, OrgType>();
+        // Postgres caps a statement's bind parameters, so long lists are split.
+        for (const ids of chunk(
+          [...new Set(restrictedInserts.map((role) => role.orgId))],
+          10_000,
+        )) {
+          const rows = await ctx.db
+            .select({ id: schema.orgs.id, orgType: schema.orgs.orgType })
+            .from(schema.orgs)
+            .where(inArray(schema.orgs.id, ids));
+          for (const row of rows) orgTypeById.set(row.id, row.orgType);
+        }
+        const refused = restrictedInserts.find((role) => {
+          const orgType = orgTypeById.get(role.orgId);
+          return (
+            orgType !== undefined &&
+            !roleAllowedOnOrgType(role.roleName, orgType)
+          );
+        });
+        if (refused) {
+          const allowedOn = (ROLE_ORG_TYPES[refused.roleName] ?? []).join(
+            " or ",
+          );
+          throw new ORPCError("BAD_REQUEST", {
+            message: `The ${refused.roleName} role can only be given on a ${allowedOn}`,
+          });
+        }
+      }
 
       // Prepare update data - only include PII if user has access
       const {
@@ -566,6 +624,11 @@ export const userRouter = {
         updateSet = rest;
       }
 
+      // The new address is unproven until its owner signs in with it.
+      const saveSet = isEmailChange
+        ? { ...updateSet, emailVerified: null }
+        : updateSet;
+
       if (!input.id && !_email) {
         throw new ORPCError("BAD_REQUEST", {
           message: "Email is required for new users",
@@ -588,6 +651,8 @@ export const userRouter = {
       try {
         user = await ctx.db.transaction(async (tx) => {
           const transactionDb = tx as unknown as AppDb;
+          if (homeRegionChanged)
+            await lockHomeRegion(transactionDb, newHomeRegionId);
           let user: typeof schema.users.$inferSelect;
 
           if (input.id && !canEditProfile) {
@@ -605,20 +670,39 @@ export const userRouter = {
             user = existing;
           } else {
             try {
-              const result = await transactionDb
-                .insert(schema.users)
-                .values({
-                  ...rest,
-                  email: normalizedEmail ?? "",
-                })
-                .onConflictDoUpdate({
-                  target: [schema.users.id],
-                  set: updateSet,
-                })
-                .returning();
+              const result =
+                sourceAdminCorrection && existingUser?.homeRegionId != null
+                  ? await transactionDb
+                      .update(schema.users)
+                      .set(saveSet)
+                      .where(
+                        and(
+                          eq(schema.users.id, existingUser.id),
+                          eq(
+                            schema.users.homeRegionId,
+                            existingUser.homeRegionId,
+                          ),
+                          sql`${schema.users}.xmin::text = ${existingUser.rowVersion}`,
+                        ),
+                      )
+                      .returning()
+                  : await transactionDb
+                      .insert(schema.users)
+                      .values({ ...rest, email: normalizedEmail ?? "" })
+                      .onConflictDoUpdate({
+                        target: [schema.users.id],
+                        set: saveSet,
+                      })
+                      .returning();
 
               const insertedUser = result[0];
               if (!insertedUser) {
+                if (sourceAdminCorrection) {
+                  throw new ORPCError("CONFLICT", {
+                    message:
+                      "The user changed or was deleted. Reload the profile and try again.",
+                  });
+                }
                 throw new ORPCError("INTERNAL_SERVER_ERROR", {
                   message: "Failed to save user",
                 });
@@ -628,6 +712,12 @@ export const userRouter = {
               if (isDuplicateEmailError(error)) {
                 throw new ORPCError("BAD_REQUEST", {
                   message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
+                });
+              }
+              if (["40P01", "55P03"].includes(getPgError(error)?.code ?? "")) {
+                throw new ORPCError("CONFLICT", {
+                  message:
+                    "The profile or home region changed concurrently. Reload and try again.",
                 });
               }
               // The empty-result ORPCError thrown just above is already typed and
@@ -663,9 +753,9 @@ export const userRouter = {
               newRolesToInsert.map((role) => {
                 const roleId = roleNameToId[role.roleName];
                 if (roleId === undefined) {
-                  // roleName is schema-constrained to "user"/"editor"/"admin", so
-                  // this only fires if the roles table is missing its seeded
-                  // rows — a server data-integrity problem, not a client error.
+                  // roleName is schema-constrained to UserRole, so this only
+                  // fires if the roles table has no row for that role — a
+                  // server data-integrity problem, not a client error.
                   throw new ORPCError("INTERNAL_SERVER_ERROR", {
                     message: `Role ${role.roleName} not found`,
                   });
@@ -683,9 +773,25 @@ export const userRouter = {
         });
       } catch (error) {
         if (error instanceof ORPCError) throw error;
+        if (["40P01", "55P03"].includes(getPgError(error)?.code ?? "")) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "The profile or home region changed concurrently. Reload and try again.",
+          });
+        }
         logError("api.user.crupdate_tx_failed", { userId: input.id }, error);
         throw new ORPCError("INTERNAL_SERVER_ERROR", {
           message: "Unable to save user",
+        });
+      }
+
+      if (sourceAdminCorrection) {
+        logInfo("api.user.home_region_corrected", {
+          actorId: ctx.session.id,
+          apiKeyId: ctx.session.apiKey?.id,
+          userId: user.id,
+          fromOrgId: existingUser?.homeRegionId,
+          toOrgId: newHomeRegionId,
         });
       }
 

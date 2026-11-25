@@ -41,11 +41,15 @@ export function createPublicImageStorage(config: {
 
   function getClient(): Storage {
     if (storageClient) return storageClient;
-    let creds: { client_email: string; private_key: string };
+    let creds: {
+      client_email: string;
+      private_key: string;
+      project_id?: string;
+    };
     try {
       creds = JSON.parse(
         Buffer.from(config.credentials, "base64").toString(),
-      ) as { client_email: string; private_key: string };
+      ) as { client_email: string; private_key: string; project_id?: string };
     } catch (err) {
       const message = err instanceof Error ? err.message : "invalid JSON";
       throw new Error(`Invalid GCS_CREDENTIALS payload: ${message}`);
@@ -55,7 +59,13 @@ export function createPublicImageStorage(config: {
         "GCS_CREDENTIALS is missing required service account fields",
       );
     }
-    storageClient = new Storage({ credentials: creds });
+    // The client resolves a project before every request and never reads it
+    // from `credentials`; without this it falls back to the GCE metadata
+    // server and fails anywhere that server is absent.
+    storageClient = new Storage({
+      credentials: creds,
+      projectId: creds.project_id,
+    });
     return storageClient;
   }
 

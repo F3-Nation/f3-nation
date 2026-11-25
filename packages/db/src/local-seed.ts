@@ -29,7 +29,7 @@ async function seed() {
   const allEventTypes = await seedEventTypes(db);
   await seedEventTags(db);
   await seedAoLocationsAndEvents(db, aoIds, regionIds, allEventTypes);
-  const { adminUserId, roleIds } = await seedDevUsers(db, nationId);
+  const { adminUserId, roleIds } = await seedDevUsers(db, nationId, regionIds);
   await seedApiKeys(db, adminUserId, nationId, roleIds, regionIds);
   await seedOAuthClients(db);
   await seedPositions(db);

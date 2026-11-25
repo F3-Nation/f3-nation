@@ -1,6 +1,23 @@
 {
   "files": [
     {
+      "path": "docs/specs/admin-user-home-region.md",
+      "description": "Source-admin home-region correction permissions, active destination validation, concurrency, confirmation and attribution; no member notifications.",
+      "scope": [
+        "packages/api/src/router/user*",
+        "packages/api/src/check-has-role-on-org.ts",
+        "packages/api/src/shared.ts",
+        "packages/api/src/lib/user.ts",
+        "packages/api/src/org-activity.ts",
+        "apps/auth/src/app/api/regions/**",
+        "apps/auth/src/app/api/onboarding/**",
+        "apps/api/characterization/wire/registration-regions.char.test.ts",
+        "apps/api/characterization/wire/api-key-roles.char.test.ts",
+        "apps/admin/src/app/_components/modal/admin-users-modal.tsx",
+        "apps/admin/__tests__/app/_components/modal/admin-users-modal.test.tsx"
+      ]
+    },
+    {
       "path": "REVIEW.md",
       "description": "Code-review priorities, critical checks, reviewer conduct and do-not-flag decisions for the whole repo."
     },
@@ -238,6 +255,11 @@
       "scope": ["apps/slackbot/**"]
     },
     {
+      "path": "docs/specs/slack-user-resolution.md",
+      "description": "Feature spec: Slack user resolution. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["packages/api/**"]
+    },
+    {
       "path": "docs/specs/slackbot-nonproduction-profile-privacy.md",
       "description": "Feature spec: Slackbot non-production profile privacy. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["apps/slackbot/**"]
@@ -245,6 +267,11 @@
     {
       "path": "docs/specs/slackbot-series-time-exceptions.md",
       "description": "Feature spec: Slackbot series time exceptions. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
+      "path": "docs/specs/slackbot-token-rotation.md",
+      "description": "Feature spec: Slackbot token rotation. Acceptance criteria and RBAC to judge changed behavior against.",
       "scope": ["apps/slackbot/**"]
     },
     {
@@ -260,6 +287,32 @@
         "packages/db/**",
         "packages/db-python/**",
         "packages/shared/**"
+      ]
+    },
+    {
+      "path": "docs/specs/strava-credential-isolation.md",
+      "description": "Feature spec: Strava credential isolation, metadata boundaries, migration precedence and sanitized database copies. Acceptance criteria and authorization for changed behavior.",
+      "scope": [
+        "packages/api/**",
+        "apps/slackbot/**",
+        "packages/db/**",
+        "packages/db-python/**",
+        "tooling/scripts/**"
+      ]
+    },
+    {
+      "path": "docs/specs/user-profile-access.md",
+      "description": "Feature spec: User profile and PII access. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/admin/**", "packages/api/**"]
+    },
+    {
+      "path": "docs/specs/admin-region-password-vault.md",
+      "description": "Feature spec: Region password vault opt-in and multi-role access. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/shared/**",
+        "packages/validators/**"
       ]
     }
   ]

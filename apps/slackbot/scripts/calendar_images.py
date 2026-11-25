@@ -30,15 +30,13 @@ from f3_data_models.models import (
     SlackSpace,
     User,
 )
-
-# import dataframe_image as dfi
 from f3_data_models.utils import DbManager, get_session
-from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models import blocks
 from sqlalchemy import Integer, and_, bindparam, func, or_, select
 from sqlalchemy.orm import aliased, joinedload
 
+from scripts.calendar_render import export_table_png
 from utilities import storage
 from utilities.constants import (
     EVENT_TAG_COLORS,
@@ -50,6 +48,7 @@ from utilities.constants import (
 from utilities.helper_functions import current_date_cst, safe_convert, update_local_region_records
 from utilities.slack import actions
 from utilities.slack.sdk_orm import image_or_link_block
+from utilities.slack_tokens.client import slack_client_for_team
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
 CALENDAR_REGION_BIND_PARAMETER = "calendar_region_id"
@@ -210,6 +209,17 @@ def set_text_color(s, color_dicts):
     return text_color_list
 
 
+def _style_calendar_table(df, styles, color_dicts):
+    # Table text comes from user-edited records; escape every cell and header before Chromium renders it.
+    return (
+        df.style.format(escape="html")
+        .format_index(escape="html", axis=1)
+        .set_table_styles(styles)
+        .apply(highlight_cells, color_dicts=color_dicts)
+        .hide(axis="index")
+    )
+
+
 def _remove_week_image(
     slack_app_settings: dict,
     region_id: int,
@@ -278,7 +288,10 @@ def _slack_attempt_was_rejected(error: Exception) -> bool:
 
 def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunday_run: bool, session=None) -> None:
     print("Posting to Slack channel")
-    client = WebClient(token=slack_app_settings["bot_token"])
+    client = slack_client_for_team(slack_app_settings["team_id"])
+    if client is None:
+        print("No Slack installation for this region; skipping Slack post")
+        return
     block_list = [blocks.HeaderBlock(text=":calendar: Q Calendar")]
     for week in WEEK_LABELS[:num_weeks]:
         image_name = slack_app_settings.get(f"calendar_image_{week}")
@@ -342,11 +355,7 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
 
 
 def slack_posting_enabled(slack_app_settings: dict) -> bool:
-    return bool(
-        slack_app_settings.get("q_image_posting_enabled")
-        and slack_app_settings.get("q_image_posting_channel")
-        and slack_app_settings.get("bot_token")
-    )
+    return bool(slack_app_settings.get("q_image_posting_enabled") and slack_app_settings.get("q_image_posting_channel"))
 
 
 def calendar_weeks_shown(slack_app_settings: dict) -> int:
@@ -457,7 +466,6 @@ def _build_calendar_query(session, current_week_start, overall_end):
 
 
 def generate_calendar_images(force: bool = False):
-    import dataframe_image as dfi
     import pandas as pd
 
     with get_session() as session:
@@ -725,11 +733,7 @@ def generate_calendar_images(force: bool = False):
                             # set style and export png
                             # df_styled = df2.style.set_table_styles(styles).apply(highlight_cells).hide_index()
                             # apply styles, hide the index
-                            df_styled = (
-                                df2.style.set_table_styles(styles)
-                                .apply(highlight_cells, color_dicts=all_color_dicts)
-                                .hide(axis="index")
-                            )
+                            df_styled = _style_calendar_table(df2, styles, all_color_dicts)
                             df_styled = df_styled.apply(set_text_color, color_dicts=all_color_dicts, axis=1)
 
                             # create calendar image
@@ -741,7 +745,7 @@ def generate_calendar_images(force: bool = False):
                             )
                             filename_static = f"{region_id}-{week}.png"
                             with storage.writable_path(storage.CALENDAR_IMAGES, filename, "image/png") as path:
-                                dfi.export(df_styled, path, table_conversion="playwright")
+                                export_table_png(df_styled, path)
                             generated_backing_files.append((week, filename))
                             if DB_SCHEMA == "f3_prod":
                                 storage.copy(storage.CALENDAR_IMAGES, filename, filename_static)
@@ -777,7 +781,8 @@ def generate_calendar_images(force: bool = False):
                                         print(f"Error deleting unposted calendar image: {cleanup_error}")
                                 raise
 
-                        print(f"Updating Slack app settings for region {region_name} with {slack_app_settings}")
+                        # Settings hold the bot token and SMTP password; never print them.
+                        print(f"Updating Slack app settings for region {region_name}")
                         session.query(SlackSpace).filter(SlackSpace.team_id == slack_app_settings["team_id"]).update(
                             {"settings": slack_app_settings}
                         )

@@ -2,7 +2,7 @@
 
 A pull request goes through these review stages on its way to `main`: automated AI review, a deeper AI review run by a codeowner, a hands-on local test, and a codeowner's approval. After each stage, the author addresses whatever feedback it raised before the PR moves on. Most of the reviewing is done by AI, so the codeowners — all volunteers — spend their time on a PR that has already been checked, fixed, and tested. Small PRs may skip some stages; see [Small PRs](#small-prs).
 
-Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the review and test skills. `pr-local-test` runs the PR's code on your own machine, and both skills' results carry weight in the final review, so someone accountable for the code runs them. Anyone else is welcome to run them too, as extra input, but only a codeowner's run moves the PR to its next stage in the Codeowners PR Report. `pnpm pr:triage` also counts runs recorded in your own local ledger. If you're an author who isn't a codeowner, your part is opening the PR, marking it ready, and addressing the feedback, including resolving the review threads.
+Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the review and test skills. `pr-local-test` runs the PR's code on your own machine, and both skills' results carry weight in the final review, so someone accountable for the code runs them. Anyone else is welcome to run them too, as extra input, but only a codeowner's run moves the PR to its next stage in the Codeowners PR Report. A codeowner can run them on their own PR as a self-check; that run doesn't move it, so the PR still waits for another codeowner. `pnpm pr:triage` also counts runs recorded in your own local ledger, except on your own PRs. If you're an author who isn't a codeowner, your part is opening the PR, marking it ready, and addressing the feedback, including resolving the review threads.
 
 ## The flow
 
@@ -10,7 +10,7 @@ Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the rev
 flowchart TD
     A["1. Author opens the PR as a Draft"] --> B["2. Author marks it 'Ready for review'"]
     B --> C["3. AI bots review automatically"]
-    C --> D["4. A codeowner runs pr-review-inline<br/>with --deep unless the PR is very minor"]
+    C --> D["4. A codeowner runs pr-review-inline"]
     D --> E["5. Author addresses all feedback<br/>(reply to each thread, then resolve it)"]
     E --> F{"All threads resolved?"}
     F -- "No: not yet addressed" --> E
@@ -29,7 +29,7 @@ flowchart TD
     J -- Yes --> K["Codeowner approves and merges"]
 ```
 
-`--deep` makes `pr-review-inline` add more reviewers, each focused on one aspect of the code. It takes longer and uses more tokens, so a very minor PR can skip it.
+`pr-review-inline` gives the PR to several reviewers, each focused on one aspect of the code: correctness, access and data exposure, failure handling, tests, and whether the comments and docs are true. The reviewer prompts ship with the skill, so every assistant runs the same prompts. A PR that changes only ordinary docs gets just the docs reviewer. Changes to agent instructions (anything under `.agents/`, `.claude/` or `.github/`, any `AGENTS.md`, `REVIEW.md` or `CLAUDE.md`, and any doc an `AGENTS.md` tells agents they must read) count as code and get all five, and so does every PR from a fork or an outside contributor. The skill picks how deep to go from the diff, never from how it was asked: only a very small, contained change from a team member can get a single reviewer covering every aspect. The "Pick the depth" list in [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md) sets the exact conditions.
 
 On a PR's first pass, the answer to "Codeowner wants a local test?" is normally Yes. No is for a small PR (see [Small PRs](#small-prs)), or for fixes after a local test that a reviewer can confirm by reading the diff.
 
@@ -51,13 +51,21 @@ The bots run on free open-source quotas, so they don't review every push. CodeRa
 
 ### How to tell it's your turn
 
-Anyone can run `pnpm pr:triage`, author or codeowner. It sorts every open PR by the stage it's waiting on, so you can pick up whatever needs you, including your own PRs that are waiting on you. [Finding PRs that need you](CONTRIBUTING.md#finding-prs-that-need-you) covers its setup and options.
+Anyone can run `pnpm pr:triage`, author or codeowner. It sorts every open PR by the stage it's waiting on, so you can pick up whatever needs you, including your own PRs that are waiting on you. A PR shows as needing `pr-review-inline` as soon as it's ready for review, whether or not the AI bots have posted yet, so check for their reviews before you run it. `pnpm my-work` lists only the issues, PRs and security advisories that are waiting on you. [Finding PRs that need you](CONTRIBUTING.md#finding-prs-that-need-you) covers the setup and options of both.
 
-Codeowners also get the **Codeowners PR Report** in the #monorepo Slack channel each weekday morning. It lists only the PRs a codeowner can act on that day, in four groups: nobody has claimed it yet, it needs `pr-local-test`, it needs final review, approval and merge, or its author replied in every open thread and is waiting on a reviewer. A PR waiting on its author isn't listed; those get the author reminders in [PRs waiting on their author](#prs-waiting-on-their-author). The exception is a PR those reminders skip (a deleted author account, a bot author other than Renovate and release-please, or the `keep-open` label): nobody else moves it, so the report lists it. Each PR has a light for how long it has been the codeowners' turn, on the same timings as those reminders: 🟡 from the day an author would be reminded, 🔴 from the day an author's PR would close. Click through to a PR and take it, or reply in the report's thread to hand one off or ask for help.
+Codeowners also get the **Codeowners PR Report** in the #monorepo Slack channel each weekday morning, except on the holidays listed in [`.github/holidays.json`](../.github/holidays.json), when it posts a holiday greeting instead. It lists only the PRs a codeowner can act on that day, in four groups: nobody has claimed it yet, it needs `pr-local-test`, it needs final review, approval and merge, or its author replied in every open thread and is waiting on a reviewer. A PR waiting on its author isn't listed; those get the author reminders in [PRs waiting on their author](#prs-waiting-on-their-author). The exception is a PR those reminders skip (a deleted author account, a bot author other than Renovate and release-please, or the `keep-open` label): nobody else moves it, so the report lists it. Each PR has a light for how long it has been the codeowners' turn, on the same timings as those reminders: 🟡 from the day an author would be reminded, 🔴 from the day an author's PR would close. Click through to a PR and take it, or reply in the report's thread to hand one off or ask for help.
+
+Fix PRs for security advisories aren't in that report: they live in each advisory's temporary private fork, which GitHub keeps hidden from workflows. An org owner, security manager or repository admin who is in the private #security-managers Slack channel can post the same report for those PRs with the [`security-advisory-report`](../.agents/skills/security-advisory-report/SKILL.md) agent skill. It also lists every open advisory whose fix PR is waiting on its author or that has no open fix PR yet, so the report shows which advisories still need work. It runs on their own machine with their own GitHub and Slack logins.
 
 ### Claiming a PR
 
 **A codeowner claims a PR by assigning themselves** on GitHub, and the next report shows it under their name. `pr-review-inline` and `pr-local-test` do this for you, except on your own PR. A PR counts as claimed once a codeowner other than its author is assigned; until then, it shows in the report as needing a codeowner. When you take over a PR someone else claimed, add yourself rather than removing them, and say so in the PR.
+
+### Merging
+
+PRs reach `main` through GitHub's merge queue. Once a PR is approved and its checks are green, click **Merge when ready**. The branch doesn't need updating with `main` first. The queue tests the PR together with `main` and every PR queued ahead of it, runs every required check across the whole repository, and merges the PR only if they all pass. That takes a few minutes; the PR shows as merged once it's done.
+
+If a required check fails in the queue, GitHub takes the PR out of the queue and the failed run shows in its checks. A failure that also shows in the PR's own checks is the PR's to fix. One that shows only in the queue means the PR breaks when combined with a change merged or queued ahead of it, or in a part of the repository its own checks didn't cover: once the changes ahead of it have merged, update the branch, fix it and queue it again. A failure that passes on a re-run is flaky; queue the PR again and file an issue for the flaky test or step.
 
 ## Running the review and test skills
 
@@ -66,30 +74,28 @@ Running either skill takes one command and a PR number. Both live in [`.agents/s
 ### Set up your machine (once)
 
 - **Install the tools each skill needs.** Each skill checks them at the start and lists anything missing in one message. The lists live in the skills themselves: the Requirements table in [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md#requirements), and the `compatibility` line at the top of [`pr-local-test`](../.agents/skills/pr-local-test/SKILL.md), which also needs Docker running. On Windows, work inside WSL 2, as [AGENTS.md](../AGENTS.md#environment-setup) describes for the whole repo.
-- **Add the recommended add-ons.** Each skill works without them and falls back on its own, but runs better with them:
+- **Add the recommended add-on.** `pr-local-test` works without it and falls back on its own, but runs better with it:
 
-| Add-on                                                               | Helps                     | What you get                                                                                                                                                                             | Claude Code install                                         |
-| -------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `pr-review-toolkit` plugin                                           | `pr-review-inline --deep` | Specialist reviewers for `--deep`. Claude Code only.                                                                                                                                     | `/plugin install pr-review-toolkit@claude-plugins-official` |
-| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test`           | The agent clicks through the running apps itself and takes screenshots, instead of scripting each browser check ([details](../.agents/skills/pr-local-test/reference.md#browser-checks)) | `/plugin install playwright@claude-plugins-official`        |
-| [Superpowers](https://github.com/obra/superpowers)                   | `pr-review-inline`        | Least important: the skill ships its own copy of the reviewer brief this provides, and results are the same either way                                                                   | `/plugin install superpowers@claude-plugins-official`       |
+| Add-on                                                               | Helps           | What you get                                                                                                                                                                             | Claude Code install                                  |
+| -------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test` | The agent clicks through the running apps itself and takes screenshots, instead of scripting each browser check ([details](../.agents/skills/pr-local-test/reference.md#browser-checks)) | `/plugin install playwright@claude-plugins-official` |
 
-For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @playwright/mcp@latest`, and follow the Codex steps in the Superpowers README.
+For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @playwright/mcp@latest`.
 
 ### Run it
 
-1. **Start a new session** with your AI assistant, opened in your copy of this repository: a new `claude` in a terminal or a new session in the Claude desktop app, or a new Codex thread. A fresh session keeps the review from inheriting whatever you were working on. **Use a frontier model** (the most capable Claude or Codex model available to you): these runs are the main line of review for the PR, and smaller models miss the subtle bugs this stage exists to catch.
+1. **Start a new session** with your AI assistant, opened in your copy of this repository: a new `claude` in a terminal or a new session in the Claude desktop app, a new Codex thread, or a new Cursor agent chat. A fresh session keeps the review from inheriting whatever you were working on. **Use a frontier model** (the most capable model your assistant offers): these runs are the main line of review for the PR, and smaller models miss the subtle bugs this stage exists to catch.
 2. **Type the skill with the PR number.** For PR 1234:
 
    ```text
-   /pr-review-inline 1234 --deep
+   /pr-review-inline 1234
    ```
 
    ```text
    /pr-local-test 1234
    ```
 
-   Leave off `--deep` only for a very minor PR; it adds focused reviewers at the cost of time and tokens. In Codex, start the command with `$` instead of `/`, or ask in plain words: "Run the pr-review-inline skill on PR 1234 with --deep."
+   In Codex, start the command with `$` instead of `/`. In any assistant, you can also ask in plain words: "Run the pr-review-inline skill on PR 1234."
 
 3. **Let it work.** `pr-review-inline` posts its findings as line-level comments on the PR. `pr-local-test` shows you its results and a draft review, and posts only after you tell it to.
 
@@ -107,11 +113,11 @@ Because every run has its own worktree, you can review or test several PRs at th
 
 ### Who runs which
 
-When the PR's author is a codeowner, have a different codeowner run at least one of the two skills when you can. An author running both with their own assistant can carry the same blind spots through both. The final codeowner review can still catch what they miss, but by then it costs another round of fixes and often a re-test; a second person's skill run catches it earlier.
+When the PR's author is a codeowner, their own skill runs are a self-check and don't move the PR. It leaves the inline-review stage when a different codeowner runs either skill, and the local-test stage when a different codeowner runs `pr-local-test` or adds the `local test: not needed` label. A different codeowner running both catches more, because an author running both with their own assistant can carry the same blind spots through both. The final codeowner review can still catch what they miss, but by then it costs another round of fixes and often a re-test.
 
 ## After the local test
 
-When `pr-local-test` recommends approval, the PR goes to a codeowner's final review. When a codeowner decides a PR doesn't need a local test, they add the **`local test: not needed`** label, which moves it to final review the same way.
+When `pr-local-test` recommends approval, the PR goes to a codeowner's final review. When a codeowner decides a PR doesn't need a local test, they add the **`local test: not needed`** label, which moves it to final review the same way. The label only counts when a codeowner other than the PR's author adds it.
 
 ⏸️ **Can't recommend yet** means something kept the test from finishing — a review thread still open, a check it couldn't run, a merge status it couldn't confirm — not a problem in the code. Clear what it names. Whether `pr-local-test` runs again afterward is the reviewer's call: a check it couldn't run needs another run before it counts, while threads that were only open may just need resolving.
 
@@ -122,7 +128,7 @@ When `pr-local-test` recommends approval, the PR goes to a codeowner's final rev
 **The PR's author is responsible for resolving its review threads.** For every thread — from a bot, the inline review, the local test, or a codeowner:
 
 1. **Reply first.** Say what you changed, or why you're not changing it. When you changed code, link the commit that has the fix. The reply is the only record a reviewer has of how the comment was handled.
-2. **Then resolve it.** Click **Resolve conversation** on GitHub once you believe the item is handled. AI assistants post replies but never resolve threads, so each resolution means the author has read the reply and agrees it's done. Some review bots, CodeRabbit among them, resolve their own thread once a reply or push satisfies them; a thread that's already resolved needs nothing more.
+2. **Then resolve it.** Click **Resolve conversation** on GitHub once you believe the item is handled. AI assistants post replies but never resolve threads, so each resolution made from your account means you've read the reply and agree it's done. The one exception is a review bot resolving a thread it opened, from its own bot account, once a reply or a later commit settles it; a thread that's already resolved needs nothing more.
 3. **Out-of-scope suggestions** become a new Issue. Put the Issue number in your reply, then resolve the thread.
 4. **Still have a question?** Leave the thread open and make the question clear in a reply. @-mention the person who raised the comment, including when their AI assistant posted it for them, so GitHub notifies them; a review bot doesn't need it. Reviewers are volunteers with a lot of PRs, so an answer can take a while; it's perfectly fine to point someone at the waiting question in the F3 developers Slack.
 
@@ -130,21 +136,21 @@ The [`address-pr-comments`](../.agents/skills/address-pr-comments/SKILL.md) skil
 
 ## PRs waiting on their author
 
-A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a ready-for-review PR is waiting on them, and closes the PR if it keeps waiting. A PR is waiting on its author when any of these is true:
+A daily workflow ([`pr-author-nudge.yml`](../.github/workflows/pr-author-nudge.yml)) reminds authors when a PR is waiting on them, and closes the PR if it keeps waiting. A draft is always waiting on its author: reviewers and review bots skip drafts, so it waits until someone pushes to it or marks it ready for review. A PR that is ready for review is waiting on its author when any of these is true:
 
 - A required check is failing.
 - It has a merge conflict with its base branch.
 - A review thread is unresolved, and a repo member, anyone with write access, or a bot has commented in it since the author's last reply. A comment from anyone else doesn't count.
 - A repo member, anyone with write access, or a bot requested changes and nothing has been pushed since.
 
-Drafts are never reminded or closed: a draft is work in progress, so the author isn't keeping anyone waiting. Moving a reminded PR back to Draft stops its clock like any other pause.
+A draft's clock starts when the PR is opened as a draft or moved back to Draft, so a reminder sent before the move no longer counts toward a close.
 
-The clock runs only while one of those is true, so time a PR spends waiting on the bots or a codeowner doesn't count against the author. A push, a comment from the author, marking the PR ready for review, or reopening it resets it; comments from bots and reviewers don't. A push counts from when it reached GitHub (the first check run, check suite or status on the new head commit, or the force-push that brought it), not from the date inside the commit, which the author can set to anything. If GitHub has recorded nothing for the latest commit yet (a `[skip ci]` push, for example), reminders still go out, but the Slack heads-up and the close wait. One exception: GitHub doesn't record when a merge conflict appears, so a conflict is counted from the PR's latest review, ready-for-review or reopen. That can bring an early reminder, but never an early close.
+The clock runs only while the PR is waiting on its author, so time a PR spends waiting on the bots or a codeowner doesn't count against the author. A push, a comment from the author, marking the PR ready for review, or reopening it resets it; comments from bots and reviewers don't. A push counts from when it reached GitHub (the first check run, check suite or status on the new head commit, or the force-push that brought it), not from the date inside the commit, which the author can set to anything. If GitHub has recorded nothing for the latest commit yet (a `[skip ci]` push, for example), reminders still go out, but the Slack heads-up and the close wait. One exception: GitHub doesn't record when a merge conflict appears, so a conflict is counted from the PR's latest review, ready-for-review or reopen. That can bring an early reminder, but never an early close.
 
-| Author                                     | Reminder | Closed  |
-| ------------------------------------------ | -------- | ------- |
-| A repo member, or anyone with write access | 5 days   | 10 days |
-| Anyone else (outside contributors)         | 3 days   | 7 days  |
+| Author                                                  | Reminder | Closed  |
+| ------------------------------------------------------- | -------- | ------- |
+| A repo member, a codeowner, or anyone with write access | 5 days   | 10 days |
+| Anyone else (outside contributors)                      | 3 days   | 7 days  |
 
 The reminder lists exactly what's still open. A PR is closed only after a reminder, and at least 4 days (outside contributors) or 5 days (members and collaborators) after it. About a day before the close, the workflow posts the PR in the Codeowners Slack channel, so a codeowner can take it over the finish line (push to its branch) or hold it with `keep-open`; the close waits until that heads-up has been out at least 20 hours, and doesn't happen at all until the heads-up has gone out. If a reminded PR stops waiting on its author, or gets `keep-open`, that reminder no longer counts: when it's the author's turn again, the next close needs a new reminder and a new heads-up. Closed PRs get the `stale` label and can be reopened at any time; a maintainer may also finish the work in a new PR and credit the author with a `Co-authored-by` trailer. PRs opened by bots and apps (Renovate, release-please and others), PRs from deleted accounts, and PRs labeled `keep-open` are never reminded or closed. One run reminds at most 5 PRs, posts at most 3 to the Codeowners channel and closes at most 3, starting with the PRs that have waited longest; the rest wait for a later day, so a backlog is worked through gradually instead of all at once.
 
@@ -154,4 +160,4 @@ The label marks the end of the bot feedback, not readiness for a codeowner's fin
 
 ## Small PRs
 
-A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline` without `--deep` and no local test, and another might be approved and merged directly. To skip the local test, add the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.
+A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get only `pr-review-inline` and no local test, and another might be approved and merged directly. To skip the local test, a codeowner other than the PR's author adds the `local test: not needed` label, so `pnpm pr:triage` and the Codeowners PR Report move the PR on to final review.

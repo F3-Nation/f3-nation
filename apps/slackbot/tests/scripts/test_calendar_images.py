@@ -268,7 +268,7 @@ def calendar_generation(monkeypatch):
         calendar_images.generate_calendar_images(force=force)
         return list(exports)
 
-    monkeypatch.setitem(sys.modules, "dataframe_image", SimpleNamespace(export=export))
+    monkeypatch.setattr(calendar_images, "export_table_png", export)
     monkeypatch.setattr(calendar_images, "get_session", lambda: session)
     monkeypatch.setattr(
         session, "refresh", lambda record, attribute_names: setattr(record, "settings", deepcopy(settings))
@@ -442,7 +442,7 @@ def overlapping_calendar_runs(calendar_generation, monkeypatch):
 
     monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_prod")
     monkeypatch.setattr(calendar_images, "get_session", session_factory)
-    monkeypatch.setattr(sys.modules["dataframe_image"], "export", export)
+    monkeypatch.setattr(calendar_images, "export_table_png", export)
     monkeypatch.setattr(calendar_images.storage.shutil, "copyfile", copy)
     monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     return state, run, row, settings
@@ -651,7 +651,7 @@ def test_calendar_refresh_commits_when_special_events_are_outside_window(calenda
 
     client = MagicMock()
     client.chat_postMessage.side_effect = post
-    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    monkeypatch.setattr(calendar_images, "slack_client_for_team", lambda *args, **kwargs: client)
     exports = run([row("Synthetic AO", now)], now, force=True, special_events=[event])
 
     assert len(exports) == 1
@@ -676,7 +676,7 @@ def test_special_event_blocks_reuse_generation_session(monkeypatch):
 def test_region_lock_released_after_failure_or_interruption(overlapping_calendar_runs, monkeypatch, failure):
     state, run, row, settings = overlapping_calendar_runs
     state.rows = [row("AO", datetime(2026, 9, 30, 9))]
-    export = sys.modules["dataframe_image"].export
+    export = calendar_images.export_table_png
 
     def fail_export(style, filename, **kwargs):
         if state.lock_owner == "cleanup":
@@ -686,7 +686,7 @@ def test_region_lock_released_after_failure_or_interruption(overlapping_calendar
         export(style, filename, **kwargs)
 
     if failure in {"export", "interrupt"}:
-        monkeypatch.setattr(sys.modules["dataframe_image"], "export", fail_export)
+        monkeypatch.setattr(calendar_images, "export_table_png", fail_export)
     elif failure.startswith("slack_"):
         settings.update(q_image_posting_enabled=True, q_image_posting_channel="TEST_CHANNEL", bot_token="test-token")
 
@@ -808,6 +808,52 @@ def test_legacy_image_without_metadata_rebuilds_once(calendar_generation, monkey
     assert run(rows, now + timedelta(hours=1)) == []
 
 
+def test_calendar_table_html_escapes_user_names(calendar_generation, monkeypatch):
+    run, row, _, _ = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    rendered = []
+    monkeypatch.setattr(calendar_images, "export_table_png", lambda style, filename: rendered.append(style.to_html()))
+    q_name = '<img src="http://169.254.169.254/latest">'
+    ao_name = "<b>Spoofed AO</b>"
+    run([row(ao_name, now - timedelta(days=2), q_name=q_name)], now)
+    assert len(rendered) == 1
+    html = rendered[0]
+    assert "&lt;img src=&#34;http://169.254.169.254/latest&#34;&gt;" in html
+    assert "&lt;b&gt;Spoofed AO&lt;/b&gt;" in html
+    assert "<img" not in html
+    assert "<b>" not in html
+
+
+def test_calendar_table_html_escapes_column_headers():
+    df = pd.DataFrame({"<i>Mon</i>": ["x"]})
+    styles = [{"selector": "th", "props": []}]
+    color_dicts = {"region": {}, "nation_not_black": {}, "nation_black": {}, "generic": {}}
+
+    html = calendar_images._style_calendar_table(df, styles, color_dicts).to_html()
+
+    assert "&lt;i&gt;Mon&lt;/i&gt;" in html
+    assert "<i>" not in html
+
+
+def test_settings_update_does_not_print_region_secrets(calendar_generation, capsys):
+    run, row, settings, _ = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    secrets = {
+        "bot_token": "xoxb-secret-bot-token",
+        "email_password": "secret-smtp-password",
+        "downrange_invite_link": "https://join.slack.com/t/secret-invite",
+        "email_to": "secret-to@example.com",
+        "email_user": "secret-user@example.com",
+    }
+    settings.update(secrets)
+    assert len(run([row("One-time AO", now - timedelta(days=2))], now)) == 1
+    assert settings["bot_token"] == secrets["bot_token"]
+    output = capsys.readouterr()
+    for value in secrets.values():
+        assert value not in output.out
+        assert value not in output.err
+
+
 def test_failed_export_keeps_previous_filename_and_metadata(calendar_generation, monkeypatch):
     run, row, settings, _ = calendar_generation
     now = datetime(2026, 9, 30, 10)
@@ -815,7 +861,7 @@ def test_failed_export_keeps_previous_filename_and_metadata(calendar_generation,
     settings["calendar_image_current"] = existing
 
     fail_export = MagicMock(side_effect=RuntimeError("Export failed"))
-    monkeypatch.setattr(sys.modules["dataframe_image"], "export", fail_export)
+    monkeypatch.setattr(calendar_images, "export_table_png", fail_export)
     assert run([row("One-time AO", now + timedelta(seconds=1))], now + timedelta(hours=2)) == []
     fail_export.assert_called_once()
     assert settings["calendar_image_current"] == existing
@@ -826,7 +872,7 @@ def test_changes_during_rendering_remain_pending(calendar_generation, monkeypatc
     run, row, settings, _ = calendar_generation
     now = datetime(2026, 9, 30, 10, 0, 0, 123456)
     rows = [row("One-time AO", now - timedelta(hours=2))]
-    real_export = sys.modules["dataframe_image"].export
+    real_export = calendar_images.export_table_png
     query_clock = calendar_images.datetime
 
     class ExportCompletionClock(datetime):
@@ -842,11 +888,11 @@ def test_changes_during_rendering_remain_pending(calendar_generation, monkeypatc
         rows[0] = row("One-time AO", now + timedelta(seconds=1))
         monkeypatch.setattr(calendar_images, "datetime", ExportCompletionClock)
 
-    monkeypatch.setattr(sys.modules["dataframe_image"], "export", export_with_change)
+    monkeypatch.setattr(calendar_images, "export_table_png", export_with_change)
     assert len(run(rows, now)) == 1
     assert image_metadata(settings, now)[0] == now.replace(tzinfo=UTC)
     monkeypatch.setattr(calendar_images, "datetime", query_clock)
-    monkeypatch.setattr(sys.modules["dataframe_image"], "export", real_export)
+    monkeypatch.setattr(calendar_images, "export_table_png", real_export)
     assert len(run(rows, now + timedelta(hours=2))) == 1
 
 
@@ -960,7 +1006,7 @@ def test_emulator_uploads_copies_and_deletes_calendar_images_over_http(calendar_
 
         return call
 
-    monkeypatch.setitem(sys.modules, "dataframe_image", SimpleNamespace(export=export))
+    monkeypatch.setattr(calendar_images, "export_table_png", export)
     monkeypatch.setattr(calendar_images.storage.requests, "post", respond("POST"))
     monkeypatch.setattr(calendar_images.storage.requests, "delete", respond("DELETE"))
     objects = "http://localhost:9023/storage/v1/b/f3nation-calendar-images/o"
@@ -1225,7 +1271,7 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
     failed = outcome in {"both_fail", "initial_fail"}
     if failed:
         fail(client.chat_postMessage)
-    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    monkeypatch.setattr(calendar_images, "slack_client_for_team", lambda *args, **kwargs: client)
     monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings, session=None: [])
 
     def remove(path):
@@ -1300,13 +1346,13 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
     settings["calendar_weeks_shown"] = num_weeks
     monkeypatch.setattr(calendar_images, "DB_SCHEMA", schema)
     files = set()
-    export = sys.modules["dataframe_image"].export
+    export = calendar_images.export_table_png
 
     def write_export(style, filename, **kwargs):
         export(style, filename, **kwargs)
         files.add(filename)
 
-    monkeypatch.setattr(sys.modules["dataframe_image"], "export", write_export)
+    monkeypatch.setattr(calendar_images, "export_table_png", write_export)
     copy = MagicMock(side_effect=lambda source, destination: files.add(destination))
     monkeypatch.setattr(calendar_images.storage.shutil, "copyfile", copy)
 
@@ -1338,7 +1384,7 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
     client = MagicMock()
     client.chat_update.return_value = {"ok": True}
     client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
-    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    monkeypatch.setattr(calendar_images, "slack_client_for_team", lambda *args, **kwargs: client)
     monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings, session=None: [])
     if failure in {"both_rejected", "update_rejected_post_timeout"}:
         client.chat_update.return_value = {"ok": False}
@@ -1537,14 +1583,14 @@ def test_failure_preserves_all_persisted_images_and_rolls_back(calendar_generati
     remove = MagicMock()
     monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     if failure == "later_export":
-        original = sys.modules["dataframe_image"].export
+        original = calendar_images.export_table_png
 
         def export(style, filename, **kwargs):
             if "-next-" in filename:
                 raise RuntimeError("later week failed")
             original(style, filename, **kwargs)
 
-        monkeypatch.setattr(sys.modules["dataframe_image"], "export", export)
+        monkeypatch.setattr(calendar_images, "export_table_png", export)
     else:
         session.commit.side_effect = RuntimeError("commit failed")
     run(rows, now + timedelta(hours=1), force=True)

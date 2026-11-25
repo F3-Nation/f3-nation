@@ -35,7 +35,9 @@ says it's covered. Each links to the rule it checks.
 
 - **CC-AUTHZ:** Does every read or write of a specific resource check the
   caller against the fetched row's org, and does every move check both source
-  and destination? ([rule](packages/api/AGENTS.md#authorization))
+  and destination, except for the explicitly scoped
+  [source-admin home-region correction](docs/specs/admin-user-home-region.md)?
+  ([rule](packages/api/AGENTS.md#authorization))
 - **CC-PUBLIC:** Can an anonymous caller reach private, inactive or personal
   data, or an unbounded page? ([rule](packages/api/AGENTS.md#authorization))
 - **CC-TOKENS:** Could a client-supplied claim, an unverified token, a
@@ -183,7 +185,7 @@ across `docs/`, `AGENTS.md` files, `README.md` files and `.agents/skills/`.
 | Migration process or guards               | `docs/db-migrations.md`, `.agents/skills/db-migration/`                                                                                                                                    |
 | Env var added/renamed/removed             | Every `.env*.example`, `cloud-run-env*.sh`, the app `README.md` / `docs/LOCAL_DEV_DOCKER.md` env tables                                                                                    |
 | CI job or required check                  | `docs/CI_PIPELINE.md`, deploy `check-regexp`s                                                                                                                                              |
-| Release/deploy workflow                   | `docs/RELEASE_PROCESS.md`, `.agents/skills/release-plan/`                                                                                                                                  |
+| Release/deploy workflow                   | `docs/RELEASE_PROCESS.md`, `.agents/skills/release/`                                                                                                                                       |
 | Local dev scripts, ports, Docker          | `docs/LOCAL_DEV_DOCKER.md`, `AGENTS.md` commands                                                                                                                                           |
 | Logging conventions                       | `docs/LOGGING.md`                                                                                                                                                                          |
 | Vitest setup, coverage or thresholds      | `docs/testing.md` (not a feature's own check that only runs in Vitest)                                                                                                                     |

@@ -14,6 +14,24 @@ from utilities.routing import MAIN_MAPPER
 from utilities.slack import actions
 
 
+def test_missing_strava_connection_shows_reconnect_message_without_error_traceback():
+    from infrastructure.strava_credentials import StravaNotConnectedError
+
+    error = StravaNotConnectedError("Use the Strava button to reconnect.")
+    handler = MagicMock(side_effect=error)
+    body = {"type": "shortcut", "callback_id": "strava_shortcut", "team": {"id": "T_TEST"}}
+    logger = MagicMock()
+    with (
+        patch("main.MAIN_MAPPER", {"shortcut": {"strava_shortcut": (handler, False, False)}}),
+        patch("main.get_region_record", return_value=MagicMock()),
+        patch("main.send_error_response") as response,
+    ):
+        main_response(body, logger, MagicMock(), MagicMock(), {})
+    assert response.call_args.kwargs["error"] == str(error)
+    logger.error.assert_not_called()
+    logger.warning.assert_called_once()
+
+
 def test_unlinked_identity_has_actionable_private_error_response():
     from utilities.helper_functions import UnlinkedSlackIdentityError
 

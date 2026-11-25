@@ -1,5 +1,4 @@
 import os
-import ssl
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -23,7 +22,6 @@ from f3_data_models.models import (
     User,
 )
 from f3_data_models.utils import get_session
-from slack_sdk.web import WebClient
 from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy.orm import aliased
 
@@ -31,6 +29,7 @@ from features.calendar.event_instance import META_DO_NOT_SEND_AUTO_PREBLASTS
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import current_date_cst, safe_get
 from utilities.slack import actions, orm
+from utilities.slack_tokens.client import slack_client_for_team
 
 MSG_TEMPLATE = "Hey there, {q_name}! I see you have an upcoming {event_name} Q on {event_date} at {event_ao}. Please click the button below to fill out the preblast form below to let everyone know what to expect. Thanks for leading!"  # noqa
 MSG_TEMPLATE_NOT_ABLE = " If you're not able to complete the form, I'll still send one out on your behalf."  # noqa
@@ -137,6 +136,13 @@ class PreblastList:
 
 
 def send_preblast_reminders(force: bool = False):
+    """
+    DM each Q a reminder to fill out tomorrow's preblast.
+
+    A workspace with no installation is skipped. A workspace whose token lookup raises is logged
+    and recorded, the remaining Qs are still reminded, and a ``RuntimeError`` afterward reports
+    how many workspaces failed so the hourly runner records the incomplete run.
+    """
     # get the current time in US/Central timezone
     current_time = datetime.now(pytz.timezone("US/Central"))
     preblast_list = PreblastList()
@@ -154,6 +160,7 @@ def send_preblast_reminders(force: bool = False):
     preblast_list.items = [item for item in preblast_list.items if item.q_name is not None]
     print(f"Found {len(preblast_list.items)} preblast reminders to send.")
 
+    failed_team_ids: set[str] = set()
     for preblast in preblast_list.items:
         # check per-region configured reminder hour, defaulting to 10am CST
         reminder_hour = preblast.slack_settings.preblast_reminder_hour_cst
@@ -174,12 +181,15 @@ def send_preblast_reminders(force: bool = False):
         ):
             msg += MSG_TEMPLATE_NOT_ABLE
 
-        slack_bot_token = preblast.slack_settings.bot_token
-        if slack_bot_token and preblast.slack_user_id:
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            slack_client = WebClient(slack_bot_token, ssl=ssl_context)
+        slack_client = None
+        if preblast.slack_user_id:
+            try:
+                slack_client = slack_client_for_team(preblast.slack_settings.team_id)
+            except Exception as e:
+                print(f"Error getting Slack client for team {preblast.slack_settings.team_id}: {type(e).__name__}")
+                failed_team_ids.add(preblast.slack_settings.team_id)
+                continue
+        if slack_client:
             blocks: List[orm.BaseBlock] = [
                 orm.SectionBlock(label=msg),
                 orm.ActionsBlock(
@@ -199,6 +209,9 @@ def send_preblast_reminders(force: bool = False):
             except Exception as e:
                 print(f"Error sending preblast reminder to {preblast.q_name} ({preblast.slack_user_id}): {e}")
                 continue
+
+    if failed_team_ids:
+        raise RuntimeError(f"Preblast reminders skipped for {len(failed_team_ids)} workspace(s)")
 
 
 if __name__ == "__main__":

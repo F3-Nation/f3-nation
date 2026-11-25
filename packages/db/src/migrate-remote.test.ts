@@ -13,12 +13,17 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { checkGitState } from "./migrate-guards";
 import {
+  afterMigrationSteps,
   describeFailure,
   findMainRemote,
+  ignoreCleanupError,
   migrationsFingerprint,
   PhaseError,
   readGitState,
+  removeSnapshot,
+  runCommand,
   snapshotMigrations,
+  startRefreshRebuild,
 } from "./migrate-remote";
 
 // A throwaway "origin" plus a clone, so the git checks run against real git.
@@ -247,5 +252,128 @@ describe("describeFailure", () => {
       "Stopped before changing anything.",
       "  connection dropped",
     ]);
+  });
+});
+
+describe("afterMigrationSteps", () => {
+  it("after prod, says to rebuild the Staging refresh image", () => {
+    const text = afterMigrationSteps("prod").join("\n");
+    expect(text).toContain(
+      "gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main",
+    );
+    expect(text).toContain("tooling/scripts/staging-refresh/setup.sh");
+  });
+
+  it("after staging, says nothing", () => {
+    expect(afterMigrationSteps("staging")).toEqual([]);
+  });
+
+  it("after prod, a failed check of applied migrations still says to rebuild", () => {
+    const failure = new PhaseError("applied", { cause: new Error("boom") });
+    expect(describeFailure(failure, "prod").join("\n")).toContain(
+      "gh workflow run rebuild-staging-refresh.yml",
+    );
+    expect(describeFailure(failure, "staging").join("\n")).not.toContain(
+      "rebuild-staging-refresh",
+    );
+    expect(
+      describeFailure(new Error("connection dropped"), "prod").join("\n"),
+    ).not.toContain("rebuild-staging-refresh");
+    expect(
+      describeFailure(
+        new PhaseError("migrating", { cause: new Error("boom") }),
+        "prod",
+      ).join("\n"),
+    ).not.toContain("rebuild-staging-refresh");
+  });
+});
+
+describe("startRefreshRebuild", () => {
+  const command =
+    "gh workflow run rebuild-staging-refresh.yml -R F3-Nation/f3-nation --ref main";
+
+  it("starts the rebuild workflow on main with gh", () => {
+    const calls: string[] = [];
+    const text = startRefreshRebuild((cmd, args) => {
+      calls.push([cmd, ...args].join(" "));
+      return { status: 0, stderr: "" };
+    }).join("\n");
+    expect(calls).toEqual([command]);
+    expect(text).toContain("Started the Staging refresh image rebuild");
+    expect(text).toContain(
+      "https://github.com/F3-Nation/f3-nation/actions/workflows/rebuild-staging-refresh.yml",
+    );
+    expect(text).toContain("tooling/scripts/staging-refresh/setup.sh");
+    expect(text).not.toContain("Couldn't");
+  });
+
+  it("without gh, says to start it by hand", () => {
+    const missing = Object.assign(new Error("spawnSync gh ENOENT"), {
+      code: "ENOENT",
+    });
+    const text = startRefreshRebuild(() => ({
+      status: null,
+      stderr: "",
+      error: missing,
+    })).join("\n");
+    expect(text).toContain(
+      "Couldn't start the Staging refresh image rebuild (gh isn't installed)",
+    );
+    expect(text).toContain(command);
+  });
+
+  it("when gh fails (not logged in), gives its first error line and the command", () => {
+    const text = startRefreshRebuild(() => ({
+      status: 4,
+      stderr:
+        "To get started with GitHub CLI, please run:  gh auth login\nmore\n",
+    })).join("\n");
+    expect(text).toContain(
+      "(To get started with GitHub CLI, please run:  gh auth login)",
+    );
+    expect(text).toContain(command);
+  });
+
+  it("runs a command and returns its status and stderr", () => {
+    const res = runCommand(process.execPath, [
+      "-e",
+      "console.error('nope'); process.exit(3)",
+    ]);
+    expect(res.status).toBe(3);
+    expect(res.stderr.trim()).toBe("nope");
+    expect(res.error).toBeUndefined();
+  });
+
+  it("reports a command that isn't installed", () => {
+    const res = runCommand("f3-no-such-command-for-this-test", []);
+    expect(res.error).toBeDefined();
+    expect(startRefreshRebuild(() => res).join("\n")).toContain(
+      "(gh isn't installed)",
+    );
+  });
+
+  it("never throws, even if running gh throws", () => {
+    const text = startRefreshRebuild(() => {
+      throw new Error("boom");
+    }).join("\n");
+    expect(text).toContain(
+      "Couldn't start the Staging refresh image rebuild (boom)",
+    );
+    expect(text).toContain(command);
+  });
+});
+
+describe("cleanup after a run", () => {
+  it("a failed close doesn't replace the result", async () => {
+    await expect(
+      Promise.reject(new Error("close failed")).catch(ignoreCleanupError),
+    ).resolves.toBeUndefined();
+  });
+
+  it("removeSnapshot removes the copy and never throws", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "snap-"));
+    removeSnapshot(dir);
+    expect(existsSync(dir)).toBe(false);
+    expect(() => removeSnapshot("bad\0path")).not.toThrow();
   });
 });

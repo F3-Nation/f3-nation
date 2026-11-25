@@ -1,6 +1,5 @@
 import logging
 import os
-import ssl
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -26,6 +25,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users, get_site_q_slack_ids_by_ao
+from utilities.slack_tokens.client import slack_client_for_team
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,6 @@ class KotterConfig:
     enabled: bool
     org_id: int | None
     team_id: str
-    bot_token: str | None
     recipient_users: list[str]
     include_admins: bool
     include_site_qs: bool
@@ -146,7 +145,6 @@ def get_kotter_config(settings: SlackSettings) -> KotterConfig:
         enabled=enabled,
         org_id=settings.org_id,
         team_id=settings.team_id,
-        bot_token=settings.bot_token,
         recipient_users=_unique_truthy_strings(settings.kotter_report_recipient_users),
         include_admins=bool(settings.kotter_report_include_admins),
         include_site_qs=bool(
@@ -162,7 +160,7 @@ def get_kotter_config(settings: SlackSettings) -> KotterConfig:
         no_q_weeks=_positive_int(settings.NO_Q_THRESHOLD_WEEKS, DEFAULT_NO_Q_WEEKS),
         no_q_posts=_positive_int(settings.NO_Q_THRESHOLD_POSTS, DEFAULT_NO_Q_POSTS),
     )
-    config.enabled = bool(config.enabled and config.org_id and config.bot_token)
+    config.enabled = bool(config.enabled and config.org_id)
     return config
 
 
@@ -744,9 +742,6 @@ def send_kotter_reports(
     current_time = now_cst or datetime.now(pytz.timezone("US/Central"))
     records = DbManager.find_join_records3(Org_x_SlackSpace, Org, SlackSpace, filters=[Org.is_active])
     stats_url = os.getenv("STATS_URL")
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
 
     for org, slack in [(record[1], record[2]) for record in records]:
         if run_org_id and org.id != run_org_id:
@@ -754,7 +749,7 @@ def send_kotter_reports(
         try:
             settings = SlackSettings(**slack.settings)
             config = get_kotter_config(settings)
-            if sample_report and config.org_id and config.bot_token:
+            if sample_report and config.org_id:
                 config.enabled = True
             if not config.enabled:
                 continue
@@ -789,7 +784,10 @@ def send_kotter_reports(
                 continue
             retry_handlers = default_retry_handlers()
             retry_handlers.append(RateLimitErrorRetryHandler())
-            client = WebClient(token=config.bot_token, ssl=ssl_context, retry_handlers=retry_handlers)
+            client = slack_client_for_team(config.team_id, retry_handlers=retry_handlers)
+            if client is None:
+                logger.warning("Skipping Kotter Reports for org_id=%s: no Slack installation", config.org_id)
+                continue
             for delivery in deliveries:
                 try:
                     _send_delivery(client, delivery, stats_url=stats_url, org_id=config.org_id)

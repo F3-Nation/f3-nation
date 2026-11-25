@@ -1,6 +1,6 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { EditEventSchema } from "@acme/validators/request-schemas";
+import { EditEventSchema, EventFields } from "@acme/validators/request-schemas";
 
 import { base, expectInvalidAt, expectValid } from "./request-schema-fixtures";
 
@@ -27,5 +27,32 @@ describe("EditEventSchema", () => {
       EditEventSchema,
       { ...valid, eventName: "AB" },
       "eventName",
+    ));
+
+  it("keeps prior values that break today's rules", () => {
+    const currentValues = {
+      eventName: "AB",
+      eventStartTime: "530",
+      eventEndTime: "6:15",
+      eventDescription: null,
+      eventTypeIds: [],
+    };
+    const result = EditEventSchema.parse({ ...valid, currentValues });
+    expect(result.currentValues).toEqual(currentValues);
+  });
+
+  it("accepts null for every prior field", () => {
+    const currentValues = Object.fromEntries(
+      Object.keys(EventFields.shape).map((key) => [key, null]),
+    );
+    const result = EditEventSchema.parse({ ...valid, currentValues });
+    expect(result.currentValues).toEqual(currentValues);
+  });
+
+  it("rejects a prior value of the wrong type", () =>
+    expectInvalidAt(
+      EditEventSchema,
+      { ...valid, currentValues: { eventName: 42 } },
+      "currentValues",
     ));
 });

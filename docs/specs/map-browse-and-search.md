@@ -81,10 +81,11 @@ city X" to "this workout, this address, this time" in a few interactions.
   (e.g. "Today") THEN only locations with at least one matching event remain
   on the map; when nothing matches, the nearby list shows a "No locations
   found matching your filters" message. When filtering leaves only one AO at a
-  shared location, its nearby-list row uses the remaining workouts' AO name
-  and logo. A missing name falls back to the AO name assigned to the pin; a
-  missing logo uses the pin's logo only when the AO names match. Otherwise,
-  or when neither has a logo, the default F3 image is shown.
+  shared location, its nearby-list row uses the remaining workouts' AO name;
+  a missing name falls back to the AO name assigned to the pin. Every
+  nearby-list row at a shared location, filtered or not, uses its own AO's
+  logo; a missing or empty logo uses the pin's logo only when the AO names
+  match. Otherwise, or when neither has a logo, the default F3 image is shown.
 - **AC-13** — GIVEN the AM quick filter is active WHEN the user activates PM
   THEN AM deactivates (mutually exclusive), and Reset restores the unfiltered
   pin set.
@@ -119,11 +120,22 @@ city X" to "this workout, this address, this time" in a few interactions.
   revalidate, and it attempts a `map.created`, `map.updated` or `map.deleted`
   webhook carrying the event ID. Webhook destinations are optional; delivery
   failures are logged, with no retries or durable delivery. A rejected write
-  clears no cache and notifies no one.
+  clears no cache and notifies no one. Deleting an event deactivates it and
+  its instances dated on or after the current UTC date in one transaction: if
+  either write fails, neither is kept. Cache clearing, Map revalidation and
+  webhook notifications start only after the transaction commits.
 
 This does not synchronously refresh every API instance or open browser:
 other instances serve cached data until it expires, and browsers refetch on
 their own query schedule.
+
+### Google Maps unavailable
+
+- **AC-19** — GIVEN Google Maps rejects the API key (invalid key, disallowed
+  referrer, billing or quota) WHEN the map loads THEN the map is replaced by a
+  message (`role="alert"`) saying Google Maps isn't available, instead of the
+  error page. Google disables its markers when it rejects a key, so the map is
+  not kept on screen without them.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -183,3 +195,8 @@ shared "anonymous" bucket) — a per-instance limit, not a global cap.
   - **Warn**: one middleware warning can occur on map API calls if bearer
     token API-key lookup fails (`api.auth.api_key_not_found` in `packages/api`
     shared auth middleware).
+- Browser exceptions captured in PostHog:
+  - `map.google_maps.auth_failure` — Google Maps rejected the API key on a
+    visitor's page (AC-19); captured once per page load. Google's own scripts
+    keep throwing after the map is removed, and PostHog's exception autocapture
+    records those as separate, untagged `$exception` events.

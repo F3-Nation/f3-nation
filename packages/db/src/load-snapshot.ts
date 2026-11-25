@@ -69,7 +69,8 @@ async function main() {
       `__drizzle_migrations_${migrationsDatabaseName(databaseUrl) ?? ""}`,
     ),
     seeders: {
-      seedDevUsers: (nationId) => seedDevUsers(db, nationId),
+      seedDevUsers: (nationId, regionIds) =>
+        seedDevUsers(db, nationId, regionIds),
       seedApiKeys: (adminUserId, nationId, roleIds, regionIds) =>
         seedApiKeys(db, adminUserId, nationId, roleIds, regionIds, {
           skipMissingRegions: true,
