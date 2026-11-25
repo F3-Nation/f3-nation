@@ -147,7 +147,7 @@ jobs:
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
           CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
         run: |
-          if [[ "$CLAUDE_OUTCOME" != "success" ]]; then
+          if [[ "$CLAUDE_OUTCOME" != "success" && "$CLAUDE_OUTCOME" != "skipped" ]]; then
             echo "::warning::The Claude step ended with outcome '${CLAUDE_OUTCOME}'. Check its log. If the sign-in reached the Claude Console, the rejected exchange also appears under Authentication events on its Workload identity page."
           fi
           if [[ -n "$EXECUTION_FILE" && -f "$EXECUTION_FILE" ]]; then
