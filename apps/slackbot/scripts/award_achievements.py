@@ -511,8 +511,9 @@ def _build_dm_blocks(achievement: Achievement) -> List[Dict]:
 def post_achievements(session: Session, candidates: Sequence[CandidateAward], dry_run: bool) -> List[str]:
     """Post achievement notifications based on each region's settings.
 
-    Returns the team ids whose Slack client lookup failed; their posts were
-    skipped. A workspace with no installation is skipped without counting.
+    Returns the team ids whose Slack client lookup or any Slack post failed.
+    A workspace with no installation or no achievement channel is skipped
+    without counting.
 
     Groups candidates by their home region's Slack space and posts according
     to the region's achievement_send_option setting:
@@ -635,14 +636,17 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
             continue
 
         if send_option == "post_individually":
-            _post_individually(client, achievement_channel, group, achievements_by_id, team_id)
+            messages_failed = _post_individually(client, achievement_channel, group, achievements_by_id, team_id)
         elif send_option == "post_summary":
-            _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
+            messages_failed = _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
         elif send_option == "send_in_dms_only":
-            _send_dms(client, group, achievements_by_id, team_id)
+            messages_failed = _send_dms(client, group, achievements_by_id, team_id)
         else:
             print(f"[{team_id}] Unknown send_option: {send_option}. Defaulting to summary.")
-            _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
+            messages_failed = _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
+        if messages_failed:
+            print(f"[{team_id}] {messages_failed} achievement message(s) failed to send.")
+            failed_team_ids.append(team_id)
 
     return failed_team_ids
 
@@ -653,12 +657,13 @@ def _post_individually(
     group: RegionAchievementGroup,
     achievements_by_id: Dict[int, Achievement],
     team_id: str,
-) -> None:
-    """Post each achievement as an individual message."""
+) -> int:
+    """Post each achievement as an individual message. Returns the number of posts that failed."""
     if not channel:
         print(f"[{team_id}] No achievement channel configured. Skipping individual posts.")
-        return
+        return 0
 
+    failed = 0
     for ach_id, user_awards in group.achievements.items():
         achievement = achievements_by_id.get(ach_id)
         if not achievement:
@@ -674,6 +679,8 @@ def _post_individually(
                 print(f"[{team_id}] Posted achievement '{achievement.name}' for {user_info.user_name}")
             except Exception as e:
                 print(f"[{team_id}] Error posting achievement: {e}")
+                failed += 1
+    return failed
 
 
 def _post_summary(
@@ -682,11 +689,11 @@ def _post_summary(
     group: RegionAchievementGroup,
     achievements_by_id: Dict[int, Achievement],
     team_id: str,
-) -> None:
-    """Post a single summary of all achievements earned."""
+) -> int:
+    """Post a single summary of all achievements earned. Returns 1 if the post failed, else 0."""
     if not channel:
         print(f"[{team_id}] No achievement channel configured. Skipping summary post.")
-        return
+        return 0
 
     # Build sections with their corresponding achievements for image support
     section_data: List[Tuple[Achievement, str]] = []
@@ -699,7 +706,7 @@ def _post_summary(
         section_data.append((achievement, section_text))
 
     if not section_data:
-        return
+        return 0
 
     today_str = datetime.now(UTC).strftime("%B %d, %Y")
     header = f"📊 *Achievement Summary for {today_str}*"
@@ -719,6 +726,8 @@ def _post_summary(
         print(f"[{team_id}] Posted achievement summary with {len(section_data)} achievement types")
     except Exception as e:
         print(f"[{team_id}] Error posting achievement summary: {e}")
+        return 1
+    return 0
 
 
 def _send_dms(
@@ -726,8 +735,8 @@ def _send_dms(
     group: RegionAchievementGroup,
     achievements_by_id: Dict[int, Achievement],
     team_id: str,
-) -> None:
-    """Send DMs to each user for their achievements."""
+) -> int:
+    """Send DMs to each user for their achievements. Returns the number of DMs that failed."""
     # Group by user to batch their achievements
     user_achievements: Dict[str, List[Tuple[Achievement, CandidateAward]]] = defaultdict(list)
 
@@ -739,6 +748,7 @@ def _send_dms(
         for user_info, _candidate in user_awards:
             user_achievements[user_info.slack_user_id].append((achievement, _candidate))
 
+    failed = 0
     for slack_user_id, achievements in user_achievements.items():
         for achievement, _candidate in achievements:
             msg = _build_dm_message(achievement)
@@ -749,6 +759,8 @@ def _send_dms(
                 print(f"[{team_id}] Sent DM for achievement '{achievement.name}' to {slack_user_id}")
             except Exception as e:
                 print(f"[{team_id}] Error sending DM to {slack_user_id}: {e}")
+                failed += 1
+    return failed
 
 
 def run(achievement_id=None, dry_run=False, skip_post=False, today: date | None = None):
@@ -790,10 +802,10 @@ def run(achievement_id=None, dry_run=False, skip_post=False, today: date | None 
         print(f"Done. Candidates processed: {total_candidates}")
 
     # Awards are committed as each achievement is processed, so failing here reports the
-    # skipped notifications without undoing any award.
+    # failed notifications without undoing any award.
     if failed_team_ids:
-        print(f"Notifications skipped for {len(failed_team_ids)} workspace(s): {', '.join(failed_team_ids)}")
-        raise RuntimeError(f"Achievement notifications skipped for {len(failed_team_ids)} workspace(s)")
+        print(f"Notifications failed for {len(failed_team_ids)} workspace(s): {', '.join(failed_team_ids)}")
+        raise RuntimeError(f"Achievement notifications failed for {len(failed_team_ids)} workspace(s)")
 
 
 def main(argv=None):
