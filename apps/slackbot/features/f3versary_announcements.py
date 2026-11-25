@@ -274,7 +274,10 @@ F3VERSARY_ANNOUNCEMENTS_FORM = orm.BlockView(
                 initial_value=str(constants.DEFAULT_F3VERSARY_ACTIVITY_DAYS),
             ),
             optional=False,
-            hint="Each month represents 30 days. No requirement removes the attendance filter.",
+            hint=(
+                "PAX must have at least one recorded post during this period to receive an F3versary announcement. "
+                "Setting to No requirement skips this check."
+            ),
         ),
         orm.InputBlock(
             label="Days Before the F3versary",
