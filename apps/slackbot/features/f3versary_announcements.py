@@ -201,7 +201,7 @@ def handle_f3versary_announcements_edit(
     }:
         update_submission_wait_view(
             client=client,
-            title="Invalid attendance requirement",
+            title="Invalid attendance",
             text="Select an attendance requirement from the dropdown.",
             level=constants.AlertLevel.ERROR,
             logger=logger,

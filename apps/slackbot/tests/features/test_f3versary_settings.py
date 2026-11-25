@@ -429,12 +429,15 @@ def test_activity_requirement_submission_reads_raw_dropdown_payload(monkeypatch,
     assert region.f3versary_announcements_activity_days == int(activity_days)
 
 
-@pytest.mark.parametrize("activity_days", [None, "", "120", "-1", "91", "90.0", "no_requirement", {}, []])
+@pytest.mark.parametrize(
+    "activity_days", [None, "", "120", "-1", "91", "90.0", "no_requirement", {}, [], "missing_field"]
+)
 def test_unsupported_activity_submission_does_not_save(monkeypatch, activity_days):
     save = MagicMock()
-    update = MagicMock()
     monkeypatch.setattr(f3versary_announcements, "_save_f3versary_settings", save)
-    monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", update)
+    client = MagicMock()
+    logger = MagicMock()
+    client.views_update.side_effect = lambda **kwargs: kwargs["view"].to_dict()
     activity_action = actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS
     values = {
         actions.F3VERSARY_ANNOUNCEMENTS_ENABLED: {"selected_options": [{"value": "enable"}]},
@@ -442,15 +445,22 @@ def test_unsupported_activity_submission_does_not_save(monkeypatch, activity_day
         actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: {"value": "14"},
         activity_action: {"selected_option": {"value": activity_days}},
     }
+    if activity_days == "missing_field":
+        values.pop(activity_action)
     body = {
         "view": {"id": "V1", "blocks": [], "state": {"values": {key: {key: value} for key, value in values.items()}}}
     }
     f3versary_announcements.handle_f3versary_announcements_edit(
-        body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="T1", org_id=6)
+        body, client, logger, {}, SlackSettings(team_id="T1", org_id=6)
     )
     save.assert_not_called()
-    assert update.call_args.kwargs["title"] == "Invalid attendance requirement"
-    assert update.call_args.kwargs["level"] == constants.AlertLevel.ERROR
+    logger.error.assert_not_called()
+    client.views_update.assert_called_once()
+    assert client.views_update.call_args.kwargs["view_id"] == "V1"
+    view = client.views_update.call_args.kwargs["view"].to_dict()
+    assert view["title"]["text"] == "Invalid attendance"
+    assert view["blocks"][0]["level"] == "error"
+    assert view["blocks"][0]["text"]["text"] == "Select an attendance requirement from the dropdown."
 
 
 @pytest.mark.parametrize("stored", [None, False, True, 90.0, "0", 120, -1, {}])
