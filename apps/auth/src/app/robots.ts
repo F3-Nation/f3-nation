@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-// These apps are sign-in only; keep every path out of search results.
+// This app is sign-in only; ask every crawler to stay off every path.
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: { userAgent: "*", disallow: "/" },
