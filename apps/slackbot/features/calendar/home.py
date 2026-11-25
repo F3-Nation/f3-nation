@@ -654,17 +654,18 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             )
             update_post = False
     elif action == "Un-HC":
-        DbManager.delete_records(
-            cls=Attendance,
-            filters=[
-                Attendance.event_instance_id == event_instance_id,
-                Attendance.user_id == user_id,
-                Attendance.attendance_type == Attendance_Type.pax,
-                Attendance.is_planned,
-            ],
-        )
-        update_post = True
-        hc_action = False
+        # Only a PAX record is removed. A Q or Co-Q steps down through Assign Q, so their Un-HC
+        # changes nothing and posts no un-HC announcement.
+        pax_filters = [
+            Attendance.event_instance_id == event_instance_id,
+            Attendance.user_id == user_id,
+            Attendance.attendance_type == Attendance_Type.pax,
+            Attendance.is_planned,
+        ]
+        update_post = DbManager.find_first_record(Attendance, filters=pax_filters) is not None
+        if update_post:
+            DbManager.delete_records(cls=Attendance, filters=pax_filters)
+            hc_action = False
         build_home_form(body, client, logger, context, region_record, update_view_id=view_id)
     elif action == "Assign Q":
         build_assign_q_form(

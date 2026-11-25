@@ -163,7 +163,7 @@ def test_home_take_q_by_the_q_changes_nothing(db, region_record, home_refresh):
 
 
 @pytest.mark.parametrize("user_id", [PAX_USER, Q_USER, CO_Q_USER])
-def test_home_un_hc_removes_only_a_pax_record(db, region_record, home_refresh, user_id):
+def test_home_un_hc_removes_and_announces_only_a_pax_record(db, region_record, user_id):
     seed_event(db, start_date=date.today() + timedelta(days=1))
     expected = {
         Q_USER: Attendance_Type.q,
@@ -172,10 +172,20 @@ def test_home_un_hc_removes_only_a_pax_record(db, region_record, home_refresh, u
     }
     if user_id == PAX_USER:
         del expected[PAX_USER]
+    posted_preblast = SimpleNamespace(
+        event_record=SimpleNamespace(preblast_ts="1.0"), attendance_records=[], preblast_blocks=[]
+    )
 
-    home.handle_home_event(_home_action(user_id, "Un-HC"), MagicMock(), MagicMock(), {}, region_record)
+    with (
+        patch.object(home, "build_home_form"),
+        patch.object(home, "build_preblast_info", return_value=posted_preblast),
+        patch.object(home, "get_preblast_channel", return_value="C1"),
+        patch.object(home, "post_hc_thread_reply") as announce,
+    ):
+        home.handle_home_event(_home_action(user_id, "Un-HC"), MagicMock(), MagicMock(), {}, region_record)
 
     assert planned_attendance(db) == expected
+    assert announce.called is (user_id == PAX_USER)
 
 
 @pytest.mark.parametrize(
@@ -215,8 +225,8 @@ def test_assign_q_replaces_the_leaders_and_keeps_the_pax(db, region_record, new_
 
 
 @pytest.mark.parametrize("user_id", [PAX_USER, Q_USER])
-def test_nearby_events_un_hc_removes_only_a_pax_record(db, region_record, user_id):
-    seed_event(db, start_date=date.today() + timedelta(days=1))
+def test_nearby_events_un_hc_removes_and_announces_only_a_pax_record(db, region_record, user_id):
+    seed_event(db, start_date=date.today() + timedelta(days=1), preblast_ts=1.0)
     expected = {
         Q_USER: Attendance_Type.q,
         CO_Q_USER: Attendance_Type.co_q,
@@ -224,12 +234,20 @@ def test_nearby_events_un_hc_removes_only_a_pax_record(db, region_record, user_i
     }
     if user_id == PAX_USER:
         del expected[PAX_USER]
+    action_value = json.dumps({"event_instance_id": 100, "region_org_id": REGION_ID})
     body = {
         "user": {"id": SLACK_IDS[user_id]},
-        "actions": [{"action_id": actions.NEARBY_EVENTS_UN_HC, "value": json.dumps({"event_instance_id": 100})}],
+        "actions": [{"action_id": actions.NEARBY_EVENTS_UN_HC, "value": action_value}],
     }
 
-    with patch.object(nearby_events, "build_nearby_events_modal"):
+    with (
+        patch.object(nearby_events, "build_nearby_events_modal"),
+        patch.object(nearby_events, "_get_target_settings", return_value=SimpleNamespace(team_id=TEAM_ID)),
+        patch.object(nearby_events, "slack_client_for_team", return_value=MagicMock()),
+        patch.object(nearby_events, "_get_event_preblast_channel", return_value="C1"),
+        patch.object(event_preblast, "post_hc_thread_reply") as announce,
+    ):
         nearby_events.handle_nearby_events_hc_action(body, MagicMock(), MagicMock(), {}, region_record)
 
     assert planned_attendance(db) == expected
+    assert announce.called is (user_id == PAX_USER)
