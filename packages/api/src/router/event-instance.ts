@@ -28,6 +28,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { logWarn } from "../logger";
 import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import {
   editorProcedure,
   protectedProcedure,
@@ -169,8 +170,83 @@ export const eventInstanceRouter = {
       tags: ["event-instance"],
       summary: "List all event instances",
       description:
-        "Get a paginated list of event instances (individual occurrences)",
+        "Get a paginated list of event instances (individual occurrences). Needs no credential: without a signed-in user or an API key holding a role, only active, non-private instances under active orgs, series and locations are listed, and `meta` is null.",
     })
+    .output(
+      z.object({
+        eventInstances: z.array(
+          z.object({
+            id: z.number().describe("Event instance ID"),
+            name: z.string().describe("Event instance name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event instance description"),
+            isActive: z.boolean().describe("Whether the instance is active"),
+            aoName: z.string().nullable().describe("Name of the instance's AO"),
+            regionName: z
+              .string()
+              .nullable()
+              .describe("Name of the region above the instance's AO"),
+            locationId: z.number().nullable().describe("Location ID"),
+            locationName: z.string().nullable().describe("Location name"),
+            locationAddress: z
+              .string()
+              .nullable()
+              .describe("Location street address"),
+            locationAddress2: z
+              .string()
+              .nullable()
+              .describe("Location street address, second line"),
+            locationCity: z.string().nullable().describe("Location city"),
+            locationState: z.string().nullable().describe("Location state"),
+            locationCountry: z.string().nullable().describe("Location country"),
+            orgId: z.number().describe("ID of the org that runs the instance"),
+            seriesId: z
+              .number()
+              .nullable()
+              .describe("ID of the series (recurring event), if any"),
+            seriesException: z
+              .enum(SeriesException)
+              .nullable()
+              .describe(
+                "How the instance deviates from its series, if it does",
+              ),
+            startDate: z.string().describe("Start date (YYYY-MM-DD)"),
+            endDate: z.string().nullable().describe("End date (YYYY-MM-DD)"),
+            startTime: z.string().nullable().describe("Start time (HHmm)"),
+            endTime: z.string().nullable().describe("End time (HHmm)"),
+            highlight: z
+              .boolean()
+              .describe("Whether the instance is highlighted"),
+            meta: z
+              .unknown()
+              .nullable()
+              .describe(
+                "Instance metadata, such as Slack channel settings. Null for callers without a session or role.",
+              ),
+            isPrivate: z.boolean().describe("Whether the instance is private"),
+            paxCount: z
+              .number()
+              .nullable()
+              .describe("Number of PAX who attended"),
+            fngCount: z
+              .number()
+              .nullable()
+              .describe("Number of FNGs who attended"),
+            location: z
+              .string()
+              .nullable()
+              .describe(
+                "Display label: the location name, or the formatted address when the location has no name",
+              ),
+          }),
+        ),
+        totalCount: z
+          .number()
+          .describe("Total number of instances matching the filters"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
@@ -180,7 +256,11 @@ export const eventInstanceRouter = {
         defaultPageSize: 40,
       });
 
+      const seriesEvent = aliasedTable(schema.events, "series_event");
       const isAnonymous = !ctx.session?.user;
+      // The org-chain checks below stop at ORG_TREE_MAX_DEPTH; this scan
+      // warns operators when a deeper chain exists.
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
 
       const statusFilter = (() => {
         // Inactive instances were never meant to be public.
@@ -200,11 +280,26 @@ export const eventInstanceRouter = {
           ? and(
               eq(schema.eventInstances.isPrivate, false),
               orgAndAncestorsAreActive(schema.eventInstances.orgId),
-              // location.delete only soft-deletes, so a retired location's
-              // name and address would otherwise still show here.
+              // Editing a series updates only current and future instances,
+              // so older instances can stay public after their series is
+              // made private or retired. Standalone instances pass.
+              or(
+                isNull(schema.eventInstances.seriesId),
+                and(
+                  eq(seriesEvent.isActive, true),
+                  eq(seriesEvent.isPrivate, false),
+                  orgAndAncestorsAreActive(seriesEvent.orgId),
+                ),
+              ),
+              // location.delete only soft-deletes, and a live AO can meet at
+              // a location owned by a retired region, so check the location
+              // and its owner's org chain before showing its name and address.
               or(
                 isNull(schema.eventInstances.locationId),
-                eq(schema.locations.isActive, true),
+                and(
+                  eq(schema.locations.isActive, true),
+                  orgAndAncestorsAreActive(schema.locations.orgId),
+                ),
               ),
             )
           : undefined,
@@ -291,10 +386,14 @@ export const eventInstanceRouter = {
             eq(regionOrg.id, aoOrg.parentId),
           ),
         )
-        // The anonymous filter reads the location's isActive.
+        // The anonymous filter reads the location and the series.
         .leftJoin(
           schema.locations,
           eq(schema.locations.id, schema.eventInstances.locationId),
+        )
+        .leftJoin(
+          seriesEvent,
+          eq(seriesEvent.id, schema.eventInstances.seriesId),
         )
         .where(where);
 
@@ -362,6 +461,10 @@ export const eventInstanceRouter = {
         .leftJoin(
           schema.locations,
           eq(schema.locations.id, schema.eventInstances.locationId),
+        )
+        .leftJoin(
+          seriesEvent,
+          eq(seriesEvent.id, schema.eventInstances.seriesId),
         )
         .where(where);
 

@@ -537,14 +537,25 @@ describe("API-key access tiers", () => {
       | "privateInstance"
       | "inactiveInstance"
       | "retiredRegionInstance"
-      | "retiredLocationInstance",
+      | "retiredLocationInstance"
+      | "publicSeriesInstance"
+      | "privateSeriesInstance"
+      | "retiredSeriesInstance"
+      | "retiredOwnerLocationInstance",
       number
     >;
+    const eventIds: number[] = [];
+    // Instances an anonymous caller may see; every other fixture is hidden.
+    const publicIds = () => [fx.publicInstance, fx.publicSeriesInstance].sort();
 
     const insertInstance = async (
       orgId: number,
       locationId: number | null,
-      overrides: { isActive?: boolean; isPrivate?: boolean } = {},
+      overrides: {
+        isActive?: boolean;
+        isPrivate?: boolean;
+        seriesId?: number;
+      } = {},
     ) => {
       const [instance] = await db
         .insert(schema.eventInstances)
@@ -552,6 +563,7 @@ describe("API-key access tiers", () => {
           name: `${tag} ${randomUUID()}`,
           orgId,
           locationId,
+          seriesId: overrides.seriesId ?? null,
           startDate: "2026-12-01",
           isActive: overrides.isActive ?? true,
           isPrivate: overrides.isPrivate ?? false,
@@ -584,6 +596,37 @@ describe("API-key access tiers", () => {
         .values({ name: `${tag} Gone`, orgId: regionA.id, isActive: false })
         .returning();
       locationIds.push(retiredLocation!.id);
+      const insertLocation = async (orgId: number) => {
+        const [location] = await db
+          .insert(schema.locations)
+          .values({ name: `${tag} Place`, orgId, isActive: true })
+          .returning();
+        locationIds.push(location!.id);
+        return location!.id;
+      };
+      const liveLocation = await insertLocation(regionA.id);
+      // Active itself, but owned by a retired region.
+      const retiredOwnerLocation = await insertLocation(retiredRegionId);
+      const insertSeries = async (overrides: {
+        isActive?: boolean;
+        isPrivate?: boolean;
+      }) => {
+        const [event] = await db
+          .insert(schema.events)
+          .values({
+            name: `${tag} Series`,
+            orgId: liveAo,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            isActive: overrides.isActive ?? true,
+            isPrivate: overrides.isPrivate ?? false,
+            highlight: false,
+            startDate: "2026-01-01",
+          })
+          .returning();
+        eventIds.push(event!.id);
+        return event!.id;
+      };
 
       fx.publicInstance = await insertInstance(liveAo, null);
       fx.privateInstance = await insertInstance(liveAo, null, {
@@ -600,12 +643,28 @@ describe("API-key access tiers", () => {
         liveAo,
         retiredLocation!.id,
       );
+      // Editing a series leaves older instances as they were, so an active,
+      // public instance can belong to a series that is now hidden.
+      fx.publicSeriesInstance = await insertInstance(liveAo, liveLocation, {
+        seriesId: await insertSeries({}),
+      });
+      fx.privateSeriesInstance = await insertInstance(liveAo, null, {
+        seriesId: await insertSeries({ isPrivate: true }),
+      });
+      fx.retiredSeriesInstance = await insertInstance(liveAo, null, {
+        seriesId: await insertSeries({ isActive: false }),
+      });
+      fx.retiredOwnerLocationInstance = await insertInstance(
+        liveAo,
+        retiredOwnerLocation,
+      );
     });
 
     afterAll(async () => {
       await db
         .delete(schema.eventInstances)
         .where(inArray(schema.eventInstances.id, instanceIds));
+      await db.delete(schema.events).where(inArray(schema.events.id, eventIds));
       await db
         .delete(schema.locations)
         .where(inArray(schema.locations.id, locationIds));
@@ -629,14 +688,18 @@ describe("API-key access tiers", () => {
           credential === "none" ? undefined : keys[credential],
         );
 
-        const { eventInstances } = await client.eventInstance.all({
+        const { eventInstances, totalCount } = await client.eventInstance.all({
           searchTerm: tag,
         });
-        expect(eventInstances.map((instance) => instance.id)).toEqual([
-          fx.publicInstance,
-        ]);
+        expect(eventInstances.map((instance) => instance.id).sort()).toEqual(
+          publicIds(),
+        );
+        expect(totalCount).toBe(publicIds().length);
         // Slack channel ids and other settings in meta stay private.
-        expect(eventInstances[0]?.meta).toBeNull();
+        expect(eventInstances.map((instance) => instance.meta)).toEqual([
+          null,
+          null,
+        ]);
 
         // Asking for inactive instances does not reveal them: like
         // `event.all`, the status filter is clamped to active.
@@ -644,9 +707,7 @@ describe("API-key access tiers", () => {
           ["active", "inactive"],
           ["inactive"],
         ] as const) {
-          expect(await listIds(client, [...statuses])).toEqual([
-            fx.publicInstance,
-          ]);
+          expect(await listIds(client, [...statuses])).toEqual(publicIds());
         }
       },
     );
