@@ -541,7 +541,8 @@ describe("API-key access tiers", () => {
       | "publicSeriesInstance"
       | "privateSeriesInstance"
       | "retiredSeriesInstance"
-      | "retiredOwnerLocationInstance",
+      | "retiredOwnerLocationInstance"
+      | "retiredSeriesOrgInstance",
       number
     >;
     const eventIds: number[] = [];
@@ -610,12 +611,13 @@ describe("API-key access tiers", () => {
       const insertSeries = async (overrides: {
         isActive?: boolean;
         isPrivate?: boolean;
+        orgId?: number;
       }) => {
         const [event] = await db
           .insert(schema.events)
           .values({
             name: `${tag} Series`,
-            orgId: liveAo,
+            orgId: overrides.orgId ?? liveAo,
             dayOfWeek: "monday",
             startTime: "0530",
             isActive: overrides.isActive ?? true,
@@ -653,6 +655,12 @@ describe("API-key access tiers", () => {
       });
       fx.retiredSeriesInstance = await insertInstance(liveAo, null, {
         seriesId: await insertSeries({ isActive: false }),
+      });
+      // An active, public series run by an AO under a retired region; the
+      // instance itself sits under the live AO, so only the series' own org
+      // chain hides it.
+      fx.retiredSeriesOrgInstance = await insertInstance(liveAo, null, {
+        seriesId: await insertSeries({ orgId: aoUnderRetiredRegion }),
       });
       fx.retiredOwnerLocationInstance = await insertInstance(
         liveAo,
