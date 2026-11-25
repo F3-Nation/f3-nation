@@ -542,7 +542,10 @@ describe("API-key access tiers", () => {
       | "privateSeriesInstance"
       | "retiredSeriesInstance"
       | "retiredOwnerLocationInstance"
-      | "retiredSeriesOrgInstance",
+      | "retiredSeriesOrgInstance"
+      | "inactiveOrgInstance"
+      | "inactiveSeriesOrgInstance"
+      | "inactiveOwnerLocationInstance",
       number
     >;
     const eventIds: number[] = [];
@@ -577,14 +580,14 @@ describe("API-key access tiers", () => {
     };
 
     beforeAll(async () => {
-      const insertAo = async (parentId: number) => {
+      const insertAo = async (parentId: number, isActive = true) => {
         const [org] = await db
           .insert(schema.orgs)
           .values({
             name: `${tag} AO`,
             orgType: "ao",
             parentId,
-            isActive: true,
+            isActive,
           })
           .returning();
         orgIds.push(org!.id);
@@ -592,6 +595,9 @@ describe("API-key access tiers", () => {
       };
       const liveAo = await insertAo(regionA.id);
       const aoUnderRetiredRegion = await insertAo(retiredRegionId);
+      // Inactive itself under a live region, so a check that skips the org
+      // itself (ancestorOrgsAreActive) would let its rows through.
+      const inactiveAo = await insertAo(regionA.id, false);
       const [retiredLocation] = await db
         .insert(schema.locations)
         .values({ name: `${tag} Gone`, orgId: regionA.id, isActive: false })
@@ -666,6 +672,14 @@ describe("API-key access tiers", () => {
         liveAo,
         retiredOwnerLocation,
       );
+      fx.inactiveOrgInstance = await insertInstance(inactiveAo, null);
+      fx.inactiveSeriesOrgInstance = await insertInstance(liveAo, null, {
+        seriesId: await insertSeries({ orgId: inactiveAo }),
+      });
+      fx.inactiveOwnerLocationInstance = await insertInstance(
+        liveAo,
+        await insertLocation(inactiveAo),
+      );
     });
 
     afterAll(async () => {
@@ -719,6 +733,22 @@ describe("API-key access tiers", () => {
         }
       },
     );
+
+    it("rejects out-of-range filters from anonymous callers as bad input", async () => {
+      const client = clientFor();
+      for (const input of [
+        { regionOrgId: 0 },
+        { aoOrgId: 2_147_483_648 },
+        { seriesId: 1.5 },
+        { startDate: "not-a-date" },
+        { startDateTo: "2026-13-40" },
+        { aoOrgIds: Array.from({ length: 1001 }, (_, i) => i + 1) },
+      ]) {
+        await expect(client.eventInstance.all(input)).rejects.toMatchObject({
+          code: "BAD_REQUEST",
+        });
+      }
+    });
 
     it.each(["member", "editorOnB"] as const)(
       "keeps the full list for %s",

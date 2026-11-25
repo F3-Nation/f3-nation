@@ -4436,7 +4436,9 @@
             "in": "query",
             "name": "regionOrgId",
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
@@ -4445,7 +4447,9 @@
             "in": "query",
             "name": "aoOrgId",
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
@@ -4455,9 +4459,13 @@
             "in": "query",
             "name": "regionOrgIds",
             "schema": {
+              "description": "Region org IDs to filter by (at most 1000)",
               "items": {
-                "type": "number"
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
               },
+              "maxItems": 1000,
               "type": "array"
             },
             "style": "deepObject"
@@ -4469,9 +4477,13 @@
             "in": "query",
             "name": "aoOrgIds",
             "schema": {
+              "description": "AO org IDs to filter by (at most 1000)",
               "items": {
-                "type": "number"
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
               },
+              "maxItems": 1000,
               "type": "array"
             },
             "style": "deepObject"
@@ -4483,6 +4495,7 @@
             "name": "startDate",
             "schema": {
               "description": "Inclusive lower bound on the instance start date (YYYY-MM-DD). Only instances starting on or after this date are returned.",
+              "format": "date",
               "type": "string"
             }
           },
@@ -4493,6 +4506,7 @@
             "name": "startDateTo",
             "schema": {
               "description": "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
+              "format": "date",
               "type": "string"
             }
           },
@@ -4502,7 +4516,9 @@
             "in": "query",
             "name": "seriesId",
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {

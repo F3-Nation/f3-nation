@@ -123,6 +123,13 @@ const resolveSlackChannel = ({
   return { channelId: null, source: "none" };
 };
 
+// The list is public, so its filters reject what Postgres would otherwise
+// turn into a 500: ids outside the int4 range and unbounded id lists.
+const dbIdSchema = z.coerce.number().int().min(1).max(2_147_483_647);
+// Above any region or AO selection the admin filters can make, while keeping
+// an anonymous request's IN list small.
+const MAX_FILTER_IDS = 1000;
+
 /**
  * Event Instance Router
  * Event instances are individual event occurrences stored in the event_instances table.
@@ -143,23 +150,33 @@ export const eventInstanceRouter = {
           sorting: z
             .array(z.object({ id: z.string(), desc: queryBooleanSchema }))
             .optional(),
-          regionOrgId: z.coerce.number().optional(),
-          aoOrgId: z.coerce.number().optional(),
-          regionOrgIds: z.array(z.coerce.number()).optional(),
-          aoOrgIds: z.array(z.coerce.number()).optional(),
-          startDate: z
-            .string()
+          regionOrgId: dbIdSchema.optional(),
+          aoOrgId: dbIdSchema.optional(),
+          regionOrgIds: z
+            .array(dbIdSchema)
+            .max(MAX_FILTER_IDS)
+            .optional()
+            .describe(
+              `Region org IDs to filter by (at most ${MAX_FILTER_IDS})`,
+            ),
+          aoOrgIds: z
+            .array(dbIdSchema)
+            .max(MAX_FILTER_IDS)
+            .optional()
+            .describe(`AO org IDs to filter by (at most ${MAX_FILTER_IDS})`),
+          startDate: z.iso
+            .date()
             .optional()
             .describe(
               "Inclusive lower bound on the instance start date (YYYY-MM-DD). Only instances starting on or after this date are returned.",
             ),
-          startDateTo: z
-            .string()
+          startDateTo: z.iso
+            .date()
             .optional()
             .describe(
               "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
             ),
-          seriesId: z.coerce.number().optional(),
+          seriesId: dbIdSchema.optional(),
           onlyStandalone: queryBooleanSchema.optional(), // Only instances without a series
         })
         .optional(),
