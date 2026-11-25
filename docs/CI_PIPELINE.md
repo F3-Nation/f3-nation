@@ -38,6 +38,9 @@ merge to main (ruleset "main": PR required, merge queue required, the eight
   └─ docker-cache-refresh per-app GHCR cache repair/refresh
   │
 release-please.yml ····· accumulates merges into per-app release PRs
+  │  └─ release-plan.yml ·· when a release PR merges, files the Staging
+  │                         release plan, and test plan when an app ships
+  │                         (Claude Code)
   │
 tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
        ├─ ci-gate ······· tag must be on main, then waits for the required
@@ -210,8 +213,9 @@ that app's thin `deploy-<app>.yml` caller into the shared
    [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml),
    [`_deploy-cloudrun-job.yml`](../.github/workflows/_deploy-cloudrun-job.yml)
    and [`deploy-homepage.yml`](../.github/workflows/deploy-homepage.yml), and
-   is maintained separately from the `main` ruleset; see
-   [GitHub Actions Conventions](../AGENTS.md#github-actions-conventions) for
+   is maintained separately from the `main` ruleset. Other workflows that wait
+   on the required checks keep their own copies; see
+   [workflow conventions](../.github/AGENTS.md#workflow-conventions) for
    keeping them in step.
 2. **`build`** — the deploy image is built once and pushed to Artifact
    Registry.

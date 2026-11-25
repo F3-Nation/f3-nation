@@ -1,5 +1,30 @@
 # Changelog
 
+## [7.11.0](https://github.com/F3-Nation/f3-nation/compare/map@7.10.0...map@7.11.0) (2026-11-24)
+
+
+### Features
+
+* **api,shared:** accept originating app claims before client rollout ([#1778](https://github.com/F3-Nation/f3-nation/issues/1778)) ([612b277](https://github.com/F3-Nation/f3-nation/commit/612b277ec1fcda8336803d3b0e5bee139051a5a6))
+
+
+### Bug Fixes
+
+* **map:** fail a proxied API response that stalls after its headers ([#1585](https://github.com/F3-Nation/f3-nation/issues/1585)) ([c8d4e8c](https://github.com/F3-Nation/f3-nation/commit/c8d4e8c893e8cb92ac0c629b3bd82e7c9f8b44d6))
+* **map:** let Next.js compress the /api/orpc proxy; move to next 16.4.6 ([#1709](https://github.com/F3-Nation/f3-nation/issues/1709)) ([f83b071](https://github.com/F3-Nation/f3-nation/commit/f83b071ed218e9b0b73778dab59c6e30f4874077))
+* **map:** resolve 10 suppressed react-hooks lint violations ([#1513](https://github.com/F3-Nation/f3-nation/issues/1513)) ([4175e91](https://github.com/F3-Nation/f3-nation/commit/4175e91035601c448284ab2fb8fed980df6c015b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.18.0
+    * @acme/auth bumped to 0.3.1
+    * @acme/shared bumped to 0.8.0
+    * @acme/ui bumped to 0.3.2
+    * @acme/validators bumped to 0.6.0
+
 ## [7.10.0](https://github.com/F3-Nation/f3-nation/compare/map@7.9.0...map@7.10.0) (2026-11-17)
 
 
