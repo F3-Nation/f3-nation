@@ -527,4 +527,149 @@ describe("API-key access tiers", () => {
       },
     );
   });
+
+  describe("event instance list", () => {
+    const tag = `TierInstance ${randomUUID().slice(0, 8)}`;
+    const instanceIds: number[] = [];
+    const locationIds: number[] = [];
+    const fx = {} as Record<
+      | "publicInstance"
+      | "privateInstance"
+      | "inactiveInstance"
+      | "retiredRegionInstance"
+      | "retiredLocationInstance",
+      number
+    >;
+
+    const insertInstance = async (
+      orgId: number,
+      locationId: number | null,
+      overrides: { isActive?: boolean; isPrivate?: boolean } = {},
+    ) => {
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `${tag} ${randomUUID()}`,
+          orgId,
+          locationId,
+          startDate: "2026-12-01",
+          isActive: overrides.isActive ?? true,
+          isPrivate: overrides.isPrivate ?? false,
+          highlight: false,
+          meta: { slack_channel_id: "C0TIERTEST" },
+        })
+        .returning();
+      instanceIds.push(instance!.id);
+      return instance!.id;
+    };
+
+    beforeAll(async () => {
+      const insertAo = async (parentId: number) => {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${tag} AO`,
+            orgType: "ao",
+            parentId,
+            isActive: true,
+          })
+          .returning();
+        orgIds.push(org!.id);
+        return org!.id;
+      };
+      const liveAo = await insertAo(regionA.id);
+      const aoUnderRetiredRegion = await insertAo(retiredRegionId);
+      const [retiredLocation] = await db
+        .insert(schema.locations)
+        .values({ name: `${tag} Gone`, orgId: regionA.id, isActive: false })
+        .returning();
+      locationIds.push(retiredLocation!.id);
+
+      fx.publicInstance = await insertInstance(liveAo, null);
+      fx.privateInstance = await insertInstance(liveAo, null, {
+        isPrivate: true,
+      });
+      fx.inactiveInstance = await insertInstance(liveAo, null, {
+        isActive: false,
+      });
+      fx.retiredRegionInstance = await insertInstance(
+        aoUnderRetiredRegion,
+        null,
+      );
+      fx.retiredLocationInstance = await insertInstance(
+        liveAo,
+        retiredLocation!.id,
+      );
+    });
+
+    afterAll(async () => {
+      await db
+        .delete(schema.eventInstances)
+        .where(inArray(schema.eventInstances.id, instanceIds));
+      await db
+        .delete(schema.locations)
+        .where(inArray(schema.locations.id, locationIds));
+    });
+
+    const listIds = async (
+      client: Client,
+      statuses?: ("active" | "inactive")[],
+    ) => {
+      const { eventInstances } = await client.eventInstance.all({
+        searchTerm: tag,
+        statuses,
+      });
+      return eventInstances.map((instance) => instance.id).sort();
+    };
+
+    it.each(["none", "readOnly", "userOnly"] as const)(
+      "serves only public, live instances to credential %s",
+      async (credential) => {
+        const client = clientFor(
+          credential === "none" ? undefined : keys[credential],
+        );
+
+        const { eventInstances } = await client.eventInstance.all({
+          searchTerm: tag,
+        });
+        expect(eventInstances.map((instance) => instance.id)).toEqual([
+          fx.publicInstance,
+        ]);
+        // Slack channel ids and other settings in meta stay private.
+        expect(eventInstances[0]?.meta).toBeNull();
+
+        // Asking for inactive instances does not reveal them: like
+        // `event.all`, the status filter is clamped to active.
+        for (const statuses of [
+          ["active", "inactive"],
+          ["inactive"],
+        ] as const) {
+          expect(await listIds(client, [...statuses])).toEqual([
+            fx.publicInstance,
+          ]);
+        }
+      },
+    );
+
+    it.each(["member", "editorOnB"] as const)(
+      "keeps the full list for %s",
+      async (caller) => {
+        if (caller === "member") await mockAuthWithSession(memberSession());
+        const client = clientFor(
+          caller === "member" ? undefined : keys[caller],
+        );
+
+        expect(await listIds(client, ["active", "inactive"])).toEqual(
+          Object.values(fx).sort(),
+        );
+        const { eventInstances } = await client.eventInstance.all({
+          searchTerm: tag,
+        });
+        expect(
+          eventInstances.find((instance) => instance.id === fx.publicInstance)
+            ?.meta,
+        ).toEqual({ slack_channel_id: "C0TIERTEST" });
+      },
+    );
+  });
 });

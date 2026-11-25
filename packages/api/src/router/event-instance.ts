@@ -27,7 +27,12 @@ import {
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { logWarn } from "../logger";
-import { editorProcedure, protectedProcedure } from "../shared";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import {
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 const booleanStringSchema = z
@@ -123,7 +128,11 @@ const resolveSlackChannel = ({
  * They may or may not be linked to a series (recurring event) via seriesId.
  */
 export const eventInstanceRouter = {
-  all: protectedProcedure
+  // Public so a region's website can show its schedule without a credential,
+  // like `event.all`. Anonymous callers (including role-less API keys) see
+  // only active, non-private instances under a fully active org chain at a
+  // live location, and never `meta`, which holds Slack channel settings.
+  all: publicReadProcedure
     .input(
       z
         .object({
@@ -171,7 +180,11 @@ export const eventInstanceRouter = {
         defaultPageSize: 40,
       });
 
+      const isAnonymous = !ctx.session?.user;
+
       const statusFilter = (() => {
+        // Inactive instances were never meant to be public.
+        if (isAnonymous) return eq(schema.eventInstances.isActive, true);
         const s = input?.statuses;
         if (s === undefined) return eq(schema.eventInstances.isActive, true);
         if (s.length === 0) return undefined;
@@ -183,6 +196,18 @@ export const eventInstanceRouter = {
 
       const where = and(
         statusFilter,
+        isAnonymous
+          ? and(
+              eq(schema.eventInstances.isPrivate, false),
+              orgAndAncestorsAreActive(schema.eventInstances.orgId),
+              // location.delete only soft-deletes, so a retired location's
+              // name and address would otherwise still show here.
+              or(
+                isNull(schema.eventInstances.locationId),
+                eq(schema.locations.isActive, true),
+              ),
+            )
+          : undefined,
         // Search filter
         input?.searchTerm
           ? or(
@@ -266,6 +291,11 @@ export const eventInstanceRouter = {
             eq(regionOrg.id, aoOrg.parentId),
           ),
         )
+        // The anonymous filter reads the location's isActive.
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.eventInstances.locationId),
+        )
         .where(where);
 
       const requestedSorting = input?.sorting?.length
@@ -345,6 +375,7 @@ export const eventInstanceRouter = {
         const locationName = instance.locationName?.trim() ?? "";
         return {
           ...instance,
+          meta: isAnonymous ? null : instance.meta,
           location:
             locationName.length > 0 ? locationName : getFullAddress(instance),
         };
