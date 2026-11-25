@@ -272,6 +272,37 @@ def test_commit_failure_after_exchange_retries_save_only(isolated_postgres, exch
     ]
 
 
+def test_save_retry_keeps_a_reinstall_saved_after_the_failed_save(
+    isolated_postgres, exchange, monkeypatch, capsys, caplog
+):
+    _seed(isolated_postgres, "T21")
+    _failing_flush(monkeypatch, failures=1)
+    real_save = refresh.save_bot_locked
+
+    def reinstall_then_save(*args, **kwargs):
+        # A reinstall lands after the failed first save released the lock, before the retry takes it.
+        with Session(isolated_postgres) as session:
+            row = session.scalars(select(SlackSpace).where(SlackSpace.team_id == "T21")).one()
+            row.bot_token = "xoxb-reinstalled"
+            session.commit()
+        return real_save(*args, **kwargs)
+
+    monkeypatch.setattr(converter, "save_bot_locked", reinstall_then_save)
+
+    with caplog.at_level(logging.WARNING):
+        assert converter.main(["--team-id", "T21", *APPLY]) == 0
+
+    assert capsys.readouterr().out.splitlines() == ["T21 superseded"]
+    assert exchange.tokens == [LONG_LIVED]
+    assert _row(isolated_postgres, "T21") == ("xoxb-reinstalled", None, None)
+    assert _exchange_lost(caplog) == []
+    assert [
+        r.json_fields
+        for r in caplog.records
+        if getattr(r, "json_fields", {}).get("event") == "slack.token.exchange_superseded"
+    ] == [{"event": "slack.token.exchange_superseded", "team_id": "T21", "path": "convert_slack_tokens"}]
+
+
 def test_refused_write_after_exchange_never_reports_success(isolated_postgres, exchange, monkeypatch, capsys, caplog):
     _seed(isolated_postgres, "T14")
     monkeypatch.setattr(refresh, "_guard_allows", lambda row, bot: False)
@@ -366,6 +397,42 @@ def test_non_object_settings_blocks_conversion(isolated_postgres, exchange, caps
 
     assert capsys.readouterr().out.splitlines() == ["T20 blocked:settings_token"]
     assert exchange.tokens == []
+
+
+def test_all_skips_and_counts_non_object_settings(isolated_postgres, exchange, capsys):
+    _seed(isolated_postgres, "T_0", settings=["bot_token"])
+    _seed(isolated_postgres, "T_1", settings="not-an-object")
+    _seed(isolated_postgres, "T_A")
+
+    assert converter.main(["--all", "--limit", "1", *APPLY]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["T_A converted"]
+    assert "2 workspace(s) not selected" in captured.err
+
+
+@pytest.mark.parametrize("code", ["fatal_error", "internal_error", "request_timeout", "service_unavailable"])
+def test_server_side_error_code_reports_error(isolated_postgres, exchange, capsys, code):
+    _seed(isolated_postgres, "T23")
+    exchange.error = code
+
+    assert converter.main(["--team-id", "T23", *APPLY]) == 1
+
+    assert capsys.readouterr().out.splitlines() == ["T23 error:SlackApiError"]
+    assert _row(isolated_postgres, "T23") == (LONG_LIVED, None, None)
+
+
+def test_non_json_slack_body_is_never_printed(isolated_postgres, exchange, capsys):
+    _seed(isolated_postgres, "T24")
+    # What the SDK stores as the error for a non-JSON HTTP 200 body: its first 100 characters.
+    body = f"Received a response in a non-JSON format: {EXCHANGED} <html>"
+    exchange.raises = SlackApiError("unexpected body", {"ok": False, "error": body})
+
+    assert converter.main(["--team-id", "T24", *APPLY]) == 1
+
+    out = capsys.readouterr().out
+    assert out.splitlines() == ["T24 error:SlackApiError"]
+    assert EXCHANGED not in out
 
 
 @pytest.mark.parametrize("key", [None, "not-a-fernet-key"])

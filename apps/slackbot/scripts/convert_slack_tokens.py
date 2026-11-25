@@ -33,6 +33,10 @@ exchange is the last step before the write. Each workspace prints one line,
 - `converted`: the rotating token, its expiry and the encrypted refresh token
   are committed.
 - `skipped`: the row already holds a rotating token.
+- `superseded`: the exchange succeeded and its first save failed, and before
+  the save was retried a reinstall replaced the row's token. The reinstall's
+  credentials are kept, the exchange result is dropped, and
+  `slack.token.exchange_superseded` is logged at WARNING.
 - `blocked:settings_token`: the row's `settings` JSON holds a `bot_token`, or
   isn't a JSON object; nothing is exchanged and the row is unchanged.
 - `would_convert`: dry run only; the row would be exchanged.
@@ -46,8 +50,10 @@ exchange is the last step before the write. Each workspace prints one line,
   `needs_reinstall` again. It recovers by reinstalling the app.
 - `error:<exception class>`: anything else failed before the exchange
   returned, such as a lock timeout, a network error, or a Slack response with
-  no error code (an HTTP 5xx). If the error came from the exchange call itself,
-  Slack may still have exchanged the token.
+  no error code (an HTTP 5xx or a non-JSON body) or with a server-side code
+  (`fatal_error`, `internal_error`, `request_timeout`, `service_unavailable`).
+  If the error came from the exchange call itself, Slack may still have
+  exchanged the token.
 
 Exits 1 if any workspace is `blocked`, `failed`, `needs_reinstall` or `error`.
 Tokens are never printed or logged.
@@ -56,6 +62,7 @@ Tokens are never printed or logged.
 import argparse
 import logging
 import os
+import re
 import sys
 import time
 from typing import Optional
@@ -65,11 +72,12 @@ from f3_data_models.models import SlackSpace
 from f3_data_models.utils import session_scope
 from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth.installation_store import Bot
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from utilities import constants
 from utilities.slack_tokens.crypto import TokenDecryptError, decrypt_refresh_token, encrypt_refresh_token
 from utilities.slack_tokens.refresh import (
+    TokenChanged,
     TokenSaveError,
     locked_row,
     log_refresh_failure,
@@ -83,6 +91,10 @@ logger = logging.getLogger(__name__)
 SAVE_RETRIES = 2
 _PATH = "convert_slack_tokens"
 _REQUIRED_RESPONSE_FIELDS = ("access_token", "refresh_token", "expires_in")
+_SLACK_ERROR_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
+# Slack's server-side failures, which it can return with HTTP 200 after part of
+# the operation succeeded, so the token may already be exchanged.
+_MAYBE_EXCHANGED_CODES = frozenset({"fatal_error", "internal_error", "request_timeout", "service_unavailable"})
 
 
 class ExchangeResponseError(Exception):
@@ -90,7 +102,20 @@ class ExchangeResponseError(Exception):
 
 
 def _without_settings_token():
-    return or_(SlackSpace.settings.is_(None), SlackSpace.settings["bot_token"].astext.is_(None))
+    """Settings is SQL NULL, JSON null, or a JSON object without a non-null `bot_token`.
+
+    Extracting a key from a JSON array or scalar yields NULL, so the type
+    check keeps those rows, which `_convert_team` blocks, out of `--all`
+    batches and in the blocked count. JSON null is how SQLAlchemy stores a
+    Python `None`, which `_convert_team` allows.
+    """
+    return or_(
+        SlackSpace.settings.is_(None),
+        and_(
+            func.jsonb_typeof(SlackSpace.settings).in_(("object", "null")),
+            SlackSpace.settings["bot_token"].astext.is_(None),
+        ),
+    )
 
 
 def _non_rotating():
@@ -123,9 +148,15 @@ def _slack_error_status(error: SlackApiError) -> str:
     response = error.response
     code = response.get("error") if response is not None else None
     status = getattr(response, "status_code", None)
-    if not isinstance(code, str) or (isinstance(status, int) and status >= 500):
-        # No Slack error code (a gateway or server error): Slack may have exchanged the token.
-        return f"error:{type(error).__name__}"
+    if (
+        not isinstance(code, str)
+        # The SDK stores a non-JSON body's text here; it must never be printed.
+        or not _SLACK_ERROR_CODE.fullmatch(code)
+        or code in _MAYBE_EXCHANGED_CODES
+        or (isinstance(status, int) and status >= 500)
+    ):
+        # No Slack error code, or a server-side failure: Slack may have exchanged the token.
+        return "error:SlackApiError"
     if code == "token_already_exchanged":
         return "needs_reinstall"
     return f"failed:{code}"
@@ -152,12 +183,22 @@ def _log_exchange_lost(team_id: str, reason: str) -> None:
     logger.error(event, extra={"json_fields": {"event": event, "team_id": team_id, "path": _PATH, "reason": reason}})
 
 
-def _save_retry(team_id: str, bot: Bot) -> str:
-    """Save an exchange result that the locked write lost, without calling Slack again."""
+def _save_retry(team_id: str, bot: Bot, exchanged_token: str) -> str:
+    """Save an exchange result that the locked write lost, without calling Slack again.
+
+    Saves only while the row still holds `exchanged_token`, the long-lived token
+    that was exchanged. The failed write released the lock, so a reinstall may
+    have saved new credentials since; those are kept and the exchange result is
+    dropped.
+    """
     for _ in range(SAVE_RETRIES):
         try:
-            if save_bot_locked(bot, team_id=team_id):
+            if save_bot_locked(bot, team_id=team_id, expected_token=exchanged_token):
                 return "converted"
+        except TokenChanged:
+            event = "slack.token.exchange_superseded"
+            logger.warning(event, extra={"json_fields": {"event": event, "team_id": team_id, "path": _PATH}})
+            return "superseded"
         except TokenSaveError:
             # `save_bot_locked` has already logged it.
             pass
@@ -170,6 +211,7 @@ def _save_retry(team_id: str, bot: Bot) -> str:
 
 def _convert_team(team_id: str, apply: bool) -> str:
     bot: Optional[Bot] = None
+    exchanged_token = ""
     try:
         with locked_row(team_id) as row:
             if row is None or not row.bot_token:
@@ -183,6 +225,7 @@ def _convert_team(team_id: str, apply: bool) -> str:
                 return "blocked:settings_token"
             if not apply:
                 return "would_convert"
+            exchanged_token = row.bot_token
             try:
                 # No retry handlers: a retried request after a dropped connection
                 # could exchange the token a second time.
@@ -215,7 +258,7 @@ def _convert_team(team_id: str, apply: bool) -> str:
             log_refresh_failure(team_id, e, path=_PATH)
         # Slack has already exchanged the long-lived token and would refuse a
         # second exchange, so only the save is retried.
-        return _save_retry(team_id, bot)
+        return _save_retry(team_id, bot, exchanged_token)
 
 
 def main(argv: list[str]) -> int:
@@ -255,7 +298,10 @@ def main(argv: list[str]) -> int:
     if args.all:
         blocked = _blocked_count()
         if blocked:
-            print(f"{blocked} workspace(s) not selected: settings JSON still holds a bot_token", file=sys.stderr)
+            print(
+                f"{blocked} workspace(s) not selected: settings JSON holds a bot_token or isn't an object",
+                file=sys.stderr,
+            )
         if team_ids:
             print(f"next: --after {team_ids[-1]}", file=sys.stderr)
     return 1 if failed else 0

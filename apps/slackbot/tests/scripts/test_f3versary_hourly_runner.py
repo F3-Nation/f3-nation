@@ -7,7 +7,11 @@ from scripts import hourly_runner
 
 
 def silence_other_jobs(monkeypatch, achievement_callback=lambda: None):
-    monkeypatch.setattr(hourly_runner.refresh_slack_tokens, "refresh_expiring_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        hourly_runner.refresh_slack_tokens,
+        "refresh_expiring_tokens",
+        lambda *args, **kwargs: {"refreshed": 0, "failed": 0, "skipped": 0},
+    )
     monkeypatch.setattr(hourly_runner.calendar_images, "generate_calendar_images", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.backblast_reminders, "send_backblast_reminders", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.preblast_reminders, "send_preblast_reminders", lambda *args, **kwargs: None)
@@ -17,6 +21,9 @@ def silence_other_jobs(monkeypatch, achievement_callback=lambda: None):
     monkeypatch.setattr(hourly_runner.update_slack_users, "update_home_regions", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.fng_reminders, "send_fng_reminders", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.home_region_nudge, "send_home_region_nudges", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        hourly_runner.f3versary_announcements, "send_f3versary_announcements", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(hourly_runner.award_achievements, "run", achievement_callback)
     monkeypatch.setattr(hourly_runner.requests, "post", lambda *args, **kwargs: None)
 

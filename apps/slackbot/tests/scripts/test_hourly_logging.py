@@ -86,6 +86,8 @@ def stub_jobs(monkeypatch, failing_job=None, error=None, arguments=None, real_ac
                 arguments.append((_job, args, kwargs))
             if _job == failing_job:
                 raise error
+            if _job == "refresh_slack_tokens.refresh_expiring_tokens":
+                return {"refreshed": 0, "failed": 0, "skipped": 0}
 
         monkeypatch.setattr(getattr(hourly_runner, module), function, run)
     return attempted

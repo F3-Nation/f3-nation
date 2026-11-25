@@ -152,7 +152,7 @@ refreshes earlier than its window.
 - **AC-8** — GIVEN workspaces whose tokens expire within 3 hours WHEN the
   hourly job starts THEN each is refreshed before the job's other scripts run.
   A failure for one workspace is logged and does not stop the others or the
-  rest of the job.
+  rest of the job; once every script has run, the job exits non-zero.
 - **AC-9** — GIVEN a Slack call that fails with `token_revoked` WHEN it was
   made with a token from the getter THEN the caller re-reads the row and
   retries once with the stored token if it differs from the one that failed.
@@ -185,9 +185,14 @@ refreshes earlier than its window.
   exchange succeeds but the save still fails after retries, THEN the CLI
   prints that team as needing a reinstall, logs
   `slack.token.exchange_lost`, doesn't call the exchange again for it in that
-  run, and exits non-zero. GIVEN the exchange call fails with an error that
-  carries no Slack error code (such as a dropped connection or a gateway
-  error) THEN the CLI prints that team as `error:<exception class>` and exits
+  run, and exits non-zero. GIVEN the first save fails and a reinstall replaces
+  the row's token before the retry THEN the retry keeps the reinstall's
+  credentials, the CLI prints that team as `superseded` and logs
+  `slack.token.exchange_superseded`. GIVEN the exchange call fails with an
+  error that carries no Slack error code (such as a dropped connection, a
+  gateway error or a non-JSON body) or with a Slack server-side code
+  (`fatal_error`, `internal_error`, `request_timeout`, `service_unavailable`)
+  THEN the CLI prints that team as `error:<exception class>` and exits
   non-zero; Slack may or may not have exchanged the token, so a re-run for
   that team either converts it or reports it as needing a reinstall. `--all`
   batches resume with `--after`, so rows a batch couldn't convert don't hold
@@ -311,6 +316,9 @@ values, refresh tokens or key material, only the team ID.
   token field). Logged at ERROR by the conversion CLI when a workspace's
   long-lived token can no longer be converted, so it needs a reinstall. Alert
   on any occurrence.
+- `slack.token.exchange_superseded`: team ID, path. Logged at WARNING by the
+  conversion CLI when a reinstall replaced the token between a failed save and
+  its retry; the reinstall's credentials are kept.
 - `slack.token.lock_timeout`: team ID, path.
 - `slack.token.sweep_complete`: counts of workspaces refreshed, skipped and
   failed by the hourly sweep; WARNING when any failed, INFO otherwise.

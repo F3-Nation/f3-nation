@@ -62,6 +62,25 @@ class TokenChanged(Exception):
 _oauth_http_logger = logging.getLogger(__name__ + ".oauth_http")
 _oauth_http_logger.setLevel(logging.INFO)
 
+_UNDECODABLE_BODY_PREFIX = "Failed to decode Slack API response"
+
+
+class _DropUndecodableBody(logging.Filter):
+    """Strip the response body from the SDK's ERROR record for a non-JSON response.
+
+    `BaseClient` logs the start of an undecodable body at ERROR, which the
+    level pin above doesn't stop, and an OAuth response body can hold tokens.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str) and record.msg.startswith(_UNDECODABLE_BODY_PREFIX):
+            record.msg = _UNDECODABLE_BODY_PREFIX
+            record.args = None
+        return True
+
+
+_oauth_http_logger.addFilter(_DropUndecodableBody())
+
 
 def oauth_web_client(**kwargs) -> WebClient:
     """A `WebClient` for token-issuing OAuth calls, whose HTTP bodies are never logged."""

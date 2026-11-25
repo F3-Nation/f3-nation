@@ -165,27 +165,46 @@ def test_sweep_without_key_leaves_rows(isolated_postgres, monkeypatch):
     monkeypatch.delenv("SLACK_TOKEN_ENCRYPTION_KEY", raising=False)
     _seed(isolated_postgres, "T_NOKEY", timedelta(hours=1))
     with Session(isolated_postgres) as session:
-        before = session.scalars(select(SlackSpace.bot_token, SlackSpace.bot_refresh_token_encrypted)).one()
+        before = session.execute(select(SlackSpace.bot_token, SlackSpace.bot_refresh_token_encrypted)).one()
+    assert before.bot_refresh_token_encrypted is not None
 
     result = refresh_slack_tokens.refresh_expiring_tokens()
 
     assert result == {"refreshed": 0, "failed": 1, "skipped": 0}
     with Session(isolated_postgres) as session:
-        assert session.scalars(select(SlackSpace.bot_token, SlackSpace.bot_refresh_token_encrypted)).one() == before
+        assert session.execute(select(SlackSpace.bot_token, SlackSpace.bot_refresh_token_encrypted)).one() == before
+
+
+def _sweep_returning(calls, failed):
+    def sweep():
+        calls.append("sweep")
+        return {"refreshed": 0, "failed": failed, "skipped": 0}
+
+    return sweep
 
 
 def test_hourly_runner_runs_sweep_first(monkeypatch):
     calls = []
     silence_other_jobs(monkeypatch)
-    monkeypatch.setattr(hourly_runner.refresh_slack_tokens, "refresh_expiring_tokens", lambda: calls.append("sweep"))
+    monkeypatch.setattr(hourly_runner.refresh_slack_tokens, "refresh_expiring_tokens", _sweep_returning(calls, 0))
     monkeypatch.setattr(
         hourly_runner.calendar_images, "generate_calendar_images", lambda *a, **k: calls.append("calendar")
     )
 
-    hourly_runner.run_all_hourly_scripts(run_reporting=False)
+    assert hourly_runner.run_all_hourly_scripts(run_reporting=False) is True
 
     assert calls[0] == "sweep"
     assert "calendar" in calls
+
+
+def test_hourly_runner_reports_failed_refreshes_after_running_every_job(monkeypatch):
+    calls = []
+    silence_other_jobs(monkeypatch, achievement_callback=lambda: calls.append("achievements"))
+    monkeypatch.setattr(hourly_runner.refresh_slack_tokens, "refresh_expiring_tokens", _sweep_returning(calls, 1))
+
+    assert hourly_runner.run_all_hourly_scripts(run_reporting=False) is False
+
+    assert calls == ["sweep", "achievements"]
 
 
 def test_hourly_runner_continues_when_sweep_fails(monkeypatch):
@@ -200,6 +219,6 @@ def test_hourly_runner_continues_when_sweep_fails(monkeypatch):
         hourly_runner.calendar_images, "generate_calendar_images", lambda *a, **k: calls.append("calendar")
     )
 
-    hourly_runner.run_all_hourly_scripts(run_reporting=False)
+    assert hourly_runner.run_all_hourly_scripts(run_reporting=False) is False
 
     assert calls == ["calendar"]
