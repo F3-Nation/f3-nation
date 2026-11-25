@@ -2,7 +2,8 @@
  * Whether a GCS call failed with HTTP 403: the credentials the client runs
  * with (the service's identity, or a key) lack permission on the bucket or
  * object. Callers report this separately from other failures because the fix
- * is a GCP IAM grant, not a retry.
+ * is a GCP IAM grant, not a retry. It reads only the HTTP status, so call it
+ * only on an error thrown by a storage call: an F3 API 403 matches too.
  */
 export function isStorageAccessDenied(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;

@@ -29,9 +29,10 @@ condition to the folder the app writes. The folders are the path prefixes in
 commands are in
 [GCP app setup § Public image uploads](../../docs/GCP_APP_SETUP.md#public-image-uploads).
 
-`isStorageAccessDenied(err)` recognizes a GCS 403. Upload routes report it
-apart from other failures, because the fix is a missing IAM grant rather than
-a retry.
+`isStorageAccessDenied(err)` recognizes a GCS 403. It reads only the HTTP
+status, so call it only on an error from a storage call: an F3 API 403 matches
+too. Upload routes report it apart from other failures, because the fix is a
+missing IAM grant rather than a retry.
 
 ## Local development
 

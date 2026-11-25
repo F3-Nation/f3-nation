@@ -92,7 +92,7 @@ gcloud artifacts repositories create cloud-run-builds \
 
 ## 4. Create Runtime Service Accounts and Cloud Run Services
 
-Each service runs as its own runtime service account, `cloudrun-<service name>`, created with no roles. Every GCP resource the app uses at runtime (secrets, buckets, Cloud SQL) is granted to that account, so it holds exactly what the app needs. The alternative, the project's default Compute Engine service account, holds project Editor.
+An app set up with this guide runs as its own runtime service account, `cloudrun-<service name>`, created with no roles. Every GCP resource the app uses at runtime (secrets, buckets, Cloud SQL) is granted to that account, so it holds exactly what the app needs. The alternative, the project's default Compute Engine service account, holds project Editor.
 
 Apps reach GCP as this identity, never with a stored service-account key. A key is a long-lived secret that keeps working until someone deletes it; an identity's access ends when its grant is removed.
 
@@ -282,7 +282,7 @@ gcloud projects add-iam-policy-binding "$DB_PROJECT" \
   --role="roles/serviceusage.serviceUsageViewer"
 ```
 
-Then grant the Cloud Run runtime service accounts Cloud SQL Client:
+Then grant the Cloud Run runtime service accounts Cloud SQL Client. A service set up before runtime service accounts may still run as another account; check with `gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project=<project> --format='value(spec.template.spec.serviceAccountName)'` and set `STAGING_RUNTIME_SA` / `PROD_RUNTIME_SA` to that account first:
 
 ```bash
 gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
@@ -338,7 +338,7 @@ For Cloud Run volume mounts, the `bucket=` value must be a bucket name only, not
 
 #### Public image uploads
 
-Apps that write public images through `@acme/storage` (org logos, user avatars) use the `f3-public-images-staging` and `f3-public-images` buckets in the shared `f3data` project. Each runtime service account gets `roles/storage.objectUser` on its own environment's bucket only, limited by an IAM condition to the one folder the app writes, so a compromised app can't overwrite another app's images. The folder is the path prefix the app's uploads use in [`packages/storage/src/public-images.ts`](../packages/storage/src/public-images.ts): `org-logos` for logo uploads, `user-avatars` for avatar uploads.
+Apps that write public images through `@acme/storage` (org logos, user avatars) use the `f3-public-images-staging` and `f3-public-images` buckets in the shared `f3data` project. Each runtime service account gets `roles/storage.objectUser` on its own environment's bucket only, limited by an IAM condition to the one folder the app writes, so a compromised app can write only inside that folder, not the rest of the bucket. It can still overwrite images that any other service with access to the same folder wrote there. The folder is the path prefix the app's uploads use in [`packages/storage/src/public-images.ts`](../packages/storage/src/public-images.ts): `org-logos` for logo uploads, `user-avatars` for avatar uploads.
 
 ```bash
 IMAGE_FOLDER="user-avatars" # the folder this app writes
