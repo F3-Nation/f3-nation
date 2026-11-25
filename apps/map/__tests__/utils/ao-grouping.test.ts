@@ -114,6 +114,31 @@ describe("groupMarkersByAo", () => {
     },
   );
   it.each([
+    { filter: "daySu", day: "sunday" },
+    { filter: "dayTu", day: "tuesday" },
+    { filter: "dayF", day: "friday" },
+    { filter: "daySa", day: "saturday" },
+  ] as const)("keeps only the selected AO on $day", ({ filter, day }) => {
+    const marker = makeMarker({
+      id: 1,
+      events: [
+        makeEvent({ id: 101, aoName: "AO A", aoLogo: "a.png", dayOfWeek: day }),
+        makeEvent({ id: 102, aoName: "AO B", aoLogo: "b.png" }),
+      ],
+    });
+    const result = groupMarkersByAo(
+      filterData([marker], { ...initialFilterState, [filter]: true }),
+    );
+    expect(
+      result.map((row) => ({
+        name: row.aoName,
+        logo: row.logo,
+        ids: row.events.map((event) => event.id),
+      })),
+    ).toEqual([{ name: "AO A", logo: "a.png", ids: [101] }]);
+  });
+
+  it.each([
     { events: [], ids: [] },
     { events: [makeEvent({ id: 101 })], ids: [101] },
     { events: [makeEvent({ id: -101, aoName: "" })], ids: [-101] },
@@ -166,6 +191,36 @@ describe("groupMarkersByAo", () => {
       expect(result).toHaveLength(1);
       expect(result[0]?.logo).toBe(expected);
       expect(result[0]?.aoName).toBe(aoName);
+    },
+  );
+
+  it.each([
+    { aLogo: "a.png", bLogo: null, expected: ["a.png", null] },
+    { aLogo: "a.png", bLogo: "", expected: ["a.png", null] },
+    { aLogo: null, bLogo: null, expected: ["location.png", null] },
+    { aLogo: "", bLogo: "b.png", expected: ["location.png", "b.png"] },
+    { aLogo: "a.png", bLogo: "b.png", expected: ["a.png", "b.png"] },
+  ])(
+    "only falls back to the location logo for its own AO at a shared location: $aLogo / $bLogo",
+    ({ aLogo, bLogo, expected }) => {
+      const marker = makeMarker({
+        id: 1,
+        aoName: "AO A",
+        logo: "location.png",
+        events: [
+          makeEvent({ id: 1, aoName: "AO A", aoLogo: aLogo }),
+          makeEvent({ id: 2, aoName: "AO B", aoLogo: bLogo }),
+        ],
+      });
+
+      const result = groupMarkersByAo([marker]);
+
+      expect(
+        result.map((row) => ({ name: row.aoName, logo: row.logo })),
+      ).toEqual([
+        { name: "AO A", logo: expected[0] },
+        { name: "AO B", logo: expected[1] },
+      ]);
     },
   );
 
