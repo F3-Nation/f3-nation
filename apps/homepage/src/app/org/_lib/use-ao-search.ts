@@ -26,15 +26,22 @@ export function useAoSearch(query: string): {
   loading: boolean;
   error: boolean;
 } {
-  const [settled, setSettled] = useState<SettledSearch | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
   const trimmed = query.trim();
   const searchable = trimmed.length >= MIN_SEARCH_LENGTH;
-  // Closing the list passes an empty query. Forget the last response then, so
-  // reopening with the same text waits for a fresh one instead of showing the
-  // old AOs or an old error. Set during render, not in the effect below.
-  if (!searchable && settled !== null) setSettled(null);
+
+  const [settled, setSettled] = useState<SettledSearch | null>(null);
+  const [lastQuery, setLastQuery] = useState(trimmed);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Forget the last response whenever the query changes (closing the list
+  // counts, since it passes ""). Otherwise going back to an earlier query,
+  // e.g. boot -> boots -> boot, or reopening with the same text, would show
+  // the old AOs or an old error while the new request is still pending.
+  // Whitespace alone isn't a change. Set during render, not in the effect below.
+  if (trimmed !== lastQuery) {
+    setLastQuery(trimmed);
+    setSettled(null);
+  }
   // Only a result for the current query counts. Anything else means the new
   // query is still waiting on its debounce or request, so it reads as empty
   // and loading: Enter can't select stale AOs, and the empty-results UI

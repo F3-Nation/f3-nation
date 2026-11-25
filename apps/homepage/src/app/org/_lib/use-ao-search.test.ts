@@ -73,6 +73,45 @@ describe("useAoSearch", () => {
     expect(searchAosMock).toHaveBeenCalledTimes(2);
   });
 
+  it("waits for a fresh response when going back to an earlier query", async () => {
+    const deferred: ((v: unknown) => void)[] = [];
+    searchAosMock.mockImplementation(
+      () => new Promise((resolve) => deferred.push(resolve)),
+    );
+    const { result, rerender } = renderHook(({ q }) => useAoSearch(q), {
+      initialProps: { q: "boot" },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    await act(async () => {
+      deferred[0]?.([hit]);
+    });
+    expect(result.current.results).toHaveLength(1);
+
+    // "boots" is still in flight when the "s" is deleted again.
+    rerender({ q: "boots" });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    rerender({ q: "boot" });
+    expect(result.current.results).toEqual([]);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.results).toEqual([]);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      deferred[2]?.([hit]);
+    });
+    expect(searchAosMock).toHaveBeenCalledTimes(3);
+    expect(result.current.results).toHaveLength(1);
+    expect(result.current.loading).toBe(false);
+  });
+
   it("does not search for queries shorter than 2 characters", () => {
     const { result } = renderHook(({ q }) => useAoSearch(q), {
       initialProps: { q: "a" },

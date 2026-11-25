@@ -88,17 +88,20 @@ describe("SearchBox", () => {
   });
 
   it("reopens the list when typing after picking a result that matched the query exactly", () => {
+    const onSelect = vi.fn();
     render(
       <SearchBox
         presentLayers={["region", "area", "sector"]}
         getResults={getResults}
-        onSelect={vi.fn()}
+        onSelect={onSelect}
         onSelectAo={vi.fn()}
       />,
     );
     const input = screen.getByRole("searchbox");
     fireEvent.change(input, { target: { value: "Charlotte" } });
     fireEvent.click(screen.getByText("Charlotte"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(orgs[0]);
     expect(screen.queryByRole("listbox")).toBeNull();
 
     fireEvent.change(input, { target: { value: "Charlott" } });
