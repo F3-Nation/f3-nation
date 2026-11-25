@@ -250,7 +250,7 @@ export const POSITIONS = [
     name: "Site Q",
     description:
       "He plants the flag for the AO, makes folks feel welcome, makes sure the disclaimer is correctly spoken, cadence is called, picks up the 6, makes sure the FNGs have a battle buddy, watches for hydration issues, etc.",
-    orgType: "region" as const,
+    orgType: "ao" as const,
   },
   {
     name: "ITQ",
