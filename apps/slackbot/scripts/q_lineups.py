@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from logging import Logger
@@ -27,6 +28,7 @@ from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
     current_date_cst,
     get_user,
+    log_error_event,
     safe_convert,
     safe_get,
 )
@@ -280,11 +282,12 @@ def send_q_lineup_message(
                         DbManager.update_record(Org, org.id, {Org.meta: org.meta})
                 break  # successfully sent, break out of retry loop
             except Exception as e:
+                context = {"team_id": slack_settings.team_id, "org_id": org.id}
                 if channel_id and attempt == 0:
-                    print(f"Error sending message to channel {channel_id}, trying to join channel and resend: {e}")
+                    log_error_event(logging.getLogger(__name__), "slack.q_lineups.send_failed_retrying", e, **context)
                     slack_client.conversations_join(channel=channel_id)
                 else:
-                    print(f"Error sending Q lineup message for org {org.name} ({org.id}): {e}")
+                    log_error_event(logging.getLogger(__name__), "slack.q_lineups.send_failed", e, **context)
                     break  # ran out of tries, break out of retry loop
 
 

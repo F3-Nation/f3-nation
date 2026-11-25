@@ -32,6 +32,7 @@ If filter keys are unrecognised, they are ignored (logged at DEBUG level).
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 
@@ -55,7 +56,10 @@ from sqlalchemy.orm import Session
 from utilities import constants
 from utilities.database.orm import SlackSettings
 from utilities.database.orm.views import EventAttendance, EventInstanceExpanded
+from utilities.helper_functions import log_error_event
 from utilities.slack_tokens.client import slack_client_for_team
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Period calculations
@@ -422,7 +426,6 @@ class AwardedUserInfo:
 
     user_id: int
     slack_user_id: str
-    user_name: str
 
 
 @dataclass
@@ -595,7 +598,6 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
         user_info = AwardedUserInfo(
             user_id=user.id,
             slack_user_id=slack_user.slack_id,
-            user_name=slack_user.user_name or user.f3_name or "Unknown",
         )
 
         if candidate.achievement_id not in group.achievements:
@@ -619,9 +621,8 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
             print(f"[DRY-RUN] [{team_id}] Would post achievements with option: {send_option}")
             for ach_id, user_awards in group.achievements.items():
                 ach = achievements_by_id.get(ach_id)
-                ach_name = ach.name if ach else f"Achievement #{ach_id}"
-                users = [ui.user_name for ui, _ in user_awards]
-                print(f"  - {ach_name}: {', '.join(users)}")
+                ach_name = ach.name if ach else "Unknown"
+                print(f"  - {ach_name} (achievement {ach_id}): {len(user_awards)} member(s)")
             continue
 
         try:
@@ -635,14 +636,27 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
             continue
 
         if send_option == "post_individually":
-            _post_individually(client, achievement_channel, group, achievements_by_id, team_id)
+            sent, failed = _post_individually(client, achievement_channel, group, achievements_by_id, team_id)
         elif send_option == "post_summary":
-            _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
+            sent, failed = _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
         elif send_option == "send_in_dms_only":
-            _send_dms(client, group, achievements_by_id, team_id)
+            sent, failed = _send_dms(client, group, achievements_by_id, team_id)
         else:
             print(f"[{team_id}] Unknown send_option: {send_option}. Defaulting to summary.")
-            _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
+            sent, failed = _post_summary(client, achievement_channel, group, achievements_by_id, team_id)
+        # Counts only: the award rows record who earned what, and failures were logged with their IDs.
+        fields = {
+            "team_id": team_id,
+            "send_option": send_option,
+            "awards": sum(len(user_awards) for user_awards in group.achievements.values()),
+            "messages_sent": sent,
+            "messages_failed": failed,
+        }
+        logger.info(
+            "%s",
+            " ".join(["slack.achievements.region_complete", *(f"{key}={value}" for key, value in fields.items())]),
+            extra={"json_fields": {"event": "slack.achievements.region_complete", **fields}},
+        )
 
     return failed_team_ids
 
@@ -653,11 +667,12 @@ def _post_individually(
     group: RegionAchievementGroup,
     achievements_by_id: Dict[int, Achievement],
     team_id: str,
-) -> None:
-    """Post each achievement as an individual message."""
+) -> Tuple[int, int]:
+    """Post each achievement as an individual message; return how many messages were sent and how many failed."""
+    sent = failed = 0
     if not channel:
         print(f"[{team_id}] No achievement channel configured. Skipping individual posts.")
-        return
+        return sent, failed
 
     for ach_id, user_awards in group.achievements.items():
         achievement = achievements_by_id.get(ach_id)
@@ -671,9 +686,18 @@ def _post_individually(
 
             try:
                 client.chat_postMessage(channel=channel, text=msg, blocks=blocks)
-                print(f"[{team_id}] Posted achievement '{achievement.name}' for {user_info.user_name}")
+                sent += 1
             except Exception as e:
-                print(f"[{team_id}] Error posting achievement: {e}")
+                failed += 1
+                log_error_event(
+                    logger,
+                    "slack.achievements.post_failed",
+                    e,
+                    team_id=team_id,
+                    achievement_id=ach_id,
+                    user_id=user_info.user_id,
+                )
+    return sent, failed
 
 
 def _post_summary(
@@ -682,11 +706,11 @@ def _post_summary(
     group: RegionAchievementGroup,
     achievements_by_id: Dict[int, Achievement],
     team_id: str,
-) -> None:
-    """Post a single summary of all achievements earned."""
+) -> Tuple[int, int]:
+    """Post a single summary of all achievements earned; return how many messages were sent and how many failed."""
     if not channel:
         print(f"[{team_id}] No achievement channel configured. Skipping summary post.")
-        return
+        return 0, 0
 
     # Build sections with their corresponding achievements for image support
     section_data: List[Tuple[Achievement, str]] = []
@@ -699,7 +723,7 @@ def _post_summary(
         section_data.append((achievement, section_text))
 
     if not section_data:
-        return
+        return 0, 0
 
     today_str = datetime.now(UTC).strftime("%B %d, %Y")
     header = f"📊 *Achievement Summary for {today_str}*"
@@ -716,9 +740,10 @@ def _post_summary(
 
     try:
         client.chat_postMessage(channel=channel, text=full_msg, blocks=blocks)
-        print(f"[{team_id}] Posted achievement summary with {len(section_data)} achievement types")
     except Exception as e:
-        print(f"[{team_id}] Error posting achievement summary: {e}")
+        log_error_event(logger, "slack.achievements.summary_failed", e, team_id=team_id)
+        return 0, 1
+    return 1, 0
 
 
 def _send_dms(
@@ -726,8 +751,8 @@ def _send_dms(
     group: RegionAchievementGroup,
     achievements_by_id: Dict[int, Achievement],
     team_id: str,
-) -> None:
-    """Send DMs to each user for their achievements."""
+) -> Tuple[int, int]:
+    """Send DMs to each user for their achievements; return how many were sent and how many failed."""
     # Group by user to batch their achievements
     user_achievements: Dict[str, List[Tuple[Achievement, CandidateAward]]] = defaultdict(list)
 
@@ -736,19 +761,29 @@ def _send_dms(
         if not achievement:
             continue
 
-        for user_info, _candidate in user_awards:
-            user_achievements[user_info.slack_user_id].append((achievement, _candidate))
+        for user_info, candidate in user_awards:
+            user_achievements[user_info.slack_user_id].append((achievement, candidate))
 
+    sent = failed = 0
     for slack_user_id, achievements in user_achievements.items():
-        for achievement, _candidate in achievements:
+        for achievement, candidate in achievements:
             msg = _build_dm_message(achievement)
             blocks = _build_dm_blocks(achievement)
 
             try:
                 client.chat_postMessage(channel=slack_user_id, text=msg, blocks=blocks)
-                print(f"[{team_id}] Sent DM for achievement '{achievement.name}' to {slack_user_id}")
+                sent += 1
             except Exception as e:
-                print(f"[{team_id}] Error sending DM to {slack_user_id}: {e}")
+                failed += 1
+                log_error_event(
+                    logger,
+                    "slack.achievements.dm_failed",
+                    e,
+                    team_id=team_id,
+                    achievement_id=achievement.id,
+                    user_id=candidate.user_id,
+                )
+    return sent, failed
 
 
 def run(achievement_id=None, dry_run=False, skip_post=False, today: date | None = None):

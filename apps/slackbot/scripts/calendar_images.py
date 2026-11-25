@@ -6,6 +6,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import hashlib
 import json
+import logging
 import random
 import re
 from copy import deepcopy
@@ -45,10 +46,12 @@ from utilities.constants import (
     WEEK_ALT_TEXT,
     WEEK_LABELS,
 )
-from utilities.helper_functions import current_date_cst, safe_convert, update_local_region_records
+from utilities.helper_functions import current_date_cst, log_error_event, safe_convert, update_local_region_records
 from utilities.slack import actions
 from utilities.slack.sdk_orm import image_or_link_block
 from utilities.slack_tokens.client import slack_client_for_team
+
+logger = logging.getLogger(__name__)
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
 CALENDAR_REGION_BIND_PARAMETER = "calendar_region_id"
@@ -246,7 +249,7 @@ def _remove_week_image(
         except FileNotFoundError:
             pass
         except Exception as e:
-            print(f"Error deleting stale file {filename} from storage: {e}")
+            log_error_event(logger, "slack.calendar_images.stale_image_delete_failed", e, region_id=region_id)
     return removed
 
 
@@ -331,7 +334,9 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
                     raise CalendarSlackPostError(safe_to_discard=response["ok"] is False)
             except Exception as e:
                 all_attempts_rejected = _slack_attempt_was_rejected(e)
-                print(f"Error updating Slack message, posting new message: {e}")
+                log_error_event(
+                    logger, "slack.calendar_images.message_update_failed", e, team_id=slack_app_settings["team_id"]
+                )
                 response = client.chat_postMessage(
                     channel=slack_app_settings["q_image_posting_channel"],
                     text="Q Sheet",
@@ -350,7 +355,7 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
                 raise CalendarSlackPostError(safe_to_discard=response["ok"] is False)
             slack_app_settings["q_image_posting_ts"] = response["ts"]
     except Exception as e:
-        print(f"Error posting to Slack channel: {e}")
+        log_error_event(logger, "slack.calendar_images.post_failed", e, team_id=slack_app_settings["team_id"])
         raise CalendarSlackPostError(safe_to_discard=all_attempts_rejected and _slack_attempt_was_rejected(e)) from e
 
 
@@ -778,7 +783,12 @@ def generate_calendar_images(force: bool = False):
                                     except FileNotFoundError:
                                         pass
                                     except Exception as cleanup_error:
-                                        print(f"Error deleting unposted calendar image: {cleanup_error}")
+                                        log_error_event(
+                                            logger,
+                                            "slack.calendar_images.unposted_image_delete_failed",
+                                            cleanup_error,
+                                            region_id=region_id,
+                                        )
                                 raise
 
                         # Settings hold the bot token and SMTP password; never print them.
@@ -827,11 +837,13 @@ def generate_calendar_images(force: bool = False):
                         except FileNotFoundError:
                             pass
                         except Exception as e:
-                            print(f"Error deleting old calendar image: {e}")
+                            log_error_event(
+                                logger, "slack.calendar_images.old_image_delete_failed", e, region_id=region_id
+                            )
 
             except Exception as e:
                 session.rollback()
-                print(f"Error processing region {region_id}: {e}")
+                log_error_event(logger, "slack.calendar_images.region_failed", e, region_id=region_id)
 
     update_local_region_records()
 

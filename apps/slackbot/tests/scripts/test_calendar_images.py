@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from scripts import calendar_images
 from scripts.calendar_images import _calendar_time_sort_key, _normalize_label_value, _prepare_calendar_labels
+from tests import log_privacy
 
 
 def v1_filename(region_id=1, week="current", timestamp="20260930T100000000000Z", fingerprint="a" * 64):
@@ -1701,3 +1702,137 @@ def test_late_commit_with_old_transaction_start_is_detected(calendar_generation)
     # Same transaction-start timestamp, but new snapshot after its late commit.
     assert len(run([row("After", transaction_start)], now + timedelta(hours=1))) == 1
     assert image_metadata(settings, now + timedelta(hours=1))[0] == (now + timedelta(hours=1)).replace(tzinfo=UTC)
+
+
+@pytest.fixture
+def slack_post(monkeypatch):
+    """`post_calendar_to_slack` against a mock client, returning (client, settings, post)."""
+    client = MagicMock()
+    settings = {"team_id": "T123", "q_image_posting_channel": "C123", "q_image_posting_ts": "old-ts"}
+    monkeypatch.setattr(calendar_images, "slack_client_for_team", lambda *args, **kwargs: client)
+    monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings, session=None: [])
+    return client, settings, lambda: calendar_images.post_calendar_to_slack(settings, 1, first_sunday_run=False)
+
+
+@pytest.mark.parametrize(
+    "make_error",
+    [log_privacy.slack_error, log_privacy.database_error, lambda: RuntimeError(log_privacy.SENSITIVE_TEXT)],
+)
+def test_failed_message_update_logs_privately_then_posts_new_message(slack_post, caplog, capsys, make_error):
+    client, settings, post = slack_post
+    client.chat_update.side_effect = make_error()
+    client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
+
+    post()
+
+    log_privacy.assert_private(caplog, capsys)
+    (record,) = log_privacy.error_events(caplog, "slack.calendar_images.message_update_failed")
+    assert record.json_fields["team_id"] == "T123"
+    assert record.json_fields["error_type"] == type(client.chat_update.side_effect).__name__
+    assert settings["q_image_posting_ts"] == "new-ts"
+    assert not log_privacy.error_events(caplog, "slack.calendar_images.post_failed")
+
+
+def test_failed_new_post_logs_privately_and_raises(slack_post, caplog, capsys):
+    client, settings, post = slack_post
+    client.chat_update.side_effect = log_privacy.slack_error("message_not_found")
+    client.chat_postMessage.side_effect = log_privacy.slack_error("channel_not_found")
+
+    with pytest.raises(calendar_images.CalendarSlackPostError) as raised:
+        post()
+
+    log_privacy.assert_private(caplog, capsys)
+    (update,) = log_privacy.error_events(caplog, "slack.calendar_images.message_update_failed")
+    (failed,) = log_privacy.error_events(caplog, "slack.calendar_images.post_failed")
+    assert update.json_fields["slack_error"] == "message_not_found"
+    assert failed.json_fields == {
+        "event": "slack.calendar_images.post_failed",
+        "team_id": "T123",
+        "error_type": "SlackApiError",
+        "slack_error": "channel_not_found",
+        "error_stack": failed.json_fields["error_stack"],
+    }
+    assert raised.value.safe_to_discard is True
+    assert settings["q_image_posting_ts"] == "old-ts"
+
+
+def test_failed_region_logs_privately_and_rolls_back(calendar_generation, caplog, capsys):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    session.commit.side_effect = log_privacy.database_error()
+
+    run([row("AO", now - timedelta(days=1))], now)
+
+    log_privacy.assert_private(caplog, capsys)
+    (record,) = log_privacy.error_events(caplog, "slack.calendar_images.region_failed")
+    assert record.json_fields["region_id"] == 1
+    assert record.json_fields["error_type"] == "StatementError"
+    session.rollback.assert_called_once()
+    assert "calendar_image_current" not in settings
+
+
+def test_failed_old_image_delete_logs_privately_and_keeps_new_settings(
+    calendar_generation, monkeypatch, caplog, capsys
+):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    run([row("AO", now - timedelta(days=1))], now)
+    old_backing = settings["calendar_image_current"]
+
+    def remove(path):
+        if path.endswith(old_backing):
+            raise OSError(log_privacy.SENSITIVE_TEXT)
+
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
+    run([row("Changed AO", now - timedelta(days=1))], now + timedelta(hours=1))
+
+    log_privacy.assert_private(caplog, capsys)
+    (record,) = log_privacy.error_events(caplog, "slack.calendar_images.old_image_delete_failed")
+    assert record.json_fields["region_id"] == 1
+    assert record.json_fields["error_type"] == "OSError"
+    assert settings["calendar_image_current"] not in (None, old_backing)
+    assert not log_privacy.error_events(caplog, "slack.calendar_images.region_failed")
+
+
+def test_failed_unposted_image_cleanup_logs_privately_and_fails_region(
+    calendar_generation, monkeypatch, caplog, capsys
+):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    run([row("AO", now - timedelta(days=1))], now)
+    before = deepcopy(settings)
+    settings.update(q_image_posting_enabled=True, q_image_posting_channel="C123")
+    client = MagicMock()
+    client.chat_postMessage.return_value = {"ok": False, "error": "channel_not_found"}
+    monkeypatch.setattr(calendar_images, "slack_client_for_team", lambda *args, **kwargs: client)
+    monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings, session=None: [])
+
+    def remove(path):
+        raise OSError(log_privacy.SENSITIVE_TEXT)
+
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
+    run([row("Changed AO", now - timedelta(days=1))], now + timedelta(hours=1))
+
+    log_privacy.assert_private(caplog, capsys)
+    (cleanup,) = log_privacy.error_events(caplog, "slack.calendar_images.unposted_image_delete_failed")
+    assert cleanup.json_fields["region_id"] == 1
+    (region,) = log_privacy.error_events(caplog, "slack.calendar_images.region_failed")
+    assert region.json_fields["error_type"] == "CalendarSlackPostError"
+    assert settings["calendar_image_current"] == before["calendar_image_current"]
+
+
+def test_failed_stale_image_delete_logs_privately_and_still_clears_settings(monkeypatch, caplog, capsys):
+    monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_staging")
+
+    def remove(path):
+        raise OSError(log_privacy.SENSITIVE_TEXT)
+
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
+    settings = {f"calendar_image_{week}": v1_filename(week=week) for week in ("current", "next")}
+
+    assert calendar_images.remove_stale_week_images(settings, 1, 1)
+
+    log_privacy.assert_private(caplog, capsys)
+    (record,) = log_privacy.error_events(caplog, "slack.calendar_images.stale_image_delete_failed")
+    assert record.json_fields["region_id"] == 1
+    assert "calendar_image_next" not in settings

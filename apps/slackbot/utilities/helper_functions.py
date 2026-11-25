@@ -1229,3 +1229,41 @@ def error_stack(exc: BaseException) -> str:
         f"{os.path.basename(f.filename)}:{f.lineno}:{f.name}"
         for f in reversed(traceback.extract_tb(exc.__traceback__)[-5:])
     )
+
+
+def _bounded_slack_error(error: SlackApiError) -> str:
+    """Slack's short error code, or ``unclassified`` when it doesn't look like one."""
+    try:
+        code = error.response.get("error")
+    except Exception:
+        # A missing or unreadable response must not replace the caller's handling with a new failure.
+        code = None
+    if (
+        isinstance(code, str)
+        and re.fullmatch(r"[a-z0-9_]{1,64}", code)
+        and not code.startswith(("xox", "xapp", "secret", "token"))
+    ):
+        return code
+    return "unclassified"
+
+
+def log_error_event(logger: Logger, event: str, error: BaseException, **context: str | int | None) -> None:
+    """Log a caught error at ERROR as a fixed event with the caller's IDs.
+
+    The exception message, Slack response and SQL parameters can carry credentials or member data, so only
+    the class name, a bounded Slack error code and the frame locations from `error_stack` are kept. Callers
+    pass IDs in `context`, never names.
+    """
+    name = type(error).__name__
+    fields: dict[str, Any] = {
+        **context,
+        "error_type": name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) else "Exception",
+    }
+    if isinstance(error, SlackApiError):
+        fields["slack_error"] = _bounded_slack_error(error)
+    message = " ".join([event, *(f"{key}={value}" for key, value in fields.items())])
+    logger.error(
+        "%s",
+        message,
+        extra={"json_fields": {"event": event, **fields, "error_stack": error_stack(error)}},
+    )

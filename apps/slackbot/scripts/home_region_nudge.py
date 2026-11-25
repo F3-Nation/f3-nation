@@ -15,7 +15,7 @@ from sqlalchemy import case, func
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utilities.helper_functions import safe_get
+from utilities.helper_functions import log_error_event, safe_get
 from utilities.slack import actions, orm
 from utilities.slack_tokens.client import slack_client_for_team
 
@@ -228,10 +228,14 @@ def send_home_region_nudges(force: bool = False):
         raise RuntimeError(f"Home region nudges skipped for {len(failed_team_ids)} workspace(s)")
 
 
+def _team_id_from_body(body: dict) -> Optional[str]:
+    return safe_get(body, "user", "team_id") or safe_get(body, "team", "id")
+
+
 def _get_user_from_body(body: dict) -> tuple[Optional[User], Optional[SlackUser]]:
     """Look up User and SlackUser records from a Slack action body."""
     slack_user_id = safe_get(body, "user", "id")
-    team_id = safe_get(body, "user", "team_id") or safe_get(body, "team", "id")
+    team_id = _team_id_from_body(body)
     if not slack_user_id or not team_id:
         return None, None
     slack_user = DbManager.find_first_record(
@@ -265,7 +269,13 @@ def handle_home_region_switch(body: dict, client: WebClient, logger: Logger, con
             blocks=[orm.SectionBlock(label=msg).as_form_field()],
         )
     except Exception as e:
-        logger.error(f"Error updating DM after home region switch: {e}")
+        log_error_event(
+            logger,
+            "slack.home_region_nudge.switch_update_failed",
+            e,
+            team_id=_team_id_from_body(body),
+            user_id=user_record.id,
+        )
 
 
 def handle_home_region_dismiss(body: dict, client: WebClient, logger: Logger, context: dict, region_record):
@@ -278,7 +288,7 @@ def handle_home_region_dismiss(body: dict, client: WebClient, logger: Logger, co
             blocks=[orm.SectionBlock(label=MSG_DISMISSED).as_form_field()],
         )
     except Exception as e:
-        logger.error(f"Error updating DM after home region dismiss: {e}")
+        log_error_event(logger, "slack.home_region_nudge.dismiss_update_failed", e, team_id=_team_id_from_body(body))
 
 
 def handle_home_region_opt_out(body: dict, client: WebClient, logger: Logger, context: dict, region_record):
@@ -300,7 +310,13 @@ def handle_home_region_opt_out(body: dict, client: WebClient, logger: Logger, co
             blocks=[orm.SectionBlock(label=MSG_OPT_OUT).as_form_field()],
         )
     except Exception as e:
-        logger.error(f"Error updating DM after home region opt-out: {e}")
+        log_error_event(
+            logger,
+            "slack.home_region_nudge.opt_out_update_failed",
+            e,
+            team_id=_team_id_from_body(body),
+            user_id=user_record.id,
+        )
 
 
 if __name__ == "__main__":
