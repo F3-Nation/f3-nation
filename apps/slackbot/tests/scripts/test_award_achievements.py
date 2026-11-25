@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from slack_sdk.errors import SlackApiError
 
 from scripts import award_achievements
 
@@ -91,19 +92,19 @@ def test_cli_keeps_dry_run_enabled_when_posting(award_run, monkeypatch, tmp_path
     award_run.post.assert_called_once_with(award_run.session, [award_run.candidate], True)
 
 
-def _slack_space(team_id: str):
+def _slack_space(team_id: str, send_option: str):
     return SimpleNamespace(
         team_id=team_id,
         settings={
             "team_id": team_id,
             "send_achievements": True,
-            "achievement_send_option": "post_summary",
+            "achievement_send_option": send_option,
             "achievement_channel": f"C-{team_id}",
         },
     )
 
 
-def _post_for_two_workspaces(monkeypatch, client_for_team):
+def _post_for_two_workspaces(monkeypatch, client_for_team, send_option="post_summary"):
     """Run `post_achievements` for one award in each of workspaces T1 and T2."""
     candidates = [
         award_achievements.CandidateAward(achievement_id=7, user_id=1, award_year=2026, award_period=1, metric=5),
@@ -121,7 +122,10 @@ def _post_for_two_workspaces(monkeypatch, client_for_team):
         MagicMock(all=lambda: [achievement]),
         MagicMock(all=lambda: slack_users),
     ]
-    session.execute.return_value.all.return_value = [(10, _slack_space("T1")), (20, _slack_space("T2"))]
+    session.execute.return_value.all.return_value = [
+        (10, _slack_space("T1", send_option)),
+        (20, _slack_space("T2", send_option)),
+    ]
     monkeypatch.setattr(award_achievements, "slack_client_for_team", lambda team_id, **kwargs: client_for_team(team_id))
     return award_achievements.post_achievements(session, candidates, dry_run=False)
 
@@ -147,7 +151,7 @@ def test_main_raises_an_ordinary_exception_when_a_client_lookup_failed(monkeypat
     monkeypatch.setattr(award_achievements, "award_candidates", lambda *_args: None)
     monkeypatch.setattr(award_achievements, "post_achievements", lambda *_args: ["T1"])
 
-    with pytest.raises(RuntimeError, match="skipped for 1 workspace"):
+    with pytest.raises(RuntimeError, match="failed for 1 workspace"):
         award_achievements.main([])
 
 
@@ -175,3 +179,28 @@ def test_award_achievements_reports_failed_client_lookup_and_continues(monkeypat
     assert failed == ["T1"]
     installed_client.chat_postMessage.assert_called_once()
     assert installed_client.chat_postMessage.call_args.kwargs["channel"] == "C-T2"
+
+
+@pytest.mark.parametrize("send_option", ["post_individually", "post_summary", "send_in_dms_only"])
+def test_award_achievements_reports_failed_post_and_continues(monkeypatch, send_option):
+    failing_client = MagicMock()
+    failing_client.chat_postMessage.side_effect = SlackApiError("channel_not_found", {"ok": False})
+    installed_client = MagicMock()
+    clients = {"T1": failing_client, "T2": installed_client}
+
+    failed = _post_for_two_workspaces(monkeypatch, clients.__getitem__, send_option)
+
+    assert failed == ["T1"]
+    failing_client.chat_postMessage.assert_called_once()
+    installed_client.chat_postMessage.assert_called_once()
+
+
+@pytest.mark.parametrize("send_option", ["post_individually", "post_summary", "send_in_dms_only"])
+def test_award_achievements_reports_no_failure_when_every_post_succeeds(monkeypatch, send_option):
+    clients = {"T1": MagicMock(), "T2": MagicMock()}
+
+    failed = _post_for_two_workspaces(monkeypatch, clients.__getitem__, send_option)
+
+    assert failed == []
+    clients["T1"].chat_postMessage.assert_called_once()
+    clients["T2"].chat_postMessage.assert_called_once()
