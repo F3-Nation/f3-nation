@@ -4334,7 +4334,7 @@
     },
     "/v1/event-instance": {
       "get": {
-        "description": "Get a paginated list of event instances (individual occurrences). Needs no credential: without a signed-in user or an API key holding a role, only active, non-private instances under active orgs, series and locations are listed, and `meta` is null.",
+        "description": "Get a paginated list of event instances (individual occurrences). Needs no credential. Without one, only active, non-private instances under active orgs, series and locations are listed, and `meta` is null.",
         "operationId": "eventInstance.all",
         "parameters": [
           {
@@ -4703,7 +4703,7 @@
                                 "type": "null"
                               }
                             ],
-                            "description": "Instance metadata, such as Slack channel settings. Null for callers without a session or role."
+                            "description": "Instance metadata, such as Slack channel settings. Null for callers without a credential."
                           },
                           "name": {
                             "description": "Event instance name",

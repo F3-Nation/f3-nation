@@ -130,9 +130,9 @@ const resolveSlackChannel = ({
  */
 export const eventInstanceRouter = {
   // Public so a region's website can show its schedule without a credential,
-  // like `event.all`. Anonymous callers (including role-less API keys) see
-  // only active, non-private instances under a fully active org chain at a
-  // live location, and never `meta`, which holds Slack channel settings.
+  // like `event.all`. Anonymous callers see only active, non-private
+  // instances whose series, location and org chains are all live, and never
+  // `meta`, which holds Slack channel settings.
   all: publicReadProcedure
     .input(
       z
@@ -170,7 +170,7 @@ export const eventInstanceRouter = {
       tags: ["event-instance"],
       summary: "List all event instances",
       description:
-        "Get a paginated list of event instances (individual occurrences). Needs no credential: without a signed-in user or an API key holding a role, only active, non-private instances under active orgs, series and locations are listed, and `meta` is null.",
+        "Get a paginated list of event instances (individual occurrences). Needs no credential. Without one, only active, non-private instances under active orgs, series and locations are listed, and `meta` is null.",
     })
     .output(
       z.object({
@@ -223,7 +223,7 @@ export const eventInstanceRouter = {
               .unknown()
               .nullable()
               .describe(
-                "Instance metadata, such as Slack channel settings. Null for callers without a session or role.",
+                "Instance metadata, such as Slack channel settings. Null for callers without a credential.",
               ),
             isPrivate: z.boolean().describe("Whether the instance is private"),
             paxCount: z
@@ -363,7 +363,10 @@ export const eventInstanceRouter = {
         startTime: schema.eventInstances.startTime,
         endTime: schema.eventInstances.endTime,
         highlight: schema.eventInstances.highlight,
-        meta: schema.eventInstances.meta,
+        // Anonymous callers never get meta, so it is not read for them.
+        meta: isAnonymous
+          ? sql<unknown>`NULL`.as("meta")
+          : schema.eventInstances.meta,
         isPrivate: schema.eventInstances.isPrivate,
         paxCount: schema.eventInstances.paxCount,
         fngCount: schema.eventInstances.fngCount,
@@ -478,7 +481,6 @@ export const eventInstanceRouter = {
         const locationName = instance.locationName?.trim() ?? "";
         return {
           ...instance,
-          meta: isAnonymous ? null : instance.meta,
           location:
             locationName.length > 0 ? locationName : getFullAddress(instance),
         };
