@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as Storage from "@acme/storage";
+
 const createPublicImageStorage = vi.hoisted(() => vi.fn(() => ({})));
 
 vi.mock("server-only", () => ({}));
@@ -7,7 +9,7 @@ vi.mock("server-only", () => ({}));
 async function loadStorageWithChannel(channel: string) {
   vi.resetModules();
   vi.doMock("@acme/storage", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("@acme/storage")>()),
+    ...(await importOriginal<typeof Storage>()),
     createPublicImageStorage,
   }));
   vi.doMock("~/env", () => ({ env: { F3_CHANNEL: channel } }));
