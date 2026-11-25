@@ -17,7 +17,9 @@ PR opened/updated
        ├─ lint ·········· pnpm lint (ESLint)                 [required to merge]
        ├─ typecheck ····· pnpm typecheck (tsc)               [required to merge]
        ├─ build ········· pnpm build (Turbo)                 [required to merge]
-       ├─ test-coverage · pnpm test (Vitest vs postgres:18)  [required to merge]
+       ├─ test-coverage · passes when both test jobs pass    [required to merge]
+       │   ├─ test-suites ·········· pnpm test + API characterization (postgres:18)
+       │   └─ test-slackbot-postgres  Slackbot suites vs disposable postgres:18
        ├─ security-audit  pnpm audit --prod --level=high    [required to merge]
        ├─ db-schema-sync · Drizzle migration drift check    [required to merge]
        ├─ docker-build ·· app + job images (matrix)        [advisory]
@@ -62,7 +64,7 @@ read-only access to the GHCR cache, while a separate `main`-only job refreshes
 it with package-write permission.
 
 The five Turbo-backed required checks (`format-check`, `lint`, `typecheck`,
-`build`, and `test-coverage`) add `--affected` on pull requests, selecting
+`build`, and `test-coverage` through its `test-suites` job) add `--affected` on pull requests, selecting
 changed workspaces and their dependents. Their checkouts include the complete
 Git history needed for the comparison. Setup pins Turbo's affected calculation
 to the pull request's exact base and head SHAs, while the tasks themselves run
@@ -152,29 +154,44 @@ or unavailable affected set, but they cannot infer dependencies missing from
 the graph or detect a plausible nonempty selection that differs from the
 checked-out merge tree.
 
-| #   | Gate                   | What it runs                                                                                                                                                                                                                                                                           | What it catches                                                                                               | Merge-blocking (`main` ruleset) |
-| --- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| 1   | `format-check`         | `pnpm format` (affected workspaces and dependents on PRs; full workspace in the merge queue and on `main`)                                                                                                                                                                             | Prettier drift                                                                                                | ✅                              |
-| 2   | `lint`                 | `pnpm lint` (affected workspaces and dependents plus repository-wide safeguards on PRs; full workspace in the merge queue and on `main`)                                                                                                                                               | ESLint violations (incl. security rules)                                                                      | ✅                              |
-| 3   | `typecheck`            | `pnpm typecheck` (affected workspaces and dependents on PRs; full workspace in the merge queue and on `main`)                                                                                                                                                                          | Type errors in changed workspaces and their consumers                                                         | ✅                              |
-| 4   | `build`                | `pnpm build` (affected workspaces and dependents on PRs; full workspace in the merge queue and on `main`)                                                                                                                                                                              | Build breakage in changed workspaces and their consumers                                                      | ✅                              |
-| 5   | `test-coverage`        | `pnpm test` for affected workspaces and dependents on PRs or the full workspace in the merge queue and on `main`, plus the full API characterization suite and the disposable PostgreSQL Slackbot suites (Slack identity, token refresh and installation store), against `postgres:18` | Unit/integration regressions and API parity drift                                                             | ✅                              |
-| 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                                                                                                                                                                                 | Known high/critical vulns in prod deps                                                                        | ✅                              |
-| 7   | `db-schema-sync`       | Regenerates Drizzle migrations from the schema and diffs them against committed output                                                                                                                                                                                                 | Schema/migration drift                                                                                        | ✅                              |
-| 8   | `docker-build`         | Docker image builds (every app Dockerfile plus the Slackbot scripts and staging-refresh job images; matrix, `linux/amd64`, no image push, per-image GHCR layer cache)                                                                                                                  | Dockerfile-specific breakage, including the Slackbot scripts image's Python, system and Chromium dependencies | ❌ advisory                     |
-| 9   | `docker-cache-refresh` | Per-app Docker validation plus GHCR layer-cache export (`main` pushes only)                                                                                                                                                                                                            | Refreshes the read-only cache consumed by PR builds                                                           | ❌ advisory                     |
-| 10  | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                                                                                                                                                                                    | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                 | ❌ advisory                     |
-| —   | `pr-title.yml`         | PR title lint (`lint-title`)                                                                                                                                                                                                                                                           | Non-Conventional-Commit squash titles                                                                         | ✅ (separate workflow)          |
+| #   | Gate                   | What it runs                                                                                                                                                                                                                                                                                             | What it catches                                                                                               | Merge-blocking (`main` ruleset) |
+| --- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1   | `format-check`         | `pnpm format` (affected workspaces and dependents on PRs; full workspace in the merge queue and on `main`)                                                                                                                                                                                               | Prettier drift                                                                                                | ✅                              |
+| 2   | `lint`                 | `pnpm lint` (affected workspaces and dependents plus repository-wide safeguards on PRs; full workspace in the merge queue and on `main`)                                                                                                                                                                 | ESLint violations (incl. security rules)                                                                      | ✅                              |
+| 3   | `typecheck`            | `pnpm typecheck` (affected workspaces and dependents on PRs; full workspace in the merge queue and on `main`)                                                                                                                                                                                            | Type errors in changed workspaces and their consumers                                                         | ✅                              |
+| 4   | `build`                | `pnpm build` (affected workspaces and dependents on PRs; full workspace in the merge queue and on `main`)                                                                                                                                                                                                | Build breakage in changed workspaces and their consumers                                                      | ✅                              |
+| 5   | `test-coverage`        | `pnpm test` for affected workspaces and dependents on PRs or the full workspace in the merge queue and on `main`, plus the full API characterization suite and the disposable PostgreSQL Slackbot suites (Slack identity, token refresh and installation store), against `postgres:18`, in parallel jobs | Unit/integration regressions and API parity drift                                                             | ✅                              |
+| 6   | `security-audit`       | `pnpm audit --prod --audit-level=high`                                                                                                                                                                                                                                                                   | Known high/critical vulns in prod deps                                                                        | ✅                              |
+| 7   | `db-schema-sync`       | Regenerates Drizzle migrations from the schema and diffs them against committed output                                                                                                                                                                                                                   | Schema/migration drift                                                                                        | ✅                              |
+| 8   | `docker-build`         | Docker image builds (every app Dockerfile plus the Slackbot scripts and staging-refresh job images; matrix, `linux/amd64`, no image push, per-image GHCR layer cache)                                                                                                                                    | Dockerfile-specific breakage, including the Slackbot scripts image's Python, system and Chromium dependencies | ❌ advisory                     |
+| 9   | `docker-cache-refresh` | Per-app Docker validation plus GHCR layer-cache export (`main` pushes only)                                                                                                                                                                                                                              | Refreshes the read-only cache consumed by PR builds                                                           | ❌ advisory                     |
+| 10  | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                                                                                                                                                                                                      | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                 | ❌ advisory                     |
+| —   | `pr-title.yml`         | PR title lint (`lint-title`)                                                                                                                                                                                                                                                                             | Non-Conventional-Commit squash titles                                                                         | ✅ (separate workflow)          |
 
 Local equivalents before pushing: `pnpm format`, `pnpm lint`, `pnpm typecheck`,
 `pnpm build`, `pnpm test` (see [`AGENTS.md`](../AGENTS.md#build-test-and-development-commands)).
 
-The `test-coverage` job always runs the Slackbot PostgreSQL suites (Slack identity, token refresh and
-installation store) with
-`SLACKBOT_POSTGRES_TESTS=1`, independently of affected-workspace selection. Its
-`SLACKBOT_POSTGRES_IMAGE` override selects the same pinned GHCR mirror already
-pulled for the job service. Each fixture creates and removes its own container
-and database; it does not mutate the job service database.
+The `test-coverage` check is a small job that passes only when the jobs it
+needs all succeed, so their suites run in parallel and the check takes as long
+as the slowest one:
+
+- `test-suites` runs `pnpm test` and then both API characterization legs
+  against its `postgres:18` service.
+- `test-slackbot-postgres` always runs the Slackbot PostgreSQL suites (Slack
+  identity, token refresh and installation store) with
+  `SLACKBOT_POSTGRES_TESTS=1`, independently of affected-workspace selection.
+  Its `SLACKBOT_POSTGRES_IMAGE` override selects the same pinned GHCR mirror as
+  the `test-suites` service. The fixture starts one container per pytest
+  session and gives each test its own database, created before the test and
+  dropped after it.
+
+A new job that must gate merges joins `test-coverage`'s `needs` list instead of
+becoming another required check, so the `main` ruleset stays unchanged; the
+gate step checks every entry in `needs`. The job is also added to each deploy
+workflow's `check-regexp` and to `rebuild-staging-refresh.yml`'s required
+list. A job waiting on `needs` has no check run until it starts, and the deploy
+gates wait only on checks that already exist, so without those entries a
+deploy could pass its gate before `test-coverage` appears.
 
 ## Deploy pipeline (per app)
 
@@ -185,9 +202,10 @@ that app's thin `deploy-<app>.yml` caller into the shared
 
 1. **`ci-gate`** — fails unless the tag points at a commit on `main`, then
    waits (does not re-run) for the CI checks matched by its `check-regexp` to
-   succeed on the tagged SHA. That is every required check
-   except `lint-title`, which runs only on pull requests and so never reports
-   on a tagged commit. The gate fails if a matching check concludes anything
+   succeed on the tagged SHA. That is every required check except
+   `lint-title`, plus the jobs in `test-coverage`'s `needs` (see above).
+   `lint-title` runs only on pull requests and so never reports on a tagged
+   commit. The gate fails if a matching check concludes anything
    other than `success` (including `failure` or `skipped`), or if no check
    matches at all. A required check that is missing on its own does not fail
    it, so redeploying a tag cut before a required check was added passes on
