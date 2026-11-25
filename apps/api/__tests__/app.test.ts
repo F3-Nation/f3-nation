@@ -5,6 +5,7 @@ import type * as HealthModule from "@f3nation/health";
 import { healthResponseSchema } from "@f3nation/health";
 
 import { app } from "../src/app";
+import { checkDatabase } from "../src/lib/database-health";
 
 // Thin wiring tests: prove app.ts routes to the right module and applies the
 // legacy-parity behaviors it owns (trailing-slash 308, docs method-guard, no
@@ -127,11 +128,22 @@ describe("app", () => {
       }),
     );
     try {
+      const shared = checkDatabase();
+      let completed: unknown;
+      void shared.then((result) => {
+        completed = result;
+      });
       const first = app.request("/health");
       const second = app.request("/health");
       await vi.advanceTimersByTimeAsync(2_999);
       expect(healthLogging.logWarn).not.toHaveBeenCalled();
+      expect(completed).toBeUndefined();
       await vi.advanceTimersByTimeAsync(1);
+      expect(completed).toEqual({
+        status: "down",
+        message: "Check timed out",
+        details: { reason: "timeout", timeoutMs: 3_000 },
+      });
       expect(healthLogging.logWarn).toHaveBeenCalledExactlyOnceWith(
         "api.health.database_probe_stalled",
         {},
@@ -149,11 +161,20 @@ describe("app", () => {
           }),
         );
       }
-      const third = app.request("/health");
-      await vi.advanceTimersByTimeAsync(3_000);
-      expect(
-        healthResponseSchema.parse(await (await third).json()).status,
-      ).toBe("down");
+      for (let poll = 0; poll < 20; poll++) {
+        const response = await app.request("/health");
+        expect(
+          healthResponseSchema.parse(await response.json()).checks,
+        ).toContainEqual(
+          expect.objectContaining({
+            id: "database",
+            status: "down",
+            severity: "critical",
+            details: { reason: "timeout", timeoutMs: 3_000 },
+          }),
+        );
+        expect(checkDatabase()).toBe(shared);
+      }
       expect(database.execute).toHaveBeenCalledTimes(1);
       expect(healthLogging.logWarn).toHaveBeenCalledExactlyOnceWith(
         "api.health.database_probe_stalled",

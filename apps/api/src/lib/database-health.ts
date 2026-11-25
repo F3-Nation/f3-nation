@@ -1,23 +1,31 @@
+import type { CheckRunnerResult } from "@f3nation/health";
 import { checkDb } from "@acme/db/client";
 
 import { logWarn } from "./logging";
 
 export const DATABASE_HEALTH_TIMEOUT_MS = 3_000;
 
-let outstanding: Promise<{ status: "ok" }> | undefined;
+let outstanding: Promise<CheckRunnerResult> | undefined;
 
-/** Retain the query after a health deadline to bound abandoned pool work. */
+/** Keep physical ownership while sharing a deadline-bounded health response. */
 export function checkDatabase() {
   if (outstanding) return outstanding;
-  const stalled = setTimeout(() => {
-    logWarn("api.health.database_probe_stalled", {});
-  }, DATABASE_HEALTH_TIMEOUT_MS).unref();
-  outstanding = Promise.resolve()
-    .then(() => checkDb())
-    .then(() => ({ status: "ok" as const }))
-    .finally(() => {
-      clearTimeout(stalled);
-      outstanding = undefined;
-    });
+  outstanding = new Promise((resolve, reject) => {
+    const stalled = setTimeout(() => {
+      logWarn("api.health.database_probe_stalled", {});
+      resolve({
+        status: "down",
+        message: "Check timed out",
+        details: { reason: "timeout", timeoutMs: DATABASE_HEALTH_TIMEOUT_MS },
+      });
+    }, DATABASE_HEALTH_TIMEOUT_MS).unref();
+    void Promise.resolve()
+      .then(() => checkDb())
+      .then(() => resolve({ status: "ok" }), reject)
+      .finally(() => {
+        clearTimeout(stalled);
+        outstanding = undefined;
+      });
+  });
   return outstanding;
 }

@@ -115,7 +115,7 @@ describe("pool recovery", () => {
       closed = true;
     });
     expect(manager.close()).toBe(manager.close());
-    await Promise.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(closed).toBe(false);
     for (let count = 0; count < 3; count++) observers[1]!.timeout();
     observers[1]!.success();
