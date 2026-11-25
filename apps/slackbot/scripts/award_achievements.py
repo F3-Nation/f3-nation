@@ -840,6 +840,9 @@ def main(argv=None):
         "--today", type=str, help="Override today's date (YYYY-MM-DD, UTC) for backfilling / testing", default=None
     )
     args = parser.parse_args(argv)
+    # The hourly runner sets up logging for its jobs; a standalone run needs INFO on stderr to show
+    # each region's delivery counts. A no-op when the root logger already has a handler.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     run(
         achievement_id=args.achievement_id,
         dry_run=args.dry_run,

@@ -866,11 +866,29 @@ def test_failed_delivery_channel_logs_privately_and_sends_nothing(caplog, capsys
         def chat_postMessage(self, **kwargs):
             self.posted.append(kwargs)
 
-    delivery = kotter_reports.Delivery(destination=None, destination_users=["U1", "U2"], rows=[row(1)])
+    delivery = kotter_reports.Delivery(
+        destination=None, destination_users=["U_SYNTHETIC_A", "U_SYNTHETIC_B"], rows=[row(1)]
+    )
     kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
+
+    output = log_privacy.assert_private(caplog, capsys)
+    assert "U_SYNTHETIC_" not in output
+    (record,) = log_privacy.error_events(caplog, "slack.kotter_reports.delivery_failed")
+    assert record.json_fields["org_id"] == 42
+    assert record.json_fields["destination"] == "group_dm"
+    assert record.json_fields["recipients"] == 2
+    assert record.json_fields["error_type"] == "ValueError"
+    assert Client.posted == []
+
+
+def test_failed_channel_delivery_logs_the_channel_id(caplog, capsys):
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            raise ValueError(log_privacy.SENSITIVE_TEXT)
+
+    kotter_reports._send_delivery(Client(), kotter_reports.Delivery("C123", [row(1)]), stats_url=None, org_id=42)
 
     log_privacy.assert_private(caplog, capsys)
     (record,) = log_privacy.error_events(caplog, "slack.kotter_reports.delivery_failed")
-    assert record.json_fields["org_id"] == 42
-    assert record.json_fields["error_type"] == "ValueError"
-    assert Client.posted == []
+    assert record.json_fields["destination"] == "C123"
+    assert "recipients" not in record.json_fields

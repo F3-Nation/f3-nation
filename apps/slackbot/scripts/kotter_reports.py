@@ -724,7 +724,13 @@ def _send_delivery(client: WebClient, delivery: Delivery, stats_url: str | None,
             e.response.get("error"),
         )
     except ValueError as e:
-        log_error_event(logger, "slack.kotter_reports.delivery_failed", e, org_id=org_id, destination=destination_label)
+        # A group DM's label lists its recipients' Slack IDs; this event records only how many there are.
+        destination = (
+            {"destination": delivery.destination}
+            if delivery.destination
+            else {"destination": "group_dm", "recipients": len(delivery.destination_users or [])}
+        )
+        log_error_event(logger, "slack.kotter_reports.delivery_failed", e, org_id=org_id, **destination)
 
 
 def send_kotter_reports(

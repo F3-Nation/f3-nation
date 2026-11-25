@@ -315,3 +315,26 @@ def test_achievement_region_without_sends_still_reports_counts(
     summary = _region_summary(caplog)
     assert (summary["messages_sent"], summary["messages_failed"]) == expected
     assert client.chat_postMessage.call_count == expected[0]
+
+
+def test_cli_shows_info_events_on_stderr(monkeypatch, capsys):
+    """A standalone run has no hourly runner to set up logging, so `main` turns on INFO output itself."""
+    import logging
+
+    def run(**kwargs):
+        award_achievements.logger.info("slack.achievements.region_complete team_id=T1 messages_sent=2")
+
+    monkeypatch.setattr(award_achievements, "run", run)
+    root = logging.getLogger()
+    previous_handlers, previous_level = root.handlers[:], root.level
+    root.handlers[:] = []
+    try:
+        award_achievements.main([])
+    finally:
+        added = [handler for handler in root.handlers if handler not in previous_handlers]
+        for handler in added:
+            handler.close()
+        root.handlers[:] = previous_handlers
+        root.setLevel(previous_level)
+
+    assert "slack.achievements.region_complete team_id=T1 messages_sent=2" in capsys.readouterr().err
