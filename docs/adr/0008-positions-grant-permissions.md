@@ -85,28 +85,30 @@ them gains positions, and their callers do not change.
 
 ### Permissions
 
-`entities.manage` is split into three, so a grant can cover events and
+`entities.manage` is split so that each permission covers one kind of
+record, matching the tables they live in. A grant can then cover events and
 attendance without covering orgs or locations. Every role that included
-`entities.manage` includes all three of its replacements.
+`entities.manage` includes all four of its replacements.
 
-| Permission          | Allows                                                                  |
-| ------------------- | ----------------------------------------------------------------------- |
-| `security.manage`   | Give and remove roles and permission-granting positions; API keys.      |
-| `orgs.manage`       | Create, edit and delete orgs.                                           |
-| `locations.manage`  | Create, edit and delete locations.                                      |
-| `events.manage`     | Create, edit and delete event series and event instances.               |
-| `attendance.manage` | Add, change and remove other people's attendance, including Q and Co-Q. |
-| `messages.send`     | Send and edit Slack messages through the API.                           |
-| `pii.read`          | See people's personal information, such as email addresses.             |
+| Permission               | Allows                                                                  |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `security.manage`        | Give and remove roles and permission-granting positions; API keys.      |
+| `orgs.manage`            | Create, edit and delete orgs.                                           |
+| `locations.manage`       | Create, edit and delete locations.                                      |
+| `events.manage`          | Create, edit and delete event series.                                   |
+| `event_instances.manage` | Create, edit and delete event instances, including other people's.      |
+| `attendance.manage`      | Add, change and remove other people's attendance, including Q and Co-Q. |
+| `messages.send`          | Send and edit Slack messages through the API.                           |
+| `pii.read`               | See people's personal information, such as email addresses.             |
 
 ### Roles and positions
 
-| Grant            | Kind     | Granted on | Permissions                                 |
-| ---------------- | -------- | ---------- | ------------------------------------------- |
-| `admin`          | role     | any org    | all                                         |
-| `editor`         | role     | any org    | all except `security.manage` and `pii.read` |
-| Beatdown Manager | role     | region     | `events.manage`, `attendance.manage`        |
-| Site Q           | position | AO         | `events.manage`, `attendance.manage`        |
+| Grant            | Kind     | Granted on | Permissions                                                    |
+| ---------------- | -------- | ---------- | -------------------------------------------------------------- |
+| `admin`          | role     | any org    | all                                                            |
+| `editor`         | role     | any org    | all except `security.manage` and `messages.send`               |
+| Beatdown Manager | role     | region     | `events.manage`, `event_instances.manage`, `attendance.manage` |
+| Site Q           | position | AO         | `events.manage`, `event_instances.manage`, `attendance.manage` |
 
 Roles not listed keep the permissions ADR 0002 gives them.
 
@@ -131,9 +133,12 @@ permission on the event's org **or** one of these rules allows it.
   and remove people on its preblast and backblast, and add and remove Co-Qs.
   A Co-Q has the same access as the Q: they may remove themselves, add other
   Co-Qs, and remove the Q and take Q themselves.
-- **Creating an event instance.** Anyone may create one. After that they
-  manage it only as its Q, so the screens that create one sign the creator up
-  as Q.
+- **Creating an event instance.** By default anyone may create one in a
+  region. Each region has a setting that limits creating them to people with
+  `event_instances.manage`, and anyone with `orgs.manage` on the region (its
+  admins and editors) can change it. Whoever creates an event instance
+  manages it afterwards only as its Q, so the screens that create one sign the
+  creator up as Q.
 
 ## Alternatives considered
 
@@ -180,8 +185,8 @@ permission on the event's org **or** one of these rules allows it.
   Q of any AO can manage every AO's calendar, preblasts and backblasts in the
   region. Under this decision they manage only their own AO. A region that
   relies on the wider reach grants those people the Beatdown Manager role.
-- **Editors change.** They gain `messages.send` and `attendance.manage` and
-  lose `pii.read`.
+- **Editors gain `attendance.manage`.** They keep everything else they can
+  do today.
 - **Assigning a Site Q now needs `security.manage`**, so an editor who assigns
   Site Qs today needs an admin to do it.
 - **Access follows the position records.** A Site Q missing from the records
