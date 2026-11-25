@@ -33,7 +33,6 @@ REGION="us-central1"
 # Only genuinely sensitive values go here.
 declare -A SECRET_MAP=(
   [OAUTH_CLIENT_SECRET]="oauth-client-secret"
-  [GCS_CREDENTIALS]="gcs-credentials"
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain Cloud Run env vars)

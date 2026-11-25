@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getSessionLookup: vi.fn<() => Promise<SessionLookup>>(),
   getOrgParentId: vi.fn<(orgId: number) => Promise<number | null>>(),
   uploadOrgLogo: vi.fn(),
+  logError: vi.fn(),
 }));
 
 vi.mock("~/lib/auth/server", () => ({
@@ -16,6 +17,10 @@ vi.mock("~/lib/auth/server", () => ({
   getSessionLookup: mocks.getSessionLookup,
 }));
 vi.mock("~/lib/api/client", () => ({ getOrgParentId: mocks.getOrgParentId }));
+vi.mock("~/lib/logging", () => ({
+  logError: mocks.logError,
+  logWarn: vi.fn(),
+}));
 vi.mock("~/lib/storage", () => ({
   storage: { uploadOrgLogo: mocks.uploadOrgLogo },
 }));
@@ -133,5 +138,51 @@ describe("POST /api/upload-logo", () => {
 
     expect(response.status).toBe(503);
     expect(mocks.uploadOrgLogo).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 and logs storage_access_denied when the service can't write to the image bucket", async () => {
+    mocks.getSessionLookup.mockResolvedValue(
+      sessionWith([{ orgId: 30, roleName: "editor" }]),
+    );
+    const denied = Object.assign(
+      new Error(
+        "svc@proj.iam.gserviceaccount.com does not have storage.objects.create access",
+      ),
+      { code: 403 },
+    );
+    mocks.uploadOrgLogo.mockRejectedValue(denied);
+
+    const response = await POST(uploadRequest(30));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        "Logo storage is misconfigured: this service can't write to the image bucket.",
+    });
+    expect(mocks.logError).toHaveBeenCalledWith(
+      "admin.logo.storage_access_denied",
+      { orgId: 30 },
+      denied,
+    );
+  });
+
+  it("returns the generic 500 for a storage error other than access denied", async () => {
+    mocks.getSessionLookup.mockResolvedValue(
+      sessionWith([{ orgId: 30, roleName: "editor" }]),
+    );
+    const failure = Object.assign(new Error("backend error"), { code: 500 });
+    mocks.uploadOrgLogo.mockRejectedValue(failure);
+
+    const response = await POST(uploadRequest(30));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: "Failed to upload logo",
+    });
+    expect(mocks.logError).toHaveBeenCalledWith(
+      "admin.logo.upload_failed",
+      { orgId: 30 },
+      failure,
+    );
   });
 });

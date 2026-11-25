@@ -216,10 +216,10 @@ jobs:
           AUTH_URL: ${{ steps.meta.outputs.url_auth }}
         run: |
           # Throwaway RS256 signing key, generated fresh per deploy — never a
-          # real credential (mirrors the FAKE_GCS approach: nothing worth
-          # protecting, and nothing committed that could trip secret
-          # scanners). Flattened to one line with literal \n escapes;
-          # apps/auth/src/lib/jwt.ts converts them back before importPKCS8.
+          # real credential: nothing worth protecting, and nothing committed
+          # that could trip secret scanners. Flattened to one line with
+          # literal \n escapes; apps/auth/src/lib/jwt.ts converts them back
+          # before importPKCS8.
           # The api verifies tokens against the matching public key served at
           # ${AUTH_URL}/.well-known/jwks.json, so no key material is shared.
           AUTH_JWT_PRIVATE_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null \
@@ -257,16 +257,9 @@ jobs:
           # and living in the budget-capped sandbox project.
           MAPS_KEY: ${{ secrets.PREVIEW_GOOGLE_MAPS_API_KEY }}
         run: |
-          # GCS_CREDENTIALS must be non-empty to satisfy env validation, but
-          # previews never touch GCS. Built here from plainly fake JSON so
-          # secret scanners (and humans) can see there is nothing real —
-          # committing the equivalent base64 blob trips high-entropy
-          # detectors (GitGuardian, 2026-07-06).
-          FAKE_GCS=$(printf '{"client_email":"fake-not-a-real-credential@preview.invalid","private_key":"THIS-IS-A-FAKE-PLACEHOLDER-FOR-PREVIEW-ENVS"}' | base64 -w0)
-          export FAKE_GCS
           # The map runs a DB sidecar (like api/auth) because @acme/auth reaches
           # the database during signed-in SSR — see docs/PREVIEW_AUTH.md.
-          envsubst '${SERVICE_MAP} ${PR_NUMBER} ${RUNTIME_SA} ${MAP_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${MAPS_KEY} ${NEXT_PUBLIC_POSTHOG_KEY} ${FAKE_GCS} ${PROXY_CLIENT_IP_SECRET}' \
+          envsubst '${SERVICE_MAP} ${PR_NUMBER} ${RUNTIME_SA} ${MAP_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${MAPS_KEY} ${NEXT_PUBLIC_POSTHOG_KEY} ${PROXY_CLIENT_IP_SECRET}' \
             < .github/preview/map-service.template.yaml > /tmp/map-service.yaml
           gcloud run services replace /tmp/map-service.yaml \
             --region "${REGION}" --project "${PROJECT}" --quiet
