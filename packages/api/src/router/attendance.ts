@@ -217,6 +217,14 @@ export const attendanceRouter = {
       description:
         "Create a new planned attendance record with specified attendance types",
     })
+    .output(
+      z.object({
+        success: z.boolean().describe("Always true; a failure throws an error"),
+        attendanceId: z
+          .number()
+          .describe("ID of the created or updated planned attendance record"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       await assertSelfOrEditorOnEventOrg({
         ctx,
@@ -500,6 +508,11 @@ export const attendanceRouter = {
       description:
         "Update the attendance types for an existing attendance record",
     })
+    .output(
+      z.object({
+        success: z.boolean().describe("Always true; a failure throws an error"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [attendance] = await ctx.db
         .select({
@@ -573,6 +586,14 @@ export const attendanceRouter = {
       summary: "Take Q for event",
       description: "Sign up as Q (primary workout leader) for an event",
     })
+    .output(
+      z.object({
+        success: z.boolean().describe("Always true; a failure throws an error"),
+        attendanceId: z
+          .number()
+          .describe("ID of the user's planned attendance record"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       await assertSelfOrEditorOnEventOrg({
         ctx,
@@ -661,6 +682,11 @@ export const attendanceRouter = {
       summary: "Remove Q status",
       description: "Remove Q status from attendance (keeps HC status)",
     })
+    .output(
+      z.object({
+        success: z.boolean().describe("Always true; a failure throws an error"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       await assertSelfOrEditorOnEventOrg({
         ctx,
@@ -724,6 +750,11 @@ export const attendanceRouter = {
       description:
         "Assign a Q and optional Co-Qs to an event, demoting existing Q/Co-Qs to HC",
     })
+    .output(
+      z.object({
+        success: z.boolean().describe("Always true; a failure throws an error"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const { eventInstanceId, qUserId, coQUserIds } = input;
 

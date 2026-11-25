@@ -2837,12 +2837,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "attendanceId": {
+                      "description": "ID of the created or updated planned attendance record",
+                      "type": "number"
+                    },
+                    "success": {
+                      "description": "Always true; a failure throws an error",
+                      "type": "boolean"
                     }
-                  ]
+                  },
+                  "required": [
+                    "success",
+                    "attendanceId"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -2958,12 +2967,16 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "success": {
+                      "description": "Always true; a failure throws an error",
+                      "type": "boolean"
                     }
-                  ]
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -3296,12 +3309,16 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "success": {
+                      "description": "Always true; a failure throws an error",
+                      "type": "boolean"
                     }
-                  ]
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -3350,12 +3367,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "attendanceId": {
+                      "description": "ID of the user's planned attendance record",
+                      "type": "number"
+                    },
+                    "success": {
+                      "description": "Always true; a failure throws an error",
+                      "type": "boolean"
                     }
-                  ]
+                  },
+                  "required": [
+                    "success",
+                    "attendanceId"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -3411,12 +3437,16 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "success": {
+                      "description": "Always true; a failure throws an error",
+                      "type": "boolean"
                     }
-                  ]
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5062,12 +5092,160 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "events": {
+                      "description": "Events from the start date on, soonest first",
+                      "items": {
+                        "properties": {
+                          "eventTypes": {
+                            "description": "The instance's event types",
+                            "items": {
+                              "properties": {
+                                "id": {
+                                  "description": "Event type ID",
+                                  "type": "number"
+                                },
+                                "name": {
+                                  "description": "Event type name",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "hasPreblast": {
+                            "description": "Whether a preblast has been posted",
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "description": "Event instance ID",
+                            "type": "number"
+                          },
+                          "meta": {
+                            "description": "Free-form event instance metadata (JSON), or null"
+                          },
+                          "name": {
+                            "description": "Event instance name",
+                            "type": "string"
+                          },
+                          "orgId": {
+                            "description": "ID of the AO or region the event is at",
+                            "type": "number"
+                          },
+                          "orgName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of that AO"
+                          },
+                          "plannedQs": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "F3 names of the planned Q and Co-Qs, comma-separated, or null if there are none"
+                          },
+                          "seriesException": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "closed",
+                                  "different-time",
+                                  "miscellaneous"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "How this instance departs from its series: closed, different-time, miscellaneous"
+                          },
+                          "seriesId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "ID of the series the instance belongs to"
+                          },
+                          "seriesName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Series name"
+                          },
+                          "startDate": {
+                            "description": "Start date (YYYY-MM-DD)",
+                            "type": "string"
+                          },
+                          "startTime": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Start time (HHMM)"
+                          },
+                          "userAttending": {
+                            "description": "Whether the user has planned attendance",
+                            "type": "boolean"
+                          },
+                          "userIsQ": {
+                            "description": "Whether the user is a planned Q or Co-Q",
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "startDate",
+                          "startTime",
+                          "orgId",
+                          "orgName",
+                          "seriesId",
+                          "seriesName",
+                          "seriesException",
+                          "hasPreblast",
+                          "eventTypes",
+                          "plannedQs",
+                          "userAttending",
+                          "userIsQ"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "events"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5228,12 +5406,103 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventInstances": {
+                      "description": "Past events where the user was Q or Co-Q, latest first",
+                      "items": {
+                        "properties": {
+                          "backblastTs": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Slack timestamp of the posted backblast, or null if none"
+                          },
+                          "id": {
+                            "description": "Event instance ID",
+                            "type": "number"
+                          },
+                          "locationId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location ID"
+                          },
+                          "name": {
+                            "description": "Event instance name",
+                            "type": "string"
+                          },
+                          "orgId": {
+                            "description": "ID of the AO or region the event is at",
+                            "type": "number"
+                          },
+                          "orgName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of that AO or region"
+                          },
+                          "seriesId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "ID of the series the instance belongs to"
+                          },
+                          "startDate": {
+                            "description": "Start date (YYYY-MM-DD)",
+                            "type": "string"
+                          },
+                          "startTime": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Start time (HHMM)"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "startDate",
+                          "startTime",
+                          "orgId",
+                          "orgName",
+                          "locationId",
+                          "seriesId",
+                          "backblastTs"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventInstances"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5295,12 +5564,103 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventInstances": {
+                      "description": "Upcoming events where the user is Q or Co-Q, soonest first",
+                      "items": {
+                        "properties": {
+                          "id": {
+                            "description": "Event instance ID",
+                            "type": "number"
+                          },
+                          "locationId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location ID"
+                          },
+                          "name": {
+                            "description": "Event instance name",
+                            "type": "string"
+                          },
+                          "orgId": {
+                            "description": "ID of the AO or region the event is at",
+                            "type": "number"
+                          },
+                          "orgName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of that AO or region"
+                          },
+                          "preblastTs": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Slack timestamp of the posted preblast, or null if none"
+                          },
+                          "seriesId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "ID of the series the instance belongs to"
+                          },
+                          "startDate": {
+                            "description": "Start date (YYYY-MM-DD)",
+                            "type": "string"
+                          },
+                          "startTime": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Start time (HHMM)"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "startDate",
+                          "startTime",
+                          "orgId",
+                          "orgName",
+                          "locationId",
+                          "seriesId",
+                          "preblastTs"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventInstances"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5363,12 +5723,103 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventInstances": {
+                      "description": "Past events with no planned Q or Co-Q, latest first",
+                      "items": {
+                        "properties": {
+                          "backblastTs": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Slack timestamp of the posted backblast, or null if none"
+                          },
+                          "id": {
+                            "description": "Event instance ID",
+                            "type": "number"
+                          },
+                          "locationId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location ID"
+                          },
+                          "name": {
+                            "description": "Event instance name",
+                            "type": "string"
+                          },
+                          "orgId": {
+                            "description": "ID of the AO or region the event is at",
+                            "type": "number"
+                          },
+                          "orgName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of that AO or region"
+                          },
+                          "seriesId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "ID of the series the instance belongs to"
+                          },
+                          "startDate": {
+                            "description": "Start date (YYYY-MM-DD)",
+                            "type": "string"
+                          },
+                          "startTime": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Start time (HHMM)"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "startDate",
+                          "startTime",
+                          "orgId",
+                          "orgName",
+                          "locationId",
+                          "seriesId",
+                          "backblastTs"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventInstances"
+                  ],
+                  "type": "object"
                 }
               }
             },

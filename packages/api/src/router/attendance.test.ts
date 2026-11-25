@@ -1948,4 +1948,89 @@ describe("Attendance Router", () => {
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
+
+  // Records whose attendance_type is set with no link rows behind it. The Q
+  // checks must read the column: each test fails if its check goes back to
+  // reading attendance_x_attendance_types.
+  describe("Q checks read the attendance_type column", () => {
+    const createAttendanceWithColumnType = async (
+      eventInstanceId: number,
+      userId: number,
+      attendanceType: "pax" | "q" | "co_q",
+    ) => {
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({ eventInstanceId, userId, isPlanned: true, attendanceType })
+        .returning();
+      createdAttendanceIds.push(attendance!.id);
+      return attendance!;
+    };
+
+    it("should reject signing up as Q when another user's record is type q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const scheduledQ = await createTestUser();
+      const member = await createTestUser();
+      await createAttendanceWithColumnType(
+        eventInstance!.id,
+        scheduledQ!.id,
+        "q",
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.createPlanned({
+          eventInstanceId: eventInstance!.id,
+          userId: member!.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.Q],
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+    });
+
+    it("should not add a Q link when taking Q on a record that is already type q", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const user = await createTestUser();
+      const existing = await createAttendanceWithColumnType(
+        eventInstance!.id,
+        user!.id,
+        "q",
+      );
+
+      const client = createTestClient();
+      const result = await client.attendance.takeQ({
+        eventInstanceId: eventInstance!.id,
+        userId: user!.id,
+      });
+
+      expect(result.attendanceId).toBe(existing.id);
+      expect(await getTypeIds(existing.id)).toEqual([]);
+    });
+
+    it("should demote a record of type co_q when assigning a different Q", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const oldCoQ = await createTestUser();
+      const newQ = await createTestUser();
+      const oldCoQAttendance = await createAttendanceWithColumnType(
+        eventInstance!.id,
+        oldCoQ!.id,
+        "co_q",
+      );
+
+      const client = createTestClient();
+      await client.attendance.assignQAndCoQs({
+        eventInstanceId: eventInstance!.id,
+        qUserId: newQ!.id,
+        coQUserIds: [],
+      });
+
+      expect(await getTypeIds(oldCoQAttendance.id)).toEqual([
+        ATTENDANCE_TYPE_IDS!.PAX,
+      ]);
+    });
+  });
 });
