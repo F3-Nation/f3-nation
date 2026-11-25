@@ -4,6 +4,18 @@ vi.mock("./resize", () => ({
   prepareImageForStorage: vi.fn(() => Promise.resolve(Buffer.from("fakejpeg"))),
 }));
 
+const gcs = vi.hoisted(() => {
+  const save = vi.fn(() => Promise.resolve());
+  const file = vi.fn(() => ({ save }));
+  const bucket = vi.fn(() => ({ file }));
+  const Storage = vi.fn(function (this: { bucket: typeof bucket }) {
+    this.bucket = bucket;
+  });
+  return { Storage, bucket, file, save };
+});
+
+vi.mock("@google-cloud/storage", () => ({ Storage: gcs.Storage }));
+
 import { createPublicImageStorage } from "./public-images";
 
 const EMULATOR_HOST = "localhost:4443";
@@ -213,6 +225,38 @@ describe("uploadOrgLogo (production mode)", () => {
     });
     await expect(storage.uploadOrgLogo(1, Buffer.from("img"))).rejects.toThrow(
       "GCS_CREDENTIALS is missing required service account fields",
+    );
+  });
+
+  it("passes the key's project_id to the client and uploads to the channel bucket", async () => {
+    const key = {
+      client_email: "svc@proj.iam.gserviceaccount.com",
+      private_key:
+        "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----",
+      project_id: "f3-test-project",
+    };
+    const storage = createPublicImageStorage({
+      channel: "staging",
+      credentials: Buffer.from(JSON.stringify(key)).toString("base64"),
+    });
+
+    const url = await storage.uploadOrgLogo(7, Buffer.from("img"));
+
+    expect(gcs.Storage).toHaveBeenCalledWith({
+      credentials: key,
+      projectId: "f3-test-project",
+    });
+    expect(gcs.bucket).toHaveBeenCalledWith("f3-public-images-staging");
+    expect(gcs.file).toHaveBeenCalledWith("org-logos/7.jpg");
+    expect(gcs.save).toHaveBeenCalledWith(Buffer.from("fakejpeg"), {
+      resumable: false,
+      metadata: {
+        contentType: "image/jpeg",
+        cacheControl: "public, max-age=300",
+      },
+    });
+    expect(url).toBe(
+      "https://storage.googleapis.com/f3-public-images-staging/org-logos/7.jpg",
     );
   });
 });

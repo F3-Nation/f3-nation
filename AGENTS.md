@@ -167,13 +167,11 @@ follow
   reference), [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md#secrets--sensitive-data)
   (what counts as sensitive).
 
-## GitHub Actions Conventions
+## Docker build platform
 
-- **Pin third-party actions to a full commit SHA with a version comment** (e.g. `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
-- Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
+Rules for files under `.github/` live in [`.github/AGENTS.md`](.github/AGENTS.md).
+
 - **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
-- Share toolchain setup through the composite action [`.github/actions/setup`](.github/actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
-- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. Every required check except `lint-title` belongs in each deploy workflow's `check-regexp` — `lint-title` is deliberately excluded from the deploy gate because it never runs on `push` (`pr-title.yml` triggers only on `pull_request` and `merge_group`), so a commit that reached `main` outside the merge queue has no `lint-title` check-run, and waiting on one that will never exist would hang the gate rather than deploy.
 
 ## Scripts and operator CLIs
 
@@ -257,7 +255,7 @@ changed, not by its scope** — is documented in
 
 These rules cover everything an AI assistant writes to GitHub — issues, pull requests, comments, and review replies:
 
-- **Pre-flight:** run `bash scripts/gh-check.sh` before reading through `gh`, and `bash scripts/gh-check.sh --require-write` before writing. It confirms `gh` is signed in and can reach the repository with the access needed; set `GH_REPO=<owner>/<name>` to check a repository other than the current checkout. If it fails, show the user its message and stop.
+- **Pre-flight:** run `bash scripts/gh-check.sh` before reading through `gh`, and `bash scripts/gh-check.sh --require-write` before writing. It confirms `gh` is signed in and can reach the repository with the access needed; set `GH_REPO=<owner>/<name>` to check a repository other than the current checkout. If it fails, show the user its message and stop. A CI workflow that grants its agent access through job `permissions:` skips both checks: a failed `gh` call fails the run, and the write check tests push access, which a token limited to the writes it needs doesn't have.
 - **Signature:** end every issue body, PR body, and comment with `_written by <model_name>_`, exactly once, as its final line. Name the actual model or agent (`Claude Opus 5.5`, `Codex`), not a generic label like `AI`. A footer your tool adds on its own goes above it.
 - **Draft PRs:** open pull requests with `gh pr create --draft`; the author marks them ready for review. The hosted review apps skip drafts and start once a PR is marked ready, so work in progress doesn't use up their review runs.
 - **Never resolve review threads.** Resolving them is the PR author's responsibility, once they have read the replies; see [`docs/PR_REVIEW_PROCESS.md`](docs/PR_REVIEW_PROCESS.md#addressing-feedback). The one exception: a hosted review app posting as its own `[bot]` account may resolve the threads it opened, once a reply or a later commit settles them.

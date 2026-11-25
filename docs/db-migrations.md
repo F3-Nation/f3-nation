@@ -129,7 +129,9 @@ another terminal first and leave it running:
 | `pnpm db:migrate:prod`    | `cloud-sql-proxy f3data:us-central1:f3data --port 5481`         |
 
 The proxy uses Application Default Credentials: run
-`gcloud auth application-default login` once on your machine. If nothing
+`gcloud auth application-default login` once on your machine. Installing
+gcloud and the proxy on macOS, Linux or Windows, and the access you need, are
+in [CLOUD_SQL_PROXY.md](CLOUD_SQL_PROXY.md). If nothing
 is listening at the local address, the command says which address it tried and
 prints the proxy command; if the proxy is running but can't reach Cloud SQL, it
 points at the credentials step above. A Cloud SQL socket URL (`?host=/cloudsql/…`) also

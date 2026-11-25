@@ -1,8 +1,4 @@
 import datetime
-import os
-import subprocess
-import sys
-import time
 
 import pytest
 from f3_data_models.models import (
@@ -17,85 +13,38 @@ from f3_data_models.models import (
     Org_Type,
     User,
 )
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import URL
+from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+from tests import postgres_fixture
+from utilities.database import special_queries
 
-from utilities.database import special_queries  # noqa: E402
-
-POSTGRES_IMAGE = os.environ.get(
-    "SLACKBOT_POSTGRES_IMAGE",
-    "postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280",
-)
-pytestmark = pytest.mark.skipif(
-    os.environ.get("SLACKBOT_POSTGRES_TESTS") != "1",
-    reason="set SLACKBOT_POSTGRES_TESTS=1 to run disposable-Postgres integration tests",
-)
+pytestmark = postgres_fixture.requires_postgres
+isolated_postgres = postgres_fixture.isolated_postgres
 
 START = datetime.date(2026, 12, 1)
 HC, Q = 1, 2
 
 
 @pytest.fixture
-def engine(monkeypatch):
-    container_id = None
-    db_engine = None
-    try:
-        container_id = subprocess.check_output(
-            [
-                "docker",
-                "create",
-                "--tmpfs",
-                "/var/lib/postgresql:rw",
-                "--publish",
-                "127.0.0.1::5432",
-                "--env",
-                "POSTGRES_USER=home_test",
-                "--env",
-                "POSTGRES_PASSWORD=home_test",
-                "--env",
-                "POSTGRES_DB=home_test",
-                POSTGRES_IMAGE,
-            ],
-            text=True,
-        ).strip()
-        subprocess.run(["docker", "start", container_id], check=True, capture_output=True, text=True)
-        published_port = subprocess.check_output(["docker", "port", container_id, "5432/tcp"], text=True).strip()
-        url = URL.create(
-            "postgresql+psycopg2",
-            username="home_test",
-            password="home_test",
-            host="127.0.0.1",
-            port=int(published_port.rsplit(":", maxsplit=1)[1]),
-            database="home_test",
-        )
-        db_engine = create_engine(url, pool_pre_ping=True)
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                with db_engine.connect() as connection:
-                    connection.execute(text("SELECT 1"))
-                break
-            except Exception:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.2)
-
-        with db_engine.begin() as connection:
-            connection.execute(text("CREATE EXTENSION citext"))
+def postgres_schema():
+    def create(engine):
+        with engine.begin() as connection:
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS citext"))
             for schema in {t.schema for t in Base.metadata.tables.values() if t.schema}:
                 connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-        Base.metadata.create_all(db_engine)
-        session_factory = sessionmaker(bind=db_engine)
-        monkeypatch.setattr(special_queries, "get_session", lambda backend=None: session_factory())
-        yield db_engine
-    finally:
-        if db_engine is not None:
-            db_engine.dispose()
-        if container_id:
-            subprocess.run(["docker", "rm", "--force", container_id], check=True, capture_output=True, text=True)
+        Base.metadata.create_all(engine)
+
+    return create
+
+
+@pytest.fixture
+def engine(monkeypatch, isolated_postgres):
+    # special_queries binds get_session at import, so the shared fixture's patch
+    # of f3_data_models.utils does not reach it.
+    session_factory = sessionmaker(bind=isolated_postgres)
+    monkeypatch.setattr(special_queries, "get_session", lambda backend=None: session_factory())
+    return isolated_postgres
 
 
 @pytest.fixture

@@ -330,5 +330,7 @@ can proceed without linking its optional battle buddy when the actor is unlinked
 
 The disposable PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`.
 `SLACKBOT_POSTGRES_IMAGE` optionally overrides their pinned local PostgreSQL
-image; CI supplies the same mirrored image as its database service. Every test
-container is removed by its fixture.
+image; CI sets it to the same mirrored image the `test-suites` job uses for its
+database service. The fixture starts one container per pytest session, gives
+each test its own database, drops that database and any roles the test created
+after the test, and removes the container when the session ends.
