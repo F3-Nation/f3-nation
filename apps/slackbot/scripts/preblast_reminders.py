@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 
@@ -27,7 +28,7 @@ from sqlalchemy.orm import aliased
 
 from features.calendar.event_instance import META_DO_NOT_SEND_AUTO_PREBLASTS
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import current_date_cst, safe_get
+from utilities.helper_functions import current_date_cst, log_error_event, safe_get
 from utilities.slack import actions, orm
 from utilities.slack_tokens.client import slack_client_for_team
 
@@ -207,7 +208,13 @@ def send_preblast_reminders(force: bool = False):
             try:
                 slack_client.chat_postMessage(channel=preblast.slack_user_id, text=msg, blocks=blocks)
             except Exception as e:
-                print(f"Error sending preblast reminder to {preblast.q_name} ({preblast.slack_user_id}): {e}")
+                log_error_event(
+                    logging.getLogger(__name__),
+                    "slack.preblast_reminders.dm_failed",
+                    e,
+                    team_id=preblast.slack_settings.team_id,
+                    event_id=preblast.event.id,
+                )
                 continue
 
     if failed_team_ids:
