@@ -2,8 +2,10 @@
 
 Uploads, moves and deletes the public images the apps serve (org logos, user
 avatars) in the `f3-public-images` buckets, and resizes them to JPEG first.
-`createPublicImageStorage` picks the bucket from the channel: `prod` writes to
-`f3-public-images`, every other channel to `f3-public-images-staging`.
+`createPublicImageStorage` takes a channel of `staging` or `prod` and writes to
+`f3-public-images-staging` or `f3-public-images`. `deriveStorageChannel` turns
+an app's channel into one of those: `prod` stays `prod`, and every other channel
+becomes `staging`. Pass its result to the factory.
 
 ## Authentication
 
