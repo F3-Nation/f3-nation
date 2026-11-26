@@ -22,6 +22,7 @@ from slack_sdk.web import WebClient
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
+from application.attendance import CO_Q_TYPE_ID, Q_TYPE_ID
 from features.backblast import build_backblast_form
 from features.calendar import event_instance, get_preblast_action_buttons
 from features.calendar.event_preblast import (
@@ -621,9 +622,10 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             joinedloads=[Attendance.attendance_x_attendance_types],
         )
         if attendance_record:
-            if 2 not in attendance_record[0].attendance_x_attendance_types:
+            type_ids = {x.attendance_type_id for x in attendance_record[0].attendance_x_attendance_types}
+            if Q_TYPE_ID not in type_ids:
                 DbManager.create_record(
-                    Attendance_x_AttendanceType(attendance_id=attendance_record[0].id, attendance_type_id=2)
+                    Attendance_x_AttendanceType(attendance_id=attendance_record[0].id, attendance_type_id=Q_TYPE_ID)
                 )
         else:
             DbManager.create_record(
@@ -696,11 +698,12 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
     if update_post:
         preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
         if preblast_info.event_record.preblast_ts:
+            # build_preblast_info returns attendance records as dicts.
             q_list = [
-                r.user.id
+                r.get("user_id")
                 for r in preblast_info.attendance_records
-                if bool({t.id for t in r.attendance_types}.intersection([2, 3]))
-            ]  # noqa
+                if {Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", []))
+            ]
             blocks = [
                 *preblast_info.preblast_blocks,
                 orm.ActionsBlock(
@@ -710,7 +713,7 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             blocks = [b.as_form_field() for b in blocks]
             metadata = {
                 "event_instance_id": event_instance_id,
-                "attendees": [r.user.id for r in preblast_info.attendance_records],
+                "attendees": [r.get("user_id") for r in preblast_info.attendance_records],
                 "qs": q_list,
             }
             try:

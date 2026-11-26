@@ -72,7 +72,7 @@ def test_send_attaches_file_content(transport):
         attachments=[{"content": b"full", "meta": {"filename": "F1.jpg", "maintype": "image", "subtype": "jpeg"}}],
     )
 
-    transport.smtp.assert_called_once_with("smtp.test", 587)
+    transport.smtp.assert_called_once_with("smtp.test", 587, timeout=10)
     message = transport.client.send_message.call_args.args[0]
     [attachment] = list(message.iter_attachments())
     assert attachment.get_content() == b"full"

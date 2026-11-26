@@ -209,3 +209,66 @@ def test_loading_calendar_update_propagates_modal_error_to_dispatcher():
             region_record=region_record,
             update_view_id="V_LOADING",
         )
+
+
+def _home_event_body(action: str) -> dict:
+    return {
+        "user": {"id": "U_ACTOR"},
+        "view": {"id": "V_HOME"},
+        "actions": [{"action_id": f"{actions.CALENDAR_HOME_EVENT}_7", "selected_option": {"value": action}}],
+    }
+
+
+def _patch_home_event(monkeypatch, home, preblast_info=None):
+    monkeypatch.setattr(home, "get_user", lambda *_a, **_k: SimpleNamespace(user_id=42))
+    monkeypatch.setattr(home, "build_home_form", MagicMock())
+    monkeypatch.setattr(home, "get_preblast_channel", lambda *_a: "C_PREBLAST")
+    monkeypatch.setattr(home, "post_hc_thread_reply", MagicMock())
+    info = preblast_info or SimpleNamespace(
+        event_record=SimpleNamespace(preblast_ts=None), attendance_records=[], preblast_blocks=[]
+    )
+    monkeypatch.setattr(home, "build_preblast_info", lambda *_a, **_k: info)
+
+
+@pytest.mark.parametrize(("existing_type_ids", "inserts_q"), [([1], True), ([2], False), ([1, 2], False)])
+def test_take_q_adds_q_link_only_when_attendance_lacks_it(monkeypatch, existing_type_ids, inserts_q):
+    from features.calendar import home
+
+    _patch_home_event(monkeypatch, home)
+    attendance = SimpleNamespace(
+        id=9,
+        attendance_x_attendance_types=[SimpleNamespace(attendance_type_id=type_id) for type_id in existing_type_ids],
+    )
+    with patch.object(home, "DbManager") as database:
+        database.find_records.return_value = [attendance]
+        home.handle_home_event(_home_event_body("Take Q"), MagicMock(), MagicMock(), {}, SimpleNamespace(org_id=1))
+
+    if inserts_q:
+        [created] = [c.args[0] for c in database.create_record.call_args_list]
+        assert (created.attendance_id, created.attendance_type_id) == (9, 2)
+    else:
+        database.create_record.assert_not_called()
+
+
+def test_home_hc_updates_preblast_post_from_attendance_dicts(monkeypatch):
+    from features.calendar import home
+
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(preblast_ts="1700000000.000100"),
+        attendance_records=[
+            {"user_id": 42, "attendance_type_ids": [1]},
+            {"user_id": 43, "attendance_type_ids": [2]},
+            {"user_id": 44, "attendance_type_ids": [1, 3]},
+        ],
+        preblast_blocks=[],
+    )
+    _patch_home_event(monkeypatch, home, preblast_info)
+    client = MagicMock()
+    logger = MagicMock()
+    with patch.object(home, "DbManager"):
+        home.handle_home_event(_home_event_body("HC"), client, logger, {}, SimpleNamespace(org_id=1))
+
+    logger.error.assert_not_called()
+    client.chat_postMessage.assert_not_called()
+    payload = client.chat_update.call_args.kwargs["metadata"]["event_payload"]
+    assert payload == {"event_instance_id": 7, "attendees": [42, 43, 44], "qs": [43, 44]}
