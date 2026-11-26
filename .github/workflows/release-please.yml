@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release-please
     outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
       prs_created: ${{ steps.release.outputs.prs_created }}
       prs: ${{ steps.release.outputs.prs }}
     steps:
@@ -33,6 +34,23 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Starts release-plan.yml, which files the Staging plans for the release
+  # this push cut. claude-code-action doesn't run on push events, so the plans
+  # are filed from a workflow_dispatch run.
+  request-release-plan:
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # start release-plan.yml
+    steps:
+      - name: Start release-plan.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MERGE_SHA: ${{ github.sha }}
+        run: gh workflow run release-plan.yml --repo "$REPO" --ref main -f merge_sha="$MERGE_SHA"
 
   # `uv lock` can run build backends named in the release PR branch. The
   # release-branches ruleset (scripts/release-protections.sh) lets only the

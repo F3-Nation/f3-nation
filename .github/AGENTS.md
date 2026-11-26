@@ -1,8 +1,14 @@
 # .github (workflows, actions, scripts)
 
-Root [`AGENTS.md`](../AGENTS.md) § GitHub Actions Conventions covers SHA
-pinning, `.nvmrc`, the build platform, the setup action and `check-regexp`
-upkeep. These rules apply to new and changed workflows.
+These rules apply to new and changed files under `.github/`. The
+Docker build-platform rule lives in root [`AGENTS.md`](../AGENTS.md#docker-build-platform).
+
+## Workflow conventions
+
+- **Pin third-party actions to a full commit SHA with a version comment** (`<owner>/<action>@<full 40-character commit SHA> # v<version>`). SHAs are immutable — a semver tag can be force-pushed, a SHA cannot. Renovate (`pinDigests: true`) keeps the SHAs up to date automatically.
+- Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
+- Share toolchain setup through the composite action [`.github/actions/setup`](actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
+- The `main` branch ruleset's required status checks are a GitHub setting, and every workflow that waits on them keeps its own copy: each `check-regexp` under `.github/workflows/` (`git grep -l check-regexp .github/workflows` finds them all) and any check-name list beside one, such as the `REQUIRED` env in `rebuild-staging-refresh.yml`. Renaming or adding a required check means updating the ruleset and every copy by hand, and nothing checks that they agree. A stale copy fails differently by kind: a check-name list such as `REQUIRED` fails when a named check has no run, but a `check-regexp` waits only on the matching checks that have run, so a name missing or misspelled there drops that check from the gate without failing anything. Every required check except `lint-title` belongs in each copy. A copy may also wait on checks the ruleset doesn't require but its own job depends on; keep those when bringing it in step with the ruleset. The jobs in `test-coverage`'s `needs` belong in every copy too: a `needs`-blocked check run appears only when it starts, and a `check-regexp` waits only on checks that exist. `lint-title` is deliberately left out of every copy, so each workflow's copies name the same checks: it never runs on `push` (`pr-title.yml` triggers only on `pull_request` and `merge_group`), so a commit that reached `main` outside the merge queue has no `lint-title` check-run, and a check-name list would fail on that commit.
 
 ## Security
 

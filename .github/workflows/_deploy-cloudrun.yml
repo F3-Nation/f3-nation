@@ -172,8 +172,7 @@ jobs:
 
       # lint-title is deliberately excluded: it never runs on `push`
       # (pr-title.yml triggers only on `pull_request` and `merge_group`), so a
-      # commit that reached main outside the merge queue has no check-run for
-      # it -- waiting on it here would hang until timeout, not deploy.
+      # commit that reached main outside the merge queue has no check-run for it.
       #
       # NOTE: wait-on-check-action only fails when the filtered check list is
       # completely empty (fail-on-no-checks). Redeploying a tag older than the
@@ -185,7 +184,7 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync)$"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|test-suites|test-slackbot-postgres|security-audit|db-schema-sync)$"
           wait-interval: 15
           allowed-conclusions: success
 

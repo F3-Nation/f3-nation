@@ -1,0 +1,193 @@
+name: Release Plan
+
+# Files the Staging test plan and the Staging release plan for the latest
+# merged release PR by running the release skill (.agents/skills/release)
+# unattended. release-please.yml starts it after a push that cut releases;
+# run it from the Actions page to re-run, which never refiles a plan the
+# release already has.
+# Production plans follow a human go/no-go, so this never files one.
+on:
+  workflow_dispatch:
+    inputs:
+      merge_sha:
+        description: A commit at or after the release PR's merge commit. Blank plans the latest merged release PR; a commit before its merge fails the run.
+        required: false
+        type: string
+
+permissions: {}
+
+jobs:
+  release-plan:
+    runs-on: ubuntu-latest
+    # Holds the Claude API key and accepts runs from main alone, so a workflow
+    # on another branch can't spend it.
+    environment: release-plan
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write # file and edit the plan issues
+      pull-requests: read # read the release PR and its changelog
+      actions: read # release-facts.sh reads deploy runs
+    concurrency:
+      group: release-plan
+      cancel-in-progress: false
+    # Set before the agent starts, so the jobs after it can trust it.
+    outputs:
+      number: ${{ steps.release-pr.outputs.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # release-facts.sh diffs back to the previous release commit.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Plans only the latest merged release PR; find-release-pr.sh says which
+      # merge_sha values it accepts.
+      - name: Find the release PR
+        id: release-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MERGE_SHA: ${{ inputs.merge_sha }}
+        run: |
+          set -euo pipefail
+          number="$(bash .agents/skills/release/scripts/find-release-pr.sh ${MERGE_SHA:+--merge-sha "$MERGE_SHA"})"
+          echo "Planning release PR #${number}."
+          echo "number=${number}" >>"$GITHUB_OUTPUT"
+
+      # Runs the repo's script here, outside the agent, so the agent never
+      # needs permission to run a file it could also edit.
+      - name: Collect the release facts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.release-pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          bash .agents/skills/release/scripts/release-facts.sh --pr "$PR_NUMBER" >"$RUNNER_TEMP/release-facts.json"
+
+      # Claude Code reads skills from .claude/skills/, which is generated.
+      - name: Sync agent skills
+        run: node .claude/scripts/sync-agent-skills.mjs
+
+      # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB runs every command in Claude Code's
+      # sandbox, which needs bubblewrap and socat, and unprivileged user
+      # namespaces, which Ubuntu 24.04 restricts through AppArmor. Without
+      # them every command fails, so nothing is filed and the run fails.
+      - name: Set up the command sandbox
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends bubblewrap socat
+          if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --ro-bind / / --dev /dev --unshare-pid true
+
+      # The run reads changelog and PR text that contributors wrote, so it
+      # gets only what filing needs:
+      # - --permission-mode default denies every tool call the allowlist
+      #   doesn't cover;
+      # - the file tools write only under /tmp, and no allowed command runs a
+      #   file, but the allowed git commands can write files in the checkout
+      #   (--output), so no later step in this job runs a file from it, and
+      #   the plans are checked in their own job from a fresh checkout;
+      # - the scrub removes the API key from every command's environment, and
+      #   the /proc denies keep Read and commands out of the Claude process's
+      #   own environment;
+      # - the job token can write only issues.
+      # The check-plans job decides the run's result, so an agent that files
+      # both plans and then exits non-zero doesn't fail it.
+      - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        id: claude
+        continue-on-error: true
+        env:
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+        with:
+          anthropic_api_key: ${{ secrets.RELEASE_PLAN_ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          # release-please.yml starts this run with the job token, so its actor
+          # is github-actions[bot]; the action refuses bot actors not listed.
+          allowed_bots: github-actions[bot]
+          prompt: |
+            Use the release skill. This is an unattended run for Staging.
+            Release PR: #${{ steps.release-pr.outputs.number }}
+            GitHub access is already checked. The release facts are in ${{ runner.temp }}/release-facts.json.
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 100
+            --permission-mode default
+            --allowedTools "Read,Glob,Grep,Edit(//tmp/**),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api repos/${{ github.repository }}/collaborators/*/permission*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(mktemp:*),Bash(bash -n:*)"
+            --disallowedTools "Read(//proc/**),Bash(*/proc/*)"
+
+      - name: Print the agent's summary
+        if: always()
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          if [[ -n "$EXECUTION_FILE" && -f "$EXECUTION_FILE" ]]; then
+            echo "Agent summary:"
+            jq -r '[.[] | select(.type == "result")] | last | .result // "(none)"' "$EXECUTION_FILE"
+          fi
+
+      # The agent could have written git config or hooks into .git; removing
+      # it means actions/checkout's end-of-job cleanup runs no git command
+      # against them.
+      - name: Remove the checkout's git data
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/.git"
+
+  # Runs on its own runner from a fresh checkout of this workflow's commit, so
+  # nothing the agent wrote can change the check. The skill ends without error
+  # when it stops on purpose (a step that needs a human run, a failed command),
+  # so the run's result is the plans existing, trusted and linked, not the
+  # agent's exit status.
+  check-plans:
+    needs: release-plan
+    if: always() && needs.release-plan.outputs.number != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read # release-facts.sh reads deploy runs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          # release-facts.sh diffs back to the previous release commit.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the plans were filed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.release-plan.outputs.number }}
+        run: |
+          set -euo pipefail
+          bash .agents/skills/release/scripts/release-facts.sh --pr "$PR_NUMBER" >"$RUNNER_TEMP/release-facts.json"
+          bash .agents/skills/release/scripts/check-filed-plans.sh \
+            --pr "$PR_NUMBER" --facts "$RUNNER_TEMP/release-facts.json" --attempts 6 --delay 15
+
+  # A dispatched run notifies nobody when it fails; the release PR's
+  # subscribers see this comment. check-plans runs whenever a release PR was
+  # found, so its result alone says whether the plans are missing.
+  report-failure:
+    needs: [release-plan, check-plans]
+    if: ${{ !cancelled() && needs.check-plans.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # comment on the release PR
+    steps:
+      - name: Report the failure on the release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.release-plan.outputs.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --silent \
+            -f body="The Release Plan run didn't file the Staging plans for this release: ${RUN_URL}. Fix the cause, then run **Release Plan** again from the Actions page."
