@@ -1235,3 +1235,106 @@ def test_error_stack_keeps_only_the_five_innermost_frames():
     assert frames == ["_raise_through"] * 5
     assert "_caught" not in stack
     assert "bob@example.com" not in stack
+
+
+class _NeverEmptyDict(dict):
+    def clear(self):
+        raise AssertionError("cache must not be cleared in place")
+
+    def pop(self, key, *args):
+        result = super().pop(key, *args)
+        assert len(self) > 0, "cache became empty during in-place replacement"
+        return result
+
+
+def test_update_local_slack_users_replaces_in_place_without_emptying_cache(monkeypatch):
+    stale = SimpleNamespace(id=1, slack_team_id="T_STALE", slack_id="U_STALE", user_id=10, slack_updated=1)
+    kept_old = SimpleNamespace(id=2, slack_team_id="T_KEEP", slack_id="U_KEEP", user_id=20, slack_updated=1)
+    kept_new = SimpleNamespace(id=2, slack_team_id="T_KEEP", slack_id="U_KEEP", user_id=21, slack_updated=2)
+    added = SimpleNamespace(id=3, slack_team_id="T_NEW", slack_id="U_NEW", user_id=30, slack_updated=3)
+
+    guarded_cache = _NeverEmptyDict({("T_STALE", "U_STALE"): stale, ("T_KEEP", "U_KEEP"): kept_old})
+    monkeypatch.setattr(helper_functions, "SLACK_USERS", guarded_cache)
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: [kept_new, added])
+
+    helper_functions.update_local_slack_users()
+
+    assert helper_functions.SLACK_USERS is guarded_cache
+    assert dict(guarded_cache) == {("T_KEEP", "U_KEEP"): kept_new, ("T_NEW", "U_NEW"): added}
+
+
+def test_update_local_region_records_replaces_in_place_without_emptying_cache(monkeypatch):
+    stale_settings = helper_functions.SlackSettings(team_id="T_STALE", workspace_name="Stale")
+    guarded_cache = _NeverEmptyDict({"T_STALE": stale_settings})
+    fresh_row = SimpleNamespace(team_id="T_FRESH", settings={"team_id": "T_FRESH", "workspace_name": "Fresh"})
+
+    monkeypatch.setattr(helper_functions, "REGION_RECORDS", guarded_cache)
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: [fresh_row])
+
+    helper_functions.update_local_region_records()
+
+    assert helper_functions.REGION_RECORDS is guarded_cache
+    assert list(guarded_cache.keys()) == ["T_FRESH"]
+    assert guarded_cache["T_FRESH"].workspace_name == "Fresh"
+
+
+def test_ensure_slack_users_loaded_coalesces_concurrent_cold_starts(monkeypatch):
+    import threading
+
+    fresh_row = SimpleNamespace(id=1, slack_team_id="T_CONC", slack_id="U_CONC", user_id=42, slack_updated=1)
+    calls = 0
+    in_query = threading.Event()
+    release_query = threading.Event()
+
+    def slow_find_records(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        in_query.set()
+        release_query.wait(timeout=5)
+        return [fresh_row]
+
+    monkeypatch.setattr(helper_functions, "SLACK_USERS", {})
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", slow_find_records)
+
+    threads = [threading.Thread(target=helper_functions.ensure_slack_users_loaded) for _ in range(4)]
+    for t in threads:
+        t.start()
+    assert in_query.wait(timeout=5)
+    release_query.set()
+    for t in threads:
+        t.join(timeout=5)
+        assert not t.is_alive()
+
+    assert calls == 1
+    assert helper_functions.SLACK_USERS == {("T_CONC", "U_CONC"): fresh_row}
+
+
+def test_ensure_region_records_loaded_coalesces_concurrent_cold_starts(monkeypatch):
+    import threading
+
+    fresh_row = SimpleNamespace(team_id="T_CONC", settings={"team_id": "T_CONC", "workspace_name": "Concurrent"})
+    calls = 0
+    in_query = threading.Event()
+    release_query = threading.Event()
+
+    def slow_find_records(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        in_query.set()
+        release_query.wait(timeout=5)
+        return [fresh_row]
+
+    monkeypatch.setattr(helper_functions, "REGION_RECORDS", {})
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", slow_find_records)
+
+    threads = [threading.Thread(target=helper_functions.ensure_region_records_loaded) for _ in range(4)]
+    for t in threads:
+        t.start()
+    assert in_query.wait(timeout=5)
+    release_query.set()
+    for t in threads:
+        t.join(timeout=5)
+        assert not t.is_alive()
+
+    assert calls == 1
+    assert list(helper_functions.REGION_RECORDS.keys()) == ["T_CONC"]

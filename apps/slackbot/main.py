@@ -6,6 +6,7 @@ import re
 import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Callable, Tuple
 
@@ -88,6 +89,9 @@ check_encryption_key()
 
 _app = None
 _app_lock = threading.Lock()
+# Slack Bolt's default ThreadPoolExecutor uses 5 workers, which starves ack()
+# when several I/O-heavy handlers run concurrently on one Cloud Run instance.
+LISTENER_MAX_WORKERS = 20
 
 
 def create_slack_app() -> App:
@@ -95,6 +99,7 @@ def create_slack_app() -> App:
         slack_app = App(
             process_before_response=process_before_response,
             oauth_settings=get_oauth_settings(),
+            listener_executor=ThreadPoolExecutor(max_workers=LISTENER_MAX_WORKERS),
         )
     except Exception as exc:
         raise RuntimeError(

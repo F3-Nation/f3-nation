@@ -134,10 +134,9 @@ class PositionViews:
 
 
 def _user_id_to_slack_id_map(team_id: str) -> dict:
-    if not SLACK_USERS:
-        from utilities.helper_functions import update_local_slack_users
+    from utilities.helper_functions import ensure_slack_users_loaded
 
-        update_local_slack_users()
+    ensure_slack_users_loaded()
     return {su.user_id: su.slack_id for su in SLACK_USERS.values() if su.slack_team_id == team_id}
 
 
