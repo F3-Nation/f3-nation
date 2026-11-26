@@ -251,16 +251,20 @@ def test_take_q_adds_q_link_only_when_attendance_lacks_it(monkeypatch, existing_
 
 
 def test_home_hc_updates_preblast_post_from_attendance_dicts(monkeypatch):
-    from features.calendar import home
+    from features.calendar import get_preblast_action_blocks, home
+    from utilities import constants
 
+    summary = {"type": "section", "text": {"type": "mrkdwn", "text": "PRTEST preblast"}}
     preblast_info = SimpleNamespace(
-        event_record=SimpleNamespace(preblast_ts="1700000000.000100"),
+        event_record=SimpleNamespace(
+            preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
+        ),
         attendance_records=[
             {"user_id": 42, "attendance_type_ids": [1]},
             {"user_id": 43, "attendance_type_ids": [2]},
             {"user_id": 44, "attendance_type_ids": [1, 3]},
         ],
-        preblast_blocks=[],
+        preblast_blocks=[summary],
     )
     _patch_home_event(monkeypatch, home, preblast_info)
     client = MagicMock()
@@ -270,5 +274,8 @@ def test_home_hc_updates_preblast_post_from_attendance_dicts(monkeypatch):
 
     logger.error.assert_not_called()
     client.chat_postMessage.assert_not_called()
-    payload = client.chat_update.call_args.kwargs["metadata"]["event_payload"]
-    assert payload == {"event_instance_id": 7, "attendees": [42, 43, 44], "qs": [43, 44]}
+    sent = client.chat_update.call_args.kwargs
+    assert sent["metadata"]["event_payload"] == {"event_instance_id": 7, "attendees": [42, 43, 44], "qs": [43, 44]}
+    buttons = [b.as_form_field() for b in get_preblast_action_blocks(has_q=True, event_instance_id=7)]
+    photo = {"type": "image", "slack_file": {"id": "F_PHOTO"}, "alt_text": "Preblast Image"}
+    assert sent["blocks"] == [summary, *buttons[:-1], photo, buttons[-1]]

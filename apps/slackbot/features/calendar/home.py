@@ -24,8 +24,10 @@ from sqlalchemy.exc import IntegrityError
 
 from application.attendance import CO_Q_TYPE_ID, Q_TYPE_ID
 from features.backblast import build_backblast_form
-from features.calendar import event_instance, get_preblast_action_buttons
+from features.calendar import event_instance, get_preblast_action_blocks
 from features.calendar.event_preblast import (
+    _insert_preblast_image,
+    _send_preblast_blocks,
     build_event_preblast_form,
     build_preblast_info,
     get_preblast_channel,
@@ -704,31 +706,34 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
                 for r in preblast_info.attendance_records
                 if {Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", []))
             ]
-            blocks = [
-                *preblast_info.preblast_blocks,
-                orm.ActionsBlock(
-                    elements=get_preblast_action_buttons(has_q=len(q_list) > 0, event_instance_id=event_instance_id)
-                ),
+            # preblast_blocks are already Slack block dicts; only the buttons need converting.
+            blocks = list(preblast_info.preblast_blocks) + [
+                b.as_form_field()
+                for b in get_preblast_action_blocks(has_q=len(q_list) > 0, event_instance_id=event_instance_id)
             ]
-            blocks = [b.as_form_field() for b in blocks]
+            _insert_preblast_image(blocks, preblast_info.event_record.meta)
             metadata = {
                 "event_instance_id": event_instance_id,
                 "attendees": [r.get("user_id") for r in preblast_info.attendance_records],
                 "qs": q_list,
             }
             try:
-                client.chat_update(
+                _send_preblast_blocks(
+                    client.chat_update,
+                    blocks,
+                    logger,
                     channel=get_preblast_channel(region_record, preblast_info),
                     ts=safe_get(metadata, "preblast_ts") or str(preblast_info.event_record.preblast_ts),
-                    blocks=blocks,
                     text="Event Preblast",
                     metadata={"event_type": "preblast", "event_payload": metadata},
                 )
             except Exception as e:
                 logger.error(f"Error updating preblast post, posting a new one: {e}")
-                client.chat_postMessage(
+                _send_preblast_blocks(
+                    client.chat_postMessage,
+                    blocks,
+                    logger,
                     channel=get_preblast_channel(region_record, preblast_info),
-                    blocks=blocks,
                     text="Event Preblast",
                     metadata={"event_type": "preblast", "event_payload": metadata},
                 )
