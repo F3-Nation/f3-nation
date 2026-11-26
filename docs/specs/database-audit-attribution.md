@@ -102,11 +102,15 @@ unchanged.
   [the source normalizer](../../packages/api/src/audit-source.ts) THEN its writes
   record the lowercase value with characters outside ASCII `a-z`, `0-9` and
   hyphen removed, truncated to the first 128 remaining characters, independently
-  of actor eligibility. Custom names and generic `orpc` are retained without an
-  app-name mapping. Missing headers and values empty after normalization record
+  of actor eligibility. Custom names and generic `orpc` are recorded like any
+  other value. Missing headers and values empty after normalization record
   NULL source. The header does not authenticate a caller or authorize a write.
-  Existing history values are not rewritten; normalization can collapse distinct
-  input values to the same informational source.
+  History can contain the short source aliases `map`, `admin`, `me`,
+  `region-pages`, `slackbot` and `map-ssg` for the headers `f3-map`, `f3-admin`,
+  `f3-me`, `f3-region-pages`, `f3-nation-slack-bot` and `orpc-ssg`, respectively.
+  History queries that group by application must account for both forms; stored
+  source values are not rewritten. Normalization can collapse distinct input
+  values to the same informational source.
 - **AC-20** — GIVEN a request with `client: f3-map` or `client: f3-admin` WHEN the
   API selects its transport THEN it dispatches to RPC while keeping the Slackbot
   and Scalar identifiers on REST. Generic `orpc` remains RPC-compatible and records
@@ -161,7 +165,7 @@ query boundaries without adding a history UI or test endpoint.
 - Observed read statements, lazy once-only execution, native callback results,
   and invalid settings rejected before any statement.
 - Client-header normalization for known, custom, generic, mixed-case,
-  punctuation-only and oversized values; unchanged RPC/REST dispatch for recognized apps.
+  punctuation-only and oversized values; RPC/REST dispatch for recognized apps.
   Map/Admin proxies overwrite caller-supplied identifiers with their app's
   identifier, and Admin direct clients send `f3-admin` while retaining their
   authentication behavior.
@@ -216,8 +220,6 @@ requests with any nonempty normalized client header, including custom and generi
 identifiers. Their standalone writes use native transactions and explicit
 transactions receive the settings round trip. Requests with neither actor nor source retain the original client
 path.
-Any API-key request with a nonempty normalized client header has source context,
-even when its header does not name a built-in app.
 
 Production rollout requires verification of the API role's effective
 `statement_timeout` and codeowner acceptance of its execution-timeout policy.

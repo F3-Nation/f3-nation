@@ -3,7 +3,8 @@ export function toAuditSource(
   header: string | null | undefined,
 ): string | null {
   if (!header) return null;
-  // Match auditSettingsSql's source grammar so caller text cannot break SET LOCAL.
+  // Keep the output within auditSettingsSql's source grammar ([a-z0-9-]);
+  // unsupported characters make it reject the context and fail the request's queries.
   // Bound caller-supplied context so oversized names do not bloat history rows.
   const source = header
     .toLowerCase()
