@@ -81,6 +81,46 @@ describe("pool recovery", () => {
     expect(manager.isLive()).toBe(false);
     observers[2]!.success();
     expect(manager.isLive()).toBe(true);
+    await vi.advanceTimersByTimeAsync(120_000);
+    fail(2);
+    expect(manager.isLive()).toBe(true);
+    await manager.close();
+  });
+
+  it("reports each failed-recovery transition once until timely progress", async () => {
+    vi.useFakeTimers();
+    const observers: { timeout: () => void; success: () => void }[] = [];
+    const manager = createRecoveringPool((observer) => {
+      observers.push(observer);
+      return { db: {}, close: () => Promise.resolve() };
+    });
+    for (let count = 0; count < 3; count++) observers[0]!.timeout();
+    observers[1]!.timeout();
+    await vi.advanceTimersByTimeAsync(59_999);
+    observers[1]!.timeout();
+    expect(manager.isLive()).toBe(true);
+    expect(logging.logError).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    observers[1]!.timeout();
+    expect(manager.isLive()).toBe(false);
+    expect(logging.logError).toHaveBeenCalledExactlyOnceWith(
+      "db.pool.recovery_failed",
+      { generation: 1 },
+    );
+    observers[2]!.timeout();
+    expect(manager.isLive()).toBe(false);
+    expect(logging.logError).toHaveBeenCalledTimes(1);
+    observers[2]!.success();
+    expect(manager.isLive()).toBe(true);
+    observers[2]!.timeout();
+    await vi.advanceTimersByTimeAsync(60_000);
+    observers[2]!.timeout();
+    expect(manager.isLive()).toBe(false);
+    expect(logging.logError).toHaveBeenCalledTimes(2);
+    expect(logging.logError).toHaveBeenLastCalledWith(
+      "db.pool.recovery_failed",
+      { generation: 2 },
+    );
     await manager.close();
   });
 

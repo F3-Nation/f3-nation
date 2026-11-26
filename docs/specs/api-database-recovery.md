@@ -41,7 +41,7 @@ An API instance whose database connections stop answering must recover its conne
 
 ## 6. Out of scope / non-goals
 
-- Proving the original Cloud SQL connector failure trigger.
+- Identifying what silences established Cloud SQL connector connections; recovery handles the symptom whatever the cause.
 - Retrying failed queries or transactions, changing authorization, or changing database schema.
 - Altering the existing query deadline or adding deadlines to transactions.
 - Automatically enabling recovery for non-API applications or operator CLIs.
@@ -59,6 +59,7 @@ An API instance whose database connections stop answering must recover its conne
 
 - `db.query.deadline_exceeded`: bounded top-level query reached its deadline; no SQL or parameter values.
 - `db.pool.recycled`: pool generation replaced after repeated timeouts.
+- `db.pool.recovery_failed`: one event when the progress watchdog transitions to unhealthy, identifying the pool generation without driver details; timely progress permits a later failure transition to emit a new event.
 - `db.pool.retirement_failed`: forced retirement failed; no raw driver error is logged.
 - `api.health.database_probe_stalled`: one pending physical health query outlived its response deadline; no query or driver details.
 - API health reports database status through the shared contract; `/live` provides the platform's HTTP failure signal.

@@ -46,7 +46,10 @@ export function createRecoveringPool<T extends object>(
         if (stopped || id !== generation) return;
         if (id > 0) {
           failedRecoveryAt ??= performance.now();
-          if (performance.now() - failedRecoveryAt >= 60_000) live = false;
+          if (live && performance.now() - failedRecoveryAt >= 60_000) {
+            live = false;
+            logError("db.pool.recovery_failed", { generation: id });
+          }
         }
         if (++consecutiveTimeouts < 3) return;
         const old = current;
