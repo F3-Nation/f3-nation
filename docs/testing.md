@@ -145,7 +145,8 @@ Run it from the repo root. `turbo.json` declares the task with
 `dependsOn: [… "reset-test-db" …]`; `pnpm -C apps/api test:characterization`
 skips that and reuses whatever the last suite left in the database.
 
-CI runs it in the `test-coverage` job, sequentially after `pnpm test` — both
+CI runs it in the `test-suites` job (part of the `test-coverage` check),
+sequentially after `pnpm test` — both
 suites mutate the shared `f3_test` database and must never run concurrently.
 
 ### The transport seam

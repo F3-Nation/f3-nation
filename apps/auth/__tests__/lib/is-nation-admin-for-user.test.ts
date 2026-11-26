@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { isNationAdminForUser } from "../../src/lib/better-auth";
 
 // A real live-Postgres test isn't viable here: apps/auth has no DB-reset/
-// migration wiring of its own, and CI's test-coverage job runs `turbo test`
+// migration wiring of its own, and CI's test-suites job runs `turbo test`
 // across every workspace concurrently — packages/api's vitest globalSetup is
 // what resets/migrates the shared f3_test DB, with no ordering guarantee
 // relative to apps/auth's own test run. A query against real orgs/roles

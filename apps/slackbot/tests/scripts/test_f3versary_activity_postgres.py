@@ -89,7 +89,10 @@ def _config(days=90):
 )
 def test_activity_window_uses_processing_date_and_counts_other_regions(isolated_postgres, recent_date, expected):
     _seed(isolated_postgres, recent_date)
-    result = f3versary_announcements.get_f3versary_candidates(_config(), date(2026, 9, 15), date(2026, 9, 1))
+    config = f3versary_announcements.F3versaryConfig(
+        enabled=True, org_id=1, team_id="T1", channel="C1", lead_days=10, last_processed_date=None, activity_days=90
+    )
+    result = f3versary_announcements.get_f3versary_candidates(config, date(2026, 9, 15), date(2026, 9, 1))
     assert [pax.user_id for pax in result] == expected
     if result:
         assert result[0].effective_start_date == date(2020, 9, 15)
