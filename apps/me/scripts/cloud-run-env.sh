@@ -201,10 +201,16 @@ fi
 echo ""
 echo "Granting secret access to Cloud Run service account..."
 
-SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
+# A failed lookup must stop here: falling back to the default Compute Engine
+# account would grant it (project Editor) every secret below. Only a lookup
+# that succeeds and names no account means the service runs as that default.
+if ! SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
-  --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null)" || SA_EMAIL=""
+  --format='value(spec.template.spec.serviceAccountName)')"; then
+  echo "Error: Couldn't read the runtime service account of $SERVICE_NAME in $PROJECT. Deploy the service first (docs/GCP_APP_SETUP.md § 4) or check gcloud auth."
+  exit 1
+fi
 
 if [[ -z "$SA_EMAIL" ]]; then
   PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"

@@ -101,7 +101,8 @@ A workflow that pins a runtime service account (`--service-account` in its
 deploy fails, and the previous revision keeps serving, when the account doesn't
 exist in that environment's project or can't read a secret the service
 references. Create the account and its grants before the first release that
-pins it: [GCP app setup § 4](GCP_APP_SETUP.md#4-create-runtime-service-accounts-and-cloud-run-services).
+pins it: for a new app, [GCP app setup § 4](GCP_APP_SETUP.md#4-create-runtime-service-accounts-and-cloud-run-services);
+for a service that already runs, [move an existing service to its own runtime account](GCP_APP_SETUP.md#move-an-existing-service-to-its-own-runtime-account).
 
 For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 

@@ -128,6 +128,40 @@ gcloud run deploy "$CLOUDRUN_SERVICE" \
 
 A deploy that omits `--service-account` keeps the service's current account, so a service recreated by hand would come back as the default one. The app's deploy workflow pins the account per environment in `staging_flags` and `prod_flags` (`--service-account=<runtime SA email>`), which keeps the identity in code review and fails the deploy if the account is missing. The deploy service account may deploy as it through the project-level `roles/iam.serviceAccountUser` granted below.
 
+### Move an existing service to its own runtime account
+
+A service that already runs, usually as the default Compute Engine account, keeps its image: don't deploy the placeholder over it. Give the new account everything the service reads before switching, because a revision that can't read a referenced secret fails to start. Run this per environment; the example is staging.
+
+```bash
+PROJECT="$GCP_STAGING_PROJECT"
+RUNTIME_SA="$STAGING_RUNTIME_SA"
+
+gcloud iam service-accounts create "cloudrun-${CLOUDRUN_SERVICE}" \
+  --display-name="Cloud Run runtime: ${CLOUDRUN_SERVICE}" \
+  --project="$PROJECT"
+# A new account can take a few seconds to be visible to IAM.
+until gcloud iam service-accounts describe "$RUNTIME_SA" --project="$PROJECT" >/dev/null 2>&1; do sleep 5; done
+
+# Every secret the service references now, read from the live service.
+for secret in $(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$PROJECT" --format=json \
+    | jq -r '[.spec.template.spec.containers[].env[]? | .valueFrom.secretKeyRef.name // empty] | unique[]'); do
+  gcloud secrets add-iam-policy-binding "$secret" \
+    --project="$PROJECT" \
+    --member="serviceAccount:${RUNTIME_SA}" \
+    --role=roles/secretmanager.secretAccessor
+done
+```
+
+Then grant the account the rest of what the app uses from § 6 (Cloud SQL, buckets) and switch the running service to it. The update creates a new revision of the image already running; if it fails to start, the previous revision keeps serving.
+
+```bash
+gcloud run services update "$CLOUDRUN_SERVICE" \
+  --service-account="$RUNTIME_SA" \
+  --region="$GCP_REGION" --project="$PROJECT"
+```
+
+Switch each environment before the first deploy that pins the account there (`--service-account` in the workflow's `staging_flags` / `prod_flags`); a pinned deploy fails if the account is missing.
+
 ---
 
 ## 5. Set Up Workload Identity Federation (WIF)
