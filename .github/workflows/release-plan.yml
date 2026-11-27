@@ -102,10 +102,15 @@ jobs:
       #   the /proc denies keep Read and commands out of the Claude process's
       #   own environment;
       # - the action writes the GitHub OIDC token and the exchanged Claude
-      #   token under runner.temp/claude-workload-identity, which the
-      #   matching denies keep Read and commands out of (Read denies also bind
-      #   sandboxed commands); if an action bump moves that folder, update
-      #   the denies;
+      #   token under runner.temp/claude-workload-identity. The sandbox's
+      #   denyRead hides that folder from every command, which is what stops
+      #   an allowed command that reads files (gh issue create --body-file)
+      #   from reading a token: the Read and Bash denies match the folder's
+      #   name as text, so a wildcard or quoting gets past them, and a
+      #   permission-rule Read deny doesn't bind sandboxed commands. Commands
+      #   can't retry outside the sandbox, and its network allows only
+      #   GitHub. If an action bump moves the folder, update denyRead and the
+      #   denies;
       # - the job token can write only issues.
       # The check-plans job decides the run's result, so an agent that files
       # both plans and then exits non-zero doesn't fail it.
@@ -137,6 +142,7 @@ jobs:
             --permission-mode default
             --allowedTools "Read,Glob,Grep,Edit(//tmp/**),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api repos/${{ github.repository }}/collaborators/*/permission*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(mktemp:*),Bash(bash -n:*)"
             --disallowedTools "Read(//proc/**),Bash(*/proc/*),Read(/${{ runner.temp }}/claude-workload-identity/**),Bash(*claude-workload-identity*)"
+            --settings '{"sandbox":{"enabled":true,"allowUnsandboxedCommands":false,"filesystem":{"denyRead":["${{ runner.temp }}/claude-workload-identity"]},"network":{"allowedDomains":["github.com","api.github.com"]}}}'
 
       # The Claude step can't fail the job, and a re-run whose plans already
       # exist passes check-plans without the agent, so a failed sign-in to
