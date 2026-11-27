@@ -64,7 +64,7 @@ event_tags AS (
     GROUP BY x.event_instance_id
 ),
 valid_attendance AS (
-    SELECT a.id, a.event_instance_id, a.user_id, a.is_planned, u.f3_name, u.avatar_url
+    SELECT a.id, a.event_instance_id, a.user_id, a.is_planned, a.attendance_type, u.f3_name, u.avatar_url
     FROM pg.public.attendance a
     JOIN pg.public.users u ON u.id = a.user_id
     WHERE u.email IS NOT NULL
@@ -75,12 +75,10 @@ attendance_users_grouped AS (
            max(a.avatar_url) AS avatar_url,
            bool_or(a.is_planned = false) AS attended,
            bool_or(a.is_planned = true) AS planned,
-           bool_or(a.is_planned = false AND aty.type = 'Q')::INTEGER AS q_ind,
-           bool_or(a.is_planned = false AND aty.type IN ('Co-Q', 'CoQ'))::INTEGER AS coq_ind
+           bool_or(a.is_planned = false AND a.attendance_type = 'q')::INTEGER AS q_ind,
+           bool_or(a.is_planned = false AND a.attendance_type = 'co_q')::INTEGER AS coq_ind
     FROM valid_attendance a
     JOIN events e ON e.id = a.event_instance_id
-    LEFT JOIN pg.public.attendance_x_attendance_types ax ON ax.attendance_id = a.id
-    LEFT JOIN pg.public.attendance_types aty ON aty.id = ax.attendance_type_id
     GROUP BY a.event_instance_id, a.user_id
 ),
 attendance_users AS (
