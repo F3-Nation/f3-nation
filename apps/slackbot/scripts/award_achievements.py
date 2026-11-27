@@ -512,8 +512,9 @@ def post_achievements(session: Session, candidates: Sequence[CandidateAward], dr
     """Post achievement notifications based on each region's settings.
 
     Returns the team ids whose Slack client lookup or any Slack post failed.
-    A workspace with no installation or no achievement channel is skipped
-    without counting.
+    A workspace with no installation, or with no achievement channel when it
+    posts to a channel, is skipped without counting. A send_in_dms_only
+    workspace needs no channel.
 
     Groups candidates by their home region's Slack space and posts according
     to the region's achievement_send_option setting:
