@@ -27,7 +27,13 @@ import {
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { logWarn } from "../logger";
-import { editorProcedure, protectedProcedure } from "../shared";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
+import {
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 const booleanStringSchema = z
@@ -117,13 +123,24 @@ const resolveSlackChannel = ({
   return { channelId: null, source: "none" };
 };
 
+// The list is public, so its filters reject what Postgres would otherwise
+// turn into a 500: ids outside the int4 range and unbounded id lists.
+const dbIdSchema = z.coerce.number().int().min(1).max(2_147_483_647);
+// Above any region or AO selection the admin filters can make, while keeping
+// an anonymous request's IN list small.
+const MAX_FILTER_IDS = 1000;
+
 /**
  * Event Instance Router
  * Event instances are individual event occurrences stored in the event_instances table.
  * They may or may not be linked to a series (recurring event) via seriesId.
  */
 export const eventInstanceRouter = {
-  all: protectedProcedure
+  // Public so a region's website can show its schedule without a credential,
+  // like `event.all`. Anonymous callers see only active, non-private
+  // instances whose series, location and org chains are all live, and never
+  // `meta`, which holds Slack channel settings.
+  all: publicReadProcedure
     .input(
       z
         .object({
@@ -133,23 +150,33 @@ export const eventInstanceRouter = {
           sorting: z
             .array(z.object({ id: z.string(), desc: queryBooleanSchema }))
             .optional(),
-          regionOrgId: z.coerce.number().optional(),
-          aoOrgId: z.coerce.number().optional(),
-          regionOrgIds: z.array(z.coerce.number()).optional(),
-          aoOrgIds: z.array(z.coerce.number()).optional(),
-          startDate: z
-            .string()
+          regionOrgId: dbIdSchema.optional(),
+          aoOrgId: dbIdSchema.optional(),
+          regionOrgIds: z
+            .array(dbIdSchema)
+            .max(MAX_FILTER_IDS)
+            .optional()
+            .describe(
+              `Region org IDs to filter by (at most ${MAX_FILTER_IDS})`,
+            ),
+          aoOrgIds: z
+            .array(dbIdSchema)
+            .max(MAX_FILTER_IDS)
+            .optional()
+            .describe(`AO org IDs to filter by (at most ${MAX_FILTER_IDS})`),
+          startDate: z.iso
+            .date()
             .optional()
             .describe(
               "Inclusive lower bound on the instance start date (YYYY-MM-DD). Only instances starting on or after this date are returned.",
             ),
-          startDateTo: z
-            .string()
+          startDateTo: z.iso
+            .date()
             .optional()
             .describe(
               "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
             ),
-          seriesId: z.coerce.number().optional(),
+          seriesId: dbIdSchema.optional(),
           onlyStandalone: queryBooleanSchema.optional(), // Only instances without a series
         })
         .optional(),
@@ -160,8 +187,83 @@ export const eventInstanceRouter = {
       tags: ["event-instance"],
       summary: "List all event instances",
       description:
-        "Get a paginated list of event instances (individual occurrences)",
+        "Get a paginated list of event instances (individual occurrences). Needs no credential. Without one, only active, non-private instances under active orgs, series and locations are listed, and `meta` is null.",
     })
+    .output(
+      z.object({
+        eventInstances: z.array(
+          z.object({
+            id: z.number().describe("Event instance ID"),
+            name: z.string().describe("Event instance name"),
+            description: z
+              .string()
+              .nullable()
+              .describe("Event instance description"),
+            isActive: z.boolean().describe("Whether the instance is active"),
+            aoName: z.string().nullable().describe("Name of the instance's AO"),
+            regionName: z
+              .string()
+              .nullable()
+              .describe("Name of the region above the instance's AO"),
+            locationId: z.number().nullable().describe("Location ID"),
+            locationName: z.string().nullable().describe("Location name"),
+            locationAddress: z
+              .string()
+              .nullable()
+              .describe("Location street address"),
+            locationAddress2: z
+              .string()
+              .nullable()
+              .describe("Location street address, second line"),
+            locationCity: z.string().nullable().describe("Location city"),
+            locationState: z.string().nullable().describe("Location state"),
+            locationCountry: z.string().nullable().describe("Location country"),
+            orgId: z.number().describe("ID of the org that runs the instance"),
+            seriesId: z
+              .number()
+              .nullable()
+              .describe("ID of the series (recurring event), if any"),
+            seriesException: z
+              .enum(SeriesException)
+              .nullable()
+              .describe(
+                "How the instance deviates from its series, if it does",
+              ),
+            startDate: z.string().describe("Start date (YYYY-MM-DD)"),
+            endDate: z.string().nullable().describe("End date (YYYY-MM-DD)"),
+            startTime: z.string().nullable().describe("Start time (HHmm)"),
+            endTime: z.string().nullable().describe("End time (HHmm)"),
+            highlight: z
+              .boolean()
+              .describe("Whether the instance is highlighted"),
+            meta: z
+              .unknown()
+              .nullable()
+              .describe(
+                "Instance metadata, such as Slack channel settings. Null for callers without a credential.",
+              ),
+            isPrivate: z.boolean().describe("Whether the instance is private"),
+            paxCount: z
+              .number()
+              .nullable()
+              .describe("Number of PAX who attended"),
+            fngCount: z
+              .number()
+              .nullable()
+              .describe("Number of FNGs who attended"),
+            location: z
+              .string()
+              .nullable()
+              .describe(
+                "Display label: the location name, or the formatted address when the location has no name",
+              ),
+          }),
+        ),
+        totalCount: z
+          .number()
+          .describe("Total number of instances matching the filters"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
@@ -171,7 +273,15 @@ export const eventInstanceRouter = {
         defaultPageSize: 40,
       });
 
+      const seriesEvent = aliasedTable(schema.events, "series_event");
+      const isAnonymous = !ctx.session?.user;
+      // The org-chain checks below stop at ORG_TREE_MAX_DEPTH; this scan
+      // warns operators when a deeper chain exists.
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const statusFilter = (() => {
+        // Inactive instances were never meant to be public.
+        if (isAnonymous) return eq(schema.eventInstances.isActive, true);
         const s = input?.statuses;
         if (s === undefined) return eq(schema.eventInstances.isActive, true);
         if (s.length === 0) return undefined;
@@ -183,6 +293,33 @@ export const eventInstanceRouter = {
 
       const where = and(
         statusFilter,
+        isAnonymous
+          ? and(
+              eq(schema.eventInstances.isPrivate, false),
+              orgAndAncestorsAreActive(schema.eventInstances.orgId),
+              // Editing a series updates only current and future instances,
+              // so older instances can stay public after their series is
+              // made private or retired. Standalone instances pass.
+              or(
+                isNull(schema.eventInstances.seriesId),
+                and(
+                  eq(seriesEvent.isActive, true),
+                  eq(seriesEvent.isPrivate, false),
+                  orgAndAncestorsAreActive(seriesEvent.orgId),
+                ),
+              ),
+              // location.delete only soft-deletes, and a live AO can meet at
+              // a location owned by a retired region, so check the location
+              // and its owner's org chain before showing its name and address.
+              or(
+                isNull(schema.eventInstances.locationId),
+                and(
+                  eq(schema.locations.isActive, true),
+                  orgAndAncestorsAreActive(schema.locations.orgId),
+                ),
+              ),
+            )
+          : undefined,
         // Search filter
         input?.searchTerm
           ? or(
@@ -243,7 +380,10 @@ export const eventInstanceRouter = {
         startTime: schema.eventInstances.startTime,
         endTime: schema.eventInstances.endTime,
         highlight: schema.eventInstances.highlight,
-        meta: schema.eventInstances.meta,
+        // Anonymous callers never get meta, so it is not read for them.
+        meta: isAnonymous
+          ? sql<unknown>`NULL`.as("meta")
+          : schema.eventInstances.meta,
         isPrivate: schema.eventInstances.isPrivate,
         paxCount: schema.eventInstances.paxCount,
         fngCount: schema.eventInstances.fngCount,
@@ -265,6 +405,15 @@ export const eventInstanceRouter = {
             eq(regionOrg.orgType, "region"),
             eq(regionOrg.id, aoOrg.parentId),
           ),
+        )
+        // The anonymous filter reads the location and the series.
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.eventInstances.locationId),
+        )
+        .leftJoin(
+          seriesEvent,
+          eq(seriesEvent.id, schema.eventInstances.seriesId),
         )
         .where(where);
 
@@ -332,6 +481,10 @@ export const eventInstanceRouter = {
         .leftJoin(
           schema.locations,
           eq(schema.locations.id, schema.eventInstances.locationId),
+        )
+        .leftJoin(
+          seriesEvent,
+          eq(seriesEvent.id, schema.eventInstances.seriesId),
         )
         .where(where);
 

@@ -839,4 +839,15 @@ describe("public reads exclude inactive organization hierarchies", () => {
       expect(lookup[branch.eventId]).toBeDefined();
     }
   });
+
+  it("runs the org-tree depth scan for anonymous event-instance lists only", async () => {
+    const client = createTestClient();
+    await client.eventInstance.all({ searchTerm: uniqueId() });
+    expect(mockDepthScan).toHaveBeenCalledWith(db);
+    mockDepthScan.mockClear();
+
+    await mockAuthWithSession(createNoPermissionSession());
+    await client.eventInstance.all({ searchTerm: uniqueId() });
+    expect(mockDepthScan).not.toHaveBeenCalled();
+  });
 });
