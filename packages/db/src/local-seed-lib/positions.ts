@@ -6,19 +6,33 @@ import { POSITIONS } from "./data";
 export async function seedPositions(db: AppDb): Promise<void> {
   // 11. Positions — global standard F3 positions (orgId null = applies to all orgs)
   //
-  // Migration note: earlier versions seeded positions per-region (orgId = regionId).
-  // On re-run we migrate any such rows to global (orgId = null) and deduplicate.
+  // Each position keeps a global row. Rows with an org id under the same name
+  // are folded into it. When the name has exactly one global row and its org
+  // type differs from POSITIONS, the type is corrected, so re-running the seed
+  // fixes a database an older seed wrote. A name with several global rows is
+  // one the nation defines once per org type, and those rows are left alone.
   for (const position of POSITIONS) {
     const existing = await db
       .select()
       .from(schema.positions)
       .where(eq(schema.positions.name, position.name));
 
-    const globalRow = existing.find((p) => p.orgId === null);
+    const globalRows = existing.filter((p) => p.orgId === null);
+    const globalRow =
+      globalRows.find((p) => p.orgType === position.orgType) ?? globalRows[0];
     const legacyRows = existing.filter((p) => p.orgId !== null);
 
     if (globalRow) {
-      // Already a global row — delete any leftover per-region duplicates
+      if (globalRows.length === 1 && globalRow.orgType !== position.orgType) {
+        await db
+          .update(schema.positions)
+          .set({ orgType: position.orgType })
+          .where(eq(schema.positions.id, globalRow.id));
+        console.log(
+          `  ~ Set position "${position.name}" org type to ${position.orgType}`,
+        );
+      }
+      // Delete any leftover per-region duplicates
       for (const legacy of legacyRows) {
         await db
           .delete(schema.positions)
@@ -29,7 +43,7 @@ export async function seedPositions(db: AppDb): Promise<void> {
       const [first, ...rest] = legacyRows;
       await db
         .update(schema.positions)
-        .set({ orgId: null, orgType: "region" })
+        .set({ orgId: null, orgType: position.orgType })
         .where(eq(schema.positions.id, first!.id));
       for (const dup of rest) {
         await db
@@ -42,7 +56,7 @@ export async function seedPositions(db: AppDb): Promise<void> {
         name: position.name,
         description: position.description,
         orgId: null,
-        orgType: "region",
+        orgType: position.orgType,
         isActive: true,
       });
       console.log(`  + Inserted position "${position.name}" (global)`);
