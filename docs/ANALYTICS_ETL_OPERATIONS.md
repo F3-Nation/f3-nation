@@ -162,12 +162,27 @@ release delete. That identity needs `storage.objects.list` on the bucket,
 `storage.objects.get` on the product's `current.json` and release prefix, and
 `storage.objects.delete` on only that release prefix. It reads the same
 environment as `rollback-pointer` (`ANALYTICS_ENVIRONMENT`,
-`ANALYTICS_CATALOG_BUCKET`, and in production `ANALYTICS_PRODUCER_REVISION`):
+`ANALYTICS_CATALOG_BUCKET`, and in production `ANALYTICS_PRODUCER_REVISION`).
+Cleanup writes nothing, so in production any safe slug satisfies the revision
+check. The identities and their grants are in
+[`ANALYTICS_GCP_PROVISIONING.md`](ANALYTICS_GCP_PROVISIONING.md#release-cleanup-operator).
+
+Point Application Default Credentials at the environment's identity, run both
+products, then restore your own credentials so later local tools don't act as
+the cleanup identity:
 
 ```bash
+gcloud auth application-default login --impersonate-service-account=analytics-release-gc@f3data.iam.gserviceaccount.com
+export ANALYTICS_ENVIRONMENT=production ANALYTICS_CATALOG_BUCKET=f3-analytics ANALYTICS_PRODUCER_REVISION=release-gc-operator
 uv --directory apps/analytics run analytics-etl gc-releases --product analytics
 uv --directory apps/analytics run analytics-etl gc-releases --product analytics --apply
+uv --directory apps/analytics run analytics-etl gc-releases --product pax-vault
+uv --directory apps/analytics run analytics-etl gc-releases --product pax-vault --apply
+gcloud auth application-default login
 ```
+
+For nonprod, impersonate `analytics-release-gc-nonprod@f3data.iam.gserviceaccount.com`
+and set `ANALYTICS_ENVIRONMENT=nonprod ANALYTICS_CATALOG_BUCKET=f3-analytics-nonprod`.
 
 Review the dry-run plan's `protected_release_ids` and `candidate_release_ids`
 before applying. `--apply` plans again with the same checks rather than
