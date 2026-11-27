@@ -143,10 +143,11 @@ gcloud iam service-accounts create "cloudrun-${CLOUDRUN_SERVICE}" \
 until gcloud iam service-accounts describe "$RUNTIME_SA" --project="$PROJECT" >/dev/null 2>&1; do sleep 5; done
 
 # Every secret the service references now, read from the live service. A
-# failed lookup or grant prints STOP instead of "All secrets granted."
-if svc_json="$(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$PROJECT" --format=json)"; then
+# failed lookup, parse or grant prints STOP instead of "All secrets granted."
+if svc_json="$(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$PROJECT" --format=json)" &&
+  secrets="$(jq -r '[.spec.template.spec.containers[].env[]? | .valueFrom.secretKeyRef.name // empty] | unique[]' <<<"$svc_json")"; then
   failed=0
-  for secret in $(jq -r '[.spec.template.spec.containers[].env[]? | .valueFrom.secretKeyRef.name // empty] | unique[]' <<<"$svc_json"); do
+  for secret in $secrets; do
     gcloud secrets add-iam-policy-binding "$secret" \
       --project="$PROJECT" \
       --member="serviceAccount:${RUNTIME_SA}" \
@@ -154,7 +155,7 @@ if svc_json="$(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_R
   done
   if [ "$failed" = 0 ]; then echo "All secrets granted."; else echo "STOP: a grant failed. Fix it before switching the account."; fi
 else
-  echo "STOP: couldn't read $CLOUDRUN_SERVICE. Fix that before switching the account."
+  echo "STOP: couldn't read $CLOUDRUN_SERVICE or list its secrets (is jq installed?). Fix that before switching the account."
 fi
 ```
 
