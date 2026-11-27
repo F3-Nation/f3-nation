@@ -1150,6 +1150,32 @@ describe("Attendance Router", () => {
       expect(row?.attendanceType).toBe("q");
     });
 
+    it("should add Q to a user already signed up as Co-Q", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const user = await createTestUser();
+      const existing = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        user!.id,
+        [ATTENDANCE_TYPE_IDS!.COQ],
+      );
+
+      const client = createTestClient();
+      const result = await client.attendance.takeQ({
+        eventInstanceId: eventInstance!.id,
+        userId: user!.id,
+      });
+
+      expect(result.attendanceId).toBe(existing.id);
+      expect(await getTypeIds(existing.id)).toContain(ATTENDANCE_TYPE_IDS!.Q);
+      const [row] = await db
+        .select({ attendanceType: schema.attendance.attendanceType })
+        .from(schema.attendance)
+        .where(eq(schema.attendance.id, existing.id));
+      expect(row?.attendanceType).toBe("q");
+    });
+
     it("should leave a user who is already Q unchanged when they take Q again", async () => {
       await mockAuthWithSession(await createAdminSession());
       const { ao } = await createTestAO();
@@ -1950,8 +1976,8 @@ describe("Attendance Router", () => {
   });
 
   // Records whose attendance_type is set with no link rows behind it. The Q
-  // checks must read the column: each test fails if its check goes back to
-  // reading attendance_x_attendance_types.
+  // checks must read the column: each test fails if its check reads
+  // attendance_x_attendance_types instead.
   describe("Q checks read the attendance_type column", () => {
     const createAttendanceWithColumnType = async (
       eventInstanceId: number,

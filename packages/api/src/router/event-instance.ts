@@ -118,12 +118,7 @@ const resolveSlackChannel = ({
   return { channelId: null, source: "none" };
 };
 
-/**
- * Event Instance Router
- * Event instances are individual event occurrences stored in the event_instances table.
- * They may or may not be linked to a series (recurring event) via seriesId.
- */
-/** Fields of an event instance in the Q selection menus. */
+/** Event instance fields shared by the Q and Co-Q lookup responses. */
 const qMenuEventFields = {
   id: z.number().describe("Event instance ID"),
   name: z.string().describe("Event instance name"),
@@ -148,6 +143,11 @@ const backblastTsField = z
   .nullable()
   .describe("Slack timestamp of the posted backblast, or null if none");
 
+/**
+ * Event Instance Router
+ * Event instances are individual event occurrences stored in the event_instances table.
+ * They may or may not be linked to a series (recurring event) via seriesId.
+ */
 export const eventInstanceRouter = {
   all: protectedProcedure
     .input(
@@ -1153,9 +1153,8 @@ export const eventInstanceRouter = {
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split("T")[0]!;
 
-      // Planned Q or Co-Q attendance on the outer row's event instance.
-      // Correlated, so each lookup uses idx_attendance_event_instance_id
-      // rather than scanning every planned attendance record for its type.
+      // Planned Q or Co-Q attendance on the outer row's event instance,
+      // correlated on event_instance_id so it can be checked per event.
       const plannedQOnEvent = ctx.db
         .select({ one: sql`1` })
         .from(schema.attendance)
@@ -1258,7 +1257,10 @@ export const eventInstanceRouter = {
               orgId: z
                 .number()
                 .describe("ID of the AO or region the event is at"),
-              orgName: z.string().nullable().describe("Name of that AO"),
+              orgName: z
+                .string()
+                .nullable()
+                .describe("Name of that AO or region"),
               seriesId: z
                 .number()
                 .nullable()
@@ -1288,7 +1290,7 @@ export const eventInstanceRouter = {
                 .string()
                 .nullable()
                 .describe(
-                  "F3 names of the planned Q and Co-Qs, comma-separated, or null if there are none",
+                  "F3 names of the planned Q and Co-Qs that have one, comma-separated; null if no planned Q or Co-Q has an F3 name",
                 ),
               userAttending: z
                 .boolean()

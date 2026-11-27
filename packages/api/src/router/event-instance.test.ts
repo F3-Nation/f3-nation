@@ -3490,16 +3490,17 @@ describe("Event Instance Router", () => {
       return instance!;
     };
 
-    // Planned attendance with the given type rows; the database sets the
-    // record's attendance_type from them.
+    // Attendance with the given type rows, planned unless isPlanned is false;
+    // the database sets the record's attendance_type from them.
     const attend = async (
       eventInstanceId: number,
       userId: number,
       typeIds: number[],
+      isPlanned = true,
     ) => {
       const [attendance] = await db
         .insert(schema.attendance)
-        .values({ eventInstanceId, userId, isPlanned: true })
+        .values({ eventInstanceId, userId, isPlanned })
         .returning();
       await db.insert(schema.attendanceXAttendanceTypes).values(
         typeIds.map((attendanceTypeId) => ({
@@ -3577,9 +3578,12 @@ describe("Event Instance Router", () => {
       const withCoQ = await createInstance(ao.id, past);
       const paxOnly = await createInstance(ao.id, past);
       const empty = await createInstance(ao.id, past);
+      // Its only Q is actual (backblast) attendance, so it has no planned Q.
+      const actualQOnly = await createInstance(ao.id, past);
       await attend(withQ.id, (await createUser()).id, [ids.Q]);
       await attend(withCoQ.id, (await createUser()).id, [ids.COQ]);
       await attend(paxOnly.id, (await createUser()).id, [ids.PAX]);
+      await attend(actualQOnly.id, (await createUser()).id, [ids.Q], false);
 
       const client = createTestClient();
       const result = await client.eventInstance.getEventsWithoutQ({
@@ -3587,7 +3591,7 @@ describe("Event Instance Router", () => {
       });
 
       expect(result.eventInstances.map((e) => e.id).sort()).toEqual(
-        [paxOnly.id, empty.id].sort(),
+        [paxOnly.id, empty.id, actualQOnly.id].sort(),
       );
     });
 
@@ -3646,7 +3650,7 @@ describe("Event Instance Router", () => {
 
     // The lookups must read attendance_type, not the link rows: here the Q
     // and Co-Q have the type with no link rows, and the PAX has a Q link row
-    // but type pax. Each test fails if its lookup goes back to the link rows.
+    // but type pax. Each test fails if its lookup reads the link rows instead.
     describe("read the attendance_type column", () => {
       const attendWithColumnType = async (
         eventInstanceId: number,

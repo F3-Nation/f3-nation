@@ -2,6 +2,13 @@ import { z } from "zod";
 
 export const F3_NATION_ORG_ID = 1;
 
+/**
+ * Ids of the `attendance_types` rows that writers link attendance records to
+ * and the deprecated `attendanceTypes` response field reports. They must match
+ * the rows in the database and in the local seed.
+ */
+export const ATTENDANCE_TYPE_IDS = { PAX: 1, Q: 2, COQ: 3 } as const;
+
 export const SHORT_DAY_ORDER = ["Su", "M", "Tu", "W", "Th", "F", "Sa"] as const;
 
 export const DEFAULT_ZOOM = 2.9;

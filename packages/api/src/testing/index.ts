@@ -9,7 +9,10 @@
 
 import type { Session } from "@acme/auth";
 import type { OrgType } from "@acme/shared/app/enums";
-import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
+import {
+  ATTENDANCE_TYPE_IDS,
+  F3_NATION_ORG_ID,
+} from "@acme/shared/app/constants";
 import { asc, eq, inArray, schema, sql } from "@acme/db";
 import { db } from "@acme/db/client";
 
@@ -44,17 +47,16 @@ export const getOrCreateRoles = async (): Promise<void> => {
 };
 
 /**
- * Inserts the PAX, Q and Co-Q attendance types with the fixed ids (1, 2, 3)
- * that production uses and the API writes, unless rows with those ids
- * already exist, and throws if any of those ids names a different type. Then
- * moves the id sequence past them so a test inserting its own type gets a
- * free id. Returns their ids.
+ * Inserts the PAX, Q and Co-Q attendance types with the ids in
+ * `ATTENDANCE_TYPE_IDS`, unless rows with those ids already exist, and throws
+ * if any of those ids names a different type. Then moves the id sequence past
+ * them so a test inserting its own type gets a free id. Returns their ids.
  */
 export const ensureAttendanceTypes = async () => {
   const expected = [
-    { id: 1, type: "PAX" },
-    { id: 2, type: "Q" },
-    { id: 3, type: "Co-Q" },
+    { id: ATTENDANCE_TYPE_IDS.PAX, type: "PAX" },
+    { id: ATTENDANCE_TYPE_IDS.Q, type: "Q" },
+    { id: ATTENDANCE_TYPE_IDS.COQ, type: "Co-Q" },
   ];
   await db
     .insert(schema.attendanceTypes)
@@ -75,13 +77,13 @@ export const ensureAttendanceTypes = async () => {
     .orderBy(asc(schema.attendanceTypes.id));
   if (JSON.stringify(rows) !== JSON.stringify(expected)) {
     throw new Error(
-      `attendance_types ids 1-3 must be PAX, Q, Co-Q; found ${JSON.stringify(rows)}`,
+      `attendance_types rows must be ${JSON.stringify(expected)}; found ${JSON.stringify(rows)}`,
     );
   }
   await db.execute(
     sql`SELECT setval('attendance_types_id_seq', GREATEST((SELECT max(id) FROM attendance_types), (SELECT last_value FROM attendance_types_id_seq)))`,
   );
-  return { PAX: 1, Q: 2, COQ: 3 } as const;
+  return ATTENDANCE_TYPE_IDS;
 };
 
 export interface FixtureOrg {

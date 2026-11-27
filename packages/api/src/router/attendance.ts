@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { and, eq, inArray, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { ATTENDANCE_TYPE_IDS } from "@acme/shared/app/constants";
 import { AttendanceType } from "@acme/shared/app/enums";
 import { queryBooleanSchema } from "@acme/shared/app/functions";
 
@@ -13,17 +14,8 @@ import {
 import { protectedProcedure } from "../shared";
 
 /**
- * Fixed ids of the `attendance_types` rows, which writers still link
- * attendance records to and the `attendanceTypes` response field still
- * reports. They are fixed in production and in the local seed; tests insert
- * them with `ensureAttendanceTypes`.
- */
-const ATTENDANCE_TYPE_IDS = { PAX: 1, Q: 2, COQ: 3 } as const;
-
-/**
  * The `attendance_types` row each `attendance.attendance_type` value stands
- * for, reported in the `attendanceTypes` response field for callers that
- * still read type ids.
+ * for, reported in the deprecated `attendanceTypes` response field.
  */
 const LEGACY_ATTENDANCE_TYPES = {
   pax: { id: ATTENDANCE_TYPE_IDS.PAX, type: "PAX" },

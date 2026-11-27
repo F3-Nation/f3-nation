@@ -5146,7 +5146,7 @@
                                 "type": "null"
                               }
                             ],
-                            "description": "Name of that AO"
+                            "description": "Name of that AO or region"
                           },
                           "plannedQs": {
                             "anyOf": [
@@ -5157,7 +5157,7 @@
                                 "type": "null"
                               }
                             ],
-                            "description": "F3 names of the planned Q and Co-Qs, comma-separated, or null if there are none"
+                            "description": "F3 names of the planned Q and Co-Qs that have one, comma-separated; null if no planned Q or Co-Q has an F3 name"
                           },
                           "seriesException": {
                             "anyOf": [
