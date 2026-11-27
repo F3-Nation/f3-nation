@@ -1338,3 +1338,130 @@ def test_ensure_region_records_loaded_coalesces_concurrent_cold_starts(monkeypat
 
     assert calls == 1
     assert list(helper_functions.REGION_RECORDS.keys()) == ["T_CONC"]
+
+
+def _run_cold_cache_threads(monkeypatch, row, target, *, cache_name):
+    """Start four threads on an empty cache whose first DB load blocks, and return the query count."""
+    import threading
+    import time
+
+    calls = 0
+    in_query = threading.Event()
+    release_query = threading.Event()
+
+    def slow_find_records(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        in_query.set()
+        release_query.wait(timeout=5)
+        return [row]
+
+    monkeypatch.setattr(helper_functions, cache_name, {})
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", slow_find_records)
+
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(target())) for _ in range(4)]
+    for t in threads:
+        t.start()
+    assert in_query.wait(timeout=5)
+    # Let every thread reach its cache check before the first load finishes.
+    time.sleep(0.2)
+    release_query.set()
+    for t in threads:
+        t.join(timeout=5)
+        assert not t.is_alive()
+    return calls, results
+
+
+def test_get_user_cold_cache_runs_one_slack_user_query_for_concurrent_requests(monkeypatch):
+    row = SimpleNamespace(id=1, slack_team_id="T_CONC", slack_id="U_CONC", user_id=42, slack_updated=1)
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    client = SimpleNamespace(users_info=lambda **_kwargs: pytest.fail("users_info must not be called"))
+
+    calls, results = _run_cold_cache_threads(
+        monkeypatch,
+        row,
+        lambda: helper_functions.get_user("U_CONC", SimpleNamespace(org_id=9, team_id="T_CONC"), client, None),
+        cache_name="SLACK_USERS",
+    )
+
+    assert calls == 1
+    assert results == [row] * 4
+
+
+def test_get_region_record_cold_cache_runs_one_slack_space_query_for_concurrent_requests(monkeypatch):
+    from unittest.mock import MagicMock
+
+    row = SimpleNamespace(team_id="T_CONC", settings={"team_id": "T_CONC", "workspace_name": "Concurrent"})
+
+    calls, results = _run_cold_cache_threads(
+        monkeypatch,
+        row,
+        lambda: helper_functions.get_region_record("T_CONC", {}, {}, MagicMock(), MagicMock()),
+        cache_name="REGION_RECORDS",
+    )
+
+    assert calls == 1
+    assert [(r.team_id, r.workspace_name) for r in results] == [("T_CONC", "Concurrent")] * 4
+
+
+def test_positions_user_map_loads_an_empty_slack_user_cache(monkeypatch):
+    from features import positions
+
+    row = SimpleNamespace(id=1, slack_team_id="T_POS", slack_id="U_POS", user_id=42, slack_updated=1)
+    monkeypatch.setattr(helper_functions, "SLACK_USERS", {})
+    monkeypatch.setattr(positions, "SLACK_USERS", helper_functions.SLACK_USERS)
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: [row])
+
+    assert positions._user_id_to_slack_id_map("T_POS") == {42: "U_POS"}
+
+
+@pytest.mark.parametrize(
+    ("refresh_name", "cache_name", "row"),
+    [
+        (
+            "update_local_slack_users",
+            "SLACK_USERS",
+            SimpleNamespace(id=1, slack_team_id="T_LOCK", slack_id="U_LOCK", user_id=42, slack_updated=1),
+        ),
+        (
+            "update_local_region_records",
+            "REGION_RECORDS",
+            SimpleNamespace(team_id="T_LOCK", settings={"team_id": "T_LOCK", "workspace_name": "Lock"}),
+        ),
+    ],
+)
+def test_overlapping_full_refreshes_run_one_at_a_time(monkeypatch, refresh_name, cache_name, row):
+    import threading
+    import time
+
+    events = []
+    first_in_query = threading.Event()
+    release_first = threading.Event()
+
+    def recording_find_records(*_args, **_kwargs):
+        name = threading.current_thread().name
+        events.append(f"{name}-enter")
+        if name == "A":
+            first_in_query.set()
+            release_first.wait(timeout=5)
+        events.append(f"{name}-exit")
+        return [row]
+
+    monkeypatch.setattr(helper_functions, cache_name, {})
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", recording_find_records)
+    refresh = getattr(helper_functions, refresh_name)
+
+    first = threading.Thread(target=refresh, name="A")
+    first.start()
+    assert first_in_query.wait(timeout=5)
+    second = threading.Thread(target=refresh, name="B")
+    second.start()
+    time.sleep(0.1)
+    assert events == ["A-enter"]
+
+    release_first.set()
+    for t in (first, second):
+        t.join(timeout=5)
+        assert not t.is_alive()
+    assert events == ["A-enter", "A-exit", "B-enter", "B-exit"]

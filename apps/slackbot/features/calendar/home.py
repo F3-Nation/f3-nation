@@ -23,6 +23,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
 from application.attendance import CO_Q_TYPE_ID, Q_TYPE_ID
+from application.preblast.service import PreblastService
 from features.backblast import build_backblast_form
 from features.calendar import event_instance, get_preblast_action_blocks
 from features.calendar.event_preblast import (
@@ -717,12 +718,16 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
                 "attendees": [r.get("user_id") for r in preblast_info.attendance_records],
                 "qs": q_list,
             }
+            # The post may sit in a different channel from the one now configured.
+            posted_channel = PreblastService().resolve_posted_channel(
+                preblast_info.event_record, get_preblast_channel(region_record, preblast_info)
+            )
             try:
                 _send_preblast_blocks(
                     client.chat_update,
                     blocks,
                     logger,
-                    channel=get_preblast_channel(region_record, preblast_info),
+                    channel=posted_channel,
                     ts=safe_get(metadata, "preblast_ts") or str(preblast_info.event_record.preblast_ts),
                     text="Event Preblast",
                     metadata={"event_type": "preblast", "event_payload": metadata},
@@ -742,7 +747,7 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
                     client,
                     logger,
                     region_record,
-                    get_preblast_channel(region_record, preblast_info),
+                    posted_channel,
                     safe_get(metadata, "preblast_ts") or str(preblast_info.event_record.preblast_ts),
                     safe_get(body, "user", "id"),
                     is_hc=hc_action,

@@ -80,6 +80,25 @@ def test_send_attaches_file_content(transport):
     assert attachment.get_content_type() == "image/jpeg"
 
 
+def test_send_closes_connection_when_login_fails(transport):
+    transport.client.login.side_effect = sendmail.smtplib.SMTPAuthenticationError(535, b"Synthetic rejection")
+
+    with pytest.raises(sendmail.smtplib.SMTPAuthenticationError):
+        sendmail.send(
+            "Synthetic subject",
+            "Synthetic body",
+            "smtp.test",
+            587,
+            "sender@f3local.dev",
+            "synthetic-password",
+            "recipient@f3local.dev",
+            attachments=[],
+        )
+
+    transport.client.__exit__.assert_called_once()
+    transport.client.send_message.assert_not_called()
+
+
 @pytest.mark.parametrize("keyword", [False, True], ids=["positional", "keyword"])
 def test_explicit_sender_takes_precedence_over_email_from(transport, keyword):
     sender = "F3 Support <support@f3local.dev>"

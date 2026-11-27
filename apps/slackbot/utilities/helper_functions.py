@@ -50,10 +50,10 @@ _SLACK_USERS_REFRESH_LOCK = threading.RLock()
 def _replace_cache_in_place(cache: dict, fresh: dict) -> None:
     """Replace cache entries in place without ever leaving the dict empty.
 
-    Callers import `SLACK_USERS` and `REGION_RECORDS` by reference and check
-    truthiness on the request path. Calling `.clear()` before `.update()`
-    exposes an empty dict to concurrent threads, causing redundant full-table
-    reloads.
+    Callers import `SLACK_USERS` and `REGION_RECORDS` by reference and read
+    them without the refresh lock. Calling `.clear()` before `.update()`
+    exposes an empty dict to concurrent threads: direct `.get()` readers see
+    a miss, and the `ensure_*_loaded` helpers start another full reload.
     """
     cache.update(fresh)
     for stale_key in list(cache.keys() - fresh.keys()):

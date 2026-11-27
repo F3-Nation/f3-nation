@@ -159,8 +159,7 @@ def send(
 
     if email_server and email_server_port and email_user and email_password and email_to:
         # Without a timeout a stalled server holds a Slack listener thread for minutes.
-        server = smtplib.SMTP(email_server, email_server_port, timeout=SMTP_TIMEOUT_SECONDS)
-        server.starttls()
-        server.login(email_user, email_password)
-        server.send_message(msg)
-        server.close()
+        with smtplib.SMTP(email_server, email_server_port, timeout=SMTP_TIMEOUT_SECONDS) as server:
+            server.starttls()
+            server.login(email_user, email_password)
+            server.send_message(msg)

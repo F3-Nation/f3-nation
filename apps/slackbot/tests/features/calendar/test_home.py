@@ -279,3 +279,20 @@ def test_home_hc_updates_preblast_post_from_attendance_dicts(monkeypatch):
     buttons = [b.as_form_field() for b in get_preblast_action_blocks(has_q=True, event_instance_id=7)]
     photo = {"type": "image", "slack_file": {"id": "F_PHOTO"}, "alt_text": "Preblast Image"}
     assert sent["blocks"] == [summary, *buttons[:-1], photo, buttons[-1]]
+
+
+def test_home_hc_updates_preblast_in_the_channel_it_was_posted_to(monkeypatch):
+    from features.calendar import home
+
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(preblast_ts="1700000000.000100", meta={"preblast_post_channel_id": "C_POSTED"}),
+        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        preblast_blocks=[],
+    )
+    _patch_home_event(monkeypatch, home, preblast_info)
+    client = MagicMock()
+    with patch.object(home, "DbManager"):
+        home.handle_home_event(_home_event_body("HC"), client, MagicMock(), {}, SimpleNamespace(org_id=1))
+
+    assert client.chat_update.call_args.kwargs["channel"] == "C_POSTED"
+    assert home.post_hc_thread_reply.call_args.args[3] == "C_POSTED"
