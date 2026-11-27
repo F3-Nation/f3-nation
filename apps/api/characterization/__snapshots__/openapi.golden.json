@@ -4841,6 +4841,12 @@
             "description": "OK"
           }
         },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
         "summary": "List all event instances",
         "tags": [
           "event-instance"
