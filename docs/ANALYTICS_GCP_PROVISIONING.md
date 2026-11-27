@@ -161,7 +161,7 @@ not instructions to execute blanket project/bucket grants.
 | Product consumer          | `storage.objects.get` on that product's fixed pointer and approved release prefix                                                                                                                                                                                                                                | Write, pointer mutation, other product access unless approved, end-user direct access                                                           |
 | Pointer rollback operator | Separately approved pointer read and exact-key content-replacement permissions; read retained release chain                                                                                                                                                                                                      | Release mutation/deletion; broad bucket update/delete                                                                                           |
 | Release cleanup operator  | `storage.objects.list` on the bucket; `storage.objects.get` on each product's `current.json` and release prefix; `storage.objects.delete` on only the release prefixes (see [Release cleanup operator](#release-cleanup-operator))                                                                               | Object create or overwrite; pointer delete or replacement; reads outside the product pointers and release prefixes; use as the runtime producer |
-| Scheduler                 | `roles/run.invoker` on production `analytics-etl` only                                                                                                                                                                                                                                                           | Storage, database, secrets, deploy, Scheduler administration                                                                                    |
+| Scheduler                 | `roles/run.invoker` on production `analytics-etl` and `analytics-release-gc` only                                                                                                                                                                                                                                | Storage, database, secrets, deploy, Scheduler administration                                                                                    |
 | GitHub deployer           | Reviewed build/deploy and service-account-use permissions                                                                                                                                                                                                                                                        | Runtime data, database, Scheduler administration, Owner/Editor                                                                                  |
 
 `storage.objects.update` is a metadata permission and is **not sufficient** to
@@ -243,6 +243,16 @@ Neither has keys. An operator runs the command by impersonating the
 environment's identity, which needs `roles/iam.serviceAccountTokenCreator`
 granted to that operator on the service account itself, never project-wide.
 
+Each identity is also the runtime of a Cloud Run job, `analytics-release-gc-nonprod`
+and `analytics-release-gc`, which the Analytics tagged workflow deploys with the
+publisher's image digest. The job runs `analytics-etl gc-releases --apply` for
+every product, with no Cloud SQL connection or secrets. The GitHub deploy
+identities hold Cloud Run permissions on their own jobs only, not
+project-wide, so they can update these jobs but not create them: an operator
+creates each job once, then grants the environment's deploy identity
+`roles/run.developer` on the job and `roles/iam.serviceAccountUser` on the
+cleanup identity. A tagged deploy fails until both grants exist.
+
 Grants live on the bucket, using these roles in project `f3data`:
 
 | Role                                             | Permission               | Condition                                                  |
@@ -299,8 +309,14 @@ policy, identity, timezone, and a completed execution. Record the approver,
 change, and validation evidence. Never provision IAM or schedules as a side
 effect of deploying an application image.
 
-Release cleanup has no schedule: an operator runs `gc-releases` by hand under
-the [release cleanup operator](#release-cleanup-operator) identity.
+Production release cleanup runs weekly: Cloud Scheduler job
+`analytics-release-gc-weekly` invokes the `analytics-release-gc` Cloud Run job
+as the Scheduler identity, which needs `roles/run.invoker` on that job. Weekly
+keeps every run under the command's `--max-releases` cap at the production
+publishing rate; if the plan reaches the cap, run more often or run again.
+Provision it with the same script (`--job analytics-release-gc --name
+analytics-release-gc-weekly`). Nonprod cleanup is run by hand under the
+[release cleanup operator](#release-cleanup-operator) identity.
 
 ## 6. Staging, cutover, and recovery gates
 

@@ -98,6 +98,10 @@ on:
         required: false
         type: boolean
         default: true
+    outputs:
+      staging_image:
+        description: "Built image pinned to its digest in the staging project's Artifact Registry"
+        value: ${{ jobs.build.outputs.image }}@${{ jobs.build.outputs.digest }}
 
 jobs:
   ci-gate:

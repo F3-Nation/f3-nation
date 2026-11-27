@@ -72,3 +72,101 @@ jobs:
         --args=run
         --set-env-vars=ANALYTICS_ENVIRONMENT=production,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data,ANALYTICS_POSTGRES_DATABASE=f3_prod,ANALYTICS_PRODUCER_REVISION=gha-${{ github.run_id }}-${{ github.run_attempt }}
         --set-secrets=ANALYTICS_POSTGRES_USER=analytics-etl-database-user:latest,ANALYTICS_POSTGRES_PASSWORD=analytics-etl-database-password:latest
+
+  # Release cleanup ships with the publisher's image, so its pointer and
+  # manifest validation always matches the code that wrote the releases.
+  # Deploying updates the job without running it; production runs come from
+  # Cloud Scheduler.
+  deploy-release-gc-nonprod:
+    needs: deploy
+    concurrency:
+      group: cloudrun-job-deploy-f3data-us-central1-analytics-release-gc-nonprod
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # id-token: write -> GCP OIDC for the nonprod deploy identity.
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: analytics-nonprod
+    steps:
+      - name: Authenticate to GCP (nonprod)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Deploy release cleanup job (nonprod)
+        env:
+          IMAGE: ${{ needs.deploy.outputs.staging_image }}
+          PRODUCER_REVISION: gha-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          if [[ ! "${IMAGE}" =~ ^us-central1-docker\.pkg\.dev/f3data/cloud-run-builds/analytics-etl:[^@]+@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::unexpected image reference: ${IMAGE}" >&2
+            exit 1
+          fi
+          gcloud run jobs deploy analytics-release-gc-nonprod \
+            --image "${IMAGE}" \
+            --region us-central1 \
+            --project f3data \
+            --service-account analytics-release-gc-nonprod@f3data.iam.gserviceaccount.com \
+            --tasks=1 \
+            --parallelism=1 \
+            --max-retries=0 \
+            --task-timeout=30m \
+            --memory=1Gi \
+            --cpu=1 \
+            --command=analytics-etl \
+            --args=gc-releases,--apply \
+            --set-env-vars="ANALYTICS_ENVIRONMENT=nonprod,ANALYTICS_CATALOG_BUCKET=f3-analytics-nonprod,ANALYTICS_PRODUCER_REVISION=${PRODUCER_REVISION}"
+
+  deploy-release-gc-prod:
+    needs: [deploy, deploy-release-gc-nonprod]
+    concurrency:
+      group: cloudrun-job-deploy-f3data-us-central1-analytics-release-gc
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # id-token: write -> GCP OIDC for the production deploy identity.
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: analytics-production
+    steps:
+      - name: Authenticate to GCP (production)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      # Production and nonprod share project f3data, so the production job runs
+      # the same staging-registry digest the publisher's production job does.
+      - name: Deploy release cleanup job (production)
+        env:
+          IMAGE: ${{ needs.deploy.outputs.staging_image }}
+          PRODUCER_REVISION: gha-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          if [[ ! "${IMAGE}" =~ ^us-central1-docker\.pkg\.dev/f3data/cloud-run-builds/analytics-etl:[^@]+@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::unexpected image reference: ${IMAGE}" >&2
+            exit 1
+          fi
+          gcloud run jobs deploy analytics-release-gc \
+            --image "${IMAGE}" \
+            --region us-central1 \
+            --project f3data \
+            --service-account analytics-release-gc@f3data.iam.gserviceaccount.com \
+            --tasks=1 \
+            --parallelism=1 \
+            --max-retries=0 \
+            --task-timeout=30m \
+            --memory=1Gi \
+            --cpu=1 \
+            --command=analytics-etl \
+            --args=gc-releases,--apply \
+            --set-env-vars="ANALYTICS_ENVIRONMENT=production,ANALYTICS_CATALOG_BUCKET=f3-analytics,ANALYTICS_PRODUCER_REVISION=${PRODUCER_REVISION}"

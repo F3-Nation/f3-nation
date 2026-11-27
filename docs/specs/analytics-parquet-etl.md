@@ -49,9 +49,10 @@ nonproduction, with zero Scheduler/task retries, one task and parallelism, and
 a 60-minute timeout. These design values do not assert a live deployment. Retention targets are at least one day
 for current and previous valid releases, 14 days for ordinary completed
 releases, and a minimum age of 14 days before abandoned prefixes are eligible
-for cleanup. Never delete current. These are operational requirements, not a
-claim that automated garbage collection or a live lifecycle policy is in place;
-the publisher does not remove unreachable staged releases.
+for cleanup. Never delete current. The generation-aware `analytics-etl
+gc-releases` command enforces them, and the operational design runs it weekly
+in production from Cloud Scheduler. No bucket lifecycle rule deletes releases,
+and the publisher does not remove unreachable staged releases.
 
 The default is all four datasets in the order above. A subset may be used for
 local export or diagnostics, but a publication run rejects any selection other

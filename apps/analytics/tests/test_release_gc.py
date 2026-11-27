@@ -99,27 +99,29 @@ class FakeBlob:
         self.gcs.deleted.append(self.name)
 
 
-def put_release(gcs: FakeGcs, release_id: str, *, age_days: float) -> None:
+def put_release(gcs: FakeGcs, release_id: str, *, age_days: float, product: str = "analytics") -> None:
     created = NOW - timedelta(days=age_days)
-    base = f"analytics/releases/{release_id}"
+    base = f"{product}/releases/{release_id}"
     for name in ("release.json", "event_info/manifest.json", "event_info/partitions/part-0.parquet"):
         gcs.put(f"{base}/{name}", created=created)
 
 
-def put_pointer(gcs: FakeGcs, current: str, retained: str | None) -> None:
+def put_pointer(gcs: FakeGcs, current: str, retained: str | None, *, product: str = "analytics") -> None:
+    contract = "pv-release.v2" if product == "pax-vault" else "analytics-release.v1"
+
     def ref(release_id: str) -> dict[str, Any]:
         return {
             "releaseId": release_id,
-            "manifestUri": f"gs://{BUCKET}/analytics/releases/{release_id}/release.json",
+            "manifestUri": f"gs://{BUCKET}/{product}/releases/{release_id}/release.json",
             "manifestGeneration": "1",
             "manifestSha256": "a" * 64,
         }
 
     pointer = {
         **ref(current),
-        "contractVersion": "analytics-release.v1",
-        "schemaVersion": "analytics-release.v1",
-        "prefix": f"gs://{BUCKET}/analytics/releases/{current}/",
+        "contractVersion": contract,
+        "schemaVersion": contract,
+        "prefix": f"gs://{BUCKET}/{product}/releases/{current}/",
         "createdAtUtc": "2026-11-01T00:00:00Z",
         "producerRevision": "revision",
         "releaseSequence": 5,
@@ -127,7 +129,7 @@ def put_pointer(gcs: FakeGcs, current: str, retained: str | None) -> None:
         "sourceHighWaterOrder": current,
         "retainedPrevious": ref(retained) if retained else None,
     }
-    gcs.put(POINTER, canonical_json_bytes(pointer))
+    gcs.put(f"{product}/current.json", canonical_json_bytes(pointer))
 
 
 def collector(gcs: FakeGcs) -> ReleaseGarbageCollector:
@@ -135,8 +137,8 @@ def collector(gcs: FakeGcs) -> ReleaseGarbageCollector:
     return ReleaseGarbageCollector(gcs, settings, product="analytics")  # type: ignore[arg-type]
 
 
-def release_ids(gcs: FakeGcs) -> set[str]:
-    return {name.split("/")[2] for name in gcs.objects if name.startswith("analytics/releases/")}
+def release_ids(gcs: FakeGcs, product: str = "analytics") -> set[str]:
+    return {name.split("/")[2] for name in gcs.objects if name.startswith(f"{product}/releases/")}
 
 
 @pytest.fixture
@@ -499,3 +501,34 @@ def test_cli_gc_releases_rejects_bad_arguments_as_usage_errors(monkeypatch, extr
     with pytest.raises(SystemExit) as raised:
         cli.main()
     assert raised.value.code == 2
+
+
+def seed_pax_vault(gcs: FakeGcs) -> None:
+    for day in range(30, 40):
+        put_release(gcs, f"p{day:03d}", age_days=day, product="pax-vault")
+    put_pointer(gcs, current="p030", retained="p031", product="pax-vault")
+
+
+def test_cli_gc_releases_without_product_cleans_every_product(monkeypatch, gcs, cli_events):
+    seed_pax_vault(gcs)
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "gc-releases", "--min-age-days", "7", "--apply"])
+
+    assert cli.main() == 0
+    applied = [context["product"] for event, context in cli_events if event == "analytics.etl.release_gc_applied"]
+    assert applied == ["pax-vault", "analytics"]
+    assert release_ids(gcs) == {"r030", "r031", "r032", "r033", "r034"}
+    assert release_ids(gcs, "pax-vault") == {"p030", "p031", "p032", "p033", "p034"}
+
+
+def test_cli_gc_releases_without_product_still_cleans_others_when_one_refuses(monkeypatch, gcs, cli_events):
+    seed_pax_vault(gcs)
+    gcs.objects.pop("pax-vault/current.json")
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "gc-releases", "--min-age-days", "7", "--apply"])
+
+    assert cli.main() == 1
+    assert (
+        "analytics.etl.release_gc_refused",
+        {"product": "pax-vault", "reason": "pointer_absent", "release_id": None},
+    ) in cli_events
+    assert release_ids(gcs) == {"r030", "r031", "r032", "r033", "r034"}
+    assert len(release_ids(gcs, "pax-vault")) == 10
