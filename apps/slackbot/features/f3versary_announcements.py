@@ -68,14 +68,25 @@ def _load_f3versary_settings(region_record: SlackSettings) -> dict | None:
         ):
             lead_days = DEFAULT_LEAD_DAYS
 
+        activity_days = settings.get("f3versary_announcements_activity_days")
+        if type(activity_days) is not int or activity_days not in constants.F3VERSARY_ACTIVITY_DAYS:
+            activity_days = constants.DEFAULT_F3VERSARY_ACTIVITY_DAYS
+
         return {
+            "activity_days": activity_days,
             "enabled": settings.get("f3versary_announcements_enabled") is True,
             "channel": settings.get("f3versary_announcements_channel"),
             "lead_days": lead_days,
         }
 
 
-def _save_f3versary_settings(region_record: SlackSettings, enabled: bool, channel: str | None, lead_days: int) -> bool:
+def _save_f3versary_settings(
+    region_record: SlackSettings,
+    enabled: bool,
+    channel: str | None,
+    lead_days: int,
+    activity_days: int,
+) -> bool:
     """Atomically merge only this feature's keys into SlackSpace.settings."""
     with get_session() as session:
         scope = _resolve_setting_scope(session, region_record)
@@ -86,6 +97,7 @@ def _save_f3versary_settings(region_record: SlackSettings, enabled: bool, channe
             "f3versary_announcements_enabled": enabled,
             "f3versary_announcements_channel": channel,
             "f3versary_announcements_lead_days": lead_days,
+            "f3versary_announcements_activity_days": activity_days,
         }
         settings = func.coalesce(SlackSpace.settings, cast({}, JSONB)).op("||")(cast(patch, JSONB))
         result = session.execute(
@@ -131,6 +143,7 @@ def build_f3versary_announcements_form(
             actions.F3VERSARY_ANNOUNCEMENTS_ENABLED: ["enable"] if settings["enabled"] else [],
             actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL: settings["channel"],
             actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: str(settings["lead_days"]),
+            actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS: str(settings["activity_days"]),
         }
     )
     form.post_modal(
@@ -182,6 +195,21 @@ def handle_f3versary_announcements_edit(
         )
         return
 
+    raw_activity_days = safe_get(form_data, actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS)
+    if not isinstance(raw_activity_days, str) or raw_activity_days not in {
+        str(days) for days in constants.F3VERSARY_ACTIVITY_DAYS
+    }:
+        update_submission_wait_view(
+            client=client,
+            title="Invalid attendance",
+            text="Select an attendance requirement from the dropdown.",
+            level=constants.AlertLevel.ERROR,
+            logger=logger,
+            view_id=submission_view_id,
+        )
+        return
+    activity_days = int(raw_activity_days)
+
     if enabled and not channel:
         update_submission_wait_view(
             client=client,
@@ -193,7 +221,7 @@ def handle_f3versary_announcements_edit(
         )
         return
 
-    if not _save_f3versary_settings(region_record, enabled, channel, lead_days):
+    if not _save_f3versary_settings(region_record, enabled, channel, lead_days, activity_days):
         update_submission_wait_view(
             client=client,
             title="Region unavailable",
@@ -207,6 +235,7 @@ def handle_f3versary_announcements_edit(
     region_record.f3versary_announcements_enabled = enabled
     region_record.f3versary_announcements_channel = channel
     region_record.f3versary_announcements_lead_days = lead_days
+    region_record.f3versary_announcements_activity_days = activity_days
     update_local_region_records()
 
     update_submission_wait_view(
@@ -233,6 +262,22 @@ F3VERSARY_ANNOUNCEMENTS_FORM = orm.BlockView(
             element=orm.ConversationsSelectElement(),
             optional=True,
             hint="The channel where daily F3versary announcements will be posted.",
+        ),
+        orm.InputBlock(
+            label="Recent attendance requirement",
+            action=actions.F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS,
+            element=orm.StaticSelectElement(
+                options=orm.as_selector_options(
+                    ["No requirement", "1 month", "2 months", "3 months", "6 months", "12 months"],
+                    [str(days) for days in constants.F3VERSARY_ACTIVITY_DAYS],
+                ),
+                initial_value=str(constants.DEFAULT_F3VERSARY_ACTIVITY_DAYS),
+            ),
+            optional=False,
+            hint=(
+                "PAX must have at least one recorded post during this period to receive an F3versary announcement. "
+                "Setting to No requirement skips this check."
+            ),
         ),
         orm.InputBlock(
             label="Days Before the F3versary",

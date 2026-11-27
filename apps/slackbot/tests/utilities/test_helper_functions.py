@@ -13,6 +13,7 @@ from slack_sdk.web import SlackResponse
 from sqlalchemy.exc import OperationalError
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+from tests.log_privacy import SENSITIVE_MARKERS, SENSITIVE_TEXT, database_error
 from utilities import helper_functions
 from utilities.helper_functions import is_deactivated_slack_user, safe_get, usable_invite_link
 
@@ -1446,3 +1447,158 @@ def test_overlapping_full_refreshes_run_one_at_a_time(monkeypatch, refresh_name,
         t.join(timeout=5)
         assert not t.is_alive()
     assert events == ["A-enter", "A-exit", "B-enter", "B-exit"]
+
+
+def _raise_and_catch(error: BaseException) -> BaseException:
+    try:
+        raise error
+    except BaseException as caught:
+        return caught
+
+
+def _log_and_capture(error: BaseException, structured: bool, **context):
+    """Logs through both a real handler and caplog, returning (formatted output, record)."""
+    stream = io.StringIO()
+    handler = StructuredLogHandler(stream=stream) if structured else logging.StreamHandler(stream)
+    logger = logging.getLogger("tests.log_error_event")
+    logger.addHandler(handler)
+    records = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    collector = _Collect()
+    logger.addHandler(collector)
+    try:
+        helper_functions.log_error_event(logger, "slack.test.operation_failed", error, **context)
+    finally:
+        logger.removeHandler(handler)
+        logger.removeHandler(collector)
+        handler.close()
+    assert len(records) == 1
+    return stream.getvalue(), records[0]
+
+
+def _structured_payload(output: str) -> dict:
+    payloads = [json.loads(line) for line in output.splitlines() if line.strip()]
+    return next(payload for payload in payloads if payload.get("event") == "slack.test.operation_failed")
+
+
+@pytest.mark.parametrize("structured", [False, True])
+def test_log_error_event_keeps_context_and_drops_the_message(structured):
+    error = _raise_and_catch(RuntimeError(SENSITIVE_TEXT))
+
+    output, record = _log_and_capture(error, structured, team_id="T123", org_id=42)
+
+    for marker in SENSITIVE_MARKERS:
+        assert marker not in output
+        assert marker not in repr(record.__dict__)
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is None
+    assert record.json_fields["event"] == "slack.test.operation_failed"
+    assert record.json_fields["team_id"] == "T123"
+    assert record.json_fields["org_id"] == 42
+    assert record.json_fields["error_type"] == "RuntimeError"
+    assert record.json_fields["error_stack"].startswith("test_helper_functions.py:")
+    assert record.json_fields["error_stack"].endswith(":_raise_and_catch")
+    assert "slack_error" not in record.json_fields
+    if structured:
+        payload = _structured_payload(output)
+        assert payload["severity"] == "ERROR"
+        assert payload["event"] == "slack.test.operation_failed"
+        assert payload["org_id"] == 42
+    else:
+        assert output.strip() == "slack.test.operation_failed team_id=T123 org_id=42 error_type=RuntimeError"
+
+
+def test_log_error_event_drops_sqlalchemy_statement_and_parameters():
+    error = _raise_and_catch(database_error())
+
+    output, record = _log_and_capture(error, True, region_id=7)
+
+    for marker in SENSITIVE_MARKERS:
+        assert marker not in output
+    assert record.json_fields["error_type"] == "StatementError"
+
+
+@pytest.mark.parametrize(
+    "response_data,expected",
+    [
+        ({"ok": False, "error": "channel_not_found", "token": "xoxb-synthetic-token"}, "channel_not_found"),
+        ({"ok": False, "error": "token_revoked"}, "token_revoked"),
+        ({"ok": False, "error": "token_expired"}, "token_expired"),
+        ({"ok": False, "error": "xoxb_synthetic"}, "unclassified"),
+        ({"ok": False, "error": "xapp_synthetic"}, "unclassified"),
+        ({"ok": False, "error": "xoxb-synthetic-token"}, "unclassified"),
+        ({"ok": False, "error": "member@example.invalid"}, "unclassified"),
+        ({"ok": False, "error": "x" * 65}, "unclassified"),
+        ({"ok": False}, "unclassified"),
+    ],
+)
+def test_log_error_event_keeps_only_a_bounded_slack_error_code(response_data, expected):
+    response = SlackResponse(
+        client=None,
+        http_verb="POST",
+        api_url="https://slack.com/api/chat.postMessage",
+        req_args={"json": {"text": SENSITIVE_TEXT}},
+        data=response_data,
+        headers={},
+        status_code=200,
+    )
+    error = _raise_and_catch(SlackApiError(SENSITIVE_TEXT, response))
+
+    output, record = _log_and_capture(error, True, team_id="T123")
+
+    for marker in SENSITIVE_MARKERS:
+        assert marker not in output
+    assert record.json_fields["slack_error"] == expected
+    assert _structured_payload(output)["slack_error"] == expected
+
+
+class _UnreadableResponse:
+    def get(self, key):
+        raise RuntimeError(SENSITIVE_TEXT)
+
+
+@pytest.mark.parametrize("response", [None, _UnreadableResponse()])
+def test_log_error_event_classifies_a_missing_or_unreadable_slack_response(response):
+    error = _raise_and_catch(SlackApiError(SENSITIVE_TEXT, response))
+
+    output, record = _log_and_capture(error, False, team_id="T123")
+
+    assert record.json_fields["slack_error"] == "unclassified"
+    for marker in SENSITIVE_MARKERS:
+        assert marker not in output
+
+
+@pytest.mark.parametrize("name,expected", [("member@example.invalid", "Exception"), ("_Err2", "_Err2")])
+def test_log_error_event_bounds_the_exception_class_name(name, expected):
+    error = _raise_and_catch(type(name, (Exception,), {})(SENSITIVE_TEXT))
+
+    output, record = _log_and_capture(error, False)
+
+    assert record.json_fields["error_type"] == expected
+    assert "member@example.invalid" not in output
+
+
+def test_log_error_event_logs_at_the_requested_level():
+    error = _raise_and_catch(RuntimeError(SENSITIVE_TEXT))
+    logger = logging.getLogger("tests.log_error_event.level")
+    records = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    collector = _Collect()
+    logger.addHandler(collector)
+    try:
+        helper_functions.log_error_event(logger, "slack.test.retrying", error, level=logging.WARNING, org_id=3)
+    finally:
+        logger.removeHandler(collector)
+
+    (record,) = records
+    assert record.levelno == logging.WARNING
+    assert record.json_fields["event"] == "slack.test.retrying"
+    assert SENSITIVE_TEXT not in repr(record.__dict__)
