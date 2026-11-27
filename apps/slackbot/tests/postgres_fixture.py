@@ -2,14 +2,17 @@
 
 A test module imports `isolated_postgres` and `requires_postgres`, and defines
 a `postgres_schema` fixture that returns a callable taking the engine and
-creating the tables the module needs. The fixture points
-`f3_data_models.utils.get_session` at the container, so `session_scope()` in
-application code writes to it.
+creating the tables the module needs. One container serves the whole pytest
+session; each test gets its own freshly created database in it, dropped
+afterwards, so no test sees another's schema, rows or connections. The fixture
+points `f3_data_models.utils.get_session` at that database, so
+`session_scope()` in application code writes to it.
 """
 
 import os
 import subprocess
 import time
+import uuid
 
 import pytest
 from f3_data_models import utils as data_model_utils
@@ -27,8 +30,20 @@ requires_postgres = pytest.mark.skipif(
 )
 
 
-@pytest.fixture
-def isolated_postgres(monkeypatch, postgres_schema):
+def _url(port, database):
+    return URL.create(
+        "postgresql+psycopg2",
+        username="slackbot_test",
+        password="slackbot_test",
+        host="127.0.0.1",
+        port=port,
+        database=database,
+    )
+
+
+@pytest.fixture(scope="session")
+def postgres_server():
+    """Start the session's container and yield an autocommit engine on its maintenance database."""
     container_id = None
     engine = None
     try:
@@ -53,15 +68,7 @@ def isolated_postgres(monkeypatch, postgres_schema):
         subprocess.run(["docker", "start", container_id], check=True, capture_output=True, text=True)
         published_port = subprocess.check_output(["docker", "port", container_id, "5432/tcp"], text=True).strip()
         port = int(published_port.rsplit(":", maxsplit=1)[1])
-        url = URL.create(
-            "postgresql+psycopg2",
-            username="slackbot_test",
-            password="slackbot_test",
-            host="127.0.0.1",
-            port=port,
-            database="slackbot_test",
-        )
-        engine = create_engine(url, pool_pre_ping=True)
+        engine = create_engine(_url(port, "slackbot_test"), isolation_level="AUTOCOMMIT", pool_pre_ping=True)
 
         deadline = time.monotonic() + 30
         while True:
@@ -74,6 +81,27 @@ def isolated_postgres(monkeypatch, postgres_schema):
                     raise
                 time.sleep(0.2)
 
+        yield engine
+    finally:
+        if engine is not None:
+            engine.dispose()
+        if container_id:
+            subprocess.run(["docker", "rm", "--force", container_id], check=True, capture_output=True, text=True)
+
+
+@pytest.fixture
+def isolated_postgres(monkeypatch, postgres_schema, postgres_server):
+    database = f"test_{uuid.uuid4().hex}"
+    with postgres_server.connect() as connection:
+        # Roles belong to the server, not the database, so they outlive the drop below.
+        roles_before = set(connection.exec_driver_sql("SELECT rolname FROM pg_roles").scalars())
+        connection.exec_driver_sql(f'CREATE DATABASE "{database}"')
+    engine = None
+    try:
+        engine = create_engine(
+            _url(postgres_server.url.port, database),
+            pool_pre_ping=True,
+        )
         postgres_schema(engine)
 
         session_factory = sessionmaker(bind=engine)
@@ -82,5 +110,11 @@ def isolated_postgres(monkeypatch, postgres_schema):
     finally:
         if engine is not None:
             engine.dispose()
-        if container_id:
-            subprocess.run(["docker", "rm", "--force", container_id], check=True, capture_output=True, text=True)
+        # FORCE ends connections a test leaked (an abandoned worker thread, say)
+        # so the drop cannot hang.
+        with postgres_server.connect() as connection:
+            connection.exec_driver_sql(f'DROP DATABASE "{database}" WITH (FORCE)')
+            roles_after = set(connection.exec_driver_sql("SELECT rolname FROM pg_roles").scalars())
+            for role in sorted(roles_after - roles_before):
+                drop = connection.execute(text("SELECT format('DROP ROLE %I', :role)"), {"role": role}).scalar_one()
+                connection.exec_driver_sql(drop)

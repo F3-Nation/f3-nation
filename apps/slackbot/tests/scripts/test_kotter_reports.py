@@ -11,6 +11,7 @@ from slack_sdk.http_retry import RateLimitErrorRetryHandler
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from scripts import hourly_runner, kotter_reports
+from tests import log_privacy
 from utilities.database.orm import SlackSettings
 
 
@@ -822,3 +823,72 @@ def test_kotter_skips_uninstalled_workspace(monkeypatch):
     kotter_reports.send_kotter_reports(force=True)
 
     assert sent == [(installed_client, 2)]
+
+
+def test_failed_region_logs_privately_and_serves_the_next_region(monkeypatch, caplog, capsys):
+    orgs = [SimpleNamespace(id=org_id, name="Region") for org_id in (1, 2)]
+    slack = SimpleNamespace(settings=settings(kotter_reports_enabled=True).__dict__)
+    monkeypatch.setattr(
+        kotter_reports.DbManager, "find_join_records3", lambda *args, **kwargs: [(None, org, slack) for org in orgs]
+    )
+    queried = []
+
+    def get_rows(config, today):
+        queried.append(today)
+        if len(queried) == 1:
+            raise log_privacy.database_error()
+        return [row(1)]
+
+    monkeypatch.setattr(kotter_reports, "get_kotter_rows", get_rows)
+    monkeypatch.setattr(
+        kotter_reports, "resolve_kotter_deliveries", lambda cfg, rows: [kotter_reports.Delivery("C1", rows)]
+    )
+    sent = []
+    monkeypatch.setattr(kotter_reports, "_send_delivery", lambda client, delivery, **kwargs: sent.append(delivery))
+    monkeypatch.setattr(kotter_reports, "slack_client_for_team", lambda *args, **kwargs: object())
+
+    kotter_reports.send_kotter_reports(force=True, now_cst=datetime(2026, 7, 6, 8))
+
+    log_privacy.assert_private(caplog, capsys)
+    (record,) = log_privacy.error_events(caplog, "slack.kotter_reports.region_failed")
+    assert (record.json_fields["org_id"], record.json_fields["error_type"]) == (1, "StatementError")
+    assert len(queried) == 2
+    assert len(sent) == 1
+
+
+def test_failed_delivery_channel_logs_privately_and_sends_nothing(caplog, capsys):
+    class Client:
+        posted = []
+
+        def conversations_open(self, **kwargs):
+            raise ValueError(log_privacy.SENSITIVE_TEXT)
+
+        def chat_postMessage(self, **kwargs):
+            self.posted.append(kwargs)
+
+    delivery = kotter_reports.Delivery(
+        destination=None, destination_users=["U_SYNTHETIC_A", "U_SYNTHETIC_B"], rows=[row(1)]
+    )
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
+
+    output = log_privacy.assert_private(caplog, capsys)
+    assert "U_SYNTHETIC_" not in output
+    (record,) = log_privacy.error_events(caplog, "slack.kotter_reports.delivery_failed")
+    assert record.json_fields["org_id"] == 42
+    assert record.json_fields["destination"] == "group_dm"
+    assert record.json_fields["recipients"] == 2
+    assert record.json_fields["error_type"] == "ValueError"
+    assert Client.posted == []
+
+
+def test_failed_channel_delivery_logs_the_channel_id(caplog, capsys):
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            raise ValueError(log_privacy.SENSITIVE_TEXT)
+
+    kotter_reports._send_delivery(Client(), kotter_reports.Delivery("C123", [row(1)]), stats_url=None, org_id=42)
+
+    log_privacy.assert_private(caplog, capsys)
+    (record,) = log_privacy.error_events(caplog, "slack.kotter_reports.delivery_failed")
+    assert record.json_fields["destination"] == "C123"
+    assert "recipients" not in record.json_fields

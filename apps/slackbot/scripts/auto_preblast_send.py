@@ -28,7 +28,7 @@ from sqlalchemy.orm import aliased
 
 from features.calendar import event_preblast
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import current_date_cst, safe_get
+from utilities.helper_functions import current_date_cst, log_error_event, safe_get
 from utilities.slack_tokens.client import slack_client_for_team
 
 logger = logging.getLogger(__name__)
@@ -188,8 +188,14 @@ def send_automated_preblasts(force: bool = False):
                 client=slack_client,
                 logger=logger,
             )
-        except Exception:
-            logger.exception("Error sending preblast for event %s", preblast.event.id)
+        except Exception as e:
+            log_error_event(
+                logger,
+                "slack.auto_preblast.send_failed",
+                e,
+                team_id=preblast.slack_settings.team_id,
+                event_id=preblast.event.id,
+            )
             continue
 
 

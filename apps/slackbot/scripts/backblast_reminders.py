@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from datetime import datetime, timedelta
@@ -30,7 +31,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import aliased
 
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import current_date_cst, safe_get
+from utilities.helper_functions import current_date_cst, log_error_event, safe_get
 from utilities.slack import actions, orm
 from utilities.slack_tokens.client import slack_client_for_team
 
@@ -189,7 +190,13 @@ def send_backblast_reminders(force=False):
                     try:
                         slack_client.chat_postMessage(channel=backblast.slack_user_id, text=msg, blocks=blocks)
                     except Exception as e:
-                        print(f"Error sending backblast reminder to {backblast.slack_user_id}: {e}")
+                        log_error_event(
+                            logging.getLogger(__name__),
+                            "slack.backblast_reminders.dm_failed",
+                            e,
+                            team_id=backblast.slack_settings.team_id,
+                            event_id=backblast.event.id,
+                        )
                         continue
 
     if failed_team_ids:
@@ -207,7 +214,7 @@ def handle_backblast_reminder_dismiss(
     try:
         event_instance = DbManager.get(EventInstance, event_id)
     except Exception as e:
-        logger.error(f"Error fetching event with ID {event_id}: {e}")
+        log_error_event(logger, "slack.backblast_reminders.event_lookup_failed", e, event_id=event_id)
         return
 
     meta = event_instance.meta or {}
@@ -231,7 +238,7 @@ def handle_backblast_reminder_dismiss(
             ],
         )
     except Exception as e:
-        logger.error(f"Error updating message for event ID {event_id}: {e}")
+        log_error_event(logger, "slack.backblast_reminders.dismiss_update_failed", e, event_id=event_id)
         return
 
 

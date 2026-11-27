@@ -25,6 +25,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utilities.constants import LEADER_ATTENDANCE_TYPES
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users, get_site_q_slack_ids_by_ao
+from utilities.helper_functions import log_error_event
 from utilities.slack_tokens.client import slack_client_for_team
 
 logger = logging.getLogger(__name__)
@@ -720,12 +721,13 @@ def _send_delivery(client: WebClient, delivery: Delivery, stats_url: str | None,
             e.response.get("error"),
         )
     except ValueError as e:
-        logger.error(
-            "Error sending Kotter Report (org_id=%s, destination=%s, error=%s)",
-            org_id,
-            destination_label,
-            e,
+        # A group DM's label lists its recipients' Slack IDs; this event records only how many there are.
+        destination = (
+            {"destination": delivery.destination}
+            if delivery.destination
+            else {"destination": "group_dm", "recipients": len(delivery.destination_users or [])}
         )
+        log_error_event(logger, "slack.kotter_reports.delivery_failed", e, org_id=org_id, **destination)
 
 
 def send_kotter_reports(
@@ -796,7 +798,7 @@ def send_kotter_reports(
                         type(e).__name__,
                     )
         except Exception as e:
-            print(f"Error processing Kotter Reports for org {org.name} ({org.id}): {e}")
+            log_error_event(logger, "slack.kotter_reports.region_failed", e, org_id=org.id)
 
 
 if __name__ == "__main__":
