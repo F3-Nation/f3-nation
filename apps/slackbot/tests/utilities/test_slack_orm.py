@@ -8,7 +8,10 @@ from slack_sdk.errors import SlackApiError
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from utilities.slack.orm import BlockView, DividerBlock
+from utilities.slack.orm import (
+    BlockView,
+    DividerBlock,
+)
 
 
 def _slack_rejection() -> SlackApiError:
@@ -17,7 +20,7 @@ def _slack_rejection() -> SlackApiError:
         {
             "error": "invalid_arguments",
             "response_metadata": {
-                "messages": ["no more than 100 items allowed"],
+                "messages": ["[ERROR] no more than 100 items allowed [json-pointer:/view/blocks]"],
             },
             "view": {"id": "V_SECRET"},
         },
@@ -39,6 +42,7 @@ def test_update_modal_logs_sanitized_slack_error_and_preserves_legacy_suppressio
     assert result is None
     assert "slack.modal.update_failed error=invalid_arguments" in caplog.text
     assert "V_SECRET" not in caplog.text
+    assert "pointers=['/view/blocks']" in caplog.text
     assert "no more than 100 items allowed" not in caplog.text
 
 

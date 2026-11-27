@@ -98,6 +98,14 @@ def test_restored_confirmation_actions_preserve_dispatch_contract(action_prefix,
         assert events == ["ack", "handler"]
 
 
+@pytest.mark.parametrize(
+    "action_id",
+    [actions.CALENDAR_HOME_SHOW_MORE, actions.CALENDAR_HOME_SHOW_FIRST, actions.CALENDAR_HOME_FILTERS],
+)
+def test_calendar_home_paging_and_filter_actions_redraw_in_place(action_id):
+    assert MAIN_MAPPER["block_actions"][action_id] == (home.build_home_form, False, False)
+
+
 def test_calendar_shortcut_acknowledges_before_loading_form_and_handler():
     events = []
     ack = MagicMock(side_effect=lambda: events.append("ack"))

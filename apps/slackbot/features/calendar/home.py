@@ -41,6 +41,7 @@ from utilities.database.special_queries import CalendarHomeQuery, get_admin_user
 from utilities.helper_functions import (
     _parse_view_private_metadata,
     current_date_cst,
+    escape_mrkdwn,
     get_location_display_name,
     get_user,
     safe_convert,
@@ -50,30 +51,180 @@ from utilities.helper_functions import (
 from utilities.slack import actions, orm
 
 SLACK_MODAL_BLOCK_LIMIT = 100
+# Events requested per page. A page renders fewer when they and their date headers would pass the modal limit.
+HOME_PAGE_SIZE = 90
+# Metadata key under which a modal opened from the calendar carries the calendar's filter state.
+HOME_STATE_KEY = "home_state"
+FILTER_ACTIONS = {
+    actions.CALENDAR_HOME_AO_FILTER,
+    actions.CALENDAR_HOME_EVENT_TYPE_FILTER,
+    actions.CALENDAR_HOME_DATE_FILTER,
+    actions.CALENDAR_HOME_Q_FILTER,
+}
+# Calendar controls that only redraw the calendar: paging, the Filters button and the filter inputs. Event-menu
+# actions also redraw in place but go on to update the preblast post, so they don't raise on a rejected redraw.
+IN_PLACE_ACTIONS = FILTER_ACTIONS | {
+    actions.CALENDAR_HOME_SHOW_MORE,
+    actions.CALENDAR_HOME_SHOW_FIRST,
+    actions.CALENDAR_HOME_FILTERS,
+}
+OPTION_LABELS = {
+    actions.FILTER_OPEN_Q: "Show only open Q slots",
+    actions.FILTER_MY_EVENTS: "Show only my events",
+    actions.FILTER_SPECIAL_EVENTS: "Special events only",
+}
+OPTION_SUMMARIES = {
+    actions.FILTER_OPEN_Q: "Open Q only",
+    actions.FILTER_MY_EVENTS: "My events only",
+    actions.FILTER_SPECIAL_EVENTS: "Special events only",
+}
+LEGEND = ":muscle: you're Q · :white_check_mark: you're going · :pencil: preblast · :star: special event"
 
 
 def _append_calendar_event_group(
     blocks: list[orm.BaseBlock],
-    event_block: orm.SectionBlock,
+    event_blocks: list[orm.BaseBlock],
     event_date: datetime.date,
     active_date: datetime.date | None,
+    block_limit: int,
 ) -> tuple[datetime.date | None, bool]:
-    """Append a complete date/event group when it fits in Slack's modal limit."""
+    """Append an event's blocks, with a date header when the date changes, only if all of them fit."""
     candidate_blocks: list[orm.BaseBlock] = []
     if event_date != active_date:
-        candidate_blocks.extend(
-            [
-                orm.DividerBlock(),
-                orm.HeaderBlock(label=f":calendar: {event_date.strftime('%A, %B %d')}"),
-            ]
-        )
-    candidate_blocks.append(event_block)
+        candidate_blocks.append(orm.HeaderBlock(label=f":calendar: {event_date.strftime('%A, %B %d')}"))
+    candidate_blocks.extend(event_blocks)
 
-    if len(blocks) + len(candidate_blocks) > SLACK_MODAL_BLOCK_LIMIT:
+    if len(blocks) + len(candidate_blocks) > block_limit:
         return active_date, False
 
     blocks.extend(candidate_blocks)
     return event_date, True
+
+
+def _event_types(event: CalendarHomeQuery) -> str:
+    return " / ".join(escape_mrkdwn(t.name) for t in event.event_types)
+
+
+def _event_title(event: CalendarHomeQuery) -> str:
+    """The start time as a code span, so times line up down a day, then the bold name and what it is."""
+    start_time = f"`{event.event.start_time or 'TBD'}`"
+    ao_name = escape_mrkdwn(event.org.name)
+    if event.event.series_exception == Series_Exception.closed:
+        return f"{start_time} *{ao_name}* — {_event_types(event)}"
+    if event.event.highlight:
+        return f"{start_time} :star: *{escape_mrkdwn(event.event.name)}* — {ao_name}"
+    if event.series and event.series.name and event.org.name not in event.series.name:
+        return f"{start_time} *{escape_mrkdwn(event.series.name)}* — {ao_name}"
+    return f"{start_time} *{ao_name}* — {_event_types(event)}"
+
+
+def _event_option_names(event: CalendarHomeQuery, user_is_admin: bool) -> list[str]:
+    """Every action the viewer can take on an open event, most common first: Take Q and HC lead the menu."""
+    option_names: list[str] = []
+    if not event.planned_qs:
+        option_names.append("Take Q")
+    option_names.append("Un-HC" if event.user_attending else "HC")
+    if not user_is_admin:
+        option_names.append("Edit Preblast" if event.user_q else "View Preblast")
+    if user_is_admin:
+        option_names.extend(["Assign Q", "Close Event"])
+        option_names.append("Edit Preblast" if event.event.start_date > current_date_cst() else "Edit Backblast")
+    return option_names
+
+
+def _event_blocks(event: CalendarHomeQuery, user_is_admin: bool) -> list[orm.BaseBlock]:
+    """One section per event: the title line, a detail line, and every action in its overflow menu."""
+    if event.event.series_exception == Series_Exception.closed:
+        details = ":no_entry: Closed"
+        option_names = ["Reopen Event" if user_is_admin else "Event Closed"]
+    else:
+        parts = [
+            f"Q: {escape_mrkdwn(event.planned_qs)}" if event.planned_qs else "Q: *Open!*",
+            f"{event.hc_count or 0} HC",
+        ]
+        icons = " ".join(
+            icon
+            for icon, shown in [
+                (":muscle:", event.user_q),
+                (":white_check_mark:", event.user_attending),
+                (":pencil:", event.event.preblast_rich),
+            ]
+            if shown
+        )
+        if icons:
+            parts.append(icons)
+        details = " · ".join(parts)
+        option_names = _event_option_names(event, user_is_admin)
+    return [
+        orm.SectionBlock(
+            label=f"{_event_title(event)}\n{details}",
+            element=orm.OverflowElement(
+                action=f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}",
+                options=orm.as_selector_options(option_names),
+            ),
+        )
+    ]
+
+
+def _filter_summary(filter_data: dict, group_by_option: str, start_date_selected: datetime.date | None) -> list[str]:
+    """One short phrase per active filter, in display order."""
+    parts = []
+    group_count = len(safe_get(filter_data, actions.CALENDAR_HOME_AO_FILTER) or [])
+    if group_count:
+        noun = "AO" if group_by_option == "ao" else "location"
+        parts.append(f"{group_count} {noun}{'s' if group_count > 1 else ''}")
+    type_count = len(safe_get(filter_data, actions.CALENDAR_HOME_EVENT_TYPE_FILTER) or [])
+    if type_count:
+        parts.append(f"{type_count} event type{'s' if type_count > 1 else ''}")
+    selected_options = safe_get(filter_data, actions.CALENDAR_HOME_Q_FILTER) or []
+    parts.extend(OPTION_SUMMARIES[o] for o in OPTION_SUMMARIES if o in selected_options)
+    if start_date_selected:
+        parts.append(f"from {start_date_selected.strftime('%a, %b %d')}")
+    return parts
+
+
+def _page_offset(body: dict, action_id: str | None, view_id: str | None) -> int:
+    """Which page to show: Show more carries its offset, a filter change or Back to start returns to the first page,
+    and an action taken directly on the calendar (HC, Take Q, Reopen) keeps the page it was on. A refresh from a
+    modal stacked on top (Assign Q, Close Event) arrives from that modal's view, so it returns to the first page."""
+    if action_id == actions.CALENDAR_HOME_SHOW_MORE:
+        return max(safe_convert(safe_get(body, "actions", 0, "value"), int) or 0, 0)
+    if action_id in FILTER_ACTIONS or action_id == actions.CALENDAR_HOME_SHOW_FIRST:
+        return 0
+    if view_id and safe_get(body, "view", "id") == view_id:
+        return max(safe_convert(safe_get(_parse_view_private_metadata(body), "offset"), int) or 0, 0)
+    return 0
+
+
+def _filter_inputs_were_shown(body: dict, action_id: str | None, stored: dict) -> bool:
+    """Whether the view the user acted in had the filter inputs on screen, so its state holds their current values."""
+    if safe_get(stored, "filters_open") or action_id in FILTER_ACTIONS:
+        return True
+    state_values = safe_get(body, "view", "state", "values") or {}
+    return any(block_id in state_values for block_id in FILTER_ACTIONS)
+
+
+def _filters_open(action_id: str | None, were_shown: bool) -> bool:
+    """Whether the filter inputs show: the Filters button flips them, a filter change keeps them showing, any other
+    refresh of the same view keeps them as they were, and a newly opened calendar starts with them hidden."""
+    if action_id == actions.CALENDAR_HOME_FILTERS:
+        return not were_shown
+    if action_id in FILTER_ACTIONS:
+        return True
+    return were_shown
+
+
+def _home_state(body: dict) -> dict:
+    """The calendar's filters and filter visibility, for a modal opened on top of it to hand back when it redraws the
+    calendar."""
+    stored = _parse_view_private_metadata(body)
+    return {"filters": safe_get(stored, "filters") or {}, "filters_open": bool(safe_get(stored, "filters_open"))}
+
+
+def _filters_button_label(filters_open: bool, active_count: int) -> str:
+    if filters_open:
+        return ":gear: Hide filters"
+    return f":gear: Filters ({active_count} active)" if active_count else ":gear: Filters"
 
 
 def handle_event_preblast_select_button(
@@ -114,6 +265,22 @@ def build_home_form(
             user_is_admin = any(u[0].id == user_id for u in admin_users) or any(u.id == user_id for u in aoq_users)
         metadata["user_is_admin"] = user_is_admin
 
+    view_id = update_view_id or safe_get(body, actions.LOADING_ID) or safe_get(body, "view", "id")
+    offset = _page_offset(body, action_id, view_id)
+    metadata["offset"] = offset
+    # Filter values and visibility live in private_metadata so they survive while the inputs are hidden.
+    same_view = bool(view_id) and safe_get(body, "view", "id") == view_id
+    if same_view:
+        stored = _parse_view_private_metadata(body)
+    else:
+        # A modal stacked on the calendar (Assign Q, Close Event) carries the calendar's filter state in its own
+        # metadata, since its view holds none of the calendar's.
+        stored = safe_get(_parse_view_private_metadata(body), HOME_STATE_KEY) or {}
+    filter_inputs_were_shown = same_view and _filter_inputs_were_shown(body, action_id, stored)
+    filters_open = _filters_open(
+        action_id, filter_inputs_were_shown if same_view else bool(safe_get(stored, "filters_open"))
+    )
+
     start_time = time.time()
     group_by_option = region_record.calendar_group_by_option or "ao"
     ao_records = DbManager.find_records(
@@ -135,19 +302,7 @@ def build_home_form(
     logger.debug(f"AO and Event Type query time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
 
-    blocks = [
-        orm.ActionsBlock(
-            elements=[
-                orm.ButtonElement(
-                    ":calendar: Calendar Images", value="calendar", action=actions.OPEN_CALENDAR_IMAGE_BUTTON
-                ),
-                orm.ButtonElement(
-                    ":world_map: Nearby Special Events", value="nearby", action=actions.NEARBY_EVENTS_OPEN
-                ),
-            ]
-        ),
-        orm.DividerBlock(),
-        orm.SectionBlock(label="*Upcoming Schedule*"),
+    filter_inputs: list[orm.BaseBlock] = [
         orm.InputBlock(
             label="Filter AOs" if group_by_option == "ao" else "Filter Locations",
             action=actions.CALENDAR_HOME_AO_FILTER,
@@ -188,27 +343,26 @@ def build_home_form(
             label="Other options",
             action=actions.CALENDAR_HOME_Q_FILTER,
             element=orm.CheckboxInputElement(
-                options=orm.as_selector_options(
-                    names=["Show only open Q slots", "Show only my events", "Include events from nearby regions"],
-                    values=[actions.FILTER_OPEN_Q, actions.FILTER_MY_EVENTS],  # , actions.FILTER_NEARBY_REGIONS],
-                ),
+                options=orm.as_selector_options(names=list(OPTION_LABELS.values()), values=list(OPTION_LABELS)),
             ),
             dispatch_action=True,
         ),
     ]
 
-    if safe_get(body, "view"):
-        existing_filter_data = orm.BlockView(blocks=blocks).get_selected_values(body)
+    if filter_inputs_were_shown:
+        existing_filter_data = orm.BlockView(blocks=filter_inputs).get_selected_values(body)
     else:
-        existing_filter_data = {}
+        existing_filter_data = safe_get(stored, "filters") or {}
+    metadata["filters"] = {k: v for k, v in existing_filter_data.items() if v}
+    metadata["filters_open"] = filters_open
 
     # Build the filter
-    start_date = (
-        safe_convert(
-            safe_get(existing_filter_data, actions.CALENDAR_HOME_DATE_FILTER), datetime.datetime.strptime, ["%Y-%m-%d"]
-        )
-        or datetime.datetime.now(tz=pytz.timezone("US/Central")).date()
+    start_date_selected = safe_convert(
+        safe_get(existing_filter_data, actions.CALENDAR_HOME_DATE_FILTER), datetime.datetime.strptime, ["%Y-%m-%d"]
     )
+    if start_date_selected:
+        start_date_selected = start_date_selected.date()
+    start_date = start_date_selected or datetime.datetime.now(tz=pytz.timezone("US/Central")).date()
 
     selected_group_filter_ids = [
         v
@@ -228,88 +382,88 @@ def build_home_form(
 
     if safe_get(existing_filter_data, actions.CALENDAR_HOME_EVENT_TYPE_FILTER):
         event_type_ids = [int(x) for x in safe_get(existing_filter_data, actions.CALENDAR_HOME_EVENT_TYPE_FILTER)]
-        filter.append(EventType.id.in_(event_type_ids))
+        filter.append(EventInstance.event_types.any(EventType.id.in_(event_type_ids)))
 
-    open_q_only = actions.FILTER_OPEN_Q in (safe_get(existing_filter_data, actions.CALENDAR_HOME_Q_FILTER) or [])
-    only_users_events = actions.FILTER_MY_EVENTS in (
-        safe_get(existing_filter_data, actions.CALENDAR_HOME_Q_FILTER) or []
-    )
+    selected_options = safe_get(existing_filter_data, actions.CALENDAR_HOME_Q_FILTER) or []
+    open_q_only = actions.FILTER_OPEN_Q in selected_options
+    only_users_events = actions.FILTER_MY_EVENTS in selected_options
+    if actions.FILTER_SPECIAL_EVENTS in selected_options:
+        filter.append(EventInstance.highlight.is_(True))
+
+    summary_parts = _filter_summary(existing_filter_data, group_by_option, start_date_selected)
+    showing = f"Showing: {' · '.join(summary_parts)}" if summary_parts else "Showing: all upcoming events"
+    blocks: list[orm.BaseBlock] = [
+        orm.ActionsBlock(
+            elements=[
+                orm.ButtonElement(
+                    ":calendar: Calendar Images", value="calendar", action=actions.OPEN_CALENDAR_IMAGE_BUTTON
+                ),
+                # Slack's collapsible container block isn't allowed in modals, so a button shows and hides the inputs.
+                orm.ButtonElement(
+                    _filters_button_label(filters_open, len(summary_parts)),
+                    value="hide" if filters_open else "show",
+                    action=actions.CALENDAR_HOME_FILTERS,
+                ),
+            ]
+        ),
+        *(filter_inputs if filters_open else []),
+        orm.ContextBlock(element=orm.ContextElement(initial_value=f"{showing}\n{LEGEND}")),
+    ]
+
     # Run the query
-    # TODO: implement pagination / dynamic limit
     split_time = time.time()
     logger.debug(f"Block building time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
     events: list[CalendarHomeQuery] = home_schedule_query(
-        user_id, filter, limit=100, open_q_only=open_q_only, only_users_events=only_users_events
+        user_id,
+        filter,
+        limit=HOME_PAGE_SIZE,
+        offset=offset,
+        open_q_only=open_q_only,
+        only_users_events=only_users_events,
     )
 
     split_time = time.time()
     logger.debug(f"Home schedule query: {split_time - start_time:.2f} seconds")
     start_time = time.time()
 
-    # Build the event list
+    # Build the event list, keeping one block free for the paging buttons.
     active_date: datetime.date | None = None
+    rendered = 0
     for event in events:
-        option_names: List[str] = []
-        if event.event.series_exception == Series_Exception.closed:
-            label = f"{event.org.name} {' / '.join(t.name for t in event.event_types)} - CLOSED :no_entry:"
-            if user_is_admin:
-                option_names.append("Reopen Event")
-            else:
-                option_names.append("Event Closed")
-        else:
-            if not user_is_admin:
-                if event.user_q:
-                    option_names.append("Edit Preblast")
-                else:
-                    option_names.append("View Preblast")
-            if event.event.highlight:
-                label = f":star: *{event.event.name}* @ {event.org.name} @ {event.event.start_time}"
-            elif event.series and event.series.name and event.org.name not in event.series.name:
-                label = f"{event.series.name} @ {event.org.name} @ {event.event.start_time}"
-            else:
-                label = f"{event.org.name} {' / '.join(t.name for t in event.event_types)} @ {event.event.start_time}"  # noqa
-            if event.planned_qs:
-                label += f" / Q: {event.planned_qs}"
-            else:
-                label += " / Q: Open!"
-                option_names.append("Take Q")
-            if event.user_q:
-                label += " :muscle:"
-            if event.user_attending:
-                label += " :white_check_mark:"
-                option_names.append("Un-HC")
-            else:
-                option_names.append("HC")
-            if event.event.preblast_rich:
-                label += " :pencil:"
-            if user_is_admin:
-                option_names.append("Assign Q")
-                option_names.append("Close Event")
-                if event.event.start_date > current_date_cst():
-                    option_names.append("Edit Preblast")
-                else:
-                    option_names.append("Edit Backblast")
-        event_block = orm.SectionBlock(
-            label=label,
-            element=orm.OverflowElement(
-                action=f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}",
-                options=orm.as_selector_options(option_names),
-            ),
-        )
         active_date, appended = _append_calendar_event_group(
             blocks=blocks,
-            event_block=event_block,
+            event_blocks=_event_blocks(event, user_is_admin),
             event_date=event.event.start_date,
             active_date=active_date,
+            block_limit=SLACK_MODAL_BLOCK_LIMIT - 1,
         )
         if not appended:
             break
+        rendered += 1
 
-    # TODO: add "next page" button
+    if not events:
+        empty_text = (
+            "No more events. Use Back to start to see the first page."
+            if offset > 0
+            else "No upcoming events match these filters."
+        )
+        blocks.append(orm.SectionBlock(label=empty_text))
+
+    paging_buttons = []
+    if offset > 0:
+        paging_buttons.append(
+            orm.ButtonElement(label=":rewind: Back to start", action=actions.CALENDAR_HOME_SHOW_FIRST, value="0")
+        )
+    if rendered < len(events) or len(events) == HOME_PAGE_SIZE:
+        paging_buttons.append(
+            orm.ButtonElement(label="Show more", action=actions.CALENDAR_HOME_SHOW_MORE, value=str(offset + rendered))
+        )
+    if paging_buttons:
+        blocks.append(orm.ActionsBlock(elements=paging_buttons))
+
     form = orm.BlockView(blocks=blocks)
     form.set_initial_values(existing_filter_data)
-    view_id = update_view_id or safe_get(body, actions.LOADING_ID) or safe_get(body, "view", "id")
     split_time = time.time()
     logger.debug(f"Block build 2 time: {split_time - start_time:.2f} seconds")
     start_time = time.time()
@@ -321,7 +475,8 @@ def build_home_form(
             callback_id=actions.CALENDAR_HOME_CALLBACK_ID,
             submit_button_text="None",
             parent_metadata=metadata,
-            raise_on_error=view_id == safe_get(body, actions.LOADING_ID),
+            # A rejected redraw from paging, the Filters button or a filter change must reach the dispatcher.
+            raise_on_error=view_id == safe_get(body, actions.LOADING_ID) or action_id in IN_PLACE_ACTIONS,
         )
     else:
         form.post_modal(
@@ -456,6 +611,7 @@ def build_assign_q_form(
         "update_view_id": update_view_id,
         "event_instance_name": event_instance.name,
         "event_instance_date": event_instance.start_date.strftime("%A, %B %d"),
+        HOME_STATE_KEY: _home_state(body),
     }
     form.post_modal(
         client=client,
@@ -682,7 +838,7 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             callback_id=actions.EVENT_CLOSE_HOME_CALLBACK_ID,
             title_text="Close Event",
             submit_button_text="Close Event",
-            parent_metadata={"event_instance_id": event_instance_id},
+            parent_metadata={"event_instance_id": event_instance_id, HOME_STATE_KEY: _home_state(body)},
             new_or_add="add",
             close_button_text="Cancel",
         )
