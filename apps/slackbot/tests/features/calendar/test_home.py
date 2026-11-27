@@ -296,3 +296,58 @@ def test_home_hc_updates_preblast_in_the_channel_it_was_posted_to(monkeypatch):
 
     assert client.chat_update.call_args.kwargs["channel"] == "C_POSTED"
     assert home.post_hc_thread_reply.call_args.args[3] == "C_POSTED"
+
+
+def test_home_hc_retries_preblast_update_without_photo_on_invalid_blocks(monkeypatch):
+    from features.calendar import home
+    from utilities import constants
+
+    summary = {"type": "section", "text": {"type": "mrkdwn", "text": "PRTEST preblast"}}
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(
+            preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
+        ),
+        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        preblast_blocks=[summary],
+    )
+    _patch_home_event(monkeypatch, home, preblast_info)
+    client = MagicMock()
+    client.chat_update.side_effect = [SlackApiError("invalid_blocks", {"error": "invalid_blocks"}), {"ok": True}]
+    logger = MagicMock()
+    with patch.object(home, "DbManager"):
+        home.handle_home_event(_home_event_body("HC"), client, logger, {}, SimpleNamespace(org_id=1))
+
+    assert client.chat_update.call_count == 2
+    client.chat_postMessage.assert_not_called()
+    first_blocks = client.chat_update.call_args_list[0].kwargs["blocks"]
+    second_blocks = client.chat_update.call_args_list[1].kwargs["blocks"]
+    assert any(b.get("alt_text") == "Preblast Image" for b in first_blocks)
+    assert all(b.get("alt_text") != "Preblast Image" for b in second_blocks)
+
+
+def test_home_hc_fallback_post_retries_without_photo_on_invalid_blocks(monkeypatch):
+    from features.calendar import home
+    from utilities import constants
+
+    summary = {"type": "section", "text": {"type": "mrkdwn", "text": "PRTEST preblast"}}
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(
+            preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
+        ),
+        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        preblast_blocks=[summary],
+    )
+    _patch_home_event(monkeypatch, home, preblast_info)
+    client = MagicMock()
+    client.chat_update.side_effect = SlackApiError("message_not_found", {"error": "message_not_found"})
+    client.chat_postMessage.side_effect = [SlackApiError("invalid_blocks", {"error": "invalid_blocks"}), {"ok": True}]
+    logger = MagicMock()
+    with patch.object(home, "DbManager"):
+        home.handle_home_event(_home_event_body("HC"), client, logger, {}, SimpleNamespace(org_id=1))
+
+    assert client.chat_update.call_count == 1
+    assert client.chat_postMessage.call_count == 2
+    first_blocks = client.chat_postMessage.call_args_list[0].kwargs["blocks"]
+    second_blocks = client.chat_postMessage.call_args_list[1].kwargs["blocks"]
+    assert any(b.get("alt_text") == "Preblast Image" for b in first_blocks)
+    assert all(b.get("alt_text") != "Preblast Image" for b in second_blocks)

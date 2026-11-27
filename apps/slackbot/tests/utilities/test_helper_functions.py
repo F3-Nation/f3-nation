@@ -1279,68 +1279,34 @@ def test_update_local_region_records_replaces_in_place_without_emptying_cache(mo
 
 
 def test_ensure_slack_users_loaded_coalesces_concurrent_cold_starts(monkeypatch):
-    import threading
-
     fresh_row = SimpleNamespace(id=1, slack_team_id="T_CONC", slack_id="U_CONC", user_id=42, slack_updated=1)
-    calls = 0
-    in_query = threading.Event()
-    release_query = threading.Event()
 
-    def slow_find_records(*_args, **_kwargs):
-        nonlocal calls
-        calls += 1
-        in_query.set()
-        release_query.wait(timeout=5)
-        return [fresh_row]
-
-    monkeypatch.setattr(helper_functions, "SLACK_USERS", {})
-    monkeypatch.setattr(helper_functions.DbManager, "find_records", slow_find_records)
-
-    threads = [threading.Thread(target=helper_functions.ensure_slack_users_loaded) for _ in range(4)]
-    for t in threads:
-        t.start()
-    assert in_query.wait(timeout=5)
-    release_query.set()
-    for t in threads:
-        t.join(timeout=5)
-        assert not t.is_alive()
+    calls, _results = _run_cold_cache_threads(
+        monkeypatch,
+        fresh_row,
+        helper_functions.ensure_slack_users_loaded,
+        cache_name="SLACK_USERS",
+    )
 
     assert calls == 1
     assert helper_functions.SLACK_USERS == {("T_CONC", "U_CONC"): fresh_row}
 
 
 def test_ensure_region_records_loaded_coalesces_concurrent_cold_starts(monkeypatch):
-    import threading
-
     fresh_row = SimpleNamespace(team_id="T_CONC", settings={"team_id": "T_CONC", "workspace_name": "Concurrent"})
-    calls = 0
-    in_query = threading.Event()
-    release_query = threading.Event()
 
-    def slow_find_records(*_args, **_kwargs):
-        nonlocal calls
-        calls += 1
-        in_query.set()
-        release_query.wait(timeout=5)
-        return [fresh_row]
-
-    monkeypatch.setattr(helper_functions, "REGION_RECORDS", {})
-    monkeypatch.setattr(helper_functions.DbManager, "find_records", slow_find_records)
-
-    threads = [threading.Thread(target=helper_functions.ensure_region_records_loaded) for _ in range(4)]
-    for t in threads:
-        t.start()
-    assert in_query.wait(timeout=5)
-    release_query.set()
-    for t in threads:
-        t.join(timeout=5)
-        assert not t.is_alive()
+    calls, _results = _run_cold_cache_threads(
+        monkeypatch,
+        fresh_row,
+        helper_functions.ensure_region_records_loaded,
+        cache_name="REGION_RECORDS",
+    )
 
     assert calls == 1
     assert list(helper_functions.REGION_RECORDS.keys()) == ["T_CONC"]
 
 
-def _run_cold_cache_threads(monkeypatch, row, target, *, cache_name):
+def _run_cold_cache_threads(monkeypatch, row, target, *, cache_name, extra_cache_modules=()):
     """Start four threads on an empty cache whose first DB load blocks, and return the query count."""
     import threading
     import time
@@ -1348,6 +1314,7 @@ def _run_cold_cache_threads(monkeypatch, row, target, *, cache_name):
     calls = 0
     in_query = threading.Event()
     release_query = threading.Event()
+    ready = threading.Barrier(4)
 
     def slow_find_records(*_args, **_kwargs):
         nonlocal calls
@@ -1356,11 +1323,19 @@ def _run_cold_cache_threads(monkeypatch, row, target, *, cache_name):
         release_query.wait(timeout=5)
         return [row]
 
-    monkeypatch.setattr(helper_functions, cache_name, {})
+    cache = {}
+    monkeypatch.setattr(helper_functions, cache_name, cache)
+    for module in extra_cache_modules:
+        monkeypatch.setattr(module, cache_name, cache)
     monkeypatch.setattr(helper_functions.DbManager, "find_records", slow_find_records)
 
     results = []
-    threads = [threading.Thread(target=lambda: results.append(target())) for _ in range(4)]
+
+    def worker():
+        ready.wait(timeout=5)
+        results.append(target())
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
     for t in threads:
         t.start()
     assert in_query.wait(timeout=5)
@@ -1409,11 +1384,17 @@ def test_positions_user_map_loads_an_empty_slack_user_cache(monkeypatch):
     from features import positions
 
     row = SimpleNamespace(id=1, slack_team_id="T_POS", slack_id="U_POS", user_id=42, slack_updated=1)
-    monkeypatch.setattr(helper_functions, "SLACK_USERS", {})
-    monkeypatch.setattr(positions, "SLACK_USERS", helper_functions.SLACK_USERS)
-    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: [row])
 
-    assert positions._user_id_to_slack_id_map("T_POS") == {42: "U_POS"}
+    calls, results = _run_cold_cache_threads(
+        monkeypatch,
+        row,
+        lambda: positions._user_id_to_slack_id_map("T_POS"),
+        cache_name="SLACK_USERS",
+        extra_cache_modules=(positions,),
+    )
+
+    assert calls == 1
+    assert results == [{42: "U_POS"}] * 4
 
 
 @pytest.mark.parametrize(

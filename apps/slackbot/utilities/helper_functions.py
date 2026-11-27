@@ -53,7 +53,8 @@ def _replace_cache_in_place(cache: dict, fresh: dict) -> None:
     Callers import `SLACK_USERS` and `REGION_RECORDS` by reference and read
     them without the refresh lock. Calling `.clear()` before `.update()`
     exposes an empty dict to concurrent threads: direct `.get()` readers see
-    a miss, and the `ensure_*_loaded` helpers start another full reload.
+    a miss, and `ensure_*_loaded` callers miss the fast path and block on
+    the refresh lock.
     """
     cache.update(fresh)
     for stale_key in list(cache.keys() - fresh.keys()):
