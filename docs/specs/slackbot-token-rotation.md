@@ -152,7 +152,9 @@ refreshes earlier than its window.
 - **AC-8** — GIVEN workspaces whose tokens expire within 3 hours WHEN the
   hourly job starts THEN each is refreshed before the job's other scripts run.
   A failure for one workspace is logged and does not stop the others or the
-  rest of the job; once every script has run, the job exits non-zero.
+  rest of the job; once every script has run, the job exits non-zero. The
+  Cloud Run job is deployed with no task retries, so that exit never reruns
+  scripts that have already sent their messages.
 - **AC-9** — GIVEN a Slack call that fails with `token_revoked` WHEN it was
   made with a token from the getter THEN the caller re-reads the row and
   retries once with the stored token if it differs from the one that failed.
