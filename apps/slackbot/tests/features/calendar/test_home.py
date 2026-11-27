@@ -240,12 +240,16 @@ def test_assign_q_form_prefills_the_current_q_and_co_qs():
     assert elements[actions.CALENDAR_HOME_ASSIGN_Q_CO_QS].get("initial_users") == ["U_COQ"]
 
 
+# build_preblast_info returns its blocks as plain dicts, already in Slack's form.
+PREBLAST_SECTION = {"type": "section", "text": {"type": "mrkdwn", "text": "Preblast"}}
+
+
 def test_take_q_refreshes_a_posted_preblast_with_the_leaders(monkeypatch):
     from features.calendar import home
 
     preblast_info = SimpleNamespace(
         event_record=SimpleNamespace(preblast_ts=123.456),
-        preblast_blocks=[],
+        preblast_blocks=[PREBLAST_SECTION],
         attendance_records=[
             {"user_id": 7, "attendance_type": Attendance_Type.q},
             {"user_id": 8, "attendance_type": Attendance_Type.co_q},
@@ -269,3 +273,7 @@ def test_take_q_refreshes_a_posted_preblast_with_the_leaders(monkeypatch):
     payload = client.chat_update.call_args.kwargs["metadata"]["event_payload"]
     assert payload["qs"] == [7, 8]
     assert payload["attendees"] == [7, 8, 9]
+    blocks = client.chat_update.call_args.kwargs["blocks"]
+    assert blocks[0] == PREBLAST_SECTION
+    assert blocks[-1]["type"] == "actions"
+    assert len(blocks) == 2

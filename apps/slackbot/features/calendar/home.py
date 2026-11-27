@@ -702,9 +702,8 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
                 *preblast_info.preblast_blocks,
                 orm.ActionsBlock(
                     elements=get_preblast_action_buttons(has_q=len(q_list) > 0, event_instance_id=event_instance_id)
-                ),
+                ).as_form_field(),
             ]
-            blocks = [b.as_form_field() for b in blocks]
             metadata = {
                 "event_instance_id": event_instance_id,
                 "attendees": [r["user_id"] for r in preblast_info.attendance_records],
