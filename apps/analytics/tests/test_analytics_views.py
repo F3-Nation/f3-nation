@@ -95,7 +95,14 @@ def fixture() -> duckdb.DuckDBPyConnection:
     )
     db.executemany(
         "INSERT INTO pg.public.attendance VALUES (?, ?, ?, '{}', NULL, NULL, ?, ?)",
-        [(11, 1, 2, True, "q"), (12, 2, 2, True, "q"), (13, 1, 2, False, "co_q"), (14, 2, 1, False, "q")],
+        [
+            (11, 1, 2, True, "q"),
+            (12, 2, 2, True, "q"),
+            (13, 1, 2, False, "co_q"),
+            (14, 2, 1, False, "q"),
+            # A planned PAX sign-up is not a planned Q.
+            (16, 1, 2, True, "pax"),
+        ],
     )
     return db
 
@@ -221,7 +228,7 @@ def test_attendance_materializes_with_enum_user_status(tmp_path: Path):
 
 
 def test_no_query_reads_the_attendance_type_link_tables():
-    # attendance.attendance_type is the only source of a record's type; the link tables are being dropped.
+    # attendance.attendance_type is the only source of a record's type; no query may read the link tables.
     sql_files = sorted(SQL_DIR.glob("*.sql"))
     assert sql_files
     for path in sql_files:

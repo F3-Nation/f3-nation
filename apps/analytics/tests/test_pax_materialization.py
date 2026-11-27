@@ -92,6 +92,8 @@ def test_pax_materialization_contract(tmp_path: Path):
             (5, 10, True, 1, '{"exclude_from_pax_vault":true}'),
             (6, 10, False, 1, "{}"),
             (7, 30, True, 1, "{}"),
+            (8, 20, True, 1, "{}"),
+            (9, 20, True, 1, "{}"),
         ],
     )
     # Event 7 has an org without a region parent; it still counts for lifetime totals.
@@ -111,6 +113,9 @@ def test_pax_materialization_contract(tmp_path: Path):
             # A distinct, regionless eligible event with a Q.
             (8, 1, 7, False, "q"),
             (9, None, 1, False, "co_q"),
+            # Posts as PAX and as Co-Q count as posts but not as Qs.
+            (10, 1, 8, False, "pax"),
+            (11, 1, 9, False, "co_q"),
         ],
     )
     db.execute("INSERT INTO pg.public.event_instances_x_event_types VALUES (1, 7)")
@@ -131,9 +136,9 @@ def test_pax_materialization_contract(tmp_path: Path):
         {"role_id": 3, "role_name": "Q", "org_id": 20, "org_name": "AO", "org_type": "ao"},
         {"role_id": 99, "role_name": "99", "org_id": 99, "org_name": "99", "org_type": None},
     ]
-    # Two distinct eligible events count, including regionless event 7, and the
-    # user was Q at both; two Q rows on one event count once.
-    assert rows[0][14:16] == (2, 2)
+    # Four distinct eligible events count, including regionless event 7. The user
+    # was Q at two of them; two Q rows on one event count once.
+    assert rows[0][14:16] == (4, 2)
     assert rows[1][1] == 3 and rows[1][2:9] == ("3", 99, None, None, "solo@example.test", "active", None)
     assert rows[1][9:14] == ([], [], [], [], [])
     assert rows[1][14:16] == (0, 0)
