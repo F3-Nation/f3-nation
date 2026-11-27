@@ -114,13 +114,19 @@ delegated call counts as the acting user acting on their own record.
 ### Rules the app enforces that the API does not
 
 An app that decides who may act can hold rules the API has no way to
-express. The Slackbot has two:
+express. The Slackbot has these:
 
 - A user who holds the Site Q position on any AO in a region may do what a
   region admin does to that region's calendar, preblasts and backblasts:
   assign a Q, close or reopen an event, and edit someone else's preblast or
   backblast.
-- The Q or Co-Q of an event may edit that event's preblast, backblast, location, and assigned event tags.
+- The Q of an event may manage it: change the event's properties (its
+  location and event tags among them), add people to or remove them from its
+  preblast and backblast, and add or remove Co-Qs.
+- A Co-Q has the same access as the Q. That includes removing themselves as
+  Co-Q, adding other Co-Qs, and removing the Q to become the Q themselves.
+- Any user may create an event, but can manage it afterwards only by signing
+  up as its Q.
 
 A delegated call carries only what the API knows about the acting user, so
 it would refuse these people. Each such rule moves into the API, as
@@ -129,6 +135,15 @@ the action it governs moves to a delegated call. Until then the action stays
 under the app's own grant and the app keeps enforcing the rule. Whether a
 rule keeps its current reach when it moves (a Site Q of one AO acting across
 the whole region) is decided with the rule, not here.
+
+One rule runs the other way. The Slackbot does not let a user make
+themselves a Co-Q, but the API does: a user may add the Co-Q type to their
+own attendance. That check moves into the API before Co-Q sign-ups move to
+delegated calls, or a delegated call would allow what the app refuses.
+
+A user's own attendance needs no rule to move. The API already lets any
+user HC or un-HC an event and sign up as its Q when it has none, and it
+refuses a second Q.
 
 ### Audit history
 
