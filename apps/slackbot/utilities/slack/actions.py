@@ -356,6 +356,7 @@ SPECIAL_EVENTS_CALLBACK_ID = "special-events-id"
 F3VERSARY_ANNOUNCEMENTS_ENABLED = "f3versary_announcements_enabled"
 F3VERSARY_ANNOUNCEMENTS_CHANNEL = "f3versary_announcements_channel"
 F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS = "f3versary_announcements_lead_days"
+F3VERSARY_ANNOUNCEMENTS_ACTIVITY_DAYS = "f3versary_announcements_activity_days"
 F3VERSARY_ANNOUNCEMENTS_CALLBACK_ID = "f3versary-announcements-id"
 
 DB_ADMIN_CALLBACK_ID = "db-admin-id"

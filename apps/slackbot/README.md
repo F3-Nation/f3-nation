@@ -328,7 +328,10 @@ linking when email becomes available; it does not create placeholder F3 accounts
 Direct-email Downrange invitations require a usable email address. FNG creation
 can proceed without linking its optional battle buddy when the actor is unlinked.
 
-The disposable PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`.
+The disposable PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`. CI runs
+the Slack identity, token refresh, installation store, workspace settings and F3versary attendance
+suites independently of affected-workspace selection. The F3versary suite
+checks attendance eligibility and settings persistence against PostgreSQL.
 `SLACKBOT_POSTGRES_IMAGE` optionally overrides their pinned local PostgreSQL
 image; CI sets it to the same mirrored image the `test-suites` job uses for its
 database service. The fixture starts one container per pytest session, gives

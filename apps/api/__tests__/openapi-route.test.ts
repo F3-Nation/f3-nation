@@ -176,4 +176,38 @@ describe("docs openapi route", () => {
     expect(spec.paths["/v1/status"].get.security).toEqual([]);
     expect(spec.paths["/v1/status"].get.parameters).toBeUndefined();
   });
+
+  it("marks only the event-instance GET as optional-auth", async () => {
+    process.env.NEXT_PUBLIC_API_URL = "https://api.f3nation.com/";
+
+    generateMock.mockResolvedValueOnce({
+      servers: [{ url: "https://api.f3nation.com" }],
+      paths: {
+        "/v1/event-instance": { get: {}, post: {} },
+      },
+    } as never);
+
+    const { openApiJson: GET } = await import("../src/docs");
+    const response = await GET(
+      new Request("https://api.f3nation.com/docs/openapi.json"),
+    );
+    const spec = (await response.json()) as {
+      paths: {
+        "/v1/event-instance": {
+          get: { security?: unknown[]; parameters?: { $ref?: string }[] };
+          post: { security?: unknown[]; parameters?: { $ref?: string }[] };
+        };
+      };
+    };
+    const { get, post } = spec.paths["/v1/event-instance"];
+
+    expect(get.security).toEqual([{}, { bearerAuth: [] }]);
+    expect(get.parameters?.[0]?.$ref).toBe(
+      "#/components/parameters/ClientHeader",
+    );
+    expect(post.security).toBeUndefined();
+    expect(post.parameters?.[0]?.$ref).toBe(
+      "#/components/parameters/ClientHeader",
+    );
+  });
 });
