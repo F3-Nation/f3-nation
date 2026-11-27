@@ -12,11 +12,8 @@ export default defineConfig({
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
       include: coverageInclude,
-      // server.ts and instrument.ts are hand-verified process bootstrap
-      // (observability init, @hono/node-server serve(), SIGTERM handling) —
-      // same category as
-      // the instrumentation.ts they replace, which bootstrapCoverageExclude
-      // already excludes for every app.
+      // Process bootstrap is checked by the image smoke stage and focused
+      // shutdown tests separately from application coverage.
       exclude: [...coverageExclude, "src/server.ts", "src/instrument.ts"],
       thresholds: {
         autoUpdate: true,

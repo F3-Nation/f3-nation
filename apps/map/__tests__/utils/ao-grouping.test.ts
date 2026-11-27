@@ -114,6 +114,31 @@ describe("groupMarkersByAo", () => {
     },
   );
   it.each([
+    { filter: "daySu", day: "sunday" },
+    { filter: "dayTu", day: "tuesday" },
+    { filter: "dayF", day: "friday" },
+    { filter: "daySa", day: "saturday" },
+  ] as const)("keeps only the selected AO on $day", ({ filter, day }) => {
+    const marker = makeMarker({
+      id: 1,
+      events: [
+        makeEvent({ id: 101, aoName: "AO A", aoLogo: "a.png", dayOfWeek: day }),
+        makeEvent({ id: 102, aoName: "AO B", aoLogo: "b.png" }),
+      ],
+    });
+    const result = groupMarkersByAo(
+      filterData([marker], { ...initialFilterState, [filter]: true }),
+    );
+    expect(
+      result.map((row) => ({
+        name: row.aoName,
+        logo: row.logo,
+        ids: row.events.map((event) => event.id),
+      })),
+    ).toEqual([{ name: "AO A", logo: "a.png", ids: [101] }]);
+  });
+
+  it.each([
     { events: [], ids: [] },
     { events: [makeEvent({ id: 101 })], ids: [101] },
     { events: [makeEvent({ id: -101, aoName: "" })], ids: [-101] },

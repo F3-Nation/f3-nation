@@ -1,6 +1,16 @@
 {
   "files": [
     {
+      "path": "docs/specs/api-database-recovery.md",
+      "description": "API-only database pool recovery, timeout progress tracking, bounded health probes and platform liveness. Acceptance criteria and operational boundaries.",
+      "scope": [
+        "apps/api/**",
+        "packages/db/**",
+        "packages/api/src/__test__/**",
+        ".github/workflows/deploy-api.yml"
+      ]
+    },
+    {
       "path": "docs/specs/admin-user-home-region.md",
       "description": "Source-admin home-region correction permissions, active destination validation, concurrency, confirmation and attribution; no member notifications.",
       "scope": [
