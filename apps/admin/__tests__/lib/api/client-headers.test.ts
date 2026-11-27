@@ -29,19 +29,19 @@ describe("Admin API client identifiers", () => {
     vi.unstubAllEnvs();
   });
 
-  it("keeps the server-side direct client on RPC and retains its bearer token", async () => {
+  it("identifies the server-side direct client as Admin and retains its bearer token", async () => {
     const { getMyProfile } = await import("~/lib/api/client");
     expect(await getMyProfile()).toEqual({ id: 42 });
     const request = fetchMock.mock.calls[0]![0] as Request;
-    expect(request.headers.get("client")).toBe("orpc");
+    expect(request.headers.get("client")).toBe("f3-admin");
     expect(request.headers.get("authorization")).toBe("Bearer synthetic-token");
   });
 
-  it("keeps the browser client on RPC and retains cookies", async () => {
+  it("identifies the browser client as Admin and retains cookies", async () => {
     const { client } = await import("~/orpc/client");
     await client.me.profile();
     const [request, init] = fetchMock.mock.calls[0]!;
-    expect((request as Request).headers.get("client")).toBe("orpc");
+    expect((request as Request).headers.get("client")).toBe("f3-admin");
     expect(init?.credentials).toBe("include");
   });
 });
