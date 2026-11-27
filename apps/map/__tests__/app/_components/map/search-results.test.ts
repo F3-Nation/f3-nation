@@ -76,4 +76,115 @@ describe("buildF3LocationSearchResults", () => {
     const keys = results.map((result) => result.key);
     expect(new Set(keys).size).toBe(keys.length);
   });
+
+  it.each([
+    {
+      aLogo: "a.png",
+      bLogo: null,
+      search: "AO B",
+      header: "AO B",
+      logo: "",
+    },
+    {
+      aLogo: "a.png",
+      bLogo: "",
+      search: "AO B",
+      header: "AO B",
+      logo: "",
+    },
+    {
+      aLogo: "a.png",
+      bLogo: null,
+      search: "B Workout",
+      header: "B Workout",
+      logo: "",
+    },
+    {
+      aLogo: "a.png",
+      bLogo: "",
+      search: "B Workout",
+      header: "B Workout",
+      logo: "",
+    },
+    {
+      aLogo: null,
+      bLogo: "b.png",
+      search: "AO A",
+      header: "AO A",
+      logo: "location.png",
+    },
+    {
+      aLogo: "",
+      bLogo: "b.png",
+      search: "AO A",
+      header: "AO A",
+      logo: "location.png",
+    },
+    {
+      aLogo: null,
+      bLogo: "b.png",
+      search: "A Workout",
+      header: "A Workout",
+      logo: "location.png",
+    },
+    {
+      aLogo: "",
+      bLogo: "b.png",
+      search: "A Workout",
+      header: "A Workout",
+      logo: "location.png",
+    },
+    {
+      aLogo: "a.png",
+      bLogo: "b.png",
+      search: "AO A",
+      header: "AO A",
+      logo: "a.png",
+    },
+    {
+      aLogo: "a.png",
+      bLogo: "b.png",
+      search: "A Workout",
+      header: "A Workout",
+      logo: "a.png",
+    },
+  ])(
+    "uses resolveAoLogo for $search when AO A logo is $aLogo and AO B logo is $bLogo",
+    ({ aLogo, bLogo, search, header, logo }) => {
+      const baseEvent = locationMarker.events[0]!;
+      const sharedLocation: SparseF3Marker = {
+        ...locationMarker,
+        id: 9,
+        aoName: "AO A",
+        logo: "location.png",
+        events: [
+          {
+            ...baseEvent,
+            id: 90,
+            name: "A Workout",
+            aoName: "AO A",
+            aoLogo: aLogo,
+          },
+          {
+            ...baseEvent,
+            id: 91,
+            name: "B Workout",
+            aoName: "AO B",
+            aoLogo: bLogo,
+          },
+        ],
+      };
+
+      const results = buildF3LocationSearchResults({
+        locationMarkers: [sharedLocation],
+        text: search,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({
+        header,
+        destination: { logo },
+      });
+    },
+  );
 });

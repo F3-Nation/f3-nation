@@ -8,12 +8,13 @@ import type {
  * location belongs to that same AO. Empty logos count as missing, and another
  * AO's logo is never a valid fallback.
  */
-const resolveAoLogo = (
-  marker: LocationMarkerWithDistance,
+export const resolveAoLogo = (
+  marker: Pick<LocationMarkerWithDistance, "aoName" | "logo">,
   aoName: LocationMarkerWithDistance["aoName"],
   aoLogo: string | null | undefined,
 ): LocationMarkerWithDistance["logo"] => {
   const fallbackLogo = aoName === marker.aoName ? marker.logo : null;
+  // Empty string must fall back; ?? only catches null/undefined.
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   return aoLogo || fallbackLogo;
 };
