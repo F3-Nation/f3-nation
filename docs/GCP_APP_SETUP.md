@@ -139,12 +139,20 @@ RUNTIME_SA="$STAGING_RUNTIME_SA"
 gcloud iam service-accounts create "cloudrun-${CLOUDRUN_SERVICE}" \
   --display-name="Cloud Run runtime: ${CLOUDRUN_SERVICE}" \
   --project="$PROJECT"
-# A new account can take a few seconds to be visible to IAM.
-until gcloud iam service-accounts describe "$RUNTIME_SA" --project="$PROJECT" >/dev/null 2>&1; do sleep 5; done
+# A new account can take a few seconds to be visible to IAM. Wait up to about a
+# minute; gcloud's error stays visible if it never appears.
+ready=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  if gcloud iam service-accounts describe "$RUNTIME_SA" --project="$PROJECT" --format='value(email)'; then ready=1; break; fi
+  sleep 5
+done
 
 # Every secret the service references now, read from the live service. A
-# failed lookup, parse or grant prints STOP instead of "All secrets granted."
-if svc_json="$(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$PROJECT" --format=json)" &&
+# missing account or a failed lookup, parse or grant prints STOP instead of
+# "All secrets granted."
+if [ "$ready" != 1 ]; then
+  echo "STOP: $RUNTIME_SA isn't visible to IAM. Check that it was created in $PROJECT before going on."
+elif svc_json="$(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$PROJECT" --format=json)" &&
   secrets="$(jq -r '[.spec.template.spec.containers[].env[]? | .valueFrom.secretKeyRef.name // empty] | unique[]' <<<"$svc_json")"; then
   failed=0
   for secret in $secrets; do
@@ -159,7 +167,7 @@ else
 fi
 ```
 
-Continue only after "All secrets granted." Then grant the account the rest of what the app uses from § 6 (Cloud SQL, buckets) and switch the running service to it. The update creates a new revision of the image already running; if it fails to start, the previous revision keeps serving.
+Continue only after "All secrets granted." Then grant the account the rest of what the app uses from § 6 (Cloud SQL, buckets), with `STAGING_RUNTIME_SA` / `PROD_RUNTIME_SA` still set to the new `cloudrun-…` account, not the one the service runs as now, and switch the running service to it. The update creates a new revision of the image already running; if it fails to start, the previous revision keeps serving.
 
 ```bash
 gcloud run services update "$CLOUDRUN_SERVICE" \
@@ -323,7 +331,7 @@ gcloud projects add-iam-policy-binding "$DB_PROJECT" \
   --role="roles/serviceusage.serviceUsageViewer"
 ```
 
-Then grant the Cloud Run runtime service accounts Cloud SQL Client. A service set up before runtime service accounts may still run as another account; check with `gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project=<project> --format='value(spec.template.spec.serviceAccountName)'` and set `STAGING_RUNTIME_SA` / `PROD_RUNTIME_SA` to that account first:
+Then grant the Cloud Run runtime service accounts Cloud SQL Client. Grant the account the service will run as. When you are [moving a service to its own runtime account](#move-an-existing-service-to-its-own-runtime-account), that is the new `cloudrun-…` account, so keep `STAGING_RUNTIME_SA` / `PROD_RUNTIME_SA` on it. Only for a service that stays on another account (check with `gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project=<project> --format='value(spec.template.spec.serviceAccountName)'`) set the variables to that account first:
 
 ```bash
 gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
