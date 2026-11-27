@@ -142,17 +142,23 @@ gcloud iam service-accounts create "cloudrun-${CLOUDRUN_SERVICE}" \
 # A new account can take a few seconds to be visible to IAM.
 until gcloud iam service-accounts describe "$RUNTIME_SA" --project="$PROJECT" >/dev/null 2>&1; do sleep 5; done
 
-# Every secret the service references now, read from the live service.
-for secret in $(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$PROJECT" --format=json \
-    | jq -r '[.spec.template.spec.containers[].env[]? | .valueFrom.secretKeyRef.name // empty] | unique[]'); do
-  gcloud secrets add-iam-policy-binding "$secret" \
-    --project="$PROJECT" \
-    --member="serviceAccount:${RUNTIME_SA}" \
-    --role=roles/secretmanager.secretAccessor
-done
+# Every secret the service references now, read from the live service. A
+# failed lookup or grant prints STOP instead of "All secrets granted."
+if svc_json="$(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$PROJECT" --format=json)"; then
+  failed=0
+  for secret in $(jq -r '[.spec.template.spec.containers[].env[]? | .valueFrom.secretKeyRef.name // empty] | unique[]' <<<"$svc_json"); do
+    gcloud secrets add-iam-policy-binding "$secret" \
+      --project="$PROJECT" \
+      --member="serviceAccount:${RUNTIME_SA}" \
+      --role=roles/secretmanager.secretAccessor || failed=1
+  done
+  if [ "$failed" = 0 ]; then echo "All secrets granted."; else echo "STOP: a grant failed. Fix it before switching the account."; fi
+else
+  echo "STOP: couldn't read $CLOUDRUN_SERVICE. Fix that before switching the account."
+fi
 ```
 
-Then grant the account the rest of what the app uses from § 6 (Cloud SQL, buckets) and switch the running service to it. The update creates a new revision of the image already running; if it fails to start, the previous revision keeps serving.
+Continue only after "All secrets granted." Then grant the account the rest of what the app uses from § 6 (Cloud SQL, buckets) and switch the running service to it. The update creates a new revision of the image already running; if it fails to start, the previous revision keeps serving.
 
 ```bash
 gcloud run services update "$CLOUDRUN_SERVICE" \
