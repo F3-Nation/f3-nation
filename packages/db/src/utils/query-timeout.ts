@@ -1,5 +1,8 @@
 import type postgres from "postgres";
 
+import { logWarn } from "../lib/logging";
+import type { QueryObserver } from "./pool-recovery";
+
 /**
  * postgres-js has no option for how long a query may wait behind a
  * saturated connection pool -- `connect_timeout` only bounds opening a new
@@ -21,7 +24,7 @@ import type postgres from "postgres";
  * reserves the connection the moment BEGIN is dispatched -- before any
  * response arrives. `begin()` has no unwind path for a rejected BEGIN, so
  * timing it out would strand the reservation with no COMMIT/ROLLBACK ever
- * issued, pinning the connection until max_lifetime tears the socket down
+ * issued, pinning the connection until the socket closes
  * -- self-amplifying the very pool exhaustion this wrapper exists to bound.
  * `begin()` is the only unsafe() caller that passes `onexecute`, which
  * makes it a precise discriminator. Statements inside `db.transaction()`
@@ -44,7 +47,11 @@ import type postgres from "postgres";
  * (`max_pipeline` defaults to 100) has its CancelRequest deferred until
  * that connection's ReadyForQuery, so awaiting it would defeat the timeout.
  */
-export function withQueryTimeout(client: postgres.Sql, timeoutMs: number) {
+export function withQueryTimeout(
+  client: postgres.Sql,
+  timeoutMs: number,
+  observer?: QueryObserver,
+) {
   const originalUnsafe = client.unsafe.bind(client);
   client.unsafe = ((...args: Parameters<typeof originalUnsafe>) => {
     // Transaction BEGIN -- see the docstring. `begin()` is the only caller
@@ -63,12 +70,15 @@ export function withQueryTimeout(client: postgres.Sql, timeoutMs: number) {
       onRejected?: ((reason: unknown) => unknown) | null,
     ) => {
       bounded ??= new Promise((resolve, reject) => {
+        let settled = false;
         const timer = setTimeout(() => {
+          settled = true;
           reject(
             new Error(
               `Query exceeded ${timeoutMs}ms pool-wait/execution timeout`,
             ),
           );
+          observer?.timeout();
           // Best-effort cancellation via the pool's canceller (see the
           // docstring for why not query.cancel()). Fire-once semantics of
           // cancel() are preserved by nulling the canceller ourselves.
@@ -78,21 +88,16 @@ export function withQueryTimeout(client: postgres.Sql, timeoutMs: number) {
           const canceller = cancellable.canceller;
           if (canceller) {
             cancellable.canceller = null;
-            canceller(query).catch((error: unknown) => {
-              // A cancel failure means the timed-out query may keep holding
-              // its connection and server-side locks while the caller only
-              // saw a generic timeout -- a real operational signal. This
-              // package has no logger wiring; console.error beats silence.
-              console.error(
-                "[db] cancelling a timed-out query failed; it may still hold a connection",
-                error,
-              );
+            canceller(query).catch(() => {
+              logWarn("db.query.cancellation_failed", {});
             });
           }
         }, timeoutMs);
         void originalThen(
           (value: unknown) => {
             clearTimeout(timer);
+            if (!settled) observer?.success();
+            settled = true;
             resolve(value);
           },
           (err: unknown) => {

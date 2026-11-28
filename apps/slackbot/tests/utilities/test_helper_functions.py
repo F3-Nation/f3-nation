@@ -13,6 +13,7 @@ from slack_sdk.web import SlackResponse
 from sqlalchemy.exc import OperationalError
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+from tests.log_privacy import SENSITIVE_MARKERS, SENSITIVE_TEXT, database_error
 from utilities import helper_functions
 from utilities.helper_functions import is_deactivated_slack_user, safe_get, usable_invite_link
 
@@ -1235,3 +1236,369 @@ def test_error_stack_keeps_only_the_five_innermost_frames():
     assert frames == ["_raise_through"] * 5
     assert "_caught" not in stack
     assert "bob@example.com" not in stack
+
+
+class _NeverEmptyDict(dict):
+    def clear(self):
+        raise AssertionError("cache must not be cleared in place")
+
+    def pop(self, key, *args):
+        result = super().pop(key, *args)
+        assert len(self) > 0, "cache became empty during in-place replacement"
+        return result
+
+
+def test_update_local_slack_users_replaces_in_place_without_emptying_cache(monkeypatch):
+    stale = SimpleNamespace(id=1, slack_team_id="T_STALE", slack_id="U_STALE", user_id=10, slack_updated=1)
+    kept_old = SimpleNamespace(id=2, slack_team_id="T_KEEP", slack_id="U_KEEP", user_id=20, slack_updated=1)
+    kept_new = SimpleNamespace(id=2, slack_team_id="T_KEEP", slack_id="U_KEEP", user_id=21, slack_updated=2)
+    added = SimpleNamespace(id=3, slack_team_id="T_NEW", slack_id="U_NEW", user_id=30, slack_updated=3)
+
+    guarded_cache = _NeverEmptyDict({("T_STALE", "U_STALE"): stale, ("T_KEEP", "U_KEEP"): kept_old})
+    monkeypatch.setattr(helper_functions, "SLACK_USERS", guarded_cache)
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: [kept_new, added])
+
+    helper_functions.update_local_slack_users()
+
+    assert helper_functions.SLACK_USERS is guarded_cache
+    assert dict(guarded_cache) == {("T_KEEP", "U_KEEP"): kept_new, ("T_NEW", "U_NEW"): added}
+
+
+def test_update_local_region_records_replaces_in_place_without_emptying_cache(monkeypatch):
+    stale_settings = helper_functions.SlackSettings(team_id="T_STALE", workspace_name="Stale")
+    guarded_cache = _NeverEmptyDict({"T_STALE": stale_settings})
+    fresh_row = SimpleNamespace(team_id="T_FRESH", settings={"team_id": "T_FRESH", "workspace_name": "Fresh"})
+
+    monkeypatch.setattr(helper_functions, "REGION_RECORDS", guarded_cache)
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", lambda *_a, **_k: [fresh_row])
+
+    helper_functions.update_local_region_records()
+
+    assert helper_functions.REGION_RECORDS is guarded_cache
+    assert list(guarded_cache.keys()) == ["T_FRESH"]
+    assert guarded_cache["T_FRESH"].workspace_name == "Fresh"
+
+
+def test_ensure_slack_users_loaded_coalesces_concurrent_cold_starts(monkeypatch):
+    fresh_row = SimpleNamespace(id=1, slack_team_id="T_CONC", slack_id="U_CONC", user_id=42, slack_updated=1)
+
+    calls, _results = _run_cold_cache_threads(
+        monkeypatch,
+        fresh_row,
+        helper_functions.ensure_slack_users_loaded,
+        cache_name="SLACK_USERS",
+    )
+
+    assert calls == 1
+    assert helper_functions.SLACK_USERS == {("T_CONC", "U_CONC"): fresh_row}
+
+
+def test_ensure_region_records_loaded_coalesces_concurrent_cold_starts(monkeypatch):
+    fresh_row = SimpleNamespace(team_id="T_CONC", settings={"team_id": "T_CONC", "workspace_name": "Concurrent"})
+
+    calls, _results = _run_cold_cache_threads(
+        monkeypatch,
+        fresh_row,
+        helper_functions.ensure_region_records_loaded,
+        cache_name="REGION_RECORDS",
+    )
+
+    assert calls == 1
+    assert list(helper_functions.REGION_RECORDS.keys()) == ["T_CONC"]
+
+
+def _run_cold_cache_threads(monkeypatch, row, target, *, cache_name, extra_cache_modules=()):
+    """Start four threads on an empty cache whose first DB load blocks, and return the query count."""
+    import threading
+    import time
+
+    calls = 0
+    in_query = threading.Event()
+    release_query = threading.Event()
+    ready = threading.Barrier(4)
+
+    def slow_find_records(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        in_query.set()
+        release_query.wait(timeout=5)
+        return [row]
+
+    cache = {}
+    monkeypatch.setattr(helper_functions, cache_name, cache)
+    for module in extra_cache_modules:
+        monkeypatch.setattr(module, cache_name, cache)
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", slow_find_records)
+
+    results = []
+
+    def worker():
+        ready.wait(timeout=5)
+        results.append(target())
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    assert in_query.wait(timeout=5)
+    # Let every thread reach its cache check before the first load finishes.
+    time.sleep(0.2)
+    release_query.set()
+    for t in threads:
+        t.join(timeout=5)
+        assert not t.is_alive()
+    return calls, results
+
+
+def test_get_user_cold_cache_runs_one_slack_user_query_for_concurrent_requests(monkeypatch):
+    row = SimpleNamespace(id=1, slack_team_id="T_CONC", slack_id="U_CONC", user_id=42, slack_updated=1)
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    client = SimpleNamespace(users_info=lambda **_kwargs: pytest.fail("users_info must not be called"))
+
+    calls, results = _run_cold_cache_threads(
+        monkeypatch,
+        row,
+        lambda: helper_functions.get_user("U_CONC", SimpleNamespace(org_id=9, team_id="T_CONC"), client, None),
+        cache_name="SLACK_USERS",
+    )
+
+    assert calls == 1
+    assert results == [row] * 4
+
+
+def test_get_region_record_cold_cache_runs_one_slack_space_query_for_concurrent_requests(monkeypatch):
+    from unittest.mock import MagicMock
+
+    row = SimpleNamespace(team_id="T_CONC", settings={"team_id": "T_CONC", "workspace_name": "Concurrent"})
+
+    calls, results = _run_cold_cache_threads(
+        monkeypatch,
+        row,
+        lambda: helper_functions.get_region_record("T_CONC", {}, {}, MagicMock(), MagicMock()),
+        cache_name="REGION_RECORDS",
+    )
+
+    assert calls == 1
+    assert [(r.team_id, r.workspace_name) for r in results] == [("T_CONC", "Concurrent")] * 4
+
+
+def test_positions_user_map_loads_an_empty_slack_user_cache(monkeypatch):
+    from features import positions
+
+    row = SimpleNamespace(id=1, slack_team_id="T_POS", slack_id="U_POS", user_id=42, slack_updated=1)
+
+    calls, results = _run_cold_cache_threads(
+        monkeypatch,
+        row,
+        lambda: positions._user_id_to_slack_id_map("T_POS"),
+        cache_name="SLACK_USERS",
+        extra_cache_modules=(positions,),
+    )
+
+    assert calls == 1
+    assert results == [{42: "U_POS"}] * 4
+
+
+@pytest.mark.parametrize(
+    ("refresh_name", "cache_name", "row"),
+    [
+        (
+            "update_local_slack_users",
+            "SLACK_USERS",
+            SimpleNamespace(id=1, slack_team_id="T_LOCK", slack_id="U_LOCK", user_id=42, slack_updated=1),
+        ),
+        (
+            "update_local_region_records",
+            "REGION_RECORDS",
+            SimpleNamespace(team_id="T_LOCK", settings={"team_id": "T_LOCK", "workspace_name": "Lock"}),
+        ),
+    ],
+)
+def test_overlapping_full_refreshes_run_one_at_a_time(monkeypatch, refresh_name, cache_name, row):
+    import threading
+    import time
+
+    events = []
+    first_in_query = threading.Event()
+    release_first = threading.Event()
+
+    def recording_find_records(*_args, **_kwargs):
+        name = threading.current_thread().name
+        events.append(f"{name}-enter")
+        if name == "A":
+            first_in_query.set()
+            release_first.wait(timeout=5)
+        events.append(f"{name}-exit")
+        return [row]
+
+    monkeypatch.setattr(helper_functions, cache_name, {})
+    monkeypatch.setattr(helper_functions.DbManager, "find_records", recording_find_records)
+    refresh = getattr(helper_functions, refresh_name)
+
+    first = threading.Thread(target=refresh, name="A")
+    first.start()
+    assert first_in_query.wait(timeout=5)
+    second = threading.Thread(target=refresh, name="B")
+    second.start()
+    time.sleep(0.1)
+    assert events == ["A-enter"]
+
+    release_first.set()
+    for t in (first, second):
+        t.join(timeout=5)
+        assert not t.is_alive()
+    assert events == ["A-enter", "A-exit", "B-enter", "B-exit"]
+
+
+def _raise_and_catch(error: BaseException) -> BaseException:
+    try:
+        raise error
+    except BaseException as caught:
+        return caught
+
+
+def _log_and_capture(error: BaseException, structured: bool, **context):
+    """Logs through both a real handler and caplog, returning (formatted output, record)."""
+    stream = io.StringIO()
+    handler = StructuredLogHandler(stream=stream) if structured else logging.StreamHandler(stream)
+    logger = logging.getLogger("tests.log_error_event")
+    logger.addHandler(handler)
+    records = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    collector = _Collect()
+    logger.addHandler(collector)
+    try:
+        helper_functions.log_error_event(logger, "slack.test.operation_failed", error, **context)
+    finally:
+        logger.removeHandler(handler)
+        logger.removeHandler(collector)
+        handler.close()
+    assert len(records) == 1
+    return stream.getvalue(), records[0]
+
+
+def _structured_payload(output: str) -> dict:
+    payloads = [json.loads(line) for line in output.splitlines() if line.strip()]
+    return next(payload for payload in payloads if payload.get("event") == "slack.test.operation_failed")
+
+
+@pytest.mark.parametrize("structured", [False, True])
+def test_log_error_event_keeps_context_and_drops_the_message(structured):
+    error = _raise_and_catch(RuntimeError(SENSITIVE_TEXT))
+
+    output, record = _log_and_capture(error, structured, team_id="T123", org_id=42)
+
+    for marker in SENSITIVE_MARKERS:
+        assert marker not in output
+        assert marker not in repr(record.__dict__)
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is None
+    assert record.json_fields["event"] == "slack.test.operation_failed"
+    assert record.json_fields["team_id"] == "T123"
+    assert record.json_fields["org_id"] == 42
+    assert record.json_fields["error_type"] == "RuntimeError"
+    assert record.json_fields["error_stack"].startswith("test_helper_functions.py:")
+    assert record.json_fields["error_stack"].endswith(":_raise_and_catch")
+    assert "slack_error" not in record.json_fields
+    if structured:
+        payload = _structured_payload(output)
+        assert payload["severity"] == "ERROR"
+        assert payload["event"] == "slack.test.operation_failed"
+        assert payload["org_id"] == 42
+    else:
+        assert output.strip() == "slack.test.operation_failed team_id=T123 org_id=42 error_type=RuntimeError"
+
+
+def test_log_error_event_drops_sqlalchemy_statement_and_parameters():
+    error = _raise_and_catch(database_error())
+
+    output, record = _log_and_capture(error, True, region_id=7)
+
+    for marker in SENSITIVE_MARKERS:
+        assert marker not in output
+    assert record.json_fields["error_type"] == "StatementError"
+
+
+@pytest.mark.parametrize(
+    "response_data,expected",
+    [
+        ({"ok": False, "error": "channel_not_found", "token": "xoxb-synthetic-token"}, "channel_not_found"),
+        ({"ok": False, "error": "token_revoked"}, "token_revoked"),
+        ({"ok": False, "error": "token_expired"}, "token_expired"),
+        ({"ok": False, "error": "xoxb_synthetic"}, "unclassified"),
+        ({"ok": False, "error": "xapp_synthetic"}, "unclassified"),
+        ({"ok": False, "error": "xoxb-synthetic-token"}, "unclassified"),
+        ({"ok": False, "error": "member@example.invalid"}, "unclassified"),
+        ({"ok": False, "error": "x" * 65}, "unclassified"),
+        ({"ok": False}, "unclassified"),
+    ],
+)
+def test_log_error_event_keeps_only_a_bounded_slack_error_code(response_data, expected):
+    response = SlackResponse(
+        client=None,
+        http_verb="POST",
+        api_url="https://slack.com/api/chat.postMessage",
+        req_args={"json": {"text": SENSITIVE_TEXT}},
+        data=response_data,
+        headers={},
+        status_code=200,
+    )
+    error = _raise_and_catch(SlackApiError(SENSITIVE_TEXT, response))
+
+    output, record = _log_and_capture(error, True, team_id="T123")
+
+    for marker in SENSITIVE_MARKERS:
+        assert marker not in output
+    assert record.json_fields["slack_error"] == expected
+    assert _structured_payload(output)["slack_error"] == expected
+
+
+class _UnreadableResponse:
+    def get(self, key):
+        raise RuntimeError(SENSITIVE_TEXT)
+
+
+@pytest.mark.parametrize("response", [None, _UnreadableResponse()])
+def test_log_error_event_classifies_a_missing_or_unreadable_slack_response(response):
+    error = _raise_and_catch(SlackApiError(SENSITIVE_TEXT, response))
+
+    output, record = _log_and_capture(error, False, team_id="T123")
+
+    assert record.json_fields["slack_error"] == "unclassified"
+    for marker in SENSITIVE_MARKERS:
+        assert marker not in output
+
+
+@pytest.mark.parametrize("name,expected", [("member@example.invalid", "Exception"), ("_Err2", "_Err2")])
+def test_log_error_event_bounds_the_exception_class_name(name, expected):
+    error = _raise_and_catch(type(name, (Exception,), {})(SENSITIVE_TEXT))
+
+    output, record = _log_and_capture(error, False)
+
+    assert record.json_fields["error_type"] == expected
+    assert "member@example.invalid" not in output
+
+
+def test_log_error_event_logs_at_the_requested_level():
+    error = _raise_and_catch(RuntimeError(SENSITIVE_TEXT))
+    logger = logging.getLogger("tests.log_error_event.level")
+    records = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    collector = _Collect()
+    logger.addHandler(collector)
+    try:
+        helper_functions.log_error_event(logger, "slack.test.retrying", error, level=logging.WARNING, org_id=3)
+    finally:
+        logger.removeHandler(collector)
+
+    (record,) = records
+    assert record.levelno == logging.WARNING
+    assert record.json_fields["event"] == "slack.test.retrying"
+    assert SENSITIVE_TEXT not in repr(record.__dict__)

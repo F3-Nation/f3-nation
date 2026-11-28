@@ -756,10 +756,8 @@ def test_staged_events_actual_sql_runs_against_all_fixed_local_tables(tmp_path):
         "event_types": [(1, "Run", "Running", "first_f")],
         "event_tags_x_event_instances": [(1, 7)],
         "event_tags": [(7, "Morning", "Morning workout")],
-        "attendance": [(1, 1, 1, False)],
+        "attendance": [(1, 1, 1, False, "q")],
         "users": [(1, "Alpha", "a@example.com", "alpha.png")],
-        "attendance_x_attendance_types": [(1, 2)],
-        "attendance_types": [(2, "Q")],
     }
     for table, _source_sql, create_sql, insert_sql in diagnostics._STAGED_EVENTS_TABLES:
         connection.execute(create_sql)
@@ -775,6 +773,8 @@ def test_staged_events_actual_sql_runs_against_all_fixed_local_tables(tmp_path):
     assert names[-3:] == ["types", "tags", "attendance"]
     assert connection.execute("SELECT count(*) FROM diagnostic_staged_pv_events").fetchone()[0] == 1
     assert connection.execute("SELECT types, tags, attendance FROM diagnostic_staged_pv_events").fetchone()[0]
+    attendance = connection.execute("SELECT attendance FROM diagnostic_staged_pv_events").fetchone()[0]
+    assert [(entry["user_id"], entry["q_ind"], entry["coq_ind"]) for entry in attendance] == [(1, 1, 0)]
     connection.close()
 
 
@@ -1300,10 +1300,8 @@ def test_ctas_events_real_ctas_detach_and_local_production_query(tmp_path):
         "event_types": [(1, "Run", "Running", "first_f")],
         "event_tags_x_event_instances": [(1, 7)],
         "event_tags": [(7, "Morning", "Morning workout")],
-        "attendance": [(1, 1, 1, False)],
+        "attendance": [(1, 1, 1, False, "q")],
         "users": [(1, "Alpha", "a@example.com", "alpha.png")],
-        "attendance_x_attendance_types": [(1, 2)],
-        "attendance_types": [(2, "Q")],
     }
     for table, _source_sql, create_sql, insert_sql in diagnostics._STAGED_EVENTS_TABLES:
         connection.execute(create_sql.replace("staged.", "pg.public."))
@@ -1318,7 +1316,8 @@ def test_ctas_events_real_ctas_detach_and_local_production_query(tmp_path):
         ["2026-01-03T00:00:00Z", "2026-01-03"],
     )
     assert connection.execute("SELECT count(*) FROM diagnostic_ctas_pv_events").fetchone()[0] == 1
-    assert connection.execute("SELECT attendance FROM diagnostic_ctas_pv_events").fetchone()[0]
+    attendance = connection.execute("SELECT attendance FROM diagnostic_ctas_pv_events").fetchone()[0]
+    assert [(entry["user_id"], entry["q_ind"], entry["coq_ind"]) for entry in attendance] == [(1, 1, 0)]
     connection.close()
 
 

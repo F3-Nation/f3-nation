@@ -31,41 +31,66 @@ export interface PublicImageStorage {
   promoteOrgLogo(pendingUrl: string): Promise<string>;
 }
 
+/**
+ * How the GCS client authenticates. Exactly one mode applies; there is no
+ * fallback from one to the other.
+ *
+ * - `identity`: Application Default Credentials. On Cloud Run that is the
+ *   service's runtime service account, so no secret is stored anywhere.
+ *   Prefer this.
+ * - `key`: a base64-encoded service-account key JSON, only for an app that
+ *   cannot run as a service account with bucket access.
+ */
+export type PublicImageStorageAuth =
+  { kind: "identity" } | { kind: "key"; key: string };
+
+interface ServiceAccountKey {
+  client_email: string;
+  private_key: string;
+  project_id?: string;
+}
+
+function parseServiceAccountKey(key: string): ServiceAccountKey {
+  let parsed: Partial<ServiceAccountKey>;
+  try {
+    parsed = JSON.parse(
+      Buffer.from(key, "base64").toString(),
+    ) as Partial<ServiceAccountKey>;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "invalid JSON";
+    throw new Error(`Invalid service-account key: ${message}`);
+  }
+  if (!parsed.client_email || !parsed.private_key) {
+    throw new Error(
+      "Service-account key is missing client_email or private_key",
+    );
+  }
+  return {
+    client_email: parsed.client_email,
+    private_key: parsed.private_key,
+    project_id: parsed.project_id,
+  };
+}
+
+function createClient(auth: PublicImageStorageAuth): Storage {
+  if (auth.kind === "identity") return new Storage();
+  const key = parseServiceAccountKey(auth.key);
+  // The client resolves a project before every request and never reads it
+  // from `credentials`; without this it falls back to the GCE metadata
+  // server and fails anywhere that server is absent.
+  return new Storage({ credentials: key, projectId: key.project_id });
+}
+
 export function createPublicImageStorage(config: {
   channel: "staging" | "prod";
-  credentials: string;
+  auth: PublicImageStorageAuth;
 }): PublicImageStorage {
   const bucket = BUCKETS[config.channel];
 
   let storageClient: Storage | null = null;
 
   function getClient(): Storage {
-    if (storageClient) return storageClient;
-    let creds: {
-      client_email: string;
-      private_key: string;
-      project_id?: string;
-    };
-    try {
-      creds = JSON.parse(
-        Buffer.from(config.credentials, "base64").toString(),
-      ) as { client_email: string; private_key: string; project_id?: string };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "invalid JSON";
-      throw new Error(`Invalid GCS_CREDENTIALS payload: ${message}`);
-    }
-    if (!creds.client_email || !creds.private_key) {
-      throw new Error(
-        "GCS_CREDENTIALS is missing required service account fields",
-      );
-    }
-    // The client resolves a project before every request and never reads it
-    // from `credentials`; without this it falls back to the GCE metadata
-    // server and fails anywhere that server is absent.
-    storageClient = new Storage({
-      credentials: creds,
-      projectId: creds.project_id,
-    });
+    storageClient ??= createClient(config.auth);
     return storageClient;
   }
 

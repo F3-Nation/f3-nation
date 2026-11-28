@@ -110,6 +110,33 @@ calendar post fails, that region's update rolls back and the new calendar image
 references and post timestamp are not saved. The rollback does not undo settings
 already saved from the form.
 
+## Previewing views
+
+[`tools/preview_view.py`](tools/preview_view.py) renders a view from the working-tree
+code with sample data and prints a [Block Kit Builder](https://app.slack.com/block-kit-builder)
+link that opens with the view loaded. It mocks the database and the Slack client,
+so it needs no database, Slack app or credentials. Run it from `apps/slackbot`:
+
+```bash
+uv run python -m tools.preview_view --list
+```
+
+```bash
+uv run python -m tools.preview_view calendar-home filters --team T0123456789
+```
+
+Open the link in a browser signed in to Slack. Pass the team id of a workspace
+you're signed in to: Slack's sign-in redirect drops the view from a link without
+one. `--out FILE` also writes the payload as JSON. The Builder adds a Submit
+button to every modal preview, whether or not the real view has one, and its
+buttons and menus don't call the app.
+
+Each view's sample-data scenarios live in a module in
+[`tools/previews/`](tools/previews/), registered in `_previews` in
+`tools/preview_view.py`. [`tests/tools/test_preview_view.py`](tests/tools/test_preview_view.py)
+renders every scenario, so a preview that stops matching its view builder fails
+the test suite.
+
 ## Step debugging
 
 1. Set `ENABLE_DEBUGGING=true` in `apps/slackbot/.env`.
@@ -301,7 +328,10 @@ linking when email becomes available; it does not create placeholder F3 accounts
 Direct-email Downrange invitations require a usable email address. FNG creation
 can proceed without linking its optional battle buddy when the actor is unlinked.
 
-The disposable PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`.
+The disposable PostgreSQL tests run with `SLACKBOT_POSTGRES_TESTS=1`. CI runs
+the Slack identity, token refresh, installation store, workspace settings and F3versary attendance
+suites independently of affected-workspace selection. The F3versary suite
+checks attendance eligibility and settings persistence against PostgreSQL.
 `SLACKBOT_POSTGRES_IMAGE` optionally overrides their pinned local PostgreSQL
 image; CI sets it to the same mirrored image the `test-suites` job uses for its
 database service. The fixture starts one container per pytest session, gives

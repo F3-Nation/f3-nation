@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { isApiUnavailableError } from "@acme/shared/common/api-availability";
-import { parseOptionalSize } from "@acme/storage";
+import { isStorageAccessDenied, parseOptionalSize } from "@acme/storage";
 
 import { getOrgParentId } from "~/lib/api/client";
 import { canEditOrg } from "~/lib/auth/org-access";
@@ -88,6 +88,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url });
   } catch (err) {
+    if (isStorageAccessDenied(err)) {
+      logError("admin.logo.storage_access_denied", { orgId }, err);
+      return NextResponse.json(
+        {
+          error:
+            "Logo storage is misconfigured: this service can't write to the image bucket.",
+        },
+        { status: 503 },
+      );
+    }
     logError("admin.logo.upload_failed", { orgId }, err);
     return NextResponse.json(
       { error: "Failed to upload logo" },

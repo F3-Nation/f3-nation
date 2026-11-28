@@ -135,10 +135,10 @@ matching records.
 
 `lifetime_posts` is the distinct count of eligible event instances with actual
 (non-planned) attendance by the user; `lifetime_qs` is the distinct count of
-those event instances where the user's actual attendance has an attached `Q`
-attendance type. Count distinct event-instance IDs, not attendance rows. Both
-are `INTEGER` and are zero when there are no qualifying events. Q status is
-derived only from the attendance's attached Q attendance-type row, not from a
+those event instances where the user's actual attendance has
+`attendance_type = 'q'`. Count distinct event-instance IDs, not attendance rows.
+Both are `INTEGER` and are zero when there are no qualifying events. Q status is
+derived only from the attendance record's `attendance_type`, not from a
 user-level flag or another event attribute.
 
 `roles` is a list of records shaped
@@ -182,8 +182,8 @@ other AO eligibility predicate. Region is populated only when the joined AO's
 direct parent is a region. `event_name` is `COALESCE(ei.name, e.name)`.
 `event_type` is the ordered distinct event-type names for one event/category;
 the result grain can therefore contain multiple category rows per event.
-`q_list` is a distinct list of users joined through attendance-type rows where
-type is `Q`; actual and planned attendance both contribute. Names fall back to
+`q_list` is a distinct list of users with an attendance record whose
+`attendance_type` is `q`; actual and planned attendance both contribute. Names fall back to
 user ID when blank and entries sort by name then user ID. Missing Qs yield `[]`.
 Rows sort by start date then event-instance ID.
 
@@ -302,8 +302,9 @@ practical email syntax specified for `pv_pax`. Events use exactly the
 `pv_events` eligibility rule: active event instances with non-null `pax_count`,
 and `exclude_from_pax_vault` false or null. A true exclusion flag excludes the
 event; malformed non-null/non-boolean values fail the dataset. `attendance_meta`
-is not projected. `q_ind` and `coq_ind` identify whether the attendance has the
-attached Q and Co-Q attendance types, respectively. `start_date` is the event
+is not projected. `q_ind` and `coq_ind` are `1` when the attendance record's
+`attendance_type` is `q` or `co_q` respectively, otherwise `0`; a record holds
+one type, so at most one of them is `1`. `start_date` is the event
 date. `ao_org_id` and `region_org_id` come from the same recursive
 event-organization ancestry used by `pv_events`: retain the AO ID, and set
 `region_org_id` to the event organization's region ancestor, including when the

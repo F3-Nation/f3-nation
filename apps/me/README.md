@@ -86,7 +86,6 @@ apps/me/
 - pnpm (managed by the monorepo root)
 - OAuth clients registered in the F3 auth provider (see [OAuth Client Registration](#oauth-client-registration) below)
 - Admin F3 API key with edit permissions
-- GCS service account credentials (base64-encoded, from GCP)
 
 ### Setup
 
@@ -121,7 +120,6 @@ Open [https://localhost:3003](https://localhost:3003). Accept the self-signed ce
 | `AUTH_PROVIDER_URL`    | F3 SSO base URL                                                                           | `https://auth.f3nation.com`                |
 | `F3_API_BASE_URL`      | F3 API base URL (must include `/v1`)                                                      | `https://staging.api.f3nation.com/v1`      |
 | `F3_CHANNEL`           | Storage bucket selection (`local`/`staging` → staging bucket, `prod` → production bucket) | `local`                                    |
-| `GCS_CREDENTIALS`      | Base64-encoded GCS service account JSON                                                   | (from GCP)                                 |
 | `NEXT_PUBLIC_SITE_URL` | Public URL of the app                                                                     | `https://localhost:3003`                   |
 
 ## Testing

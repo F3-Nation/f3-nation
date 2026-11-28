@@ -96,10 +96,30 @@ Each deploy workflow:
 3. Deploys to the staging Cloud Run service
 4. Promotes the image and deploys to production
 
+A workflow that pins a runtime service account (`--service-account` in its
+`staging_flags` / `prod_flags`) deploys each revision as that account. The
+deploy fails, and the previous revision keeps serving, when the account doesn't
+exist in that environment's project or can't read a secret the service
+references. Create the account and its grants before the first release that
+pins it: for a new app, [GCP app setup § 4](GCP_APP_SETUP.md#4-create-runtime-service-accounts-and-cloud-run-services);
+for a service that already runs, [move an existing service to its own runtime account](GCP_APP_SETUP.md#move-an-existing-service-to-its-own-runtime-account).
+
 For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 
 1. Main Slackbot Cloud Run service deploy (`f3-slackbot` in `f3-slackbot-staging` and `f3-slackbot`)
 2. Scripts Cloud Run Job deploy (`f3-slackbot-scripts` in `f3-slackbot-staging` and `f3-slackbot`)
+
+The [API deploy workflow](../.github/workflows/deploy-api.yml) configures an
+HTTP liveness probe on `/live`, independently of the TCP startup probe.
+Its [database recovery contract](specs/api-database-recovery.md) distinguishes
+the restart signal from `/health` dependency status. A traffic-shift rollback
+retains the selected revision's probe configuration and is the preferred rollback.
+The API workflow always configures `/live`; it cannot redeploy an image without
+that route safely. An authorized operator redeploying such an image must use a
+separate manual deployment, preserving the service's other settings and passing
+`gcloud run deploy f3-api --image=<pinned-image> --liveness-probe=""` with the
+correct project and region. The empty value clears the service's existing liveness
+probe; otherwise the missing route repeatedly restarts the image.
 
 The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes
 directly to GitHub Pages. Its emitted check names must stay distinct from the CI

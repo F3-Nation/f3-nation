@@ -295,6 +295,12 @@ A regional admin can create keys with roles on the organizations they administer
   // Add the Client header parameter reference to all operations except public ones.
   // /v1/status is unauthenticated — it overrides global bearer security with security: [].
   const PUBLIC_PATHS = new Set(["/v1/status"]);
+  // Operations served without a credential, where a key or session widens
+  // the results. The empty requirement `{}` marks the bearer token optional;
+  // other methods on the same path keep the global requirement.
+  const OPTIONAL_AUTH_OPERATIONS: Record<string, readonly string[]> = {
+    "/v1/event-instance": ["get"],
+  };
   const httpMethods = [
     "get",
     "post",
@@ -314,6 +320,9 @@ A regional admin can create keys with roles on the organizations they administer
             // Public endpoint: strip auth requirements so docs are accurate.
             operation.security = [];
           } else {
+            if (OPTIONAL_AUTH_OPERATIONS[path]?.includes(method)) {
+              operation.security = [{}, { bearerAuth: [] }];
+            }
             operation.parameters ??= [];
             // Add reference to the Client header parameter
             operation.parameters.unshift({

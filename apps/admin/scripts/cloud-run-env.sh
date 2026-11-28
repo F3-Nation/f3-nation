@@ -36,7 +36,6 @@ REGION="us-central1"
 declare -A SECRET_MAP=(
   [F3_GOOGLE_API_KEY]="NEXT_PUBLIC_GOOGLE_API_KEY"
   [OAUTH_CLIENT_SECRET]="OAUTH_CLIENT_SECRET"
-  [GCS_CREDENTIALS]="GCS_CREDENTIALS"
   [PROXY_CLIENT_IP_SECRET]="PROXY_CLIENT_IP_SECRET"
 )
 
@@ -121,7 +120,7 @@ echo ""
 # Push secrets to Secret Manager
 # ---------------------------------------------------------------------------
 push_secret() {
-  local var="$1" secret_id="$2" value="$3" project="$4" sa_email="$5"
+  local var="$1" secret_id="$2" value="$3" project="$4"
   echo " [$var] Processing secret $secret_id..."
 
   if [[ -z "$value" ]]; then
@@ -135,14 +134,6 @@ push_secret() {
     echo " [$var] Secret $secret_id does not exist. Creating."
     gcloud secrets create "$secret_id" --project "$project" --replication-policy="automatic" 2>/dev/null || true
     echo -n "$value" | gcloud secrets versions add "$secret_id" --project "$project" --data-file=-
-
-    echo " [$var] Granting access to Cloud Run service account."
-    gcloud secrets add-iam-policy-binding "$secret_id" \
-      --project "$project" \
-      --member "serviceAccount:${sa_email}" \
-      --role "roles/secretmanager.secretAccessor" \
-      --quiet > /dev/null || echo " [$var] WARNING: Failed to bind $secret_id"
-
     return 0
   fi
 
@@ -171,13 +162,19 @@ push_secret() {
 echo ""
 echo "Preparing Cloud Run service account email for granting secret permissions."
 
-SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
+# A failed lookup must stop here: falling back to the default Compute Engine
+# account would grant it (project Editor) every secret below. Only a lookup
+# that succeeds and names no account means the service runs as that default.
+if ! SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
-  --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null)" || SA_EMAIL=""
+  --format='value(spec.template.spec.serviceAccountName)')"; then
+  echo "Error: Couldn't read the runtime service account of $SERVICE_NAME in $PROJECT. Deploy the service first (docs/GCP_APP_SETUP.md § 4) or check gcloud auth."
+  exit 1
+fi
 
 if [[ -z "$SA_EMAIL" ]]; then
-  echo "Service $SERVICE_NAME not found in project $PROJECT. Defaulting to default Compute Engine service account."
+  echo "Service $SERVICE_NAME runs as the default Compute Engine service account."
   PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
   SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 fi
@@ -186,10 +183,27 @@ fi
 PIDS=()
 echo "Pushing secrets to GCP Secret Manager..."
 for var in "${!SECRET_MAP[@]}"; do
-  push_secret "$var" "${SECRET_MAP[$var]}" "${!var:-}" "$PROJECT" "$SA_EMAIL" &
+  push_secret "$var" "${SECRET_MAP[$var]}" "${!var:-}" "$PROJECT" &
   PIDS+=($!)
 done
 for pid in "${PIDS[@]}"; do wait "$pid"; done
+
+# Grant on every run, not only when a secret is created: the service reads
+# each secret as its current runtime service account, which can change after
+# the secret already exists. The binding is idempotent.
+echo ""
+echo "Granting secret access to $SA_EMAIL..."
+for var in "${!SECRET_MAP[@]}"; do
+  secret_id="${SECRET_MAP[$var]}"
+  if ! gcloud secrets add-iam-policy-binding "$secret_id" \
+    --project "$PROJECT" \
+    --member "serviceAccount:${SA_EMAIL}" \
+    --role "roles/secretmanager.secretAccessor" \
+    --quiet > /dev/null; then
+    echo " [$var] ERROR: Failed to grant access to $secret_id. Aborting before the service update."
+    exit 1
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # Update Cloud Run service with env vars and secret references

@@ -5,7 +5,7 @@
 ## 1. Summary
 
 Database history identifies the person responsible for an API write when known,
-and records the originating app claimed by a recognized client header. Shared
+and records the normalized client header as caller-supplied source context. Shared
 request middleware and the database client propagate actor and source to the
 existing history triggers, so individual handlers
 need no audit calls. Existing authorization and oRPC response contracts remain
@@ -96,32 +96,46 @@ unchanged.
   through real email/OTP and edits a tracked entity through the UI THEN its
   history records that user and the normalized source from AC-19. A Development
   Mode sign-in records NULL actor while retaining the normalized source.
-  Generic `orpc` requests, including interactive Map/Admin clients, record NULL source.
-- **AC-19** — GIVEN an API request WHEN its `client` header exactly matches a
-  recognized value in [the source normalizer](../../packages/api/src/audit-source.ts)
-  THEN its writes record that normalized source independently of actor eligibility.
-  Missing, unknown, generic `orpc` and wrong-case headers record NULL source.
-  A recognized header does not authenticate a caller or authorize a write.
+  Interactive Map/Admin clients record `f3-map`/`f3-admin`; generic `orpc`
+  requests record `orpc`.
+- **AC-19** — GIVEN an API request WHEN its `client` header is processed by
+  [the source normalizer](../../packages/api/src/audit-source.ts) THEN its writes
+  record the lowercase value with characters outside ASCII `a-z`, `0-9` and
+  hyphen removed, truncated to the first 128 remaining characters, independently
+  of actor eligibility. Custom names and generic `orpc` are recorded like any
+  other value. Missing headers and values empty after normalization record
+  NULL source. The header does not authenticate a caller or authorize a write.
+  History can contain the short source aliases `map`, `admin`, `me`,
+  `region-pages`, `slackbot` and `map-ssg` for the headers `f3-map`, `f3-admin`,
+  `f3-me`, `f3-region-pages`, `f3-nation-slack-bot` and `orpc-ssg`, respectively.
+  History queries that group by application must account for both forms; stored
+  source values are not rewritten. Normalization can collapse distinct input
+  values to the same informational source.
 - **AC-20** — GIVEN a request with `client: f3-map` or `client: f3-admin` WHEN the
   API selects its transport THEN it dispatches to RPC while keeping the Slackbot
   and Scalar identifiers on REST. Generic `orpc` remains RPC-compatible and records
-  NULL source; static generation retains its existing session-resolution behavior.
+  `orpc` source; static generation retains its existing session-resolution behavior.
   A client must not begin sending a new identifier until every API revision it
   can reach, including rollback targets, accepts that identifier as RPC.
+- **AC-21** — GIVEN a Map or Admin proxy request WHEN it reaches the API THEN
+  the proxy overwrites any caller-supplied client header with `f3-map` or
+  `f3-admin`, respectively. Admin browser and direct server clients send
+  `f3-admin` while retaining their cookie and bearer authentication behavior.
+  Map static generation retains `orpc-ssg`.
 
 ## 5. Roles & authorization (RBAC)
 
 Existing procedure tiers and resource checks authorize source writes. Audit
 context supplies informational attribution; it grants no permission and does
 not make a supplied user id proof of authentication. Any caller can send a
-recognized app header, so the recorded source is a claim, not proof. History
+client header, so the recorded source is a claim, not proof. History
 access continues to follow the database audit-history foundation's grants.
 
 | Action                            | Allowed                                                                               | Explicitly denied                                                                                |
 | --------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Change a source row               | Callers authorized by the existing procedure and resource checks                      | Callers rejected by those checks                                                                 |
 | Attribute a personal API write    | Resolved personal sessions with a positive integer actor and no attribution exclusion | API-key, anonymous, Development Mode/mock, invalid and ambiguous legacy user-1 cookie identities |
-| Record a claimed app              | Recognized client header, with or without an eligible actor                           | Unknown or missing header as a claimed app; any source as authority to grant access              |
+| Record a claimed app              | Nonempty normalized client header, with or without an eligible actor                  | Missing or empty normalized header as a claimed app; any source as authority to grant access     |
 | Read history                      | Roles with existing explicit history grants                                           | Roles without the required history grants                                                        |
 | Establish context outside the API | Trusted server code using the helper and a hooked client                              | Client input as an independent authority to choose an actor                                      |
 
@@ -150,9 +164,11 @@ query boundaries without adding a history UI or test endpoint.
   connection reuse, including NULL attribution after commit and rollback.
 - Observed read statements, lazy once-only execution, native callback results,
   and invalid settings rejected before any statement.
-- Exact client-header normalization and RPC/REST dispatch for recognized apps.
-  Map/Admin proxies overwrite caller-supplied identifiers with generic `orpc`,
-  and Admin direct clients retain that identifier and their authentication behavior.
+- Client-header normalization for known, custom, generic, mixed-case,
+  punctuation-only and oversized values; RPC/REST dispatch for recognized apps.
+  Map/Admin proxies overwrite caller-supplied identifiers with their app's
+  identifier, and Admin direct clients send `f3-admin` while retaining their
+  authentication behavior.
 - Real procedure middleware identity cases, an existing production-router
   mutation, overlapping contexts and detached work.
 - Approved Staging UI verification for the application acceptance criterion.
@@ -198,9 +214,10 @@ bound server execution; it cannot bound that pool wait. Installing the timeout
 after the audit hook could reject a begin-backed write while it later commits,
 so that installation order is unsafe.
 
-Source-only contexts also activate the hook, including recognized API-key,
+Source-only contexts also activate the hook, including API-key,
 anonymous, Development Mode, mock, ambiguous legacy and static-generation
-requests. Their standalone writes use native transactions and explicit
+requests with any nonempty normalized client header, including custom and generic
+identifiers. Their standalone writes use native transactions and explicit
 transactions receive the settings round trip. Requests with neither actor nor source retain the original client
 path.
 

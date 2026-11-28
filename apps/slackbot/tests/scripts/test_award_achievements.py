@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from scripts import award_achievements
+from tests import log_privacy
 
 
 @pytest.fixture
@@ -175,3 +176,165 @@ def test_award_achievements_reports_failed_client_lookup_and_continues(monkeypat
     assert failed == ["T1"]
     installed_client.chat_postMessage.assert_called_once()
     assert installed_client.chat_postMessage.call_args.kwargs["channel"] == "C-T2"
+
+
+def _post_one_workspace(monkeypatch, send_option, client, dry_run=False, channel="C-T1", known_achievement=True):
+    """Run `post_achievements` for achievement 7 awarded to users 1 and 2 in workspace T1."""
+    candidates = [
+        award_achievements.CandidateAward(achievement_id=7, user_id=user_id, award_year=2026, award_period=1, metric=5)
+        for user_id in (1, 2)
+    ]
+    users = [SimpleNamespace(id=user_id, home_region_id=10, f3_name="Synthetic Member Name") for user_id in (1, 2)]
+    achievement = SimpleNamespace(id=7, name="Ironman", description=None, image_url=None)
+    slack_users = [
+        SimpleNamespace(user_id=user_id, slack_team_id="T1", slack_id=f"U_SYNTHETIC_{user_id}", user_name=None)
+        for user_id in (1, 2)
+    ]
+    session = MagicMock()
+    session.scalars.side_effect = [
+        MagicMock(all=lambda: users),
+        MagicMock(all=lambda: [achievement] if known_achievement else []),
+        MagicMock(all=lambda: slack_users),
+    ]
+    space = _slack_space("T1")
+    space.settings["achievement_send_option"] = send_option
+    space.settings["achievement_channel"] = channel
+    session.execute.return_value.all.return_value = [(10, space)]
+    monkeypatch.setattr(award_achievements, "slack_client_for_team", lambda team_id, **kwargs: client)
+    return award_achievements.post_achievements(session, candidates, dry_run=dry_run)
+
+
+def _assert_no_member_identity(caplog, capsys):
+    output = log_privacy.assert_private(caplog, capsys)
+    assert "U_SYNTHETIC_" not in output
+    return output
+
+
+def _region_summary(caplog):
+    (record,) = [
+        r for r in caplog.records if getattr(r, "json_fields", {}).get("event") == "slack.achievements.region_complete"
+    ]
+    assert record.levelname == "INFO"
+    return record.json_fields
+
+
+@pytest.mark.parametrize(
+    "send_option,event",
+    [("post_individually", "slack.achievements.post_failed"), ("send_in_dms_only", "slack.achievements.dm_failed")],
+)
+def test_failed_award_message_logs_ids_privately_and_sends_the_rest(monkeypatch, caplog, capsys, send_option, event):
+    caplog.set_level("INFO")
+    client = MagicMock()
+    client.chat_postMessage.side_effect = [log_privacy.slack_error("channel_not_found"), {"ok": True}]
+
+    assert _post_one_workspace(monkeypatch, send_option, client) == []
+
+    _assert_no_member_identity(caplog, capsys)
+    (record,) = log_privacy.error_events(caplog, event)
+    assert (record.json_fields["team_id"], record.json_fields["achievement_id"], record.json_fields["user_id"]) == (
+        "T1",
+        7,
+        1,
+    )
+    assert client.chat_postMessage.call_count == 2
+    summary = _region_summary(caplog)
+    assert (summary["awards"], summary["messages_sent"], summary["messages_failed"]) == (2, 1, 1)
+
+
+def test_failed_achievement_summary_logs_privately(monkeypatch, caplog, capsys):
+    caplog.set_level("INFO")
+    client = MagicMock()
+    client.chat_postMessage.side_effect = log_privacy.database_error()
+
+    _post_one_workspace(monkeypatch, "post_summary", client)
+
+    _assert_no_member_identity(caplog, capsys)
+    (record,) = log_privacy.error_events(caplog, "slack.achievements.summary_failed")
+    assert record.json_fields["team_id"] == "T1"
+    summary = _region_summary(caplog)
+    assert (summary["awards"], summary["messages_sent"], summary["messages_failed"]) == (2, 0, 1)
+
+
+@pytest.mark.parametrize(
+    "send_option,messages", [("post_individually", 2), ("send_in_dms_only", 2), ("post_summary", 1)]
+)
+def test_successful_achievement_posts_log_counts_without_member_identity(
+    monkeypatch, caplog, capsys, send_option, messages
+):
+    caplog.set_level("INFO")
+    client = MagicMock()
+
+    _post_one_workspace(monkeypatch, send_option, client)
+
+    _assert_no_member_identity(caplog, capsys)
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    assert client.chat_postMessage.call_count == messages
+    summary = _region_summary(caplog)
+    assert summary == {
+        "event": "slack.achievements.region_complete",
+        "team_id": "T1",
+        "send_option": send_option,
+        "awards": 2,
+        "messages_sent": messages,
+        "messages_failed": 0,
+    }
+
+
+def test_achievement_dry_run_lists_counts_without_member_identity(monkeypatch, caplog, capsys):
+    client = MagicMock()
+
+    _post_one_workspace(monkeypatch, "post_individually", client, dry_run=True)
+
+    output = _assert_no_member_identity(caplog, capsys)
+    assert "Ironman (achievement 7): 2 member(s)" in output
+    client.chat_postMessage.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "send_option,channel,known_achievement,expected",
+    [
+        ("post_summary", None, True, (0, 0)),
+        ("post_individually", None, True, (0, 0)),
+        ("post_summary", "C-T1", False, (0, 0)),
+        ("post_individually", "C-T1", False, (0, 0)),
+        ("send_in_dms_only", "C-T1", False, (0, 0)),
+        ("unrecognized_option", "C-T1", True, (1, 0)),
+    ],
+)
+def test_achievement_region_without_sends_still_reports_counts(
+    monkeypatch, caplog, send_option, channel, known_achievement, expected
+):
+    caplog.set_level("INFO")
+    client = MagicMock()
+
+    assert (
+        _post_one_workspace(monkeypatch, send_option, client, channel=channel, known_achievement=known_achievement)
+        == []
+    )
+
+    summary = _region_summary(caplog)
+    assert (summary["messages_sent"], summary["messages_failed"]) == expected
+    assert client.chat_postMessage.call_count == expected[0]
+
+
+def test_cli_shows_info_events_on_stderr(monkeypatch, capsys):
+    """A standalone run has no hourly runner to set up logging, so `main` turns on INFO output itself."""
+    import logging
+
+    def run(**kwargs):
+        award_achievements.logger.info("slack.achievements.region_complete team_id=T1 messages_sent=2")
+
+    monkeypatch.setattr(award_achievements, "run", run)
+    root = logging.getLogger()
+    previous_handlers, previous_level = root.handlers[:], root.level
+    root.handlers[:] = []
+    try:
+        award_achievements.main([])
+    finally:
+        added = [handler for handler in root.handlers if handler not in previous_handlers]
+        for handler in added:
+            handler.close()
+        root.handlers[:] = previous_handlers
+        root.setLevel(previous_level)
+
+    assert "slack.achievements.region_complete team_id=T1 messages_sent=2" in capsys.readouterr().err

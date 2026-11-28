@@ -22,7 +22,7 @@ from f3_data_models.models import (
     User,
 )
 from f3_data_models.utils import _joinedloads, get_session
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, nulls_last, or_, select
 from sqlalchemy.orm import joinedload
 
 from utilities.constants import ALL_PERMISSIONS, PERMISSIONS
@@ -37,195 +37,143 @@ class CalendarHomeQuery:
     user_attending: int = None
     user_q: int = None
     series: Event = None
+    hc_count: int = None
+
+
+_Q_ATTENDANCE_TYPES = [2, 3]  # Q and Co-Q
+
+
+def _home_attendance_summary(user_id: int, event_ids_stmt):
+    """Per-event planned Qs, planned headcount and the viewer's HC / Q flags, for the event ids selected."""
+    return (
+        select(
+            Attendance.event_instance_id,
+            func.string_agg(
+                case(
+                    (
+                        and_(
+                            Attendance.is_planned,
+                            Attendance_x_AttendanceType.attendance_type_id.in_(_Q_ATTENDANCE_TYPES),
+                        ),
+                        User.f3_name,
+                    ),
+                    else_=None,
+                ),
+                ",",
+            ).label("planned_qs"),
+            func.count(func.distinct(case((Attendance.is_planned, Attendance.user_id), else_=None))).label("hc_count"),
+            func.max(case((Attendance.user_id == user_id, 1), else_=0)).label("user_attending"),
+            func.max(
+                case(
+                    (
+                        and_(
+                            Attendance.user_id == user_id,
+                            Attendance_x_AttendanceType.attendance_type_id.in_(_Q_ATTENDANCE_TYPES),
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("user_q"),
+        )
+        .select_from(Attendance)
+        .join(User, User.id == Attendance.user_id)
+        .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
+        .where(Attendance.event_instance_id.in_(event_ids_stmt))
+        .group_by(Attendance.event_instance_id)
+        .subquery()
+    )
 
 
 def home_schedule_query(
-    user_id: int, filters: list, limit: int = 45, open_q_only: bool = False, only_users_events: bool = False
+    user_id: int,
+    filters: list,
+    limit: int = 45,
+    open_q_only: bool = False,
+    only_users_events: bool = False,
+    offset: int = 0,
 ) -> list[CalendarHomeQuery]:
-    session = get_session()
+    """Return one entry per event instance matching `filters`, in schedule order, one page at a time.
 
-    # LOGIC CHECK:
-    # If we are filtering BY attendance data (open_q or user_events),
-    # we cannot optimize using "Limit-First" because the Limit depends on the aggregation.
-    # We only use the optimization for the standard schedule view.
-    use_optimization = not (open_q_only or only_users_events)
+    `filters` may reference `EventInstance` and its `Org`. Filter event types with
+    `EventInstance.event_types.any(...)`: joining event types directly would repeat an event once per type.
+    """
+    # Each day runs latest start first, then by AO name; the id keeps ties in a fixed order so pages never overlap.
+    order_by = (EventInstance.start_date, nulls_last(EventInstance.start_time.desc()), Org.name, EventInstance.id)
+    # Events with no event type are left off the schedule (spec AC-12).
+    base_filters = [*filters, EventInstance.event_types.any()]
+    filtered_ids = select(EventInstance.id).join(Org, Org.id == EventInstance.org_id).filter(*base_filters)
+    summary_columns = ("planned_qs", "user_attending", "user_q", "hc_count")
 
-    if use_optimization:
-        # --- OPTIMIZED PATH (Limit First) ---
-
-        # 1. The Scout: Find the IDs of the 45 events we want to show FIRST.
-        # We apply all Event/Org filters here.
-        candidate_ids_stmt = (
-            select(EventInstance.id)
+    if open_q_only or only_users_events:
+        # The page depends on the attendance summary, so summarize every matching event before paging, and carry
+        # the summary through the page so it is computed once.
+        summary = _home_attendance_summary(user_id, filtered_ids)
+        page_stmt = (
+            select(EventInstance.id, *(summary.c[c] for c in summary_columns))
             .join(Org, Org.id == EventInstance.org_id)
-            # Add other necessary joins for filtering/sorting if they are in *filters
-            # Assuming 'filters' might reference EventType or others, ensure those joins exist:
-            .join(EventType_x_EventInstance, EventType_x_EventInstance.event_instance_id == EventInstance.id)
-            .join(EventType, EventType.id == EventType_x_EventInstance.event_type_id)
-            .filter(*filters)
-            .order_by(EventInstance.start_date, EventInstance.id, Org.name, EventInstance.start_time)
-            .limit(limit)
+            .outerjoin(summary, summary.c.event_instance_id == EventInstance.id)
+            .filter(*base_filters)
         )
-
-        # Turn this statement into a Common Table Expression (CTE)
-        # This tells Postgres: "Run this small query first and hold the results."
-        matches_cte = candidate_ids_stmt.cte("matches_cte")
-
-        # 2. The Subquery: Calculate attendance ONLY for the IDs in the CTE.
-        # Notice we do NOT apply *filters here. We only join on the CTE.
-        subquery = (
-            select(
-                Attendance.event_instance_id,
-                func.string_agg(
-                    case(
-                        (
-                            and_(Attendance.is_planned, Attendance_x_AttendanceType.attendance_type_id.in_([2, 3])),
-                            User.f3_name,
-                        ),
-                        else_=None,
-                    ),
-                    ",",
-                ).label("planned_qs"),
-                func.max(case((Attendance.user_id == user_id, 1), else_=0)).label("user_attending"),
-                func.max(
-                    case(
-                        (
-                            and_(
-                                Attendance.user_id == user_id,
-                                Attendance_x_AttendanceType.attendance_type_id.in_([2, 3]),
-                            ),
-                            1,
-                        ),
-                        else_=0,
-                    )
-                ).label("user_q"),
-            )
-            .select_from(Attendance)
-            .join(User, User.id == Attendance.user_id)
-            .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
-            # CRITICAL OPTIMIZATION: Inner join to the CTE.
-            # This forces the DB to only look at attendance for our 45 "winner" events.
-            .join(matches_cte, matches_cte.c.id == Attendance.event_instance_id)
-            .group_by(Attendance.event_instance_id)
-            .alias()
-        )
-
-        # 3. Main Query: Select the details, joining the CTE to ensure we keep our Limit/Sort
-        query = (
-            select(
-                EventInstance,
-                Org,
-                EventType,
-                subquery.c.planned_qs,
-                subquery.c.user_attending,
-                subquery.c.user_q,
-                Event,
-            )
-            .select_from(matches_cte)  # Start from our list of 45 IDs
-            .join(EventInstance, EventInstance.id == matches_cte.c.id)  # Get the full Event object
-            .join(Org, Org.id == EventInstance.org_id)
-            .join(EventType_x_EventInstance, EventType_x_EventInstance.event_instance_id == EventInstance.id)
-            .join(EventType, EventType.id == EventType_x_EventInstance.event_type_id)
-            .outerjoin(subquery, subquery.c.event_instance_id == EventInstance.id)
-            .outerjoin(Event, Event.id == EventInstance.series_id)
-            # We must re-apply the order_by to ensure final output order
-            .order_by(EventInstance.start_date, EventInstance.id, Org.name, EventInstance.start_time)
-        )
-
-    else:
-        # --- LEGACY PATH (For Open Q / User Events) ---
-        # This is your original logic, kept for when we need to filter BY the calculated fields.
-
-        subquery = (
-            select(
-                Attendance.event_instance_id,
-                func.string_agg(
-                    case(
-                        (
-                            and_(Attendance.is_planned, Attendance_x_AttendanceType.attendance_type_id.in_([2, 3])),
-                            User.f3_name,
-                        ),
-                        else_=None,
-                    ),
-                    ",",
-                ).label("planned_qs"),
-                func.max(case((Attendance.user_id == user_id, 1), else_=0)).label("user_attending"),
-                func.max(
-                    case(
-                        (
-                            and_(
-                                Attendance.user_id == user_id,
-                                Attendance_x_AttendanceType.attendance_type_id.in_([2, 3]),
-                            ),
-                            1,
-                        ),
-                        else_=0,
-                    )
-                ).label("user_q"),
-            )
-            .select_from(Attendance)
-            .join(User, User.id == Attendance.user_id)
-            .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
-            .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
-            # We still keep these joins to ensure the subquery filters correctly
-            .join(Org, Org.id == EventInstance.org_id)
-            .filter(*filters)  # Original heavy filtering
-            .group_by(Attendance.event_instance_id)
-            .alias()
-        )
-
-        # Apply the specific dynamic filters to the alias columns
-        final_filters = list(filters)  # Copy to avoid modifying the input list
         if open_q_only:
-            final_filters.append(subquery.c.planned_qs.is_(None))
+            page_stmt = page_stmt.filter(summary.c.planned_qs.is_(None))
         if only_users_events:
-            final_filters.append(subquery.c.user_attending == 1)
+            page_stmt = page_stmt.filter(summary.c.user_attending == 1)
+        page = page_stmt.order_by(*order_by).limit(limit).offset(offset).cte("home_page")
+        page_summary = page.c
+        summary_join = None
+    else:
+        # Page first, then summarize attendance only for the events on the page.
+        page = filtered_ids.order_by(*order_by).limit(limit).offset(offset).cte("home_page")
+        summary = _home_attendance_summary(user_id, select(page.c.id))
+        page_summary = summary.c
+        summary_join = summary
 
-        query = (
-            select(
-                EventInstance,
-                Org,
-                EventType,
-                subquery.c.planned_qs,
-                subquery.c.user_attending,
-                subquery.c.user_q,
-                Event,
-            )
-            .join(Org, Org.id == EventInstance.org_id)
-            .join(EventType_x_EventInstance, EventType_x_EventInstance.event_instance_id == EventInstance.id)
-            .join(EventType, EventType.id == EventType_x_EventInstance.event_type_id)
-            .outerjoin(subquery, subquery.c.event_instance_id == EventInstance.id)
-            .outerjoin(Event, Event.id == EventInstance.series_id)
-            .filter(*final_filters)
-            .order_by(EventInstance.start_date, EventInstance.id, Org.name, EventInstance.start_time)
-            .limit(limit)
+    query = (
+        select(
+            EventInstance,
+            Org,
+            page_summary.planned_qs,
+            page_summary.user_attending,
+            page_summary.user_q,
+            Event,
+            page_summary.hc_count,
         )
+        .select_from(page)
+        .join(EventInstance, EventInstance.id == page.c.id)
+        .join(Org, Org.id == EventInstance.org_id)
+    )
+    if summary_join is not None:
+        query = query.outerjoin(summary_join, summary_join.c.event_instance_id == EventInstance.id)
+    query = query.outerjoin(Event, Event.id == EventInstance.series_id).order_by(*order_by)
 
-    # --- EXECUTION ---
-    results = session.execute(query).all()
+    with get_session() as session:
+        results = session.execute(query).all()
+        event_ids = [r[0].id for r in results]
+        event_types: dict[int, list[EventType]] = {}
+        if event_ids:
+            type_rows = session.execute(
+                select(EventType_x_EventInstance.event_instance_id, EventType)
+                .join(EventType, EventType.id == EventType_x_EventInstance.event_type_id)
+                .where(EventType_x_EventInstance.event_instance_id.in_(event_ids))
+                .order_by(EventType.name, EventType.id)
+            ).all()
+            for event_id, event_type in type_rows:
+                event_types.setdefault(event_id, []).append(event_type)
 
-    # Turn EventType into a list of EventType objects for each Event.id
-    event_types = {}
-    for r in results:
-        event_types.setdefault(r[0].id, []).append(r[2])
-
-    # Turn the results into a list of CalendarHomeQuery objects
-    output = []
-
-    for r in results:
-        output.append(
-            CalendarHomeQuery(
-                event=r[0],
-                org=r[1],
-                event_types=event_types.get(r[0].id, []),
-                planned_qs=r[3],
-                user_attending=r[4],
-                user_q=r[5],
-                series=r[6],
-            )
+    return [
+        CalendarHomeQuery(
+            event=r[0],
+            org=r[1],
+            event_types=event_types.get(r[0].id, []),
+            planned_qs=r[2],
+            user_attending=r[3],
+            user_q=r[4],
+            series=r[5],
+            hc_count=r[6],
         )
-    session.close()
-    return output
+        for r in results
+    ]
 
 
 @dataclass

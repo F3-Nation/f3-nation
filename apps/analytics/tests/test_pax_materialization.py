@@ -25,11 +25,8 @@ def test_pax_materialization_contract(tmp_path: Path):
         "pax_count INTEGER, meta JSON)"
     )
     db.execute(
-        "CREATE TABLE pg.public.attendance (id INTEGER, user_id INTEGER, event_instance_id INTEGER, is_planned BOOLEAN)"
-    )
-    db.execute("CREATE TABLE pg.public.attendance_types (id INTEGER, type VARCHAR)")
-    db.execute(
-        "CREATE TABLE pg.public.attendance_x_attendance_types (attendance_id INTEGER, attendance_type_id INTEGER)"
+        "CREATE TABLE pg.public.attendance (id INTEGER, user_id INTEGER, event_instance_id INTEGER, "
+        "is_planned BOOLEAN, attendance_type VARCHAR)"
     )
     db.execute(
         "CREATE TABLE pg.public.event_instances_x_event_types (event_instance_id INTEGER, event_type_id INTEGER)"
@@ -95,31 +92,31 @@ def test_pax_materialization_contract(tmp_path: Path):
             (5, 10, True, 1, '{"exclude_from_pax_vault":true}'),
             (6, 10, False, 1, "{}"),
             (7, 30, True, 1, "{}"),
+            (8, 20, True, 1, "{}"),
+            (9, 20, True, 1, "{}"),
         ],
     )
     # Event 7 has an org without a region parent; it still counts for lifetime totals.
     db.execute("INSERT INTO pg.public.orgs VALUES (30, NULL, 'Other', 'chapter')")
     db.executemany(
-        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?)",
+        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?, ?)",
         [
-            (1, 1, 1, False),
-            (2, 1, 1, False),  # duplicate attendance row does not inflate event counts
-            (3, 1, 2, True),
-            (4, 1, 3, False),
-            (5, 1, 4, False),
-            (6, 1, 5, False),
-            (7, 1, 6, False),
-            (8, 1, 7, False),
-            (9, None, 1, False),
+            # Duplicate attendance rows, both Q, do not inflate event or Q counts.
+            (1, 1, 1, False, "q"),
+            (2, 1, 1, False, "q"),
+            # Qs on planned, ineligible or inactive events do not count.
+            (3, 1, 2, True, "q"),
+            (4, 1, 3, False, "q"),
+            (5, 1, 4, False, "q"),
+            (6, 1, 5, False, "q"),
+            (7, 1, 6, False, "pax"),
+            # A distinct, regionless eligible event with a Q.
+            (8, 1, 7, False, "q"),
+            (9, None, 1, False, "co_q"),
+            # Posts as PAX and as Co-Q count as posts but not as Qs.
+            (10, 1, 8, False, "pax"),
+            (11, 1, 9, False, "co_q"),
         ],
-    )
-    db.execute("INSERT INTO pg.public.attendance_types VALUES (1, 'Q'), (2, 'Co-Q')")
-    # Qs on ineligible events do not count. Duplicate Q type rows on attendance 2
-    # still represent one eligible event; attendance 8 adds a distinct, regionless
-    # eligible event with Q (and Co-Q).
-    db.execute(
-        "INSERT INTO pg.public.attendance_x_attendance_types VALUES "
-        "(2, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (8, 1), (8, 2)"
     )
     db.execute("INSERT INTO pg.public.event_instances_x_event_types VALUES (1, 7)")
     db.execute("INSERT INTO pg.public.event_types VALUES (7, 'Run')")
@@ -139,9 +136,9 @@ def test_pax_materialization_contract(tmp_path: Path):
         {"role_id": 3, "role_name": "Q", "org_id": 20, "org_name": "AO", "org_type": "ao"},
         {"role_id": 99, "role_name": "99", "org_id": 99, "org_name": "99", "org_type": None},
     ]
-    # Two distinct eligible events count, including regionless event 7. Both have
-    # an attached Q; duplicate Q rows on one attendance/event count only once.
-    assert rows[0][14:16] == (2, 2)
+    # Four distinct eligible events count, including regionless event 7. The user
+    # was Q at two of them; two Q rows on one event count once.
+    assert rows[0][14:16] == (4, 2)
     assert rows[1][1] == 3 and rows[1][2:9] == ("3", 99, None, None, "solo@example.test", "active", None)
     assert rows[1][9:14] == ([], [], [], [], [])
     assert rows[1][14:16] == (0, 0)

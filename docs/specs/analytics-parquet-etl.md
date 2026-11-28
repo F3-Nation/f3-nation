@@ -164,7 +164,7 @@ Columns, in order: `id`, `org_id`, `location_id`, `series_id`, `highlight`,
 The date boundary is inclusive (`start_date >= as_of_date`). Sector resolution
 uses `territory.parent_id`, falling back to `area.parent_id` when there is no
 territory; the O3 join is explicitly constrained to `org_type = 'area'`.
-`planned_q_user_id` comes from planned attendance whose attendance type ID is 2.
+`planned_q_user_id` comes from planned attendance whose `attendance_type` is `q`.
 The left join preserves one null-Q row when no planned Q matches and can produce
 multiple rows for an event when multiple planned-Q attendance rows match.
 
@@ -175,7 +175,8 @@ Columns, in order: `id`, `user_id`, `event_instance_id`, `attendance_meta`,
 `home_region_name`, `avatar_url`, `user_statusa`, `start_date`.
 
 Only `is_planned = FALSE` attendance is emitted. User and event details are
-left-joined; Q/Co-Q indicators are aggregated per attendance record. The output
+left-joined. `q_ind` and `coq_ind` are `1` when the record's `attendance_type`
+is `q` or `co_q` respectively, otherwise `0`. The output
 alias `user_statusa` (including its spelling) is the SQL contract. `as_of_date`
 and `refreshed_at` are bound query parameters but are not projected.
 
@@ -189,7 +190,7 @@ Retain the supplied `pax_count IS NULL` proxy filter, plus active events with
 `ei.org_id` and `ao.parent_id`; no `org_type` predicate validates either row as
 an AO or region. `region_name` and `ao_name` are labels from those joined rows,
 not inferred or type-checked labels. Q names include
-attendance rows of type Q (without an `is_planned` restriction), sorted and
+attendance rows whose `attendance_type` is `q` (without an `is_planned` restriction), sorted and
 joined with `, `; when there is no Q the value is `No Q Listed`. Results are
 ordered by descending start date.
 

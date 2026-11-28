@@ -28,8 +28,7 @@ tag_aggregate AS (
 planned_q AS (
     SELECT a.event_instance_id, a.user_id
     FROM pg.public.attendance a
-    JOIN pg.public.attendance_x_attendance_types att ON a.id = att.attendance_id
-    WHERE att.attendance_type_id = 2 AND a.is_planned = TRUE
+    WHERE a.attendance_type = 'q' AND a.is_planned = TRUE
 )
 SELECT ei.id, ei.org_id, ei.location_id, ei.series_id, ei.highlight,
        ei.start_date, ei.end_date, ei.start_time, ei.end_time, ei.name,

@@ -122,7 +122,6 @@ There is no app-specific bearer secret and no `X-User-Id` override in this flow.
 | `F3_API_BASE_URL`      | API base URL                                                                     | Low         |
 | `NEXT_PUBLIC_SITE_URL` | Public app origin                                                                | Low         |
 | `F3_CHANNEL`           | Bucket selection: `local`/`staging` → staging bucket, `prod` → production bucket | Medium      |
-| `GCS_CREDENTIALS`      | GCS service account credentials                                                  | Critical    |
 
 Legacy variables removed from apps/me:
 

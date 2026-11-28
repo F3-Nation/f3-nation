@@ -18,8 +18,6 @@ export const env = createEnv({
     OAUTH_CLIENT_ID: z.string().min(1),
     OAUTH_CLIENT_SECRET: z.string().min(1),
     OAUTH_REDIRECT_URI: z.url(),
-    // Base64-encoded service-account JSON for GCS public-image uploads.
-    GCS_CREDENTIALS: z.string().min(1),
     GCS_EMULATOR_HOST: z.string().optional(),
     // Shared with the API, which trusts the client IP this app's /api/orpc
     // proxy reports only when it matches. Unset, the proxy reports none.
