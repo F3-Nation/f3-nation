@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.1](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.6.0...pkg-validators@0.6.1) (2026-11-28)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.12.1
+
 ## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.5.3...pkg-validators@0.6.0) (2026-11-24)
 
 

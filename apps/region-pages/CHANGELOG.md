@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.3](https://github.com/F3-Nation/f3-nation/compare/region-pages@0.2.2...region-pages@0.2.3) (2026-11-28)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @acme/api bumped to 0.19.0
+
 ## [0.2.2](https://github.com/F3-Nation/f3-nation/compare/region-pages@0.2.1...region-pages@0.2.2) (2026-11-24)
 
 

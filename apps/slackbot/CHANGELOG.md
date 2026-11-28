@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## [2.14.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.13.0...slackbot@2.14.0) (2026-11-28)
+
+
+### Features
+
+* **slackbot:** cleaner Calendar Home layout with paging and collapsible filters ([#1759](https://github.com/F3-Nation/f3-nation/issues/1759)) ([d305fb3](https://github.com/F3-Nation/f3-nation/commit/d305fb320cec21ed9118386259a565c3f190fad1))
+
+
+### Bug Fixes
+
+* **slackbot:** log inner scheduled-job errors without exception payloads ([#1820](https://github.com/F3-Nation/f3-nation/issues/1820)) ([280ebd1](https://github.com/F3-Nation/f3-nation/commit/280ebd1fe28fac61b6df6f6e82190f37c451ac2a))
+* **slackbot:** require recent attendance for anniversaries ([#1811](https://github.com/F3-Nation/f3-nation/issues/1811)) ([8068bde](https://github.com/F3-Nation/f3-nation/commit/8068bdedef8dfe7357b65056c5c972708bf03c6e))
+* **slackbot:** stop cache-refresh stampede and fix SMTP hang and Home Take Q errors ([#1847](https://github.com/F3-Nation/f3-nation/issues/1847)) ([c4eabad](https://github.com/F3-Nation/f3-nation/commit/c4eabada9364fbb7d19d88e998d35c422b23d913))
+
 ## [2.13.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.12.0...slackbot@2.13.0) (2026-11-24)
 
 

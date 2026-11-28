@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.13.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.12.0...admin@2.13.0) (2026-11-28)
+
+
+### Features
+
+* **api,map,admin:** preserve client names in audit history ([#1795](https://github.com/F3-Nation/f3-nation/issues/1795)) ([9e54526](https://github.com/F3-Nation/f3-nation/commit/9e545263bf4dad35c89e168b18d0eb9662877e0e))
+* **auth,admin,me:** add robots.ts that keeps sign-in apps out of search ([#1794](https://github.com/F3-Nation/f3-nation/issues/1794)) ([a76548d](https://github.com/F3-Nation/f3-nation/commit/a76548d8ed3b065d4b2711c813f08e3d980d4e9c))
+* **storage,admin,me:** upload public images as the Cloud Run service identity ([#1818](https://github.com/F3-Nation/f3-nation/issues/1818)) ([86c6d6e](https://github.com/F3-Nation/f3-nation/commit/86c6d6e71d81447560535ba3867aabe155c56f8c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.19.0
+    * @acme/mail bumped to 0.1.7
+    * @acme/storage bumped to 0.3.0
+    * @acme/validators bumped to 0.6.1
+
 ## [2.12.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.11.0...admin@2.12.0) (2026-11-24)
 
 

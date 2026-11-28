@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/me@2.4.2...me@2.5.0) (2026-11-28)
+
+
+### Features
+
+* **auth,admin,me:** add robots.ts that keeps sign-in apps out of search ([#1794](https://github.com/F3-Nation/f3-nation/issues/1794)) ([a76548d](https://github.com/F3-Nation/f3-nation/commit/a76548d8ed3b065d4b2711c813f08e3d980d4e9c))
+* **storage,admin,me:** upload public images as the Cloud Run service identity ([#1818](https://github.com/F3-Nation/f3-nation/issues/1818)) ([86c6d6e](https://github.com/F3-Nation/f3-nation/commit/86c6d6e71d81447560535ba3867aabe155c56f8c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.19.0
+    * @acme/storage bumped to 0.3.0
+
 ## [2.4.2](https://github.com/F3-Nation/f3-nation/compare/me@2.4.1...me@2.4.2) (2026-11-24)
 
 

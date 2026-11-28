@@ -1,5 +1,26 @@
 # Changelog
 
+## [6.15.0](https://github.com/F3-Nation/f3-nation/compare/api@6.14.0...api@6.15.0) (2026-11-28)
+
+
+### Features
+
+* **storage,admin,me:** upload public images as the Cloud Run service identity ([#1818](https://github.com/F3-Nation/f3-nation/issues/1818)) ([86c6d6e](https://github.com/F3-Nation/f3-nation/commit/86c6d6e71d81447560535ba3867aabe155c56f8c))
+
+
+### Bug Fixes
+
+* **api:** recover silent database connections ([#1804](https://github.com/F3-Nation/f3-nation/issues/1804)) ([a8bf075](https://github.com/F3-Nation/f3-nation/commit/a8bf075928fd61f26cae0193dece85e0372618ec))
+* **api:** serve the event-instance list without a credential ([#1815](https://github.com/F3-Nation/f3-nation/issues/1815)) ([954f4a5](https://github.com/F3-Nation/f3-nation/commit/954f4a51b6072f3f802c3028cd0689b811c4009a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.19.0
+    * @acme/db bumped to 0.12.1
+
 ## [6.14.0](https://github.com/F3-Nation/f3-nation/compare/api@6.13.1...api@6.14.0) (2026-11-24)
 
 
