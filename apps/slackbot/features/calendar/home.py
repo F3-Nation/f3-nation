@@ -22,9 +22,13 @@ from slack_sdk.web import WebClient
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
+from application.attendance import CO_Q_TYPE_ID, Q_TYPE_ID
+from application.preblast.service import PreblastService
 from features.backblast import build_backblast_form
-from features.calendar import event_instance, get_preblast_action_buttons
+from features.calendar import event_instance, get_preblast_action_blocks
 from features.calendar.event_preblast import (
+    _insert_preblast_image,
+    _send_preblast_blocks,
     build_event_preblast_form,
     build_preblast_info,
     get_preblast_channel,
@@ -777,9 +781,10 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             joinedloads=[Attendance.attendance_x_attendance_types],
         )
         if attendance_record:
-            if 2 not in attendance_record[0].attendance_x_attendance_types:
+            type_ids = {x.attendance_type_id for x in attendance_record[0].attendance_x_attendance_types}
+            if Q_TYPE_ID not in type_ids:
                 DbManager.create_record(
-                    Attendance_x_AttendanceType(attendance_id=attendance_record[0].id, attendance_type_id=2)
+                    Attendance_x_AttendanceType(attendance_id=attendance_record[0].id, attendance_type_id=Q_TYPE_ID)
                 )
         else:
             DbManager.create_record(
@@ -852,36 +857,44 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
     if update_post:
         preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
         if preblast_info.event_record.preblast_ts:
+            # build_preblast_info returns attendance records as dicts.
             q_list = [
-                r.user.id
+                r.get("user_id")
                 for r in preblast_info.attendance_records
-                if bool({t.id for t in r.attendance_types}.intersection([2, 3]))
-            ]  # noqa
-            blocks = [
-                *preblast_info.preblast_blocks,
-                orm.ActionsBlock(
-                    elements=get_preblast_action_buttons(has_q=len(q_list) > 0, event_instance_id=event_instance_id)
-                ),
+                if {Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", []))
             ]
-            blocks = [b.as_form_field() for b in blocks]
+            # preblast_blocks are already Slack block dicts; only the buttons need converting.
+            blocks = list(preblast_info.preblast_blocks) + [
+                b.as_form_field()
+                for b in get_preblast_action_blocks(has_q=len(q_list) > 0, event_instance_id=event_instance_id)
+            ]
+            _insert_preblast_image(blocks, preblast_info.event_record.meta)
             metadata = {
                 "event_instance_id": event_instance_id,
-                "attendees": [r.user.id for r in preblast_info.attendance_records],
+                "attendees": [r.get("user_id") for r in preblast_info.attendance_records],
                 "qs": q_list,
             }
+            # The post may sit in a different channel from the one now configured.
+            posted_channel = PreblastService().resolve_posted_channel(
+                preblast_info.event_record, get_preblast_channel(region_record, preblast_info)
+            )
             try:
-                client.chat_update(
-                    channel=get_preblast_channel(region_record, preblast_info),
+                _send_preblast_blocks(
+                    client.chat_update,
+                    blocks,
+                    logger,
+                    channel=posted_channel,
                     ts=safe_get(metadata, "preblast_ts") or str(preblast_info.event_record.preblast_ts),
-                    blocks=blocks,
                     text="Event Preblast",
                     metadata={"event_type": "preblast", "event_payload": metadata},
                 )
             except Exception as e:
                 logger.error(f"Error updating preblast post, posting a new one: {e}")
-                client.chat_postMessage(
+                _send_preblast_blocks(
+                    client.chat_postMessage,
+                    blocks,
+                    logger,
                     channel=get_preblast_channel(region_record, preblast_info),
-                    blocks=blocks,
                     text="Event Preblast",
                     metadata={"event_type": "preblast", "event_payload": metadata},
                 )
@@ -890,7 +903,7 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
                     client,
                     logger,
                     region_record,
-                    get_preblast_channel(region_record, preblast_info),
+                    posted_channel,
                     safe_get(metadata, "preblast_ts") or str(preblast_info.event_record.preblast_ts),
                     safe_get(body, "user", "id"),
                     is_hc=hc_action,

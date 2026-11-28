@@ -790,3 +790,145 @@ def test_loading_calendar_update_propagates_modal_error_to_dispatcher():
             region_record=region_record,
             update_view_id="V_LOADING",
         )
+
+
+def _home_event_body(action: str) -> dict:
+    return {
+        "user": {"id": "U_ACTOR"},
+        "view": {"id": "V_HOME"},
+        "actions": [{"action_id": f"{actions.CALENDAR_HOME_EVENT}_7", "selected_option": {"value": action}}],
+    }
+
+
+def _patch_home_event(monkeypatch, home, preblast_info=None):
+    monkeypatch.setattr(home, "get_user", lambda *_a, **_k: SimpleNamespace(user_id=42))
+    monkeypatch.setattr(home, "build_home_form", MagicMock())
+    monkeypatch.setattr(home, "get_preblast_channel", lambda *_a: "C_PREBLAST")
+    monkeypatch.setattr(home, "post_hc_thread_reply", MagicMock())
+    info = preblast_info or SimpleNamespace(
+        event_record=SimpleNamespace(preblast_ts=None), attendance_records=[], preblast_blocks=[]
+    )
+    monkeypatch.setattr(home, "build_preblast_info", lambda *_a, **_k: info)
+
+
+@pytest.mark.parametrize(("existing_type_ids", "inserts_q"), [([1], True), ([2], False), ([1, 2], False)])
+def test_take_q_adds_q_link_only_when_attendance_lacks_it(monkeypatch, existing_type_ids, inserts_q):
+    from features.calendar import home
+
+    _patch_home_event(monkeypatch, home)
+    attendance = SimpleNamespace(
+        id=9,
+        attendance_x_attendance_types=[SimpleNamespace(attendance_type_id=type_id) for type_id in existing_type_ids],
+    )
+    with patch.object(home, "DbManager") as database:
+        database.find_records.return_value = [attendance]
+        home.handle_home_event(_home_event_body("Take Q"), MagicMock(), MagicMock(), {}, SimpleNamespace(org_id=1))
+
+    if inserts_q:
+        [created] = [c.args[0] for c in database.create_record.call_args_list]
+        assert (created.attendance_id, created.attendance_type_id) == (9, 2)
+    else:
+        database.create_record.assert_not_called()
+
+
+def test_home_hc_updates_preblast_post_from_attendance_dicts(monkeypatch):
+    from features.calendar import get_preblast_action_blocks, home
+    from utilities import constants
+
+    summary = {"type": "section", "text": {"type": "mrkdwn", "text": "PRTEST preblast"}}
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(
+            preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
+        ),
+        attendance_records=[
+            {"user_id": 42, "attendance_type_ids": [1]},
+            {"user_id": 43, "attendance_type_ids": [2]},
+            {"user_id": 44, "attendance_type_ids": [1, 3]},
+        ],
+        preblast_blocks=[summary],
+    )
+    _patch_home_event(monkeypatch, home, preblast_info)
+    client = MagicMock()
+    logger = MagicMock()
+    with patch.object(home, "DbManager"):
+        home.handle_home_event(_home_event_body("HC"), client, logger, {}, SimpleNamespace(org_id=1))
+
+    logger.error.assert_not_called()
+    client.chat_postMessage.assert_not_called()
+    sent = client.chat_update.call_args.kwargs
+    assert sent["metadata"]["event_payload"] == {"event_instance_id": 7, "attendees": [42, 43, 44], "qs": [43, 44]}
+    buttons = [b.as_form_field() for b in get_preblast_action_blocks(has_q=True, event_instance_id=7)]
+    photo = {"type": "image", "slack_file": {"id": "F_PHOTO"}, "alt_text": "Preblast Image"}
+    assert sent["blocks"] == [summary, *buttons[:-1], photo, buttons[-1]]
+
+
+def test_home_hc_updates_preblast_in_the_channel_it_was_posted_to(monkeypatch):
+    from features.calendar import home
+
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(preblast_ts="1700000000.000100", meta={"preblast_post_channel_id": "C_POSTED"}),
+        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        preblast_blocks=[],
+    )
+    _patch_home_event(monkeypatch, home, preblast_info)
+    client = MagicMock()
+    with patch.object(home, "DbManager"):
+        home.handle_home_event(_home_event_body("HC"), client, MagicMock(), {}, SimpleNamespace(org_id=1))
+
+    assert client.chat_update.call_args.kwargs["channel"] == "C_POSTED"
+    assert home.post_hc_thread_reply.call_args.args[3] == "C_POSTED"
+
+
+def test_home_hc_retries_preblast_update_without_photo_on_invalid_blocks(monkeypatch):
+    from features.calendar import home
+    from utilities import constants
+
+    summary = {"type": "section", "text": {"type": "mrkdwn", "text": "PRTEST preblast"}}
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(
+            preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
+        ),
+        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        preblast_blocks=[summary],
+    )
+    _patch_home_event(monkeypatch, home, preblast_info)
+    client = MagicMock()
+    client.chat_update.side_effect = [SlackApiError("invalid_blocks", {"error": "invalid_blocks"}), {"ok": True}]
+    logger = MagicMock()
+    with patch.object(home, "DbManager"):
+        home.handle_home_event(_home_event_body("HC"), client, logger, {}, SimpleNamespace(org_id=1))
+
+    assert client.chat_update.call_count == 2
+    client.chat_postMessage.assert_not_called()
+    first_blocks = client.chat_update.call_args_list[0].kwargs["blocks"]
+    second_blocks = client.chat_update.call_args_list[1].kwargs["blocks"]
+    assert any(b.get("alt_text") == "Preblast Image" for b in first_blocks)
+    assert all(b.get("alt_text") != "Preblast Image" for b in second_blocks)
+
+
+def test_home_hc_fallback_post_retries_without_photo_on_invalid_blocks(monkeypatch):
+    from features.calendar import home
+    from utilities import constants
+
+    summary = {"type": "section", "text": {"type": "mrkdwn", "text": "PRTEST preblast"}}
+    preblast_info = SimpleNamespace(
+        event_record=SimpleNamespace(
+            preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
+        ),
+        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        preblast_blocks=[summary],
+    )
+    _patch_home_event(monkeypatch, home, preblast_info)
+    client = MagicMock()
+    client.chat_update.side_effect = SlackApiError("message_not_found", {"error": "message_not_found"})
+    client.chat_postMessage.side_effect = [SlackApiError("invalid_blocks", {"error": "invalid_blocks"}), {"ok": True}]
+    logger = MagicMock()
+    with patch.object(home, "DbManager"):
+        home.handle_home_event(_home_event_body("HC"), client, logger, {}, SimpleNamespace(org_id=1))
+
+    assert client.chat_update.call_count == 1
+    assert client.chat_postMessage.call_count == 2
+    first_blocks = client.chat_postMessage.call_args_list[0].kwargs["blocks"]
+    second_blocks = client.chat_postMessage.call_args_list[1].kwargs["blocks"]
+    assert any(b.get("alt_text") == "Preblast Image" for b in first_blocks)
+    assert all(b.get("alt_text") != "Preblast Image" for b in second_blocks)

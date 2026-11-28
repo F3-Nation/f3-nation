@@ -9,6 +9,9 @@ from urllib.parse import unquote, urlsplit
 logger = logging.getLogger(__name__)
 
 
+SMTP_TIMEOUT_SECONDS = 10
+
+
 def send_via_sendgrid(
     to_email: str,
     subject: str,
@@ -81,9 +84,11 @@ def send_via_sendgrid(
         implicit_tls = endpoint.scheme == "smtps"
         stage = "connect"
         if implicit_tls:
-            connection = smtplib.SMTP_SSL(endpoint.hostname, port, timeout=10, context=ssl.create_default_context())
+            connection = smtplib.SMTP_SSL(
+                endpoint.hostname, port, timeout=SMTP_TIMEOUT_SECONDS, context=ssl.create_default_context()
+            )
         else:
-            connection = smtplib.SMTP(endpoint.hostname, port, timeout=10)
+            connection = smtplib.SMTP(endpoint.hostname, port, timeout=SMTP_TIMEOUT_SECONDS)
         with connection as server:
             # Only an unauthenticated loopback catcher may receive plaintext.
             if not implicit_tls and (
@@ -153,8 +158,8 @@ def send(
         msg.add_attachment(file["content"], **file["meta"])
 
     if email_server and email_server_port and email_user and email_password and email_to:
-        server = smtplib.SMTP(email_server, email_server_port)
-        server.starttls()
-        server.login(email_user, email_password)
-        server.send_message(msg)
-        server.close()
+        # Without a timeout a stalled server holds a Slack listener thread for minutes.
+        with smtplib.SMTP(email_server, email_server_port, timeout=SMTP_TIMEOUT_SECONDS) as server:
+            server.starttls()
+            server.login(email_user, email_password)
+            server.send_message(msg)
