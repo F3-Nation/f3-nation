@@ -6,7 +6,8 @@
  * and soft-deleting them when series or orgs are deleted.
  */
 
-import { and, eq, gte, inArray, isNotNull, or, schema } from "@acme/db";
+import type { AnyColumn, SQL } from "@acme/db";
+import { and, eq, gte, inArray, isNotNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 
@@ -399,6 +400,24 @@ async function createEventInstancesForSeriesInTransaction(
 }
 
 /**
+ * Fields an admin can change on one date of a series. On a date marked with a
+ * series exception, a series edit keeps the date's own value for these (see
+ * updateFutureInstancesInTransaction). The rest (privacy, org, highlight,
+ * meta) always follow the series: a series made private must hide every date.
+ */
+const OVERRIDABLE_INSTANCE_FIELDS = [
+  "locationId",
+  "startTime",
+  "endTime",
+  "description",
+  "name",
+] as const;
+type OverridableInstanceField = (typeof OVERRIDABLE_INSTANCE_FIELDS)[number];
+
+const isOverridableField = (field: string): field is OverridableInstanceField =>
+  (OVERRIDABLE_INSTANCE_FIELDS as readonly string[]).includes(field);
+
+/**
  * Update future event instances with non-structural changes from series
  */
 export async function updateFutureInstances(
@@ -406,7 +425,13 @@ export async function updateFutureInstances(
   series: SeriesData,
   startDate?: string,
   options?: {
-    fields: (
+    /**
+     * The series' values before this edit. When given, a date with a series
+     * exception keeps its own value for any overridable field that differs
+     * from these.
+     */
+    previous?: Pick<SeriesData, OverridableInstanceField>;
+    fields?: (
       | "locationId"
       | "startTime"
       | "endTime"
@@ -458,7 +483,7 @@ async function updateFutureInstancesInTransaction(
   }
 
   const instanceIds = futureInstances.map((i) => i.id);
-  const associationInstanceIds = options
+  const associationInstanceIds = options?.fields
     ? futureInstances
         .filter(({ seriesException }) => seriesException !== "closed")
         .map(({ id }) => id)
@@ -482,10 +507,41 @@ async function updateFutureInstancesInTransaction(
     ...(shouldUpdate("name") ? { name: series.name } : {}),
     ...(shouldUpdate("orgId") ? { orgId: series.orgId } : {}),
   };
-  if (Object.keys(instanceUpdate).length > 0) {
+
+  // With the series' previous values, an overridable field keeps a date's own
+  // value only when the date carries a series exception (closed, different
+  // time) and its value differs from the series' previous one. Every other
+  // date follows the series as before, including rows that drifted from it.
+  // Start and end time are judged as a pair so a date can't end up finishing
+  // before it starts. All SET expressions read the row's values before the
+  // update, so one statement does it.
+  const previous = options?.previous;
+  const instance = schema.eventInstances;
+  const sameAs = (column: SQL | AnyColumn, value: unknown): SQL =>
+    sql`${column} IS NOT DISTINCT FROM ${value}`;
+  const matchesPrevious = (field: OverridableInstanceField): SQL => {
+    if (!previous) return sql`TRUE`;
+    if (field === "startTime" || field === "endTime") {
+      const start = sameAs(instance.startTime, previous.startTime);
+      const end = sameAs(instance.endTime, previous.endTime);
+      return sql`(${start} AND ${end})`;
+    }
+    return sameAs(instance[field], previous[field]);
+  };
+  const update: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(instanceUpdate)) {
+    if (!previous || !isOverridableField(field)) {
+      update[field] = value;
+      continue;
+    }
+    const follows = sql`${instance.seriesException} IS NULL OR ${matchesPrevious(field)}`;
+    update[field] =
+      sql`CASE WHEN ${follows} THEN ${value} ELSE ${instance[field]} END`;
+  }
+  if (Object.keys(update).length > 0) {
     await db
       .update(schema.eventInstances)
-      .set(instanceUpdate)
+      .set(update)
       .where(inArray(schema.eventInstances.id, instanceIds));
   }
 
