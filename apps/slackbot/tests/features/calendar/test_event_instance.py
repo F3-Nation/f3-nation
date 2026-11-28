@@ -20,6 +20,7 @@ from features.calendar.event_instance import (
     CALENDAR_ADD_EVENT_INSTANCE_START_DATE,
     CALENDAR_ADD_EVENT_INSTANCE_START_TIME,
     CALENDAR_ADD_EVENT_INSTANCE_TYPE,
+    CLEAR_LOCATION_OPTION_VALUE,
     META_PREBLAST_CHANNEL_ID,
     _build_event_instance_service,
     build_event_instance_add_form,
@@ -406,6 +407,7 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertEqual(kwargs["json"]["name"], "Updated")
         self.assertEqual(kwargs["json"]["eventTypeId"], 1)
         self.assertIsNone(kwargs["json"]["eventTagId"])  # empty list → clears tag
+        self.assertNotIn("locationId", kwargs["json"])
 
     def test_update_writes_numeric_preblast_ts(self):
         self.client.post.return_value = {"eventInstance": self._raw_instance(id=5)}
@@ -767,6 +769,108 @@ class EventInstancePreblastChannelTest(unittest.TestCase):
     @patch("features.calendar.event_instance._build_event_type_service")
     @patch("features.calendar.event_instance._build_location_service")
     @patch("features.calendar.event_instance._build_ao_service")
+    def test_existing_event_form_can_clear_location(
+        self, mock_build_ao, mock_build_location, mock_build_event_type, mock_build_event_tag
+    ):
+        mock_build_ao.return_value.get_region_aos.return_value = [SimpleNamespace(id=10, name="Alpha")]
+        mock_build_location.return_value.get_org_locations.return_value = [SimpleNamespace(id=20, name="Park")]
+        mock_build_event_type.return_value.get_all_event_types_for_org.return_value = [
+            SimpleNamespace(id=5, name="Bootcamp")
+        ]
+        mock_build_event_tag.return_value.get_all_tags_for_org.return_value = []
+        client = MagicMock()
+        event = _make_instance(id=42)
+        event.location_id = 20
+
+        build_event_instance_add_form(
+            {"trigger_id": "T1"},
+            client,
+            MagicMock(),
+            {},
+            self._region_record(),
+            edit_event_instance=event,
+        )
+
+        view = client.views_push.call_args.kwargs["view"]
+        location = next(
+            b["element"] for b in view["blocks"] if b.get("block_id") == CALENDAR_ADD_EVENT_INSTANCE_LOCATION
+        )
+        self.assertEqual(location["options"][-1]["value"], CLEAR_LOCATION_OPTION_VALUE)
+        self.assertEqual(location["initial_option"]["value"], "20")
+
+    @patch("features.calendar.event_instance.post_bot_log")
+    @patch("features.calendar.event_instance._build_event_instance_service")
+    def test_edit_location_selection_is_persisted(self, mock_build_service, mock_post_bot_log):
+        for selected_value, expected_location in [(CLEAR_LOCATION_OPTION_VALUE, None), ("21", 21), (None, 20)]:
+            with self.subTest(selected_value=selected_value):
+                stored = {
+                    "id": 42,
+                    "name": "Pop Up",
+                    "orgId": 10,
+                    "locationId": 20,
+                    "eventTypes": [{"eventTypeId": 5}],
+                    "startDate": "2026-07-25",
+                    "startTime": "0600",
+                    "endTime": "0700",
+                }
+                api = MagicMock()
+                api.get.side_effect = lambda *args, stored=stored, **kwargs: {"eventInstance": dict(stored)}
+
+                def save(*args, stored=stored, **kwargs):
+                    stored.update(kwargs["json"])
+                    return {"eventInstance": dict(stored)}
+
+                api.post.side_effect = save
+                mock_build_service.return_value = EventInstanceService(ApiEventInstanceRepository(api))
+                body = {
+                    "user": {"id": "U123"},
+                    "view": {
+                        "private_metadata": '{"event_instance_id": 42}',
+                        "blocks": [
+                            {
+                                "block_id": CALENDAR_ADD_EVENT_INSTANCE_LOCATION,
+                                "element": {"initial_option": {"value": "20"}},
+                            },
+                            {"block_id": CALENDAR_ADD_EVENT_INSTANCE_TYPE, "element": {}},
+                        ],
+                        "state": {
+                            "values": {
+                                CALENDAR_ADD_EVENT_INSTANCE_AO: {
+                                    CALENDAR_ADD_EVENT_INSTANCE_AO: {"selected_option": {"value": "10"}}
+                                },
+                                CALENDAR_ADD_EVENT_INSTANCE_LOCATION: {
+                                    CALENDAR_ADD_EVENT_INSTANCE_LOCATION: {
+                                        "selected_option": {"value": selected_value} if selected_value else None
+                                    }
+                                },
+                                CALENDAR_ADD_EVENT_INSTANCE_TYPE: {
+                                    CALENDAR_ADD_EVENT_INSTANCE_TYPE: {"selected_option": {"value": "5"}}
+                                },
+                                CALENDAR_ADD_EVENT_INSTANCE_START_DATE: {
+                                    CALENDAR_ADD_EVENT_INSTANCE_START_DATE: {"selected_date": "2026-07-25"}
+                                },
+                                CALENDAR_ADD_EVENT_INSTANCE_START_TIME: {
+                                    CALENDAR_ADD_EVENT_INSTANCE_START_TIME: {"selected_time": "06:00"}
+                                },
+                                CALENDAR_ADD_EVENT_INSTANCE_NAME: {
+                                    CALENDAR_ADD_EVENT_INSTANCE_NAME: {"value": "Pop Up"}
+                                },
+                            }
+                        },
+                    },
+                }
+
+                handle_event_instance_add(body, MagicMock(), MagicMock(), {}, self._region_record())
+
+                payload = api.post.call_args.kwargs["json"]
+                self.assertIn("locationId", payload)
+                self.assertEqual(payload["locationId"], expected_location)
+                self.assertEqual(stored["locationId"], expected_location)
+
+    @patch("features.calendar.event_instance._build_event_tag_service")
+    @patch("features.calendar.event_instance._build_event_type_service")
+    @patch("features.calendar.event_instance._build_location_service")
+    @patch("features.calendar.event_instance._build_ao_service")
     def test_unscheduled_preblast_form_includes_channel_selector(
         self,
         mock_build_ao,
@@ -791,12 +895,104 @@ class EventInstancePreblastChannelTest(unittest.TestCase):
         )
         self.assertEqual(channel_block["element"]["type"], "channels_select")
         self.assertTrue(channel_block["optional"])
+        location_block = next(
+            b for b in view["blocks"] if b.get("block_id") == CALENDAR_ADD_EVENT_INSTANCE_LOCATION
+        )
+        clear_option = next(
+            option
+            for option in location_block["element"]["options"]
+            if option["value"] == CLEAR_LOCATION_OPTION_VALUE
+        )
+        self.assertEqual(clear_option["text"]["text"], "Clear selection")
+
+    @patch("features.calendar.event_instance._build_event_tag_service")
+    @patch("features.calendar.event_instance._build_event_type_service")
+    @patch("features.calendar.event_instance._build_location_service")
+    @patch("features.calendar.event_instance._build_ao_service")
+    def test_preblast_ao_change_keeps_clear_option_and_default_location(
+        self, mock_build_ao, mock_build_location, mock_build_event_type, mock_build_event_tag
+    ):
+        mock_build_ao.return_value.get_region_aos.return_value = [SimpleNamespace(id=10, name="Alpha")]
+        mock_build_ao.return_value.get_ao_by_id.return_value = SimpleNamespace(default_location_id=20)
+        mock_build_location.return_value.get_org_locations.return_value = [SimpleNamespace(id=20, name="Park")]
+        mock_build_event_type.return_value.get_all_event_types_for_org.return_value = []
+        mock_build_event_tag.return_value.get_all_tags_for_org.return_value = []
+        body = {
+            "actions": [{"action_id": CALENDAR_ADD_EVENT_INSTANCE_AO}],
+            "view": {
+                "id": "V1",
+                "private_metadata": '{"is_preblast": "True"}',
+                "blocks": [],
+                "state": {
+                    "values": {
+                        CALENDAR_ADD_EVENT_INSTANCE_AO: {
+                            CALENDAR_ADD_EVENT_INSTANCE_AO: {"selected_option": {"value": "10"}}
+                        }
+                    }
+                },
+            },
+        }
+        client = MagicMock()
+
+        build_event_instance_add_form(body, client, MagicMock(), {}, self._region_record())
+
+        view = client.views_update.call_args.kwargs["view"]
+        location = next(
+            b["element"] for b in view["blocks"] if b.get("block_id") == CALENDAR_ADD_EVENT_INSTANCE_LOCATION
+        )
+        self.assertEqual(location["options"][-1]["value"], CLEAR_LOCATION_OPTION_VALUE)
+        self.assertEqual(location["initial_option"]["value"], "20")
+
+    @patch("features.calendar.event_instance._build_event_tag_service")
+    @patch("features.calendar.event_instance._build_event_type_service")
+    @patch("features.calendar.event_instance._build_location_service")
+    @patch("features.calendar.event_instance._build_ao_service")
+    def test_preblast_with_100_locations_keeps_all_options(
+        self, mock_build_ao, mock_build_location, mock_build_event_type, mock_build_event_tag
+    ):
+        mock_build_ao.return_value.get_region_aos.return_value = [SimpleNamespace(id=10, name="Alpha")]
+        mock_build_ao.return_value.get_ao_by_id.return_value = SimpleNamespace(default_location_id=100)
+        mock_build_location.return_value.get_org_locations.return_value = [
+            SimpleNamespace(id=i, name=f"Park {i}") for i in range(1, 101)
+        ]
+        mock_build_event_type.return_value.get_all_event_types_for_org.return_value = []
+        mock_build_event_tag.return_value.get_all_tags_for_org.return_value = []
+        body = {
+            "actions": [{"action_id": CALENDAR_ADD_EVENT_INSTANCE_AO}],
+            "view": {
+                "id": "V1",
+                "private_metadata": '{"is_preblast": "True"}',
+                "blocks": [],
+                "state": {
+                    "values": {
+                        CALENDAR_ADD_EVENT_INSTANCE_AO: {
+                            CALENDAR_ADD_EVENT_INSTANCE_AO: {"selected_option": {"value": "10"}}
+                        }
+                    }
+                },
+            },
+        }
+        client = MagicMock()
+
+        build_event_instance_add_form(body, client, MagicMock(), {}, self._region_record())
+
+        view = client.views_update.call_args.kwargs["view"]
+        location = next(
+            b["element"] for b in view["blocks"] if b.get("block_id") == CALENDAR_ADD_EVENT_INSTANCE_LOCATION
+        )
+        self.assertNotIn("options", location)
+        groups = location["option_groups"]
+        self.assertLessEqual(len(groups), 100)
+        self.assertTrue(all(0 < len(group["options"]) <= 100 for group in groups))
+        values = [option["value"] for group in groups for option in group["options"]]
+        self.assertEqual(values, [str(i) for i in range(1, 101)] + [CLEAR_LOCATION_OPTION_VALUE])
+        self.assertEqual(location["initial_option"]["value"], "100")
 
     @patch("features.calendar.event_instance.event_preblast.send_preblast")
     @patch("features.calendar.event_instance.get_user")
     @patch("features.calendar.event_instance.DbManager.create_record")
     @patch("features.calendar.event_instance._build_event_instance_service")
-    def test_unscheduled_preblast_channel_saved_to_meta(
+    def test_unscheduled_preblast_channel_saved_and_location_can_be_cleared(
         self,
         mock_build_service,
         mock_create_record,
@@ -874,9 +1070,20 @@ class EventInstancePreblastChannelTest(unittest.TestCase):
             service.create_instance.call_args.kwargs["meta"],
             {META_PREBLAST_CHANNEL_ID: "CSELECTED"},
         )
+        self.assertEqual(service.create_instance.call_args.kwargs["location_id"], 20)
         mock_create_record.assert_called_once()
         self.assertEqual(mock_create_record.call_args.args[0].user_id, 99)
         mock_send_preblast.assert_called_once()
+
+        service.reset_mock()
+        mock_create_record.reset_mock()
+        mock_send_preblast.reset_mock()
+        body["view"]["blocks"][0]["element"]["initial_option"] = {"value": "20"}
+        body["view"]["state"]["values"][CALENDAR_ADD_EVENT_INSTANCE_LOCATION][
+            CALENDAR_ADD_EVENT_INSTANCE_LOCATION
+        ]["selected_option"] = {"value": CLEAR_LOCATION_OPTION_VALUE}
+        handle_event_instance_add(body, MagicMock(), MagicMock(), {}, self._region_record())
+        self.assertIsNone(service.create_instance.call_args.kwargs["location_id"])
 
         service.reset_mock()
         mock_create_record.reset_mock()

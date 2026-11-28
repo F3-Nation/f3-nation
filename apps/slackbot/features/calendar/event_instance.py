@@ -66,6 +66,7 @@ EVENT_CLOSE_CALLBACK_ID = "event_close_callback_id"
 META_DO_NOT_SEND_AUTO_PREBLASTS = "do_not_send_auto_preblasts"
 META_EXCLUDE_FROM_PAX_VAULT = "exclude_from_pax_vault"
 META_PREBLAST_CHANNEL_ID = "preblast_channel_id"
+CLEAR_LOCATION_OPTION_VALUE = "clear_location"
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +131,8 @@ def build_event_instance_add_form(
 
     title_text = "Add an Event"
     form = copy.deepcopy(INSTANCE_FORM)
-    if new_preblast or (safe_get(view_metadata, "is_preblast") == "True"):
+    is_preblast = new_preblast or safe_get(view_metadata, "is_preblast") == "True"
+    if is_preblast:
         # Add a preblast block if this is a new event
         form.blocks.insert(
             -1,
@@ -163,16 +165,21 @@ def build_event_instance_add_form(
     event_types = event_type_service.get_all_event_types_for_org(region_record.org_id)
     event_tags = event_tag_service.get_all_tags_for_org(region_record.org_id)
 
+    location_options = orm.as_selector_options(
+        names=[get_location_display_name(loc) for loc in locations],
+        values=[str(loc.id) for loc in locations],
+    )
+    location_options.extend(
+        orm.as_selector_options(names=["Clear selection"], values=[CLEAR_LOCATION_OPTION_VALUE])
+    )
+
     form.set_options(
         {
             CALENDAR_ADD_EVENT_INSTANCE_AO: orm.as_selector_options(
                 names=[ao.name for ao in aos],
                 values=[str(ao.id) for ao in aos],
             ),
-            CALENDAR_ADD_EVENT_INSTANCE_LOCATION: orm.as_selector_options(
-                names=[get_location_display_name(loc) for loc in locations],
-                values=[str(loc.id) for loc in locations],
-            ),
+            CALENDAR_ADD_EVENT_INSTANCE_LOCATION: location_options,
             CALENDAR_ADD_EVENT_INSTANCE_TYPE: orm.as_selector_options(
                 names=[et.name for et in event_types],
                 values=[str(et.id) for et in event_types],
@@ -340,7 +347,12 @@ def handle_event_instance_add(
     view_blocks = safe_get(body, "view", "blocks")
     location_block = [block for block in view_blocks if block["block_id"] == CALENDAR_ADD_EVENT_INSTANCE_LOCATION][0]
     location_initial_value = safe_get(location_block, "element", "initial_option", "value")
-    location_id = form_data.get(CALENDAR_ADD_EVENT_INSTANCE_LOCATION) or location_initial_value
+    selected_location_id = form_data.get(CALENDAR_ADD_EVENT_INSTANCE_LOCATION)
+    location_id = (
+        None
+        if selected_location_id == CLEAR_LOCATION_OPTION_VALUE
+        else selected_location_id or location_initial_value
+    )
     event_type_block = [block for block in view_blocks if block["block_id"] == CALENDAR_ADD_EVENT_INSTANCE_TYPE][0]
     event_type_initial_value = safe_get(event_type_block, "element", "initial_option", "value")
     event_type_id = form_data.get(CALENDAR_ADD_EVENT_INSTANCE_TYPE) or event_type_initial_value
@@ -403,6 +415,7 @@ def handle_event_instance_add(
             preblast_rich=preblast_rich,
             preblast=preblast_text,
             existing_instance=existing,
+            clear_location_id=selected_location_id == CLEAR_LOCATION_OPTION_VALUE,
         )
         post_bot_log(
             client=client,
@@ -655,7 +668,7 @@ INSTANCE_FORM = orm.BlockView(
         orm.InputBlock(
             label="Location",
             action=CALENDAR_ADD_EVENT_INSTANCE_LOCATION,
-            element=orm.StaticSelectElement(placeholder="Select the location"),
+            element=orm.StaticSelectElement(placeholder="Select the location", option_group_label="Locations"),
             optional=True,
         ),
         orm.InputBlock(

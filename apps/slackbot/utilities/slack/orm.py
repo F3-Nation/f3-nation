@@ -242,6 +242,7 @@ class StaticSelectElement(BaseElement):
     options: List[SelectorOption] = None
     confirm: ConfirmObject = None
     action: str = None
+    option_group_label: str = None
 
     # def with_options(self, options: List[SelectorOption]):
     #   return SelectorElement(self.label, self.action, options)
@@ -251,7 +252,19 @@ class StaticSelectElement(BaseElement):
             self.options = as_selector_options(["Default"])
 
         option_elements = [self.__make_option(o) for o in self.options]
-        j = {"type": "static_select", "options": option_elements, "action_id": action or self.action}
+        j = {"type": "static_select", "action_id": action or self.action}
+        if self.option_group_label and len(option_elements) > 100:
+            if len(option_elements) > 10000:
+                raise ValueError("Static select cannot contain more than 100 option groups of 100 options")
+            j["option_groups"] = [
+                {
+                    "label": {"type": "plain_text", "text": f"{self.option_group_label} {i // 100 + 1}"},
+                    "options": option_elements[i : i + 100],
+                }
+                for i in range(0, len(option_elements), 100)
+            ]
+        else:
+            j["options"] = option_elements
         if self.placeholder:
             j.update(self.make_placeholder_field())
 

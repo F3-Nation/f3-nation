@@ -99,6 +99,7 @@ class EventInstanceService:
         preblast: str | None = None,
         preblast_ts: int | float | None = None,
         existing_instance: EventInstanceData | None = None,
+        clear_location_id: bool = False,
     ) -> EventInstanceData:
         """Update an existing event instance and return the updated record."""
         return self._repository.update(
@@ -120,6 +121,7 @@ class EventInstanceService:
             preblast=preblast,
             preblast_ts=preblast_ts,
             existing_instance=existing_instance,
+            clear_location_id=clear_location_id,
         )
 
     def update_preblast_fields(
