@@ -4334,7 +4334,7 @@
     },
     "/v1/event-instance": {
       "get": {
-        "description": "Get a paginated list of event instances (individual occurrences)",
+        "description": "Get a paginated list of event instances (individual occurrences). Needs no credential. Without one, only active, non-private instances under active orgs, series and locations are listed, and `meta` is null.",
         "operationId": "eventInstance.all",
         "parameters": [
           {
@@ -4436,7 +4436,9 @@
             "in": "query",
             "name": "regionOrgId",
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
@@ -4445,7 +4447,9 @@
             "in": "query",
             "name": "aoOrgId",
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
@@ -4455,9 +4459,13 @@
             "in": "query",
             "name": "regionOrgIds",
             "schema": {
+              "description": "Region org IDs to filter by (at most 1000)",
               "items": {
-                "type": "number"
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
               },
+              "maxItems": 1000,
               "type": "array"
             },
             "style": "deepObject"
@@ -4469,9 +4477,13 @@
             "in": "query",
             "name": "aoOrgIds",
             "schema": {
+              "description": "AO org IDs to filter by (at most 1000)",
               "items": {
-                "type": "number"
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
               },
+              "maxItems": 1000,
               "type": "array"
             },
             "style": "deepObject"
@@ -4483,6 +4495,7 @@
             "name": "startDate",
             "schema": {
               "description": "Inclusive lower bound on the instance start date (YYYY-MM-DD). Only instances starting on or after this date are returned.",
+              "format": "date",
               "type": "string"
             }
           },
@@ -4493,6 +4506,7 @@
             "name": "startDateTo",
             "schema": {
               "description": "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
+              "format": "date",
               "type": "string"
             }
           },
@@ -4502,7 +4516,9 @@
             "in": "query",
             "name": "seriesId",
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
@@ -4533,18 +4549,304 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventInstances": {
+                      "items": {
+                        "properties": {
+                          "aoName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of the instance's AO"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Event instance description"
+                          },
+                          "endDate": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "End date (YYYY-MM-DD)"
+                          },
+                          "endTime": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "End time (HHmm)"
+                          },
+                          "fngCount": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Number of FNGs who attended"
+                          },
+                          "highlight": {
+                            "description": "Whether the instance is highlighted",
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "description": "Event instance ID",
+                            "type": "number"
+                          },
+                          "isActive": {
+                            "description": "Whether the instance is active",
+                            "type": "boolean"
+                          },
+                          "isPrivate": {
+                            "description": "Whether the instance is private",
+                            "type": "boolean"
+                          },
+                          "location": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Display label: the location name, or the formatted address when the location has no name"
+                          },
+                          "locationAddress": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location street address"
+                          },
+                          "locationAddress2": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location street address, second line"
+                          },
+                          "locationCity": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location city"
+                          },
+                          "locationCountry": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location country"
+                          },
+                          "locationId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location ID"
+                          },
+                          "locationName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location name"
+                          },
+                          "locationState": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Location state"
+                          },
+                          "meta": {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Instance metadata, such as Slack channel settings. Null for callers without a credential."
+                          },
+                          "name": {
+                            "description": "Event instance name",
+                            "type": "string"
+                          },
+                          "orgId": {
+                            "description": "ID of the org that runs the instance",
+                            "type": "number"
+                          },
+                          "paxCount": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Number of PAX who attended"
+                          },
+                          "regionName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of the region above the instance's AO"
+                          },
+                          "seriesException": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "closed",
+                                  "different-time",
+                                  "miscellaneous"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "How the instance deviates from its series, if it does"
+                          },
+                          "seriesId": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "ID of the series (recurring event), if any"
+                          },
+                          "startDate": {
+                            "description": "Start date (YYYY-MM-DD)",
+                            "type": "string"
+                          },
+                          "startTime": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Start time (HHmm)"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "isActive",
+                          "aoName",
+                          "regionName",
+                          "locationId",
+                          "locationName",
+                          "locationAddress",
+                          "locationAddress2",
+                          "locationCity",
+                          "locationState",
+                          "locationCountry",
+                          "orgId",
+                          "seriesId",
+                          "seriesException",
+                          "startDate",
+                          "endDate",
+                          "startTime",
+                          "endTime",
+                          "highlight",
+                          "isPrivate",
+                          "paxCount",
+                          "fngCount",
+                          "location"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "totalCount": {
+                      "description": "Total number of instances matching the filters",
+                      "type": "number"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventInstances",
+                    "totalCount"
+                  ],
+                  "type": "object"
                 }
               }
             },
             "description": "OK"
           }
         },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
         "summary": "List all event instances",
         "tags": [
           "event-instance"

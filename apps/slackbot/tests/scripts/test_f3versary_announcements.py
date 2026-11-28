@@ -340,6 +340,9 @@ def test_paginated_message_rejects_a_single_oversized_member_line():
 
 def test_first_attendance_query_excludes_inactive_events_and_scopes_users(monkeypatch):
     first_query = MagicMock()
+    from sqlalchemy import column
+
+    first_query.subquery.return_value.c.last_attendance_date = column("last_attendance_date")
     rows_query = MagicMock()
     for method in ("select_from", "join", "filter", "group_by"):
         getattr(first_query, method).return_value = first_query
@@ -698,6 +701,36 @@ def test_production_real_clock_stops_stale_day_before_claiming(monkeypatch):
     )
 
 
+def test_activity_setting_change_pauses_before_claiming_page(monkeypatch, caplog):
+    org, slack_space = slack_record(f3versary_announcements_activity_days=0)[1:]
+    run = SimpleNamespace(
+        id=1,
+        slack_space_id=10,
+        org_id=1,
+        processing_date=date(2026, 9, 1),
+        target_date=date(2026, 9, 15),
+        channel="C1",
+        lead_days=14,
+        status="planned",
+    )
+    run_query, space_query = MagicMock(), MagicMock()
+    run_query.filter.return_value.with_for_update.return_value.one.return_value = run
+    space_query.filter.return_value.with_for_update.return_value.one.return_value = slack_space
+    session = MagicMock()
+    session.__enter__.return_value = session
+    queries = {
+        f3versary_announcements.F3versaryDeliveryRun: run_query,
+        f3versary_announcements.SlackSpace: space_query,
+    }
+    session.query.side_effect = lambda model: queries[model]
+    monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
+
+    assert f3versary_announcements._claim_next_page(1, org, config(activity_days=90), date(2026, 9, 1)) is None
+    assert run.status == "planned"
+    session.commit.assert_not_called()
+    assert "settings changed" in caplog.text
+
+
 def test_active_claim_lease_blocks_reclaim_then_expired_claim_is_reused(monkeypatch):
     org, slack_space = slack_record()[1:]
     run = SimpleNamespace(
@@ -952,3 +985,74 @@ def test_f3versary_skips_uninstalled_workspace(monkeypatch, caplog):
     assert outbox.run_for_date(10, 1, date(2026, 9, 1)).status == "complete"
     assert len(posts) == 1
     assert "Error processing" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "stored, expected",
+    [
+        (None, 90),
+        (0, 0),
+        (30, 30),
+        (60, 60),
+        (90, 90),
+        (180, 180),
+        (360, 360),
+        (True, 90),
+        (False, 90),
+        ("0", 90),
+        (90.0, 90),
+        (120, 90),
+        (-1, 90),
+        ({}, 90),
+    ],
+)
+def test_activity_settings_default_and_allowed_values(stored, expected):
+    _, org, space = slack_record(f3versary_announcements_activity_days=stored)
+    assert f3versary_announcements._load_settings(org, space).activity_days == expected
+
+
+def test_activity_change_invalidates_in_flight_config():
+    assert f3versary_announcements._config_matches(config(activity_days=90), config(activity_days=90))
+    assert not f3versary_announcements._config_matches(config(activity_days=90), config(activity_days=0))
+
+
+@pytest.mark.parametrize("stored", [True, False, "0", 90.0, 120, -1, {}])
+def test_invalid_activity_settings_warning_is_scoped_without_raw_value(stored, caplog):
+    _, org, space = slack_record(f3versary_announcements_activity_days=stored)
+    assert f3versary_announcements._load_settings(org, space).activity_days == 90
+    warnings = [record.message for record in caplog.records if record.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "org_id=1" in warnings[0]
+    assert f"type={type(stored).__name__}" in warnings[0]
+    assert "120" not in caplog.text
+
+
+@pytest.mark.parametrize("stored", [None, 0, 30, 60, 90, 180, 360])
+def test_valid_or_missing_activity_settings_do_not_warn(stored, caplog):
+    _, org, space = slack_record(f3versary_announcements_activity_days=stored)
+    f3versary_announcements._load_settings(org, space)
+    assert not [record for record in caplog.records if record.levelname == "WARNING"]
+
+
+def test_changed_attendance_requirement_resumes_saved_membership_on_later_invocation(monkeypatch):
+    records = [slack_record()]
+    org, space = records[0][1:]
+    outbox = FakeOutbox(monkeypatch, space)
+    messages = f3versary_announcements.build_f3versary_messages([candidate()], date(2026, 9, 15))
+    run_id = outbox.create_run(org, 10, config(activity_days=90), date(2026, 9, 1), date(2026, 9, 15), messages)
+    saved_page = outbox.pages[run_id][0]
+    expected_text, expected_id = saved_page.text, saved_page.client_msg_id
+    space.settings["f3versary_announcements_activity_days"] = 0
+    monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
+    client = MagicMock()
+    client.chat_postMessage.return_value = {"ts": "123.000001"}
+    monkeypatch.setattr(f3versary_announcements, "slack_client_for_team", lambda *args, **kwargs: client)
+
+    def reject_candidates(*args, **kwargs):
+        raise AssertionError("saved plan must not recompute membership")
+
+    monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", reject_candidates)
+    f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 18))
+    assert client.chat_postMessage.call_args.kwargs["text"] == expected_text
+    assert client.chat_postMessage.call_args.kwargs["client_msg_id"] == expected_id
+    assert outbox.run_for_date(10, 1, date(2026, 9, 1)).status == "complete"

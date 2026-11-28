@@ -399,11 +399,10 @@ All outbound emails are captured by [Mailpit](https://mailpit.axllent.org/) — 
 
 ### Google Cloud Storage (GCS emulator)
 
-| Variable            | Value                                      | Meaning                                                             |
-| ------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
-| `GCS_EMULATOR_HOST` | `localhost:9023`                           | Tells the app to use the local emulator instead of real GCS         |
-| `GCS_CREDENTIALS`   | `local-placeholder-not-used-with-emulator` | Required by env validation, but **ignored** when emulator is active |
-| `F3_CHANNEL`        | `local`                                    | Selects staging bucket (`f3-public-images-staging`) for local dev   |
+| Variable            | Value            | Meaning                                                           |
+| ------------------- | ---------------- | ----------------------------------------------------------------- |
+| `GCS_EMULATOR_HOST` | `localhost:9023` | Tells the app to use the local emulator instead of real GCS       |
+| `F3_CHANNEL`        | `local`          | Selects staging bucket (`f3-public-images-staging`) for local dev |
 
 When `GCS_EMULATOR_HOST` is set, the upload route skips Google authentication entirely and sends files directly to the local fake-gcs-server. Uploaded logos are stored in a Docker volume at canonical paths such as `org-logos/{orgId}.jpg` and served at `http://localhost:9023/f3-public-images-staging/<path>`.
 

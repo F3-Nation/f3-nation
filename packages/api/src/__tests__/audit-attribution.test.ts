@@ -110,17 +110,21 @@ afterEach(async () => {
 
 describe("API request audit attribution", () => {
   it.each([
-    ["f3-map", "map"],
-    ["f3-admin", "admin"],
-    ["f3-me", "me"],
-    ["f3-region-pages", "region-pages"],
-    ["orpc-ssg", "map-ssg"],
-    ["f3-nation-slack-bot", "slackbot"],
+    ["f3-map", "f3-map"],
+    ["f3-admin", "f3-admin"],
+    ["f3-me", "f3-me"],
+    ["f3-region-pages", "f3-region-pages"],
+    ["orpc-ssg", "orpc-ssg"],
+    ["f3-nation-slack-bot", "f3-nation-slack-bot"],
     ["scalar-api", "scalar-api"],
     [undefined, null],
-    ["garbage", null],
-    ["orpc", null],
-    ["F3-MAP", null],
+    ["custom-website-42", "custom-website-42"],
+    ["orpc", "orpc"],
+    ["F3-MAP", "f3-map"],
+    ["My App! v2.0", "myappv20"],
+    ["f3'; drop--", "f3drop--"],
+    ["!?_", null],
+    ["X".repeat(129), "x".repeat(128)],
   ])(
     "records the claimed source %s independently of an anonymous actor",
     async (header, source) => {
@@ -130,6 +134,18 @@ describe("API request audit attribution", () => {
       ]);
     },
   );
+
+  it("retains a signed-in actor with a custom source", async () => {
+    sessions.set("custom-person", sessionWithId(42));
+    const id = await probeClient(
+      "custom-person",
+      undefined,
+      "Custom Website! 2",
+    ).write();
+    expect(await tagHistory(id)).toEqual([
+      { changed_by: 42, changed_via: "customwebsite2" },
+    ]);
+  });
 
   it.each([
     { name: "Development Mode", id: 1, devMode: true, actor: null },
@@ -165,7 +181,7 @@ describe("API request audit attribution", () => {
       const result = await client.write();
       expect(result.actor).toBe(id);
       expect(await tagHistory(result.id)).toEqual([
-        { changed_by: actor, changed_via: "admin" },
+        { changed_by: actor, changed_via: "f3-admin" },
       ]);
     },
   );
@@ -244,7 +260,7 @@ describe("API request audit attribution", () => {
       credentialId: credential.id,
     });
     expect(await tagHistory(result.id)).toEqual([
-      { changed_by: null, changed_via: "slackbot" },
+      { changed_by: null, changed_via: "f3-nation-slack-bot" },
     ]);
   });
 
@@ -263,7 +279,7 @@ describe("API request audit attribution", () => {
     const result = await client.write();
     expect(result.actor).toBe(0);
     expect(await tagHistory(result.id)).toEqual([
-      { changed_by: null, changed_via: "map" },
+      { changed_by: null, changed_via: "f3-map" },
     ]);
     expect(process.env.NODE_ENV).toBe("test");
   });
@@ -273,35 +289,38 @@ describe("API request audit attribution", () => {
     const id = await probeClient("ssg-person", undefined, "orpc-ssg").write();
     expect(getSessionFromHeaders).not.toHaveBeenCalled();
     expect(await tagHistory(id)).toEqual([
-      { changed_by: null, changed_via: "map-ssg" },
+      { changed_by: null, changed_via: "orpc-ssg" },
     ]);
   });
 
-  it("does not authorize an anonymous caller from a recognized app header", async () => {
-    vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "false");
-    const name = `audit-denied-${randomUUID()}`;
-    const client = createRouterClient(
-      {
-        write: protectedProcedure.handler(async ({ context }) => {
-          await context.db.insert(schema.eventTags).values({ name });
-        }),
-      },
-      { context: { reqHeaders: new Headers({ client: "f3-admin" }) } },
-    );
-    await expect(client.write()).rejects.toMatchObject({
-      code: "UNAUTHORIZED",
-    });
-    expect(
-      await db
-        .select({ id: schema.eventTags.id })
-        .from(schema.eventTags)
-        .where(eq(schema.eventTags.name, name)),
-    ).toEqual([]);
-    const rows = await db.execute(
-      sql`SELECT id FROM public_history.event_tags WHERE new_row->>'name' = ${name}`,
-    );
-    expect([...rows]).toEqual([]);
-  });
+  it.each(["f3-admin", "Custom-App!"])(
+    "does not authorize an anonymous caller from client %s",
+    async (header) => {
+      vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "false");
+      const name = `audit-denied-${randomUUID()}`;
+      const client = createRouterClient(
+        {
+          write: protectedProcedure.handler(async ({ context }) => {
+            await context.db.insert(schema.eventTags).values({ name });
+          }),
+        },
+        { context: { reqHeaders: new Headers({ client: header }) } },
+      );
+      await expect(client.write()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+      expect(
+        await db
+          .select({ id: schema.eventTags.id })
+          .from(schema.eventTags)
+          .where(eq(schema.eventTags.name, name)),
+      ).toEqual([]);
+      const rows = await db.execute(
+        sql`SELECT id FROM public_history.event_tags WHERE new_row->>'name' = ${name}`,
+      );
+      expect([...rows]).toEqual([]);
+    },
+  );
 
   it("clears inherited actor and source for an anonymous nested procedure", async () => {
     const tagId = await runWithAuditContext(
@@ -355,10 +374,10 @@ describe("API request audit attribution", () => {
       const anonymousId = await probeClient("anonymous").write();
       const directId = await insertTag();
       expect(await tagHistory(idA)).toEqual([
-        { changed_by: 71, changed_via: "map" },
+        { changed_by: 71, changed_via: "f3-map" },
       ]);
       expect(await tagHistory(idB)).toEqual([
-        { changed_by: 72, changed_via: "admin" },
+        { changed_by: 72, changed_via: "f3-admin" },
       ]);
       expect(await tagHistory(anonymousId)).toEqual([
         { changed_by: null, changed_via: null },
@@ -405,7 +424,7 @@ describe("API request audit attribution", () => {
       expect(optedOut).toBeDefined();
       const [inheritedId, exitedId] = await Promise.all([detached!, optedOut!]);
       expect(await tagHistory(inheritedId)).toEqual([
-        { changed_by: 81, changed_via: "me" },
+        { changed_by: 81, changed_via: "f3-me" },
       ]);
       expect(await tagHistory(exitedId)).toEqual([
         { changed_by: null, changed_via: null },
@@ -445,6 +464,6 @@ describe("API request audit attribution", () => {
     const rows = await db.execute<Attribution>(sql`
       SELECT changed_by, changed_via FROM public_history.api_keys
       WHERE row_id = ${String(result.id)} AND op = 'I'`);
-    expect(rows).toEqual([{ changed_by: owner.id, changed_via: "admin" }]);
+    expect(rows).toEqual([{ changed_by: owner.id, changed_via: "f3-admin" }]);
   });
 });

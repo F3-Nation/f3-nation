@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HTTPException } from "hono/http-exception";
 
 import type * as HealthModule from "@f3nation/health";
 import { healthResponseSchema } from "@f3nation/health";
 
 import { app } from "../src/app";
+import { checkDatabase } from "../src/lib/database-health";
 
 // Thin wiring tests: prove app.ts routes to the right module and applies the
 // legacy-parity behaviors it owns (trailing-slash 308, docs method-guard, no
@@ -12,8 +13,25 @@ import { app } from "../src/app";
 // handler.ts's own unit tests and the characterization suite, not duplicated
 // here.
 
+const healthLogging = vi.hoisted(() => ({
+  logWarn: vi.fn(),
+  logError: vi.fn(),
+}));
+vi.mock("~/lib/logging", () => healthLogging);
+
 const { buildHealthResponse } = vi.hoisted(() => ({
   buildHealthResponse: vi.fn(),
+}));
+
+const database = vi.hoisted(() => ({
+  execute: vi.fn().mockResolvedValue([]),
+  isDbLive: vi.fn().mockReturnValue(true),
+  enableDbRecovery: vi.fn(),
+}));
+vi.mock("@acme/db/client", () => ({
+  checkDb: database.execute,
+  isDbLive: database.isDbLive,
+  enableDbRecovery: database.enableDbRecovery,
 }));
 
 vi.mock("@f3nation/health", async (importOriginal) => {
@@ -55,12 +73,126 @@ const { docsPage, openApiJson } = vi.hoisted(() => ({
 vi.mock("~/docs-page", () => ({ docsPage }));
 vi.mock("~/docs", () => ({ openApiJson }));
 
+const recoveryEnabledAtImport = database.enableDbRecovery.mock.calls.length;
+
 describe("app", () => {
+  it("enables database recovery during API initialization", () => {
+    expect(recoveryEnabledAtImport).toBe(1);
+  });
+  afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     vi.clearAllMocks();
+    database.execute.mockResolvedValue([]);
+    database.isDbLive.mockReturnValue(true);
+  });
+
+  it("reports a sanitized critical database failure while retaining HTTP 200", async () => {
+    vi.useFakeTimers();
+    database.execute.mockRejectedValueOnce(
+      new Error("private database details"),
+    );
+    const res = await app.request("/health");
+    expect(res.status).toBe(200);
+    const payload = healthResponseSchema.parse(await res.json());
+    expect(payload.status).toBe("down");
+    expect(payload.checks).toContainEqual(
+      expect.objectContaining({
+        id: "database",
+        status: "down",
+        severity: "critical",
+      }),
+    );
+    expect(JSON.stringify(payload)).not.toContain("private");
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(healthLogging.logWarn).not.toHaveBeenCalled();
+  });
+
+  it("returns memory-only liveness status without querying the database", async () => {
+    let res = await app.request("/live");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
+    database.isDbLive.mockReturnValue(false);
+    res = await app.request("/live");
+    expect(res.status).toBe(503);
+    expect(await res.text()).toBe("recovery_failed");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(database.execute).not.toHaveBeenCalled();
+  });
+
+  it("bounds concurrent health work even after callers time out", async () => {
+    vi.useFakeTimers();
+    let finish!: (value: unknown[]) => void;
+    database.execute.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    try {
+      const shared = checkDatabase();
+      let completed: unknown;
+      void shared.then((result) => {
+        completed = result;
+      });
+      const first = app.request("/health");
+      const second = app.request("/health");
+      await vi.advanceTimersByTimeAsync(2_999);
+      expect(healthLogging.logWarn).not.toHaveBeenCalled();
+      expect(completed).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(completed).toEqual({
+        status: "down",
+        message: "Check timed out",
+        details: { reason: "timeout", timeoutMs: 3_000 },
+      });
+      expect(healthLogging.logWarn).toHaveBeenCalledExactlyOnceWith(
+        "api.health.database_probe_stalled",
+        {},
+      );
+      const responses = await Promise.all([first, second]);
+      for (const response of responses) {
+        expect(response.status).toBe(200);
+        expect(
+          healthResponseSchema.parse(await response.json()).checks,
+        ).toContainEqual(
+          expect.objectContaining({
+            id: "database",
+            status: "down",
+            details: { reason: "timeout", timeoutMs: 3_000 },
+          }),
+        );
+      }
+      for (let poll = 0; poll < 20; poll++) {
+        const response = await app.request("/health");
+        expect(
+          healthResponseSchema.parse(await response.json()).checks,
+        ).toContainEqual(
+          expect.objectContaining({
+            id: "database",
+            status: "down",
+            severity: "critical",
+            details: { reason: "timeout", timeoutMs: 3_000 },
+          }),
+        );
+        expect(checkDatabase()).toBe(shared);
+      }
+      expect(database.execute).toHaveBeenCalledTimes(1);
+      expect(healthLogging.logWarn).toHaveBeenCalledExactlyOnceWith(
+        "api.health.database_probe_stalled",
+        {},
+      );
+    } finally {
+      finish([]);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    const recovered = await app.request("/health");
+    expect(healthResponseSchema.parse(await recovered.json()).status).toBe(
+      "ok",
+    );
+    expect(database.execute).toHaveBeenCalledTimes(2);
   });
 
   it("returns a contract-valid /health response", async () => {
+    vi.useFakeTimers();
     const res = await app.fetch(new Request("http://api.test/health"));
 
     expect(res.status).toBe(200);
@@ -71,6 +203,8 @@ describe("app", () => {
       expect(parsed.data.service).toBe("f3-api");
       expect(parsed.data.status).toBe("ok");
     }
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(healthLogging.logWarn).not.toHaveBeenCalled();
   });
 
   it("still returns a contract-valid 200 if the health machinery itself throws", async () => {

@@ -527,4 +527,248 @@ describe("API-key access tiers", () => {
       },
     );
   });
+
+  describe("event instance list", () => {
+    const tag = `TierInstance ${randomUUID().slice(0, 8)}`;
+    const instanceIds: number[] = [];
+    const locationIds: number[] = [];
+    const fx = {} as Record<
+      | "publicInstance"
+      | "privateInstance"
+      | "inactiveInstance"
+      | "retiredRegionInstance"
+      | "retiredLocationInstance"
+      | "publicSeriesInstance"
+      | "privateSeriesInstance"
+      | "retiredSeriesInstance"
+      | "retiredOwnerLocationInstance"
+      | "retiredSeriesOrgInstance"
+      | "inactiveOrgInstance"
+      | "inactiveSeriesOrgInstance"
+      | "inactiveOwnerLocationInstance",
+      number
+    >;
+    const eventIds: number[] = [];
+    // Instances an anonymous caller may see; every other fixture is hidden.
+    const publicIds = () => [fx.publicInstance, fx.publicSeriesInstance].sort();
+
+    const insertInstance = async (
+      orgId: number,
+      locationId: number | null,
+      overrides: {
+        isActive?: boolean;
+        isPrivate?: boolean;
+        seriesId?: number;
+      } = {},
+    ) => {
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `${tag} ${randomUUID()}`,
+          orgId,
+          locationId,
+          seriesId: overrides.seriesId ?? null,
+          startDate: "2026-12-01",
+          isActive: overrides.isActive ?? true,
+          isPrivate: overrides.isPrivate ?? false,
+          highlight: false,
+          meta: { slack_channel_id: "C0TIERTEST" },
+        })
+        .returning();
+      instanceIds.push(instance!.id);
+      return instance!.id;
+    };
+
+    beforeAll(async () => {
+      const insertAo = async (parentId: number, isActive = true) => {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${tag} AO`,
+            orgType: "ao",
+            parentId,
+            isActive,
+          })
+          .returning();
+        orgIds.push(org!.id);
+        return org!.id;
+      };
+      const liveAo = await insertAo(regionA.id);
+      const aoUnderRetiredRegion = await insertAo(retiredRegionId);
+      // Inactive itself under a live region, so a check that skips the org
+      // itself (ancestorOrgsAreActive) would let its rows through.
+      const inactiveAo = await insertAo(regionA.id, false);
+      const [retiredLocation] = await db
+        .insert(schema.locations)
+        .values({ name: `${tag} Gone`, orgId: regionA.id, isActive: false })
+        .returning();
+      locationIds.push(retiredLocation!.id);
+      const insertLocation = async (orgId: number) => {
+        const [location] = await db
+          .insert(schema.locations)
+          .values({ name: `${tag} Place`, orgId, isActive: true })
+          .returning();
+        locationIds.push(location!.id);
+        return location!.id;
+      };
+      const liveLocation = await insertLocation(regionA.id);
+      // Active itself, but owned by a retired region.
+      const retiredOwnerLocation = await insertLocation(retiredRegionId);
+      const insertSeries = async (overrides: {
+        isActive?: boolean;
+        isPrivate?: boolean;
+        orgId?: number;
+      }) => {
+        const [event] = await db
+          .insert(schema.events)
+          .values({
+            name: `${tag} Series`,
+            orgId: overrides.orgId ?? liveAo,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            isActive: overrides.isActive ?? true,
+            isPrivate: overrides.isPrivate ?? false,
+            highlight: false,
+            startDate: "2026-01-01",
+          })
+          .returning();
+        eventIds.push(event!.id);
+        return event!.id;
+      };
+
+      fx.publicInstance = await insertInstance(liveAo, null);
+      fx.privateInstance = await insertInstance(liveAo, null, {
+        isPrivate: true,
+      });
+      fx.inactiveInstance = await insertInstance(liveAo, null, {
+        isActive: false,
+      });
+      fx.retiredRegionInstance = await insertInstance(
+        aoUnderRetiredRegion,
+        null,
+      );
+      fx.retiredLocationInstance = await insertInstance(
+        liveAo,
+        retiredLocation!.id,
+      );
+      // Editing a series leaves older instances as they were, so an active,
+      // public instance can belong to a series that is now hidden.
+      fx.publicSeriesInstance = await insertInstance(liveAo, liveLocation, {
+        seriesId: await insertSeries({}),
+      });
+      fx.privateSeriesInstance = await insertInstance(liveAo, null, {
+        seriesId: await insertSeries({ isPrivate: true }),
+      });
+      fx.retiredSeriesInstance = await insertInstance(liveAo, null, {
+        seriesId: await insertSeries({ isActive: false }),
+      });
+      // An active, public series run by an AO under a retired region; the
+      // instance itself sits under the live AO, so only the series' own org
+      // chain hides it.
+      fx.retiredSeriesOrgInstance = await insertInstance(liveAo, null, {
+        seriesId: await insertSeries({ orgId: aoUnderRetiredRegion }),
+      });
+      fx.retiredOwnerLocationInstance = await insertInstance(
+        liveAo,
+        retiredOwnerLocation,
+      );
+      fx.inactiveOrgInstance = await insertInstance(inactiveAo, null);
+      fx.inactiveSeriesOrgInstance = await insertInstance(liveAo, null, {
+        seriesId: await insertSeries({ orgId: inactiveAo }),
+      });
+      fx.inactiveOwnerLocationInstance = await insertInstance(
+        liveAo,
+        await insertLocation(inactiveAo),
+      );
+    });
+
+    afterAll(async () => {
+      await db
+        .delete(schema.eventInstances)
+        .where(inArray(schema.eventInstances.id, instanceIds));
+      await db.delete(schema.events).where(inArray(schema.events.id, eventIds));
+      await db
+        .delete(schema.locations)
+        .where(inArray(schema.locations.id, locationIds));
+    });
+
+    const listIds = async (
+      client: Client,
+      statuses?: ("active" | "inactive")[],
+    ) => {
+      const { eventInstances } = await client.eventInstance.all({
+        searchTerm: tag,
+        statuses,
+      });
+      return eventInstances.map((instance) => instance.id).sort();
+    };
+
+    it.each(["none", "readOnly", "userOnly"] as const)(
+      "serves only public, live instances to credential %s",
+      async (credential) => {
+        const client = clientFor(
+          credential === "none" ? undefined : keys[credential],
+        );
+
+        const { eventInstances, totalCount } = await client.eventInstance.all({
+          searchTerm: tag,
+        });
+        expect(eventInstances.map((instance) => instance.id).sort()).toEqual(
+          publicIds(),
+        );
+        expect(totalCount).toBe(publicIds().length);
+        // Slack channel ids and other settings in meta stay private.
+        expect(eventInstances.map((instance) => instance.meta)).toEqual([
+          null,
+          null,
+        ]);
+
+        // Asking for inactive instances does not reveal them: like
+        // `event.all`, the status filter is clamped to active.
+        for (const statuses of [
+          ["active", "inactive"],
+          ["inactive"],
+        ] as const) {
+          expect(await listIds(client, [...statuses])).toEqual(publicIds());
+        }
+      },
+    );
+
+    it("rejects out-of-range filters from anonymous callers as bad input", async () => {
+      const client = clientFor();
+      for (const input of [
+        { regionOrgId: 0 },
+        { aoOrgId: 2_147_483_648 },
+        { seriesId: 1.5 },
+        { startDate: "not-a-date" },
+        { startDateTo: "2026-13-40" },
+        { aoOrgIds: Array.from({ length: 1001 }, (_, i) => i + 1) },
+      ]) {
+        await expect(client.eventInstance.all(input)).rejects.toMatchObject({
+          code: "BAD_REQUEST",
+        });
+      }
+    });
+
+    it.each(["member", "editorOnB"] as const)(
+      "keeps the full list for %s",
+      async (caller) => {
+        if (caller === "member") await mockAuthWithSession(memberSession());
+        const client = clientFor(
+          caller === "member" ? undefined : keys[caller],
+        );
+
+        expect(await listIds(client, ["active", "inactive"])).toEqual(
+          Object.values(fx).sort(),
+        );
+        const { eventInstances } = await client.eventInstance.all({
+          searchTerm: tag,
+        });
+        expect(
+          eventInstances.find((instance) => instance.id === fx.publicInstance)
+            ?.meta,
+        ).toEqual({ slack_channel_id: "C0TIERTEST" });
+      },
+    );
+  });
 });

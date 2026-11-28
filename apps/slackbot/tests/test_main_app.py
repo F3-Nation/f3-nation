@@ -17,14 +17,23 @@ def test_import_does_not_create_slack_app():
 
 
 def test_get_slack_app_is_a_singleton_and_registers_listeners():
+    from concurrent.futures import ThreadPoolExecutor
+
     slack_app = MagicMock()
 
-    with patch.object(main, "App", return_value=slack_app), patch.object(main, "get_oauth_settings", return_value={}):
+    with (
+        patch.object(main, "App", return_value=slack_app) as app_cls,
+        patch.object(main, "get_oauth_settings", return_value={}),
+    ):
         first = main.get_slack_app()
         second = main.get_slack_app()
 
     assert first is slack_app
     assert second is slack_app
+    executor = app_cls.call_args.kwargs["listener_executor"]
+    assert isinstance(executor, ThreadPoolExecutor)
+    assert executor._max_workers == main.LISTENER_MAX_WORKERS
+    executor.shutdown(wait=False)
     assert slack_app.action.call_count == 1
     assert slack_app.view.call_count == 1
     assert slack_app.command.call_count == 1

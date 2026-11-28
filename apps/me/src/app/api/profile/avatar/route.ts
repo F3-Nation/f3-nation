@@ -9,32 +9,12 @@ import {
 } from "@/lib/api/client";
 import { logError } from "@/lib/logging";
 import { env } from "@/env";
+import { isStorageAccessDenied } from "@acme/storage";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
 function mapAvatarUploadError(err: unknown): { status: number; error: string } {
-  const message = err instanceof Error ? err.message : "";
-  const lower = message.toLowerCase();
-
-  if (lower.includes("invalid_grant") && lower.includes("account not found")) {
-    return {
-      status: 503,
-      error:
-        "Avatar storage is misconfigured: GCS service account was not found. Update GCS_CREDENTIALS.",
-    };
-  }
-
-  if (
-    lower.includes("invalid gcs_credentials payload") ||
-    lower.includes("gcs_credentials is missing required")
-  ) {
-    return {
-      status: 500,
-      error: "Avatar storage is not configured. Set GCS_CREDENTIALS.",
-    };
-  }
-
   if (isNotFoundApiError(err)) {
     return {
       status: 404,
@@ -84,7 +64,22 @@ export async function POST(request: NextRequest) {
     await getMyProfile();
 
     // Upload converts to JPEG and saves as user-avatars/{userId}.jpg
-    const avatarUrl = await uploadAvatar(userId, buffer);
+    let avatarUrl: string;
+    try {
+      avatarUrl = await uploadAvatar(userId, buffer);
+    } catch (uploadErr) {
+      // Checked here, not in the outer catch: F3 API errors also carry a 403
+      // status, and only a storage 403 means the bucket grant is missing.
+      if (!isStorageAccessDenied(uploadErr)) throw uploadErr;
+      logError("me.avatar.storage_access_denied", { sessionUserId }, uploadErr);
+      return NextResponse.json(
+        {
+          error:
+            "Avatar storage is misconfigured: this service can't write to the image bucket.",
+        },
+        { status: 503 },
+      );
+    }
 
     // Update user's avatarUrl via the me API
     try {

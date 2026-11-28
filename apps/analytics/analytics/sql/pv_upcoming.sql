@@ -41,10 +41,8 @@ with_qs AS (
                                  ORDER BY COALESCE(NULLIF(x.f3_name, ''), CAST(x.user_id AS VARCHAR)), x.user_id)
                     FROM (SELECT DISTINCT a.user_id, usr.f3_name, usr.avatar_url
                           FROM pg.public.attendance a
-                          JOIN pg.public.attendance_x_attendance_types ax ON ax.attendance_id = a.id
-                          JOIN pg.public.attendance_types att ON att.id = ax.attendance_type_id
                           JOIN pg.public.users usr ON usr.id = a.user_id
-                          WHERE a.event_instance_id = u.event_instance_id AND att.type = 'Q') x),
+                          WHERE a.event_instance_id = u.event_instance_id AND a.attendance_type = 'q') x),
                     []::STRUCT(user_id INTEGER, f3_name VARCHAR, avatar_url VARCHAR)[]) AS q_list
     FROM with_types u
 )

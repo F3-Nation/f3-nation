@@ -845,6 +845,16 @@ class ActionsBlock(BaseBlock):
         return j
 
 
+_JSON_POINTER = re.compile(r"\[json-pointer:([^\]]+)\]")
+
+
+def _slack_error_pointers(response) -> list[str]:
+    """The block paths Slack's validation messages name, e.g. "/view/blocks/1/type". Only the paths are kept: the
+    message text around them can quote the rejected content, which may be user- or org-supplied."""
+    messages = (response.get("response_metadata") or {}).get("messages") or []
+    return [pointer for message in messages for pointer in _JSON_POINTER.findall(str(message))]
+
+
 @dataclass
 class BlockView:
     blocks: List[BaseBlock]
@@ -965,8 +975,9 @@ class BlockView:
                 res = client.views_update(view_id=view_id, view=view)
         except SlackApiError as exc:
             logging.getLogger(__name__).error(
-                "slack.modal.update_failed error=%s",
+                "slack.modal.update_failed error=%s pointers=%s",
                 exc.response.get("error"),
+                _slack_error_pointers(exc.response),
             )
             if raise_on_error:
                 raise

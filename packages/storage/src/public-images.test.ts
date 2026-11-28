@@ -19,13 +19,6 @@ vi.mock("@google-cloud/storage", () => ({ Storage: gcs.Storage }));
 import { createPublicImageStorage } from "./public-images";
 
 const EMULATOR_HOST = "localhost:4443";
-const FAKE_CREDENTIALS = Buffer.from(
-  JSON.stringify({
-    client_email: "svc@proj.iam.gserviceaccount.com",
-    private_key:
-      "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----",
-  }),
-).toString("base64");
 
 // ---------------------------------------------------------------------------
 // isAllowedPublicImageUrl
@@ -34,7 +27,7 @@ const FAKE_CREDENTIALS = Buffer.from(
 describe("isAllowedPublicImageUrl", () => {
   const storage = createPublicImageStorage({
     channel: "staging",
-    credentials: FAKE_CREDENTIALS,
+    auth: { kind: "identity" },
   });
 
   it("allows prod bucket URLs", () => {
@@ -134,7 +127,7 @@ describe("uploadOrgLogo (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "prod",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     const url = await storage.uploadOrgLogo(123, Buffer.from("img"));
     expect(url).toBe(
@@ -150,7 +143,7 @@ describe("uploadOrgLogo (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "prod",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     const url = await storage.uploadOrgLogo(123, Buffer.from("img"), {
       requestId: "abc-123",
@@ -163,7 +156,7 @@ describe("uploadOrgLogo (emulator mode)", () => {
   it("rejects a path-unsafe requestId", async () => {
     const storage = createPublicImageStorage({
       channel: "prod",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     await expect(
       storage.uploadOrgLogo(1, Buffer.from("img"), { requestId: "../evil" }),
@@ -178,7 +171,7 @@ describe("uploadOrgLogo (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "staging",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     const url = await storage.uploadOrgLogo(42, Buffer.from("img"));
     expect(url).toBe(
@@ -196,7 +189,7 @@ describe("uploadOrgLogo (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "staging",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     await expect(storage.uploadOrgLogo(1, Buffer.from("img"))).rejects.toThrow(
       "GCS emulator upload failed: HTTP 404 bucket not found",
@@ -205,30 +198,62 @@ describe("uploadOrgLogo (emulator mode)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// uploadOrgLogo — production mode (credentials validation)
+// uploadOrgLogo — production mode (client authentication)
 // ---------------------------------------------------------------------------
 
 describe("uploadOrgLogo (production mode)", () => {
+  beforeEach(() => {
+    gcs.Storage.mockClear();
+  });
+
   afterEach(() => {
     delete process.env.GCS_EMULATOR_HOST;
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
-  it("throws when credentials JSON is missing required fields", async () => {
-    const badCreds = Buffer.from(JSON.stringify({ client_email: "" })).toString(
+  it("with identity auth, builds the client without credentials and uploads to the channel bucket", async () => {
+    const storage = createPublicImageStorage({
+      channel: "prod",
+      auth: { kind: "identity" },
+    });
+
+    const url = await storage.uploadOrgLogo(7, Buffer.from("img"));
+
+    expect(gcs.Storage).toHaveBeenCalledTimes(1);
+    expect(gcs.Storage).toHaveBeenCalledWith();
+    expect(gcs.bucket).toHaveBeenLastCalledWith("f3-public-images");
+    expect(url).toBe(
+      "https://storage.googleapis.com/f3-public-images/org-logos/7.jpg",
+    );
+  });
+
+  it("with key auth, throws when the key JSON is missing required fields", async () => {
+    const badKey = Buffer.from(JSON.stringify({ client_email: "" })).toString(
       "base64",
     );
     const storage = createPublicImageStorage({
       channel: "staging",
-      credentials: badCreds,
+      auth: { kind: "key", key: badKey },
     });
     await expect(storage.uploadOrgLogo(1, Buffer.from("img"))).rejects.toThrow(
-      "GCS_CREDENTIALS is missing required service account fields",
+      "Service-account key is missing client_email or private_key",
     );
+    expect(gcs.Storage).not.toHaveBeenCalled();
   });
 
-  it("passes the key's project_id to the client and uploads to the channel bucket", async () => {
+  it("with key auth, throws when the key is not base64 JSON", async () => {
+    const storage = createPublicImageStorage({
+      channel: "staging",
+      auth: { kind: "key", key: "not-a-key" },
+    });
+    await expect(storage.uploadOrgLogo(1, Buffer.from("img"))).rejects.toThrow(
+      /^Invalid service-account key: /,
+    );
+    expect(gcs.Storage).not.toHaveBeenCalled();
+  });
+
+  it("with key auth, passes the key and its project_id to the client and uploads to the channel bucket", async () => {
     const key = {
       client_email: "svc@proj.iam.gserviceaccount.com",
       private_key:
@@ -237,7 +262,10 @@ describe("uploadOrgLogo (production mode)", () => {
     };
     const storage = createPublicImageStorage({
       channel: "staging",
-      credentials: Buffer.from(JSON.stringify(key)).toString("base64"),
+      auth: {
+        kind: "key",
+        key: Buffer.from(JSON.stringify(key)).toString("base64"),
+      },
     });
 
     const url = await storage.uploadOrgLogo(7, Buffer.from("img"));
@@ -294,7 +322,7 @@ describe("uploadUserAvatar (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "staging",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     const url = await storage.uploadUserAvatar(7, Buffer.from("img"));
 
@@ -328,7 +356,7 @@ describe("deleteOrgLogo (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "staging",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     await expect(storage.deleteOrgLogo(5)).resolves.toBeUndefined();
   });
@@ -343,7 +371,7 @@ describe("deleteOrgLogo (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "prod",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     await expect(storage.deleteOrgLogo(5)).rejects.toThrow(
       "GCS emulator delete failed: HTTP 500 internal error",
@@ -374,7 +402,7 @@ describe("deleteUserAvatar (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "staging",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     await expect(storage.deleteUserAvatar(3)).resolves.toBeUndefined();
   });
@@ -397,7 +425,7 @@ describe("deleteUserAvatar (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "prod",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     await storage.deleteUserAvatar(9);
     expect(requestedUrls[0]).toContain(
@@ -413,7 +441,7 @@ describe("deleteUserAvatar (emulator mode)", () => {
 describe("id and size validation", () => {
   const storage = createPublicImageStorage({
     channel: "staging",
-    credentials: FAKE_CREDENTIALS,
+    auth: { kind: "identity" },
   });
 
   it.each([0, -1, 1.5, Number.NaN])(
@@ -491,7 +519,7 @@ describe("promoteOrgLogo (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "prod",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     const result = await storage.promoteOrgLogo(
       `http://${EMULATOR_HOST}/f3-public-images/org-logos/123-abc-123.jpg`,
@@ -518,7 +546,7 @@ describe("promoteOrgLogo (emulator mode)", () => {
 
     const storage = createPublicImageStorage({
       channel: "prod",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     const canonical = `http://${EMULATOR_HOST}/f3-public-images/org-logos/123.jpg`;
     await expect(storage.promoteOrgLogo(canonical)).resolves.toBe(canonical);
@@ -528,7 +556,7 @@ describe("promoteOrgLogo (emulator mode)", () => {
   it("rejects a URL outside the allowed buckets", async () => {
     const storage = createPublicImageStorage({
       channel: "prod",
-      credentials: FAKE_CREDENTIALS,
+      auth: { kind: "identity" },
     });
     await expect(
       storage.promoteOrgLogo("https://evil.example.com/org-logos/1-x.jpg"),

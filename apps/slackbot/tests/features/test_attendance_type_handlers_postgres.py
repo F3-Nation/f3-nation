@@ -173,7 +173,7 @@ def test_home_un_hc_removes_and_announces_only_a_pax_record(db, region_record, u
     if user_id == PAX_USER:
         del expected[PAX_USER]
     posted_preblast = SimpleNamespace(
-        event_record=SimpleNamespace(preblast_ts="1.0"), attendance_records=[], preblast_blocks=[]
+        event_record=SimpleNamespace(preblast_ts="1.0", meta=None), attendance_records=[], preblast_blocks=[]
     )
 
     with (

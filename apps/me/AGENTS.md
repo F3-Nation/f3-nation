@@ -109,6 +109,14 @@ Tests use Vitest and are in `__tests__/`. Run with `pnpm test`.
 
 Shared primitives live in `packages/ui`. Add the component there (see `packages/ui/README.md`) and import it from `@acme/ui/<component>`.
 
+### Avatar storage
+
+Avatar uploads go through `@acme/storage` as the Cloud Run service's own
+identity, never a stored key; the service account and its bucket and secret
+grants are set up per
+[`docs/GCP_APP_SETUP.md`](../../docs/GCP_APP_SETUP.md#4-create-runtime-service-accounts-and-cloud-run-services),
+and the auth modes are in [`packages/storage/README.md`](../../packages/storage/README.md).
+
 ### Auth proxy and sessions
 
 Auth proxy (`proxy.ts`) and session changes follow

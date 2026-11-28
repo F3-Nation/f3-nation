@@ -68,7 +68,6 @@ describe("env F3_API_BASE_URL validation", () => {
     vi.stubEnv("OAUTH_CLIENT_SECRET", "client-secret");
     vi.stubEnv("OAUTH_REDIRECT_URI", "http://localhost:3002/callback");
     vi.stubEnv("F3_CHANNEL", "local");
-    vi.stubEnv("GCS_CREDENTIALS", "credentials");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3002");
   });
 

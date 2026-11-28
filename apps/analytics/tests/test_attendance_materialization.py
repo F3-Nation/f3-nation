@@ -24,7 +24,7 @@ def source():
     )
     db.execute(
         "CREATE TABLE pg.public.attendance(id INTEGER, user_id INTEGER, event_instance_id INTEGER, "
-        "is_planned BOOLEAN, meta VARCHAR, created TIMESTAMP, updated TIMESTAMP)"
+        "is_planned BOOLEAN, meta VARCHAR, created TIMESTAMP, updated TIMESTAMP, attendance_type VARCHAR)"
     )
     db.execute("CREATE TABLE pg.public.event_instances_x_event_types(event_instance_id INTEGER, event_type_id INTEGER)")
     db.execute(
@@ -32,10 +32,6 @@ def source():
     )
     db.execute("CREATE TABLE pg.public.event_tags_x_event_instances(event_instance_id INTEGER, event_tag_id INTEGER)")
     db.execute("CREATE TABLE pg.public.event_tags(id INTEGER, name VARCHAR, description VARCHAR)")
-    db.execute("CREATE TABLE pg.public.attendance_types(id INTEGER, type VARCHAR)")
-    db.execute(
-        "CREATE TABLE pg.public.attendance_x_attendance_types(attendance_id INTEGER, attendance_type_id INTEGER)"
-    )
     db.executemany(
         "INSERT INTO pg.public.orgs VALUES (?, ?, ?, ?)",
         [
@@ -67,25 +63,25 @@ def source():
         ],
     )
     db.executemany(
-        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            (100, 1, 10, False, None, "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (101, 1, 10, True, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (102, 2, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (103, 3, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (104, 1, 11, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (105, 1, 12, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
-            (106, 1, 13, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
-            (107, 1, 14, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
-            (108, 1, 15, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
-            (109, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (110, 4, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (111, 5, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (112, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (113, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (114, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (115, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
-            (116, 1, 16, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
+            (100, 1, 10, False, None, "2026-01-01 08:00:00", "2026-01-01 09:00:00", "q"),
+            (101, 1, 10, True, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "pax"),
+            (102, 2, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "pax"),
+            (103, 3, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "pax"),
+            (104, 1, 11, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "pax"),
+            (105, 1, 12, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00", "pax"),
+            (106, 1, 13, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00", "pax"),
+            (107, 1, 14, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00", "pax"),
+            (108, 1, 15, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00", "pax"),
+            (109, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "pax"),
+            (110, 4, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "pax"),
+            (111, 5, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "pax"),
+            (112, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "q"),
+            (113, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "co_q"),
+            (114, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "co_q"),
+            (115, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00", "pax"),
+            (116, 1, 16, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00", "pax"),
         ],
     )
     db.executemany(
@@ -101,13 +97,6 @@ def source():
     )
     db.execute("INSERT INTO pg.public.event_tags VALUES (7, 'Morning', 'Workout')")
     db.execute("INSERT INTO pg.public.event_tags_x_event_instances VALUES (10, 7), (10, 7)")
-    db.executemany(
-        "INSERT INTO pg.public.attendance_types VALUES (?, ?)", [(1, "Q"), (2, "CoQ"), (3, "Co-Q"), (4, "Pax")]
-    )
-    db.execute(
-        "INSERT INTO pg.public.attendance_x_attendance_types VALUES "
-        "(100, 1), (100, 1), (100, 2), (112, 1), (113, 2), (114, 3), (115, 4)"
-    )
     return db
 
 
@@ -136,12 +125,13 @@ def test_attendance_rows_filter_and_aggregate_without_fanout():
     ]
     assert len(rows) == 10
     row = rows[0]
+    # A record holds one type, so a Q is never also counted as Co-Q.
     assert row[1:9] == (
         100,
         1,
         10,
         1,
-        1,
+        0,
         date(2026, 1, 1),
         2,
         1,
@@ -154,13 +144,13 @@ def test_attendance_rows_filter_and_aggregate_without_fanout():
     assert rows[3][1:4] == (111, 5, 10)
     assert rows[3][4:6] == (0, 0)
     assert rows[4][1:4] == (112, 1, 10)
-    assert rows[4][4:6] == (1, 0)  # Q only
+    assert rows[4][4:6] == (1, 0)  # Q
     assert rows[5][1:4] == (113, 1, 10)
-    assert rows[5][4:6] == (0, 1)  # CoQ only
+    assert rows[5][4:6] == (0, 1)  # Co-Q
     assert rows[6][1:4] == (114, 1, 10)
-    assert rows[6][4:6] == (0, 1)  # Co-Q only
+    assert rows[6][4:6] == (0, 1)  # Co-Q
     assert rows[7][1:4] == (115, 1, 10)
-    assert rows[7][4:6] == (0, 0)  # Pax only
+    assert rows[7][4:6] == (0, 0)  # PAX
     assert rows[8][1] == 104
 
 
@@ -168,7 +158,7 @@ def test_cyclic_org_ancestry_resolves_ao_and_terminates():
     db = source()
     db.execute("INSERT INTO pg.public.orgs VALUES (40, 41, 'Loop AO', 'ao'), (41, 40, 'Loop Region', 'region')")
     db.execute("INSERT INTO pg.public.event_instances VALUES (40, 40, true, 1, '{}', '2026-01-03')")
-    db.execute("INSERT INTO pg.public.attendance VALUES (400, 1, 40, false, '{}', NULL, NULL)")
+    db.execute("INSERT INTO pg.public.attendance VALUES (400, 1, 40, false, '{}', NULL, NULL, 'pax')")
 
     rows = query(db).fetchall()
     cycle_row = next(row for row in rows if row[1] == 400)
@@ -185,9 +175,9 @@ def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_region_hier
     db = source()
     # A direct region event has no AO but reports that region ancestor.
     db.execute("INSERT INTO pg.public.event_instances VALUES (20, 1, true, 1, '{}', '2026-01-03')")
-    db.execute("INSERT INTO pg.public.attendance VALUES (200, 1, 20, false, NULL, NULL, NULL)")
+    db.execute("INSERT INTO pg.public.attendance VALUES (200, 1, 20, false, NULL, NULL, NULL, 'pax')")
     db.execute("INSERT INTO pg.public.event_instances VALUES (21, 3, true, 1, '{}', '2026-01-03')")
-    db.execute("INSERT INTO pg.public.attendance VALUES (201, 1, 21, false, NULL, NULL, NULL)")
+    db.execute("INSERT INTO pg.public.attendance VALUES (201, 1, 21, false, NULL, NULL, NULL, 'pax')")
     row = next(r for r in query(db).fetchall() if r[1] == 200)
     assert row[4:6] == (0, 0)
     assert row[7:9] == (None, 1)
