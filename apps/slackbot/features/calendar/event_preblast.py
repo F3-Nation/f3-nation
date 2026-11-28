@@ -19,12 +19,12 @@ from dataclasses import dataclass
 from logging import Logger
 from typing import Any
 
-from f3_data_models.models import Attendance, AttendanceType, EventInstance, Org
+from f3_data_models.models import Attendance, Attendance_Type, EventInstance, Org
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 from sqlalchemy import or_
 
-from application.attendance import CO_Q_TYPE_ID, Q_TYPE_ID, AttendanceData
+from application.attendance import AttendanceData
 from application.attendance.service import AttendanceService
 from application.event_instance import EventInstanceData
 from application.event_instance.service import EventInstanceService
@@ -42,6 +42,7 @@ from infrastructure.api_client import (
 from utilities import constants, storage
 from utilities.bot_logger import post_bot_log
 from utilities.builders import add_loading_form, update_submission_wait_view
+from utilities.constants import LEADER_ATTENDANCE_TYPES
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import event_attendance_query, get_admin_users, get_aoq_users
 from utilities.helper_functions import (
@@ -280,7 +281,7 @@ def build_event_preblast_select_form(
         attendance_filter=[
             Attendance.user_id == user_id,
             Attendance.is_planned,
-            Attendance.attendance_types.any(AttendanceType.id.in_([Q_TYPE_ID, CO_Q_TYPE_ID])),
+            Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
         ],
         event_filter=[
             EventInstance.start_date >= current_date_cst(),
@@ -518,7 +519,7 @@ def _build_and_show_preblast_form(
     initial_coq_slack_ids = [
         preblast_info.attendance_slack_dict[attendance["user_id"]]
         for attendance in preblast_info.attendance_records
-        if CO_Q_TYPE_ID in attendance.get("attendance_type_ids", [])
+        if attendance.get("attendance_type") == Attendance_Type.co_q
         and preblast_info.attendance_slack_dict
         and attendance["user_id"] in preblast_info.attendance_slack_dict
     ]
@@ -678,7 +679,7 @@ def handle_event_preblast_edit(
                 (
                     attendance.user_id
                     for attendance in planned_attendance
-                    if Q_TYPE_ID in attendance.attendance_type_ids
+                    if attendance.attendance_type == Attendance_Type.q
                 ),
                 None,
             )
@@ -921,17 +922,13 @@ def send_preblast(
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
     preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
     q_attendance = next(
-        (r for r in preblast_info.attendance_records if Q_TYPE_ID in r.get("attendance_type_ids", [])),
+        (r for r in preblast_info.attendance_records if r.get("attendance_type") == Attendance_Type.q),
         None,
     )
     q_slack_id = None
     if q_attendance and preblast_info.attendance_slack_dict:
         q_slack_id = preblast_info.attendance_slack_dict.get(q_attendance["user_id"])
-    q_list = [
-        r
-        for r in preblast_info.attendance_records
-        if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", [])))
-    ]
+    q_list = [r for r in preblast_info.attendance_records if r.get("attendance_type") in LEADER_ATTENDANCE_TYPES]
 
     blocks = list(preblast_info.preblast_blocks)
     blocks.extend(
@@ -1137,15 +1134,11 @@ def build_preblast_info(
         )
         user_id = user_obj.user_id
         user_is_q = any(
-            att.user_id == user_id
-            for att in attendance_data
-            if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids))
+            att.user_id == user_id for att in attendance_data if att.attendance_type in LEADER_ATTENDANCE_TYPES
         )
 
     # Build Q list with Slack mentions
-    q_attendance = [
-        att for att in attendance_data if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids))
-    ]
+    q_attendance = [att for att in attendance_data if att.attendance_type in LEADER_ATTENDANCE_TYPES]
     q_mentions = [_format_attendance_user(att, attendance_slack_dict) for att in q_attendance]
     q_list = " ".join(q_mentions) if q_mentions else "Open!"
     if not q_attendance:
@@ -1308,9 +1301,7 @@ def _user_is_q(event_instance_id: int, user_id: int) -> bool:
     only refreshed when the preblast message is rewritten.
     """
     attendance = _build_attendance_service().get_planned_for_event_instance(event_instance_id)
-    return any(
-        att.user_id == user_id and {Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids) for att in attendance
-    )
+    return any(att.user_id == user_id and att.attendance_type in LEADER_ATTENDANCE_TYPES for att in attendance)
 
 
 def handle_event_preblast_action(
@@ -1375,8 +1366,7 @@ def handle_event_preblast_action(
                 b.as_form_field()
                 for b in get_preblast_action_blocks(
                     has_q=any(
-                        bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", [])))
-                        for r in preblast_info.attendance_records
+                        r.get("attendance_type") in LEADER_ATTENDANCE_TYPES for r in preblast_info.attendance_records
                     ),
                     event_instance_id=event_instance_id,
                 )
@@ -1482,7 +1472,7 @@ def handle_event_preblast_action(
             q_id_list = [
                 r.get("user_id")
                 for r in preblast_info.attendance_records
-                if bool({Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", [])))
+                if r.get("attendance_type") in LEADER_ATTENDANCE_TYPES
             ]
             metadata = {
                 "event_instance_id": event_instance_id,

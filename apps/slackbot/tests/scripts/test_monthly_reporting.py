@@ -4,6 +4,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
+from f3_data_models.models import Attendance_Type
 from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, MetaData, String, Table, create_engine, event
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
@@ -69,18 +70,7 @@ def reporting_session(monkeypatch):
         Column("event_instance_id", Integer),
         Column("user_id", Integer),
         Column("is_planned", Boolean),
-    )
-    attendance_types = Table(
-        "attendance_types",
-        metadata,
-        Column("id", Integer, primary_key=True),
-        Column("type", String),
-    )
-    attendance_type_links = Table(
-        "attendance_x_attendance_types",
-        metadata,
-        Column("attendance_id", Integer, primary_key=True),
-        Column("attendance_type_id", Integer, primary_key=True),
+        Column("attendance_type", String, nullable=False, default="pax"),
     )
     users = Table(
         "users",
@@ -218,45 +208,21 @@ def reporting_session(monkeypatch):
         connection.execute(
             attendance.insert(),
             [
-                {"id": 11, "event_instance_id": 1, "user_id": 1, "is_planned": False},
-                {"id": 12, "event_instance_id": 1, "user_id": 3, "is_planned": True},
-                {"id": 21, "event_instance_id": 2, "user_id": 1, "is_planned": False},
-                {"id": 22, "event_instance_id": 2, "user_id": 2, "is_planned": False},
-                {"id": 24, "event_instance_id": 2, "user_id": 4, "is_planned": False},
-                {"id": 31, "event_instance_id": 3, "user_id": 1, "is_planned": False},
-                {"id": 41, "event_instance_id": 4, "user_id": 1, "is_planned": False},
-                {"id": 51, "event_instance_id": 5, "user_id": 1, "is_planned": False},
-                {"id": 61, "event_instance_id": 6, "user_id": 2, "is_planned": False},
-                {"id": 71, "event_instance_id": 7, "user_id": 1, "is_planned": False},
-                {"id": 81, "event_instance_id": 8, "user_id": 1, "is_planned": False},
-                {"id": 91, "event_instance_id": 9, "user_id": 2, "is_planned": False},
-                {"id": 101, "event_instance_id": 10, "user_id": 1, "is_planned": False},
-                {"id": 111, "event_instance_id": 11, "user_id": 2, "is_planned": False},
-                {"id": 121, "event_instance_id": 12, "user_id": 5, "is_planned": False},
-            ],
-        )
-        connection.execute(
-            attendance_types.insert(),
-            [{"id": 1, "type": "Q"}, {"id": 2, "type": "Co-Q"}, {"id": 3, "type": "CoQ"}],
-        )
-        connection.execute(
-            attendance_type_links.insert(),
-            [
-                {"attendance_id": 11, "attendance_type_id": 1},
-                {"attendance_id": 12, "attendance_type_id": 1},
-                {"attendance_id": 22, "attendance_type_id": 2},
-                {"attendance_id": 31, "attendance_type_id": 1},
-                {"attendance_id": 31, "attendance_type_id": 2},
-                {"attendance_id": 31, "attendance_type_id": 3},
-                {"attendance_id": 41, "attendance_type_id": 1},
-                {"attendance_id": 51, "attendance_type_id": 1},
-                {"attendance_id": 61, "attendance_type_id": 1},
-                {"attendance_id": 71, "attendance_type_id": 1},
-                {"attendance_id": 81, "attendance_type_id": 1},
-                {"attendance_id": 91, "attendance_type_id": 3},
-                {"attendance_id": 101, "attendance_type_id": 1},
-                {"attendance_id": 111, "attendance_type_id": 2},
-                {"attendance_id": 121, "attendance_type_id": 1},
+                {"id": 11, "event_instance_id": 1, "user_id": 1, "is_planned": False, "attendance_type": "q"},
+                {"id": 12, "event_instance_id": 1, "user_id": 3, "is_planned": True, "attendance_type": "q"},
+                {"id": 21, "event_instance_id": 2, "user_id": 1, "is_planned": False, "attendance_type": "pax"},
+                {"id": 22, "event_instance_id": 2, "user_id": 2, "is_planned": False, "attendance_type": "co_q"},
+                {"id": 24, "event_instance_id": 2, "user_id": 4, "is_planned": False, "attendance_type": "pax"},
+                {"id": 31, "event_instance_id": 3, "user_id": 1, "is_planned": False, "attendance_type": "q"},
+                {"id": 41, "event_instance_id": 4, "user_id": 1, "is_planned": False, "attendance_type": "q"},
+                {"id": 51, "event_instance_id": 5, "user_id": 1, "is_planned": False, "attendance_type": "q"},
+                {"id": 61, "event_instance_id": 6, "user_id": 2, "is_planned": False, "attendance_type": "q"},
+                {"id": 71, "event_instance_id": 7, "user_id": 1, "is_planned": False, "attendance_type": "q"},
+                {"id": 81, "event_instance_id": 8, "user_id": 1, "is_planned": False, "attendance_type": "q"},
+                {"id": 91, "event_instance_id": 9, "user_id": 2, "is_planned": False, "attendance_type": "co_q"},
+                {"id": 101, "event_instance_id": 10, "user_id": 1, "is_planned": False, "attendance_type": "q"},
+                {"id": 111, "event_instance_id": 11, "user_id": 2, "is_planned": False, "attendance_type": "co_q"},
+                {"id": 121, "event_instance_id": 12, "user_id": 5, "is_planned": False, "attendance_type": "q"},
             ],
         )
 
@@ -321,8 +287,8 @@ def test_leaderboard_queries_base_tables_and_preserve_report_rows(monkeypatch):
     assert "event_instance_expanded" not in sql
     assert "attendance_expanded" not in sql
     assert "event_instances" in sql
-    assert "attendance_x_attendance_types" in sql
-    assert "attendance_types" in sql
+    assert "attendance_x_attendance_types" not in sql
+    assert "attendance.attendance_type IN" in sql
     assert "users" in sql
     assert "sum(CASE" in sql
     compiled = session.statement.compile(dialect=postgresql.dialect())
@@ -331,9 +297,8 @@ def test_leaderboard_queries_base_tables_and_preserve_report_rows(monkeypatch):
         for parameter in compiled.params.values()
         for value in (parameter if isinstance(parameter, (list, tuple)) else [parameter])
     ]
-    assert "Q" in bind_values
-    assert "Co-Q" in bind_values
-    assert "CoQ" in bind_values
+    assert set(bind_values) >= {Attendance_Type.q, Attendance_Type.co_q}
+    assert Attendance_Type.pax not in bind_values
     assert "event_org.org_type" in sql
     assert "event_parent_org.org_type" in sql
     assert "event_instances.pax_count IS NOT NULL" in sql
@@ -341,7 +306,6 @@ def test_leaderboard_queries_base_tables_and_preserve_report_rows(monkeypatch):
     assert "exclude_from_pax_vault" in compiled.params.values()
     assert "attendance.is_planned IS false" in sql
     assert "date_trunc" in sql
-    assert "attendance_type_counts" in sql
     assert session.closed
     assert results == {
         12: [
@@ -403,33 +367,6 @@ def test_monthly_summary_queries_base_tables_and_preserves_summary_shape(monkeyp
     }
 
 
-def test_type_aggregate_is_scoped_to_current_year_reportable_attendance(monkeypatch):
-    session = FakeSession([])
-    monkeypatch.setattr(monthly_reporting, "get_session", lambda: session)
-    monkeypatch.setattr(monthly_reporting, "datetime", January2025)
-
-    monthly_reporting.pull_org_leaderboard_data()
-
-    compiled = session.statement.compile(dialect=postgresql.dialect())
-    sql = str(compiled)
-    aggregate_start = sql.index("SELECT attendance_x_attendance_types.attendance_id AS attendance_id")
-    aggregate_end = sql.index(") AS attendance_type_counts", aggregate_start)
-    aggregate_sql = sql[aggregate_start:aggregate_end]
-
-    assert "JOIN attendance ON attendance.id = attendance_x_attendance_types.attendance_id" in aggregate_sql
-    assert "JOIN event_instances ON event_instances.id = attendance.event_instance_id" in aggregate_sql
-    assert "attendance.is_planned IS false" in aggregate_sql
-    assert "event_instances.is_active IS true" in aggregate_sql
-    assert "event_instances.pax_count IS NOT NULL" in aggregate_sql
-    assert "exclude_from_pax_vault" in compiled.params.values()
-    assert "event_instances.start_date >=" in aggregate_sql
-    assert "event_instances.start_date <" in aggregate_sql
-    assert "event_org" not in aggregate_sql  # No repeated hierarchy joins in the type aggregate.
-    assert list(compiled.params.values()).count("exclude_from_pax_vault") >= 2
-    assert datetime(2024, 1, 1) in compiled.params.values()
-    assert datetime(2025, 1, 1) in compiled.params.values()
-
-
 def test_leaderboard_executes_with_january_year_boundary_and_null_type_semantics(reporting_session):
     results = monthly_reporting.pull_org_leaderboard_data()
 
@@ -438,12 +375,12 @@ def test_leaderboard_executes_with_january_year_boundary_and_null_type_semantics
     assert rows[(10, "month", 1)].post_count == 2
     assert rows[(10, "month", 1)].total_qs == 1
     assert rows[(10, "month", 2)].total_qs == 1  # Co-Q
-    assert rows[(10, "month", 4)].total_qs == 0  # Actual attendance with no type link.
+    assert rows[(10, "month", 4)].total_qs == 0  # A PAX record.
     assert rows[(10, "year", 1)].post_count == 3  # Includes February, but not January 2025
     assert rows[(100, "month", 1)].post_count == 2  # AO events roll up to their parent region.
     assert rows[(100, "month", 1)].total_qs == 1
     assert rows[(200, "month", 1)].post_count == 1  # Direct-region organization
-    assert rows[(200, "month", 1)].total_qs == 3  # Q, Co-Q, and legacy CoQ all count.
+    assert rows[(200, "month", 1)].total_qs == 1  # One record counts once.
     assert rows[(10, "month", 2)].post_count == 1  # 2022 CoQ attendance is outside the report year.
     assert rows[(10, "month", 2)].total_qs == 1
     assert (10, "month", 3) not in rows  # Planned attendance is excluded

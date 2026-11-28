@@ -3,6 +3,7 @@ import datetime
 import pytest
 from f3_data_models.models import (
     Attendance,
+    Attendance_Type,
     Attendance_x_AttendanceType,
     AttendanceType,
     Base,
@@ -99,13 +100,25 @@ def schedule(engine):
             (3, 3, [HC], True),
             (4, 4, [HC], False),
         ]:
-            session.add(Attendance(id=attendance_id, event_instance_id=3, user_id=user_id, is_planned=is_planned))
+            # This schema has no sync trigger, so set the column the query reads alongside the links.
+            attendance_type = Attendance_Type.q if Q in types else Attendance_Type.pax
+            session.add(
+                Attendance(
+                    id=attendance_id,
+                    event_instance_id=3,
+                    user_id=user_id,
+                    is_planned=is_planned,
+                    attendance_type=attendance_type,
+                )
+            )
             session.flush()
             session.add_all(
                 [Attendance_x_AttendanceType(attendance_id=attendance_id, attendance_type_id=t) for t in types]
             )
         # Event 1 has a planned HC but no Q, so it stays in "open Q only" and must carry its headcount there.
-        session.add(Attendance(id=5, event_instance_id=1, user_id=3, is_planned=True))
+        session.add(
+            Attendance(id=5, event_instance_id=1, user_id=3, is_planned=True, attendance_type=Attendance_Type.pax)
+        )
         session.flush()
         session.add(Attendance_x_AttendanceType(attendance_id=5, attendance_type_id=HC))
         session.commit()

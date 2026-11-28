@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from f3_data_models.models import (
     Attendance,
+    Attendance_Type,
     Attendance_x_AttendanceType,
     EventInstance,
     Location,
@@ -453,6 +454,7 @@ def handle_nearby_events_hc_action(
     user_id = user.user_id if user else None
 
     is_hc = action_id == actions.NEARBY_EVENTS_HC
+    announce = True
 
     if is_hc:
         try:
@@ -467,22 +469,24 @@ def handle_nearby_events_hc_action(
         except Exception as e:
             logger.error(f"Error creating HC attendance for nearby event {event_instance_id}: {e}")
     else:
+        # Only a PAX record is removed. A Q or Co-Q steps down through Assign Q, so their Un-HC
+        # changes nothing and posts no un-HC announcement.
+        pax_filters = [
+            Attendance.event_instance_id == event_instance_id,
+            Attendance.user_id == user_id,
+            Attendance.is_planned,
+            Attendance.attendance_type == Attendance_Type.pax,
+        ]
         try:
-            DbManager.delete_records(
-                cls=Attendance,
-                filters=[
-                    Attendance.event_instance_id == event_instance_id,
-                    Attendance.user_id == user_id,
-                    Attendance.is_planned,
-                    Attendance.attendance_x_attendance_types.any(Attendance_x_AttendanceType.attendance_type_id == 1),
-                ],
-                joinedloads=[Attendance.attendance_x_attendance_types],
-            )
+            announce = DbManager.find_first_record(Attendance, filters=pax_filters) is not None
+            if announce:
+                DbManager.delete_records(cls=Attendance, filters=pax_filters)
         except Exception as e:
+            announce = False
             logger.error(f"Error deleting HC attendance for nearby event {event_instance_id}: {e}")
 
     # Post HC announcement to the target region's preblast thread
-    if region_org_id:
+    if region_org_id and announce:
         try:
             target_settings = _get_target_settings(region_org_id)
             target_client = slack_client_for_team(target_settings.team_id) if target_settings else None

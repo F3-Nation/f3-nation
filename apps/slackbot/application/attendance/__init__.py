@@ -1,10 +1,7 @@
 from __future__ import annotations
 
+from f3_data_models.models import Attendance_Type
 from pydantic import BaseModel
-
-HC_TYPE_ID = 1
-Q_TYPE_ID = 2
-CO_Q_TYPE_ID = 3
 
 
 class AttendanceData(BaseModel):
@@ -13,5 +10,5 @@ class AttendanceData(BaseModel):
     user_id: int
     f3_name: str | None = None
     is_planned: bool = True
-    attendance_type_ids: list[int] = []
+    attendance_type: Attendance_Type = Attendance_Type.pax
     meta: dict | None = None

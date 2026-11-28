@@ -10,8 +10,6 @@ from typing import Dict, List
 import pytz
 from f3_data_models.models import (
     Attendance,
-    Attendance_x_AttendanceType,
-    AttendanceType,
     EventInstance,
     Org,
     Org_Type,
@@ -24,6 +22,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy import and_, case, func, literal, select, union_all
 
+from utilities.constants import LEADER_ATTENDANCE_TYPES
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import safe_get
 from utilities.slack_tokens.client import slack_client_for_team
@@ -324,30 +323,6 @@ def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:
 
     events = _event_org_scope()
 
-    # Aggregate type links per actual attendance first so multiple links cannot
-    # multiply attendance rows or post counts in the leaderboard.
-    attendance_types = (
-        select(
-            Attendance_x_AttendanceType.attendance_id.label("attendance_id"),
-            func.sum(case((AttendanceType.type == "Q", 1), else_=0)).label("q_ind"),
-            func.sum(case((AttendanceType.type.in_(["Co-Q", "CoQ"]), 1), else_=0)).label("coq_ind"),
-        )
-        .select_from(Attendance_x_AttendanceType)
-        .join(Attendance, Attendance.id == Attendance_x_AttendanceType.attendance_id)
-        .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
-        .join(AttendanceType, AttendanceType.id == Attendance_x_AttendanceType.attendance_type_id)
-        .where(
-            Attendance.is_planned.is_(False),
-            EventInstance.is_active.is_(True),
-            EventInstance.pax_count.is_not(None),
-            EventInstance.meta["exclude_from_pax_vault"].as_boolean().is_not(True),
-            EventInstance.start_date >= datetime(prior_year, 1, 1),
-            EventInstance.start_date < datetime(prior_year + 1, 1, 1),
-        )
-        .group_by(Attendance_x_AttendanceType.attendance_id)
-        .subquery("attendance_type_counts")
-    )
-
     def build_scoped_query(org_id_col, org_name_col, basis: str = "month"):
         trunc_date = datetime(prior_year, prior_month, 1) if basis == "month" else datetime(prior_year, 1, 1)
         return (
@@ -360,14 +335,13 @@ def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:
                 User.avatar_url.label("avatar_url"),
                 func.count(events.c.event_id).label("post_count"),
                 func.coalesce(
-                    func.sum(func.coalesce(attendance_types.c.q_ind, 0) + func.coalesce(attendance_types.c.coq_ind, 0)),
+                    func.sum(case((Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES), 1), else_=0)),
                     0,
                 ).label("total_qs"),
             )
             .select_from(events)
             .join(Attendance, Attendance.event_instance_id == events.c.event_id)
             .join(User, User.id == Attendance.user_id)
-            .outerjoin(attendance_types, attendance_types.c.attendance_id == Attendance.id)
             .where(
                 Attendance.is_planned.is_(False),
                 org_id_col.is_not(None),

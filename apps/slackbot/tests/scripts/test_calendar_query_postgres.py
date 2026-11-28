@@ -1,96 +1,44 @@
 import os
-import subprocess
 import sys
-import time
 from datetime import date, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import URL
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from scripts import calendar_images
+from tests import postgres_fixture
 
-POSTGRES_IMAGE = "postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
-pytestmark = pytest.mark.skipif(
-    os.environ.get("SLACKBOT_POSTGRES_TESTS") != "1",
-    reason="set SLACKBOT_POSTGRES_TESTS=1 to run disposable-Postgres integration tests",
-)
+pytestmark = postgres_fixture.requires_postgres
+isolated_postgres = postgres_fixture.isolated_postgres
+
+
+def _create_schema(engine):
+    with engine.begin() as connection:
+        # Only columns touched by _build_calendar_query are needed here.
+        for statement in (
+            "CREATE TABLE orgs (id integer PRIMARY KEY, name text, description text, parent_id integer)",
+            "CREATE TABLE event_instances (id integer PRIMARY KEY, start_date date, start_time time, "
+            "updated timestamp, pax_count integer, series_exception text, org_id integer, location_id integer, "
+            "is_active boolean)",
+            "CREATE TYPE attendance_type AS ENUM ('pax', 'q', 'co_q')",
+            "CREATE TABLE attendance (id integer PRIMARY KEY, event_instance_id integer, user_id integer, "
+            "created timestamp, updated timestamp, attendance_type attendance_type NOT NULL DEFAULT 'pax')",
+            "CREATE TABLE users (id integer PRIMARY KEY, f3_name text)",
+            "CREATE TABLE event_tags (id integer PRIMARY KEY, name text, color text)",
+            "CREATE TABLE event_tags_x_event_instances (event_instance_id integer, event_tag_id integer)",
+            "CREATE TABLE event_types (id integer PRIMARY KEY, name text, acronym text)",
+            "CREATE TABLE event_instances_x_event_types (event_instance_id integer, event_type_id integer)",
+            "CREATE TABLE locations (id integer PRIMARY KEY, name text, description text, address_street text)",
+        ):
+            connection.execute(text(statement))
 
 
 @pytest.fixture
-def isolated_postgres():
-    container_id = None
-    engine = None
-    try:
-        container_id = subprocess.check_output(
-            [
-                "docker",
-                "create",
-                "--tmpfs",
-                "/var/lib/postgresql:rw",
-                "--publish",
-                "127.0.0.1::5432",
-                "--env",
-                "POSTGRES_USER=calendar_test",
-                "--env",
-                "POSTGRES_PASSWORD=calendar_test",
-                "--env",
-                "POSTGRES_DB=calendar_test",
-                POSTGRES_IMAGE,
-            ],
-            text=True,
-        ).strip()
-        subprocess.run(["docker", "start", container_id], check=True, capture_output=True, text=True)
-        published_port = subprocess.check_output(["docker", "port", container_id, "5432/tcp"], text=True).strip()
-        port = int(published_port.rsplit(":", maxsplit=1)[1])
-        url = URL.create(
-            "postgresql+psycopg2",
-            username="calendar_test",
-            password="calendar_test",
-            host="127.0.0.1",
-            port=port,
-            database="calendar_test",
-        )
-        engine = create_engine(url, pool_pre_ping=True)
-
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                with engine.connect() as connection:
-                    connection.execute(text("SELECT 1"))
-                break
-            except Exception:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.2)
-
-        with engine.begin() as connection:
-            # Only columns touched by _build_calendar_query are needed here.
-            for statement in (
-                "CREATE TABLE orgs (id integer PRIMARY KEY, name text, description text, parent_id integer)",
-                "CREATE TABLE event_instances (id integer PRIMARY KEY, start_date date, start_time time, "
-                "updated timestamp, pax_count integer, series_exception text, org_id integer, location_id integer, "
-                "is_active boolean)",
-                "CREATE TABLE attendance (id integer PRIMARY KEY, event_instance_id integer, user_id integer, "
-                "created timestamp, updated timestamp)",
-                "CREATE TABLE attendance_x_attendance_types (attendance_id integer, attendance_type_id integer)",
-                "CREATE TABLE users (id integer PRIMARY KEY, f3_name text)",
-                "CREATE TABLE event_tags (id integer PRIMARY KEY, name text, color text)",
-                "CREATE TABLE event_tags_x_event_instances (event_instance_id integer, event_tag_id integer)",
-                "CREATE TABLE event_types (id integer PRIMARY KEY, name text, acronym text)",
-                "CREATE TABLE event_instances_x_event_types (event_instance_id integer, event_type_id integer)",
-                "CREATE TABLE locations (id integer PRIMARY KEY, name text, description text, address_street text)",
-            ):
-                connection.execute(text(statement))
-        yield engine
-    finally:
-        if engine is not None:
-            engine.dispose()
-        if container_id:
-            subprocess.run(["docker", "rm", "--force", container_id], check=True, capture_output=True, text=True)
+def postgres_schema():
+    return _create_schema
 
 
 def test_bounded_calendar_query_matches_legacy_global_q_subqueries(isolated_postgres):
@@ -107,7 +55,8 @@ def test_bounded_calendar_query_matches_legacy_global_q_subqueries(isolated_post
         connection.execute(
             text(
                 "INSERT INTO users (id, f3_name) VALUES "
-                "(101, 'First Q One'), (102, 'Second Q One'), (201, 'First Q Two')"
+                "(101, 'First Q One'), (102, 'Second Q One'), (201, 'First Q Two'), "
+                "(103, 'Early PAX One'), (104, 'Early Co-Q One')"
             )
         )
         connection.execute(
@@ -128,16 +77,13 @@ def test_bounded_calendar_query_matches_legacy_global_q_subqueries(isolated_post
         )
         connection.execute(
             text(
-                "INSERT INTO attendance (id, event_instance_id, user_id, created, updated) VALUES "
-                "(501, 1001, 101, '2026-09-20 06:00:00', '2026-10-01 11:00:00'), "
-                "(502, 1001, 102, '2026-09-21 06:00:00', '2026-10-03 12:00:00'), "
-                "(601, 2001, 201, '2026-09-22 06:00:00', '2026-10-02 13:00:00')"
-            )
-        )
-        connection.execute(
-            text(
-                "INSERT INTO attendance_x_attendance_types (attendance_id, attendance_type_id) "
-                "VALUES (501, 2), (502, 2), (601, 2)"
+                "INSERT INTO attendance (id, event_instance_id, user_id, created, updated, attendance_type) VALUES "
+                "(501, 1001, 101, '2026-09-20 06:00:00', '2026-10-01 11:00:00', 'q'), "
+                "(502, 1001, 102, '2026-09-21 06:00:00', '2026-10-03 12:00:00', 'q'), "
+                "(601, 2001, 201, '2026-09-22 06:00:00', '2026-10-02 13:00:00', 'q'), "
+                # Signed up first and changed last, so the Q name and freshness are wrong if they count.
+                "(503, 1001, 103, '2026-09-01 06:00:00', '2026-10-04 14:00:00', 'pax'), "
+                "(504, 1001, 104, '2026-09-02 06:00:00', '2026-10-04 15:00:00', 'co_q')"
             )
         )
 
@@ -149,14 +95,10 @@ def test_bounded_calendar_query_matches_legacy_global_q_subqueries(isolated_post
                 "WITH ranked_q AS ("
                 " SELECT attendance.event_instance_id, attendance.user_id, "
                 " row_number() OVER (PARTITION BY attendance.event_instance_id ORDER BY attendance.created) AS rn "
-                " FROM attendance JOIN attendance_x_attendance_types "
-                " ON attendance.id = attendance_x_attendance_types.attendance_id "
-                " WHERE attendance_x_attendance_types.attendance_type_id = 2 "
+                " FROM attendance WHERE attendance.attendance_type = 'q' "
                 "), q_updates AS ("
                 " SELECT attendance.event_instance_id, max(attendance.updated) AS q_last_updated "
-                " FROM attendance JOIN attendance_x_attendance_types "
-                " ON attendance.id = attendance_x_attendance_types.attendance_id "
-                " WHERE attendance_x_attendance_types.attendance_type_id = 2 "
+                " FROM attendance WHERE attendance.attendance_type = 'q' "
                 " GROUP BY attendance.event_instance_id"
                 ") SELECT event_instances.id, event_instances.start_date, orgs.name, users.f3_name, "
                 "q_updates.q_last_updated "

@@ -7,7 +7,6 @@ from datetime import date, datetime, timedelta
 import pytz
 from f3_data_models.models import (
     Attendance,
-    Attendance_x_AttendanceType,
     EventInstance,
     Org,
     Org_x_SlackSpace,
@@ -23,6 +22,7 @@ from sqlalchemy import and_, func, or_
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
+from utilities.constants import LEADER_ATTENDANCE_TYPES
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users, get_site_q_slack_ids_by_ao
 from utilities.helper_functions import log_error_event
@@ -30,7 +30,6 @@ from utilities.slack_tokens.client import slack_client_for_team
 
 logger = logging.getLogger(__name__)
 
-Q_ATTENDANCE_TYPE_IDS = [2, 3]
 DEFAULT_NO_POST_WEEKS = 2
 DEFAULT_HOME_AO_WEEKS = 8
 DEFAULT_NO_Q_WEEKS = 12
@@ -226,12 +225,11 @@ def get_kotter_rows(config: KotterConfig, today: date | None = None) -> list[Kot
             .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
             .join(Org, Org.id == EventInstance.org_id)
             .join(User, User.id == Attendance.user_id)
-            .join(Attendance_x_AttendanceType, Attendance_x_AttendanceType.attendance_id == Attendance.id)
             .filter(
                 *base_filters,
                 User.home_region_id == config.org_id,
                 EventInstance.start_date >= no_q_cutoff,
-                Attendance_x_AttendanceType.attendance_type_id.in_(Q_ATTENDANCE_TYPE_IDS),
+                Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
             )
             .group_by(Attendance.user_id)
             .all()
@@ -244,11 +242,10 @@ def get_kotter_rows(config: KotterConfig, today: date | None = None) -> list[Kot
             .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
             .join(Org, Org.id == EventInstance.org_id)
             .join(User, User.id == Attendance.user_id)
-            .join(Attendance_x_AttendanceType, Attendance_x_AttendanceType.attendance_id == Attendance.id)
             .filter(
                 *base_filters,
                 User.home_region_id == config.org_id,
-                Attendance_x_AttendanceType.attendance_type_id.in_(Q_ATTENDANCE_TYPE_IDS),
+                Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
             )
             .group_by(Attendance.user_id)
             .all()

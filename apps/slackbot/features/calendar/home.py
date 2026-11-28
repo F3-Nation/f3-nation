@@ -9,6 +9,7 @@ import pytz
 import requests
 from f3_data_models.models import (
     Attendance,
+    Attendance_Type,
     Attendance_x_AttendanceType,
     EventInstance,
     EventType,
@@ -22,7 +23,6 @@ from slack_sdk.web import WebClient
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
-from application.attendance import CO_Q_TYPE_ID, Q_TYPE_ID
 from application.preblast.service import PreblastService
 from features.backblast import build_backblast_form
 from features.calendar import event_instance, get_preblast_action_blocks
@@ -36,6 +36,7 @@ from features.calendar.event_preblast import (
 )
 from utilities import constants, storage
 from utilities.constants import (
+    LEADER_ATTENDANCE_TYPES,
     MAX_CALENDAR_WEEKS,
     WEEK_LABELS,
     WEEK_SCHEDULE_LABELS,
@@ -585,7 +586,7 @@ def build_assign_q_form(
     attendance = DbManager.find_records(
         Attendance,
         filters=[Attendance.event_instance_id == event_instance_id],
-        joinedloads=[Attendance.slack_users, Attendance.attendance_types],
+        joinedloads=[Attendance.slack_users],
     )
 
     form = copy.deepcopy(ASSIGN_Q_FORM)
@@ -596,13 +597,11 @@ def build_assign_q_form(
         + f"*Start Time:* {event_instance.start_time or 'TBD'}\n"
     )
 
-    existing_q_slack_users = [a.slack_users for a in attendance if any(at.type == "Q" for at in a.attendance_types)]
+    existing_q_slack_users = [a.slack_users for a in attendance if a.attendance_type == Attendance_Type.q]
     if existing_q_slack_users:
         slack_user_id = [su.slack_id for su in existing_q_slack_users[0] if su.slack_team_id == region_record.team_id]
         form.set_initial_values({actions.CALENDAR_HOME_ASSIGN_Q_USER: slack_user_id[:1] if slack_user_id else None})
-    existing_co_q_slack_users = [
-        a.slack_users for a in attendance if any(at.type == "Co-Q" for at in a.attendance_types)
-    ]
+    existing_co_q_slack_users = [a.slack_users for a in attendance if a.attendance_type == Attendance_Type.co_q]
     if existing_co_q_slack_users:
         slack_user_ids = []
         for slack_user in existing_co_q_slack_users:
@@ -653,13 +652,12 @@ def handle_assign_q_form(
     existing_attendance_records = DbManager.find_records(
         Attendance,
         filters=[Attendance.event_instance_id == event_instance_id],
-        joinedloads=[Attendance.slack_users, Attendance.attendance_types],
     )
 
     # Delete existing Q / Co-Q attendance records entirely
     q_changed = False
     for ea in existing_attendance_records:
-        if any(at.type in ["Q", "Co-Q"] for at in ea.attendance_types):
+        if ea.attendance_type in LEADER_ATTENDANCE_TYPES:
             q_changed = True
             DbManager.delete_records(
                 cls=Attendance_x_AttendanceType,
@@ -680,13 +678,12 @@ def handle_assign_q_form(
     existing_attendance_records = DbManager.find_records(
         Attendance,
         filters=[Attendance.event_instance_id == event_instance_id],
-        joinedloads=[Attendance.slack_users, Attendance.attendance_types],
     )
 
     if q_user_id:
         if q_user_id in [ea.user_id for ea in existing_attendance_records]:
             attendance_record = next((ea for ea in existing_attendance_records if ea.user_id == q_user_id), None)
-            if attendance_record and 2 not in [at.id for at in attendance_record.attendance_types]:
+            if attendance_record and attendance_record.attendance_type != Attendance_Type.q:
                 DbManager.create_record(
                     Attendance_x_AttendanceType(attendance_id=attendance_record.id, attendance_type_id=2)
                 )
@@ -706,7 +703,7 @@ def handle_assign_q_form(
         for co_q_user_id in co_qs_user_ids:
             if co_q_user_id in [ea.user_id for ea in existing_attendance_records]:
                 attendance_record = next((ea for ea in existing_attendance_records if ea.user_id == co_q_user_id), None)
-                if attendance_record and 3 not in [at.id for at in attendance_record.attendance_types]:
+                if attendance_record and attendance_record.attendance_type != Attendance_Type.co_q:
                     DbManager.create_record(
                         Attendance_x_AttendanceType(attendance_id=attendance_record.id, attendance_type_id=3)
                     )
@@ -778,13 +775,11 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
                 Attendance.user_id == user_id,
                 Attendance.is_planned,
             ],
-            joinedloads=[Attendance.attendance_x_attendance_types],
         )
         if attendance_record:
-            type_ids = {x.attendance_type_id for x in attendance_record[0].attendance_x_attendance_types}
-            if Q_TYPE_ID not in type_ids:
+            if attendance_record[0].attendance_type != Attendance_Type.q:
                 DbManager.create_record(
-                    Attendance_x_AttendanceType(attendance_id=attendance_record[0].id, attendance_type_id=Q_TYPE_ID)
+                    Attendance_x_AttendanceType(attendance_id=attendance_record[0].id, attendance_type_id=2)
                 )
         else:
             DbManager.create_record(
@@ -818,18 +813,18 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             )
             update_post = False
     elif action == "Un-HC":
-        DbManager.delete_records(
-            cls=Attendance,
-            filters=[
-                Attendance.event_instance_id == event_instance_id,
-                Attendance.user_id == user_id,
-                Attendance.attendance_types.any(Attendance_x_AttendanceType.attendance_type_id == 1),
-                Attendance.is_planned,
-            ],
-            joinedloads=[Attendance.attendance_types],
-        )
-        update_post = True
-        hc_action = False
+        # Only a PAX record is removed. A Q or Co-Q steps down through Assign Q, so their Un-HC
+        # changes nothing and posts no un-HC announcement.
+        pax_filters = [
+            Attendance.event_instance_id == event_instance_id,
+            Attendance.user_id == user_id,
+            Attendance.attendance_type == Attendance_Type.pax,
+            Attendance.is_planned,
+        ]
+        update_post = DbManager.find_first_record(Attendance, filters=pax_filters) is not None
+        if update_post:
+            DbManager.delete_records(cls=Attendance, filters=pax_filters)
+            hc_action = False
         build_home_form(body, client, logger, context, region_record, update_view_id=view_id)
     elif action == "Assign Q":
         build_assign_q_form(
@@ -859,9 +854,9 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
         if preblast_info.event_record.preblast_ts:
             # build_preblast_info returns attendance records as dicts.
             q_list = [
-                r.get("user_id")
+                r["user_id"]
                 for r in preblast_info.attendance_records
-                if {Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(r.get("attendance_type_ids", []))
+                if r["attendance_type"] in LEADER_ATTENDANCE_TYPES
             ]
             # preblast_blocks are already Slack block dicts; only the buttons need converting.
             blocks = list(preblast_info.preblast_blocks) + [
@@ -871,7 +866,7 @@ def handle_home_event(body: dict, client: WebClient, logger: Logger, context: di
             _insert_preblast_image(blocks, preblast_info.event_record.meta)
             metadata = {
                 "event_instance_id": event_instance_id,
-                "attendees": [r.get("user_id") for r in preblast_info.attendance_records],
+                "attendees": [r["user_id"] for r in preblast_info.attendance_records],
                 "qs": q_list,
             }
             # The post may sit in a different channel from the one now configured.

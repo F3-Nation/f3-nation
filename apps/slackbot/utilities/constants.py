@@ -2,11 +2,15 @@ import os
 from enum import StrEnum
 
 import dotenv
+from f3_data_models.models import Attendance_Type
 
 dotenv.load_dotenv()
 
 F3VERSARY_ACTIVITY_DAYS = (0, 30, 60, 90, 180, 360)
 DEFAULT_F3VERSARY_ACTIVITY_DAYS = 90
+
+# The attendance types that lead an event: the Q and any Co-Qs.
+LEADER_ATTENDANCE_TYPES = (Attendance_Type.q, Attendance_Type.co_q)
 
 
 def is_production_deployment() -> bool:

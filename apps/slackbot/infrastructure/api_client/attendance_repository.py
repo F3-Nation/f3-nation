@@ -1,23 +1,38 @@
 from __future__ import annotations
 
-from application.attendance import HC_TYPE_ID, Q_TYPE_ID, AttendanceData
+from f3_data_models.models import Attendance_Type
+
+from application.attendance import AttendanceData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
+
+# Highest first: a record linked to several types reads as the first of these it has.
+_TYPE_PRECEDENCE = (Attendance_Type.q, Attendance_Type.co_q, Attendance_Type.pax)
+
+
+def _parse_attendance_type(raw: dict) -> Attendance_Type:
+    named = raw.get("attendanceType")
+    if named is not None:
+        return Attendance_Type[named]
+    # An API that predates the `attendanceType` field sends only the linked type ids.
+    types_raw = raw.get("attendanceTypes") or []
+    linked_ids = {int(t["id"]) if isinstance(t, dict) else int(t) for t in types_raw if t is not None}
+    return next((t for t in _TYPE_PRECEDENCE if t.value in linked_ids), Attendance_Type.pax)
+
+
+def _type_ids(*attendance_types: Attendance_Type) -> list[int]:
+    """Type ids for the attendance write endpoints, which still take ids until they accept a named type."""
+    return sorted({t.value for t in attendance_types})
 
 
 def _parse_attendance(raw: dict) -> AttendanceData:
-    types_raw = raw.get("attendanceTypes", raw.get("attendance_types", raw.get("attendance_type_ids", [])))
     user_raw = raw.get("user") or {}
-    if types_raw and isinstance(types_raw[0], dict):
-        type_ids = [int(t.get("id", t.get("attendanceTypeId", 0))) for t in types_raw]
-    else:
-        type_ids = [int(t) for t in types_raw if t is not None]
     return AttendanceData(
         id=int(raw["id"]),
         event_instance_id=int(raw["eventInstanceId"]),
         user_id=int(raw["userId"]),
         f3_name=raw.get("f3Name", raw.get("f3_name", user_raw.get("f3Name", user_raw.get("f3_name")))),
         is_planned=raw.get("isPlanned", raw.get("is_planned", True)),
-        attendance_type_ids=type_ids,
+        attendance_type=_parse_attendance_type(raw),
         meta=raw.get("meta"),
     )
 
@@ -38,33 +53,22 @@ class ApiAttendanceRepository:
         return next((a for a in self.get_planned_for_event_instance(event_instance_id) if a.user_id == user_id), None)
 
     def _update_types(self, attendance: AttendanceData, type_ids: list[int]) -> AttendanceData:
+        """Writes the record's type links. Adding or removing PAX never changes which type the record reads as."""
         result = self._client.patch(
             f"/v1/attendance/{attendance.id}/types",
             json={"attendanceTypeIds": type_ids},
         )
-        if result and result.get("success") and not (result.get("attendance") or result.get("result")):
-            return AttendanceData(
-                id=attendance.id,
-                event_instance_id=attendance.event_instance_id,
-                user_id=attendance.user_id,
-                is_planned=attendance.is_planned,
-                attendance_type_ids=type_ids,
-                meta=attendance.meta,
-            )
-        raw = (
-            result.get("attendance")
-            or result.get("result")
-            or {
-                **attendance.model_dump(),
-                "attendance_type_ids": type_ids,
-            }
-        )
-        return _parse_attendance(raw)
+        raw = (result or {}).get("attendance") or (result or {}).get("result")
+        return _parse_attendance(raw) if raw else attendance.model_copy()
 
-    def _create_planned(self, event_instance_id: int, user_id: int, type_ids: list[int]) -> AttendanceData:
+    def _create_planned(self, event_instance_id: int, user_id: int) -> AttendanceData:
         result = self._client.post(
             "/v1/attendance",
-            json={"eventInstanceId": event_instance_id, "userId": user_id, "attendanceTypeIds": type_ids},
+            json={
+                "eventInstanceId": event_instance_id,
+                "userId": user_id,
+                "attendanceTypeIds": _type_ids(Attendance_Type.pax),
+            },
         )
         raw = result.get("attendance") or result.get("result")
         if raw:
@@ -74,25 +78,23 @@ class ApiAttendanceRepository:
             event_instance_id=event_instance_id,
             user_id=user_id,
             is_planned=True,
-            attendance_type_ids=type_ids,
+            attendance_type=Attendance_Type.pax,
         )
 
     def add_hc(self, event_instance_id: int, user_id: int) -> AttendanceData:
         existing = self._find_planned(event_instance_id, user_id)
         if existing is None:
-            return self._create_planned(event_instance_id, user_id, [HC_TYPE_ID])
-        type_ids = sorted({*existing.attendance_type_ids, HC_TYPE_ID})
-        return self._update_types(existing, type_ids)
+            return self._create_planned(event_instance_id, user_id)
+        return self._update_types(existing, _type_ids(Attendance_Type.pax, existing.attendance_type))
 
     def remove_hc(self, event_instance_id: int, user_id: int) -> AttendanceData | None:
         existing = self._find_planned(event_instance_id, user_id)
         if existing is None:
             return None
-        type_ids = [type_id for type_id in existing.attendance_type_ids if type_id != HC_TYPE_ID]
-        if not type_ids:
+        if existing.attendance_type == Attendance_Type.pax:
             self._client.delete(f"/v1/attendance/event-instance/{event_instance_id}/user/{user_id}")
             return None
-        return self._update_types(existing, type_ids)
+        return self._update_types(existing, _type_ids(existing.attendance_type))
 
     def take_q(self, event_instance_id: int, user_id: int) -> AttendanceData:
         result = self._client.post(
@@ -107,7 +109,7 @@ class ApiAttendanceRepository:
             event_instance_id=event_instance_id,
             user_id=user_id,
             is_planned=True,
-            attendance_type_ids=[Q_TYPE_ID, HC_TYPE_ID],
+            attendance_type=Attendance_Type.q,
         )
 
     def remove_q(self, event_instance_id: int, user_id: int) -> AttendanceData | None:

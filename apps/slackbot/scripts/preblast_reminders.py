@@ -11,7 +11,7 @@ from typing import List
 import pytz
 from f3_data_models.models import (
     Attendance,
-    Attendance_x_AttendanceType,
+    Attendance_Type,
     EventInstance,
     EventType,
     EventType_x_EventInstance,
@@ -66,8 +66,7 @@ class PreblastList:
                 .label("rn"),
             )
             .select_from(Attendance)
-            .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
-            .filter(Attendance_x_AttendanceType.attendance_type_id == 2)
+            .filter(Attendance.attendance_type == Attendance_Type.q)
             .alias()
         )
 

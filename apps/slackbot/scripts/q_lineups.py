@@ -11,6 +11,7 @@ from typing import Dict, List
 import pytz
 from f3_data_models.models import (
     Attendance,
+    Attendance_Type,
     Attendance_x_AttendanceType,
     EventInstance,
     Org,
@@ -323,7 +324,6 @@ def handle_lineup_signup(body: dict, client: WebClient, logger: Logger, context:
     attendance_record = DbManager.find_records(
         Attendance,
         filters=[Attendance.event_instance_id == event_instance_id, Attendance.user_id == user_id],
-        joinedloads=[Attendance.attendance_x_attendance_types],
     )
     if event_info.q_name:
         client.chat_postEphemeral(
@@ -333,7 +333,7 @@ def handle_lineup_signup(body: dict, client: WebClient, logger: Logger, context:
         )
     else:
         if attendance_record:
-            if 2 not in attendance_record[0].attendance_x_attendance_types:
+            if attendance_record[0].attendance_type != Attendance_Type.q:
                 DbManager.create_record(
                     Attendance_x_AttendanceType(attendance_id=attendance_record[0].id, attendance_type_id=2)
                 )

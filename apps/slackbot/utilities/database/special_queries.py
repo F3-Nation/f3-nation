@@ -3,7 +3,7 @@ from typing import Any, List
 
 from f3_data_models.models import (
     Attendance,
-    Attendance_x_AttendanceType,
+    Attendance_Type,
     Event,
     EventInstance,
     EventTag,
@@ -25,7 +25,7 @@ from f3_data_models.utils import _joinedloads, get_session
 from sqlalchemy import and_, case, func, nulls_last, or_, select
 from sqlalchemy.orm import joinedload
 
-from utilities.constants import ALL_PERMISSIONS, PERMISSIONS
+from utilities.constants import ALL_PERMISSIONS, LEADER_ATTENDANCE_TYPES, PERMISSIONS
 
 
 @dataclass
@@ -40,9 +40,6 @@ class CalendarHomeQuery:
     hc_count: int = None
 
 
-_Q_ATTENDANCE_TYPES = [2, 3]  # Q and Co-Q
-
-
 def _home_attendance_summary(user_id: int, event_ids_stmt):
     """Per-event planned Qs, planned headcount and the viewer's HC / Q flags, for the event ids selected."""
     return (
@@ -53,7 +50,7 @@ def _home_attendance_summary(user_id: int, event_ids_stmt):
                     (
                         and_(
                             Attendance.is_planned,
-                            Attendance_x_AttendanceType.attendance_type_id.in_(_Q_ATTENDANCE_TYPES),
+                            Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
                         ),
                         User.f3_name,
                     ),
@@ -68,7 +65,7 @@ def _home_attendance_summary(user_id: int, event_ids_stmt):
                     (
                         and_(
                             Attendance.user_id == user_id,
-                            Attendance_x_AttendanceType.attendance_type_id.in_(_Q_ATTENDANCE_TYPES),
+                            Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
                         ),
                         1,
                     ),
@@ -78,7 +75,6 @@ def _home_attendance_summary(user_id: int, event_ids_stmt):
         )
         .select_from(Attendance)
         .join(User, User.id == Attendance.user_id)
-        .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
         .where(Attendance.event_instance_id.in_(event_ids_stmt))
         .group_by(Attendance.event_instance_id)
         .subquery()
@@ -197,7 +193,6 @@ def event_attendance_query(attendance_filter: List[Any] = None, event_filter: Li
     with get_session() as session:
         attendance_subquery = (
             select(Attendance.event_instance_id.distinct().label("event_instance_id"))
-            .options(joinedload(Attendance.attendance_types))
             .filter(*(attendance_filter or []))
             .alias()
         )
@@ -214,24 +209,20 @@ def event_attendance_query(attendance_filter: List[Any] = None, event_filter: Li
 
 def event_instances_without_attendance_types(
     *,
-    excluded_attendance_type_ids: list[int],
+    excluded_attendance_types: list[Attendance_Type],
     event_filter: List[Any] = None,
     limit: int = 20,
 ) -> List[EventInstance]:
     """
-    Returns EventInstances where there are NO Attendance records with any of the given attendance type IDs.
+    Returns EventInstances where there are NO Attendance records with any of the given attendance types.
     This includes events with zero Attendance rows.
     """
     with get_session() as session:
         # Correlated subquery: TRUE if the event has any of the excluded attendance types
         has_excluded_type = (
             select(Attendance.id)
-            .join(
-                Attendance_x_AttendanceType,
-                Attendance_x_AttendanceType.attendance_id == Attendance.id,
-            )
             .where(
-                Attendance_x_AttendanceType.attendance_type_id.in_(excluded_attendance_type_ids),
+                Attendance.attendance_type.in_(excluded_attendance_types),
                 Attendance.event_instance_id == EventInstance.id,
             )
             .correlate(EventInstance)
@@ -467,18 +458,12 @@ def missing_backblasts_query(
     with get_session() as session:
         q_rows = (
             session.query(Attendance.event_instance_id, SlackUser.slack_id)
-            .join(
-                Attendance_x_AttendanceType,
-                and_(
-                    Attendance_x_AttendanceType.attendance_id == Attendance.id,
-                    Attendance_x_AttendanceType.attendance_type_id.in_([2, 3]),
-                ),
-            )
             .join(User, User.id == Attendance.user_id)
             .join(SlackUser, and_(SlackUser.user_id == User.id, SlackUser.slack_team_id == slack_team_id))
             .filter(
                 Attendance.event_instance_id.in_(event_ids),
                 Attendance.is_planned,
+                Attendance.attendance_type.in_(LEADER_ATTENDANCE_TYPES),
             )
             .all()
         )

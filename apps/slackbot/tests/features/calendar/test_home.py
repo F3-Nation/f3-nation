@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
 import pytest
-from f3_data_models.models import Series_Exception
+from f3_data_models.models import Attendance_Type, Series_Exception
 from slack_sdk.errors import SlackApiError
 
 from features.calendar import home
@@ -53,9 +53,7 @@ def test_assign_q_does_not_delete_existing_attendance_for_unlinked_selection(mon
         }
     client.users_info.side_effect = lambda user: {"user": {"id": user, "profile": {}}}
     with patch.object(home, "DbManager") as database:
-        database.find_records.return_value = [
-            SimpleNamespace(id=9, user_id=42, attendance_types=[SimpleNamespace(type="Q")])
-        ]
+        database.find_records.return_value = [SimpleNamespace(id=9, user_id=42, attendance_type=Attendance_Type.q)]
         with pytest.raises(helper_functions.UnlinkedSlackIdentityError):
             home.handle_assign_q_form(body, client, MagicMock(), {}, SimpleNamespace(team_id="T_TEST", org_id=1))
         database.delete_records.assert_not_called()
@@ -792,6 +790,37 @@ def test_loading_calendar_update_propagates_modal_error_to_dispatcher():
         )
 
 
+def _attendance(slack_id, attendance_type):
+    return SimpleNamespace(
+        attendance_type=attendance_type,
+        slack_users=[SimpleNamespace(slack_id=slack_id, slack_team_id="T_TEST")],
+    )
+
+
+def test_assign_q_form_prefills_the_current_q_and_co_qs():
+    from features.calendar import home
+
+    event = SimpleNamespace(
+        name="Workout", org=SimpleNamespace(name="AO"), start_date=datetime.date(2026, 9, 30), start_time="0530"
+    )
+    client = MagicMock()
+    with patch.object(home, "DbManager") as database:
+        database.get.return_value = event
+        database.find_records.return_value = [
+            _attendance("U_PAX", Attendance_Type.pax),
+            _attendance("U_COQ", Attendance_Type.co_q),
+            _attendance("U_Q", Attendance_Type.q),
+        ]
+        home.build_assign_q_form(
+            {"trigger_id": "T"}, client, MagicMock(), {}, SimpleNamespace(team_id="T_TEST"), event_instance_id=7
+        )
+
+    view = client.views_push.call_args.kwargs["view"]
+    elements = {block["block_id"]: block.get("element", {}) for block in view["blocks"] if block.get("block_id")}
+    assert elements[actions.CALENDAR_HOME_ASSIGN_Q_USER].get("initial_users") == ["U_Q"]
+    assert elements[actions.CALENDAR_HOME_ASSIGN_Q_CO_QS].get("initial_users") == ["U_COQ"]
+
+
 def _home_event_body(action: str) -> dict:
     return {
         "user": {"id": "U_ACTOR"},
@@ -811,15 +840,15 @@ def _patch_home_event(monkeypatch, home, preblast_info=None):
     monkeypatch.setattr(home, "build_preblast_info", lambda *_a, **_k: info)
 
 
-@pytest.mark.parametrize(("existing_type_ids", "inserts_q"), [([1], True), ([2], False), ([1, 2], False)])
-def test_take_q_adds_q_link_only_when_attendance_lacks_it(monkeypatch, existing_type_ids, inserts_q):
+@pytest.mark.parametrize(
+    ("attendance_type", "inserts_q"),
+    [(Attendance_Type.pax, True), (Attendance_Type.co_q, True), (Attendance_Type.q, False)],
+)
+def test_take_q_adds_q_link_only_when_attendance_is_not_q(monkeypatch, attendance_type, inserts_q):
     from features.calendar import home
 
     _patch_home_event(monkeypatch, home)
-    attendance = SimpleNamespace(
-        id=9,
-        attendance_x_attendance_types=[SimpleNamespace(attendance_type_id=type_id) for type_id in existing_type_ids],
-    )
+    attendance = SimpleNamespace(id=9, attendance_type=attendance_type)
     with patch.object(home, "DbManager") as database:
         database.find_records.return_value = [attendance]
         home.handle_home_event(_home_event_body("Take Q"), MagicMock(), MagicMock(), {}, SimpleNamespace(org_id=1))
@@ -841,9 +870,9 @@ def test_home_hc_updates_preblast_post_from_attendance_dicts(monkeypatch):
             preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
         ),
         attendance_records=[
-            {"user_id": 42, "attendance_type_ids": [1]},
-            {"user_id": 43, "attendance_type_ids": [2]},
-            {"user_id": 44, "attendance_type_ids": [1, 3]},
+            {"user_id": 42, "attendance_type": Attendance_Type.pax},
+            {"user_id": 43, "attendance_type": Attendance_Type.q},
+            {"user_id": 44, "attendance_type": Attendance_Type.co_q},
         ],
         preblast_blocks=[summary],
     )
@@ -867,7 +896,7 @@ def test_home_hc_updates_preblast_in_the_channel_it_was_posted_to(monkeypatch):
 
     preblast_info = SimpleNamespace(
         event_record=SimpleNamespace(preblast_ts="1700000000.000100", meta={"preblast_post_channel_id": "C_POSTED"}),
-        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        attendance_records=[{"user_id": 42, "attendance_type": Attendance_Type.pax}],
         preblast_blocks=[],
     )
     _patch_home_event(monkeypatch, home, preblast_info)
@@ -888,7 +917,7 @@ def test_home_hc_retries_preblast_update_without_photo_on_invalid_blocks(monkeyp
         event_record=SimpleNamespace(
             preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
         ),
-        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        attendance_records=[{"user_id": 42, "attendance_type": Attendance_Type.pax}],
         preblast_blocks=[summary],
     )
     _patch_home_event(monkeypatch, home, preblast_info)
@@ -915,7 +944,7 @@ def test_home_hc_fallback_post_retries_without_photo_on_invalid_blocks(monkeypat
         event_record=SimpleNamespace(
             preblast_ts="1700000000.000100", meta={constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_PHOTO"}
         ),
-        attendance_records=[{"user_id": 42, "attendance_type_ids": [1]}],
+        attendance_records=[{"user_id": 42, "attendance_type": Attendance_Type.pax}],
         preblast_blocks=[summary],
     )
     _patch_home_event(monkeypatch, home, preblast_info)

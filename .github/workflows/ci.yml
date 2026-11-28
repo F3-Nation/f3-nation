@@ -453,7 +453,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - name: Verify Slack identity and token refresh against Postgres
+      - name: Verify Slack identity, token refresh and attendance types against Postgres
         working-directory: apps/slackbot
         run: >-
           uv run --frozen pytest
@@ -464,6 +464,10 @@ jobs:
           tests/scripts/test_import_slack_installations.py
           tests/scripts/test_f3versary_activity_postgres.py
           tests/utilities/test_get_region_record_postgres.py
+          tests/utilities/test_attendance_type_queries_postgres.py
+          tests/features/test_attendance_type_handlers_postgres.py
+          tests/scripts/test_attendance_type_scripts_postgres.py
+          tests/scripts/test_calendar_query_postgres.py
           tests/utilities/test_home_schedule_query_postgres.py
         env:
           SLACKBOT_POSTGRES_TESTS: "1"
