@@ -28,7 +28,7 @@ from slack_sdk.oauth.installation_store import Bot
 from slack_sdk.oauth.token_rotation import TokenRotator
 from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from utilities import constants
 from utilities.slack_tokens.crypto import TokenDecryptError, decrypt_refresh_token, encrypt_refresh_token
@@ -56,10 +56,35 @@ class TokenChanged(Exception):
 
 
 # slack_sdk logs every request and response body at DEBUG; for `oauth.v2.access`
-# those hold the refresh token and the new tokens. The SDK checks its logger's
-# own level, so this logger is pinned above DEBUG whatever `LOG_LEVEL` sets.
-_rotation_http_logger = logging.getLogger(__name__ + ".rotation_http")
-_rotation_http_logger.setLevel(logging.INFO)
+# and `oauth.v2.exchange` those hold the refresh token and the new tokens. The
+# SDK checks its logger's own level, so this logger is pinned above DEBUG
+# whatever `LOG_LEVEL` sets.
+_oauth_http_logger = logging.getLogger(__name__ + ".oauth_http")
+_oauth_http_logger.setLevel(logging.INFO)
+
+_UNDECODABLE_BODY_PREFIX = "Failed to decode Slack API response"
+
+
+class _DropUndecodableBody(logging.Filter):
+    """Strip the response body from the SDK's ERROR record for a non-JSON response.
+
+    `BaseClient` logs the start of an undecodable body at ERROR, which the
+    level pin above doesn't stop, and an OAuth response body can hold tokens.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str) and record.msg.startswith(_UNDECODABLE_BODY_PREFIX):
+            record.msg = _UNDECODABLE_BODY_PREFIX
+            record.args = None
+        return True
+
+
+_oauth_http_logger.addFilter(_DropUndecodableBody())
+
+
+def oauth_web_client(**kwargs) -> WebClient:
+    """A `WebClient` for token-issuing OAuth calls, whose HTTP bodies are never logged."""
+    return WebClient(logger=_oauth_http_logger, **kwargs)
 
 
 def _rotator() -> TokenRotator:
@@ -68,7 +93,7 @@ def _rotator() -> TokenRotator:
         client_secret=os.environ[constants.SLACK_CLIENT_SECRET],
         # Well under the 5 s lock_timeout and Slack's 3 s ack budget: the call runs while
         # holding the workspace lock and a pooled connection.
-        client=WebClient(logger=_rotation_http_logger, timeout=3),
+        client=oauth_web_client(timeout=3),
     )
 
 
@@ -193,6 +218,25 @@ def _flush(session: Session, team_id: str, path: str, *, commit: bool = False) -
     if failure is not None:
         _log(logging.ERROR, "slack.token.refresh_failed", team_id, path=path, **failure)
         raise TokenSaveError(f"saving the bot token failed with {failure['error_type']}")
+
+
+def write_locked_row(row: SlackSpace, bot: Bot, *, path: str) -> bool:
+    """Write the bot's token fields to a row yielded by `locked_row` and flush them.
+
+    For callers that must call Slack while holding the lock, so they can't use
+    `save_bot_locked`, which takes the lock itself. Returns False without
+    writing when the save guard rejects the token. Raises `TokenSaveError` if
+    the database rejects the write; the change commits only when the
+    `locked_row` block exits.
+    """
+    session = object_session(row)
+    if session is None:
+        raise ValueError("write_locked_row needs a row yielded by locked_row")
+    if not _guard_allows(row, bot):
+        return False
+    _write(row, bot)
+    _flush(session, row.team_id, path)
+    return True
 
 
 _ANY_TOKEN = object()

@@ -93,6 +93,9 @@ jobs:
       prod_environment: slackbot-production
       region: us-central1
       ar_repo: cloud-run-builds
+      # --max-retries=0: hourly_runner exits non-zero after a failed token
+      # refresh, once its other scripts have already sent their Slack messages,
+      # and a retried task would send them again.
       staging_flags: >-
         --memory=4Gi
         --cpu=1
@@ -100,6 +103,7 @@ jobs:
         --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
         --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
         --task-timeout=6h
+        --max-retries=0
         --update-env-vars=SLACKBOT_ENV=staging
       prod_flags: >-
         --memory=4Gi
@@ -108,4 +112,5 @@ jobs:
         --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
         --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
         --task-timeout=6h
+        --max-retries=0
         --update-env-vars=SLACKBOT_ENV=production

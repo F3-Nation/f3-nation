@@ -55,6 +55,7 @@ def test_hourly_logging_configuration(monkeypatch, local, level):
 
 
 JOBS = [
+    ("refresh_slack_tokens", "refresh_expiring_tokens", "refresh_slack_tokens.refresh_expiring_tokens"),
     ("calendar_images", "generate_calendar_images", "calendar_images.generate_calendar_images"),
     ("backblast_reminders", "send_backblast_reminders", "backblast_reminders.send_backblast_reminders"),
     ("preblast_reminders", "send_preblast_reminders", "preblast_reminders.send_preblast_reminders"),
@@ -85,6 +86,8 @@ def stub_jobs(monkeypatch, failing_job=None, error=None, arguments=None, real_ac
                 arguments.append((_job, args, kwargs))
             if _job == failing_job:
                 raise error
+            if _job == "refresh_slack_tokens.refresh_expiring_tokens":
+                return {"refreshed": 0, "failed": 0, "skipped": 0}
 
         monkeypatch.setattr(getattr(hourly_runner, module), function, run)
     return attempted
@@ -211,6 +214,7 @@ def test_hourly_runner_preserves_job_arguments(monkeypatch, failure):
     stub_jobs(monkeypatch, failure, RuntimeError(SENSITIVE), arguments)
     hourly_runner.run_all_hourly_scripts(force=True, reporting_org_id=123)
     assert arguments == [
+        ("refresh_slack_tokens.refresh_expiring_tokens", (), {}),
         ("calendar_images.generate_calendar_images", (), {"force": True}),
         ("backblast_reminders.send_backblast_reminders", (), {}),
         ("preblast_reminders.send_preblast_reminders", (), {}),

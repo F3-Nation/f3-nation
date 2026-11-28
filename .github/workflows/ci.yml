@@ -462,6 +462,9 @@ jobs:
           tests/utilities/slack_tokens/test_refresh_postgres.py
           tests/utilities/slack_tokens/test_store_postgres.py
           tests/scripts/test_import_slack_installations.py
+          tests/scripts/test_convert_slack_tokens.py
+          tests/scripts/test_rekey_slack_tokens.py
+          tests/scripts/test_refresh_slack_tokens.py
           tests/scripts/test_f3versary_activity_postgres.py
           tests/utilities/test_get_region_record_postgres.py
           tests/utilities/test_home_schedule_query_postgres.py

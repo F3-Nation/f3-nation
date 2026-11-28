@@ -23,6 +23,7 @@ from scripts import (
     monthly_reporting,
     preblast_reminders,
     q_lineups,
+    refresh_slack_tokens,
     update_slack_users,
 )
 from utilities.constants import LOCAL_DEVELOPMENT
@@ -69,8 +70,23 @@ def log_job_failure(job: str, error: Exception) -> None:
     )
 
 
-def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, reporting_org_id: int | None = None):
+def run_all_hourly_scripts(
+    force: bool = False, run_reporting: bool = True, reporting_org_id: int | None = None
+) -> bool:
+    """Run every hourly job; return False if the token sweep raised or any workspace failed to refresh.
+
+    The other jobs always run. A token that isn't refreshed expires within
+    hours, so its failure is surfaced through the exit status.
+    """
     print("Running hourly scripts")
+
+    print("Refreshing expiring Slack tokens")
+    sweep_ok = False
+    try:
+        counts = refresh_slack_tokens.refresh_expiring_tokens()
+        sweep_ok = not counts["failed"]
+    except Exception as e:
+        log_job_failure("refresh_slack_tokens.refresh_expiring_tokens", e)
 
     print("Running calendar images")
     try:
@@ -158,6 +174,7 @@ def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, repo
         log_job_failure("hourly_runner.notify_completion", e)
 
     print("Hourly scripts complete")
+    return sweep_ok
 
 
 if __name__ == "__main__":
@@ -169,8 +186,9 @@ if __name__ == "__main__":
     parser.add_argument("--reporting-org-id", type=int, default=None)
     args = parser.parse_args()
 
-    run_all_hourly_scripts(
+    sweep_ok = run_all_hourly_scripts(
         force=args.force,
         run_reporting=not args.skip_reporting,
         reporting_org_id=args.reporting_org_id,
     )
+    sys.exit(0 if sweep_ok else 1)

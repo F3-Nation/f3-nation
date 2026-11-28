@@ -769,6 +769,11 @@ def test_build_kotter_message_bounds_long_title():
 
 def test_hourly_runner_calls_kotter_only_when_reporting(monkeypatch):
     kotter_calls = []
+    monkeypatch.setattr(
+        hourly_runner.refresh_slack_tokens,
+        "refresh_expiring_tokens",
+        lambda *args, **kwargs: {"refreshed": 0, "failed": 0, "skipped": 0},
+    )
     monkeypatch.setattr(hourly_runner.calendar_images, "generate_calendar_images", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.backblast_reminders, "send_backblast_reminders", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.preblast_reminders, "send_preblast_reminders", lambda *args, **kwargs: None)

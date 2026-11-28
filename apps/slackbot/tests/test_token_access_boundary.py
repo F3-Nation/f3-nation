@@ -11,8 +11,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_DIRS = {"tests", ".venv", "node_modules", "build", "coverage", "__pycache__"}
 EXCLUDED_PREFIXES = ("utilities/slack_tokens/",)
+# Release-owner CLIs whose job is importing, converting or re-encrypting the stored tokens (spec AC-14).
 EXCLUDED_FILES = {
     "scripts/import_slack_installations.py",
+    "scripts/convert_slack_tokens.py",
+    "scripts/rekey_slack_tokens.py",
 }
 # Stored settings JSON can still carry a `bot_token` key, so `SlackSettings` declares the field to load it.
 # Only that declaration is allowed; any read of it is still a violation.
