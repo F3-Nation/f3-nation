@@ -67,7 +67,8 @@ Required release approvals include:
   generation-aware cleanup design.
 
 Production release is **BLOCKED**. The focused Phase 2 review passed for
-controlled nonprod testing only; it is not production review or signoff. No
+controlled nonprod testing only; it is not production review or signoff. Apart
+from the [release cleanup operator](#release-cleanup-operator) setup, no
 production IAM/deployment action or live production validation is claimed.
 Synthetic tests do not satisfy production gates.
 
@@ -285,8 +286,12 @@ objects that exist. Probing a missing object proves nothing: with
 or delete is allowed. A `DELETE` with `?ifGenerationMatch=0` never matches an
 existing object, so it changes nothing: 412 means delete is permitted, 403
 means it is denied. Expect 412 on a release object, and 403 on each
-`current.json`, on any object outside the product roots, and on an upload under
-a release prefix.
+`current.json` and on any object outside the product roots.
+
+Probe create the same way: upload to the name of an existing release object
+with `?ifGenerationMatch=0`, which fails on a live object, so the upload writes
+nothing. Expect 403, meaning create is denied. A 412 means create is granted,
+which is a permission defect: stop probing and fix the binding.
 
 ## 5. Scheduler
 
@@ -358,8 +363,9 @@ Production publication remains **BLOCKED** until external consumer
 compatibility, security/IAM, source-load, unattended-invocation, staged
 race/rollback, retention, and cutover gates are explicitly approved. The focused
 Phase 2 review passed for controlled nonprod testing only; it is not production
-review or signoff. No production IAM/deployment action or live production
-validation is claimed.
+review or signoff. Apart from the
+[release cleanup operator](#release-cleanup-operator) setup, no production
+IAM/deployment action or live production validation is claimed.
 
 CI/CD owns tests, image build/digest promotion, and Cloud Run deployment under
 the GitHub environment gate. Platform/security/database/analytics/consumer

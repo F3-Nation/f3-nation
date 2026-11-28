@@ -167,31 +167,46 @@ Cleanup writes nothing, so in production any safe slug satisfies the revision
 check. The identities and their grants are in
 [`ANALYTICS_GCP_PROVISIONING.md`](ANALYTICS_GCP_PROVISIONING.md#release-cleanup-operator).
 
-Point Application Default Credentials at the environment's identity, run both
-products, then restore your own credentials so later local tools don't act as
-the cleanup identity:
+Point Application Default Credentials at the environment's identity and dry-run
+both products. Unset `GOOGLE_APPLICATION_CREDENTIALS` first: the storage client
+reads that file before the ADC file, so leaving it set runs cleanup under a
+different identity.
 
 ```bash
+unset GOOGLE_APPLICATION_CREDENTIALS
 gcloud auth application-default login --impersonate-service-account=analytics-release-gc@f3data.iam.gserviceaccount.com
 export ANALYTICS_ENVIRONMENT=production ANALYTICS_CATALOG_BUCKET=f3-analytics ANALYTICS_PRODUCER_REVISION=release-gc-operator
-uv --directory apps/analytics run analytics-etl gc-releases --product analytics
-uv --directory apps/analytics run analytics-etl gc-releases --product analytics --apply
-uv --directory apps/analytics run analytics-etl gc-releases --product pax-vault
-uv --directory apps/analytics run analytics-etl gc-releases --product pax-vault --apply
-gcloud auth application-default login
+uv --directory apps/analytics run analytics-etl gc-releases --product analytics &&
+  uv --directory apps/analytics run analytics-etl gc-releases --product pax-vault
 ```
 
 For nonprod, impersonate `analytics-release-gc-nonprod@f3data.iam.gserviceaccount.com`
 and set `ANALYTICS_ENVIRONMENT=nonprod ANALYTICS_CATALOG_BUCKET=f3-analytics-nonprod`.
 
-Review the dry-run plan's `protected_release_ids` and `candidate_release_ids`
-before applying. `--apply` plans again with the same checks rather than
-replaying the dry run, so the dry run is a preview, not a binding list. If an
-object's generation changed after planning, the command stops on that prefix,
-lists it under `skipped_release_ids` in `analytics.etl.release_gc_applied`, and
-exits 1; investigate before re-running. With bucket Object Versioning on, deleted objects become
-noncurrent versions that still cost storage until a noncurrent-version
-lifecycle rule removes them; soft delete likewise keeps them recoverable, and
+Before applying, confirm the environment and bucket, and review each dry-run
+plan's `protected_release_ids` and `candidate_release_ids`. Then apply:
+
+```bash
+uv --directory apps/analytics run analytics-etl gc-releases --product analytics --apply &&
+  uv --directory apps/analytics run analytics-etl gc-releases --product pax-vault --apply
+```
+
+`--apply` plans again with the same checks rather than replaying the dry run,
+so the dry run is a preview, not a binding list. The `&&` stops the sequence
+when a command exits non-zero; investigate that failure before re-running. Then,
+whether or not the apply succeeded, restore your own credentials so later local
+tools don't act as the cleanup identity, and re-export
+`GOOGLE_APPLICATION_CREDENTIALS` if you use one:
+
+```bash
+gcloud auth application-default login
+```
+
+If an object's generation changed after planning, the apply stops on that
+prefix, lists it under `skipped_release_ids` in
+`analytics.etl.release_gc_applied`, and exits 1. With bucket Object Versioning
+on, deleted objects become noncurrent versions that still cost storage until a
+noncurrent-version lifecycle rule removes them; soft delete likewise keeps them recoverable, and
 billed, for the bucket's soft-delete window.
 
 ## Publication, CAS, and rollback
