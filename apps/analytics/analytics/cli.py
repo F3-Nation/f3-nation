@@ -188,12 +188,15 @@ def main() -> int:
         elif args.command == "gc-releases":
             client = _storage_client()
             gc_settings = cast(Settings, PointerSettings.from_env())
-            # Products are independent: one product's refusal must not stop another's cleanup.
-            codes = [
-                _gc_releases(client, gc_settings, product, args, logger)
-                for product in ((args.product,) if args.product else PRODUCTS)
-            ]
-            if any(codes):
+            # Products are independent: one product's refusal or error must not stop another's cleanup.
+            gc_failed = False
+            for product in (args.product,) if args.product else PRODUCTS:
+                try:
+                    gc_failed = bool(_gc_releases(client, gc_settings, product, args, logger)) or gc_failed
+                except Exception as error:  # Per-product CLI boundary: log it, then clean the next product.
+                    gc_failed = True
+                    logger.error("analytics.etl.release_gc_failed", error, product=product)
+            if gc_failed:
                 return 1
         elif args.command == "preflight":
             settings = Settings.from_env()

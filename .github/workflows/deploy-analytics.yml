@@ -76,7 +76,9 @@ jobs:
   # Release cleanup ships with the publisher's image, so its pointer and
   # manifest validation always matches the code that wrote the releases.
   # Deploying updates the job without running it; production runs come from
-  # Cloud Scheduler.
+  # Cloud Scheduler. scripts/deploy-analytics-release-gc.sh skips the update
+  # when the release predates scheduled cleanup or the publisher job has
+  # since moved to another image.
   deploy-release-gc-nonprod:
     needs: deploy
     concurrency:
@@ -90,6 +92,24 @@ jobs:
     environment:
       name: analytics-nonprod
     steps:
+      - name: Check out the deploy script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/deploy-analytics-release-gc.sh
+          sparse-checkout-cone-mode: false
+
+      # The release commit says how its CLI runs cleanup; a release that
+      # predates the file leaves the job's current template in place.
+      - name: Check out the release's cleanup arguments
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          ref: ${{ needs.deploy.outputs.release_sha }}
+          path: release
+          persist-credentials: false
+          sparse-checkout: apps/analytics/release-gc-job.args
+          sparse-checkout-cone-mode: false
+
       - name: Authenticate to GCP (nonprod)
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -102,26 +122,16 @@ jobs:
       - name: Deploy release cleanup job (nonprod)
         env:
           IMAGE: ${{ needs.deploy.outputs.staging_image }}
+          ARGS_FILE: release/apps/analytics/release-gc-job.args
+          JOB_NAME: analytics-release-gc-nonprod
+          PUBLISHER_JOB: analytics-etl-nonprod
+          SERVICE_ACCOUNT: analytics-release-gc-nonprod@f3data.iam.gserviceaccount.com
+          ANALYTICS_ENV: nonprod
+          BUCKET: f3-analytics-nonprod
           PRODUCER_REVISION: gha-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          if [[ ! "${IMAGE}" =~ ^us-central1-docker\.pkg\.dev/f3data/cloud-run-builds/analytics-etl:[^@]+@sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::unexpected image reference: ${IMAGE}" >&2
-            exit 1
-          fi
-          gcloud run jobs deploy analytics-release-gc-nonprod \
-            --image "${IMAGE}" \
-            --region us-central1 \
-            --project f3data \
-            --service-account analytics-release-gc-nonprod@f3data.iam.gserviceaccount.com \
-            --tasks=1 \
-            --parallelism=1 \
-            --max-retries=0 \
-            --task-timeout=30m \
-            --memory=1Gi \
-            --cpu=1 \
-            --command=analytics-etl \
-            --args=gc-releases,--apply \
-            --set-env-vars="ANALYTICS_ENVIRONMENT=nonprod,ANALYTICS_CATALOG_BUCKET=f3-analytics-nonprod,ANALYTICS_PRODUCER_REVISION=${PRODUCER_REVISION}"
+          REGION: us-central1
+          PROJECT: f3data
+        run: bash scripts/deploy-analytics-release-gc.sh
 
   deploy-release-gc-prod:
     needs: [deploy, deploy-release-gc-nonprod]
@@ -136,6 +146,24 @@ jobs:
     environment:
       name: analytics-production
     steps:
+      - name: Check out the deploy script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/deploy-analytics-release-gc.sh
+          sparse-checkout-cone-mode: false
+
+      # The release commit says how its CLI runs cleanup; a release that
+      # predates the file leaves the job's current template in place.
+      - name: Check out the release's cleanup arguments
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          ref: ${{ needs.deploy.outputs.release_sha }}
+          path: release
+          persist-credentials: false
+          sparse-checkout: apps/analytics/release-gc-job.args
+          sparse-checkout-cone-mode: false
+
       - name: Authenticate to GCP (production)
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -150,23 +178,13 @@ jobs:
       - name: Deploy release cleanup job (production)
         env:
           IMAGE: ${{ needs.deploy.outputs.staging_image }}
+          ARGS_FILE: release/apps/analytics/release-gc-job.args
+          JOB_NAME: analytics-release-gc
+          PUBLISHER_JOB: analytics-etl
+          SERVICE_ACCOUNT: analytics-release-gc@f3data.iam.gserviceaccount.com
+          ANALYTICS_ENV: production
+          BUCKET: f3-analytics
           PRODUCER_REVISION: gha-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          if [[ ! "${IMAGE}" =~ ^us-central1-docker\.pkg\.dev/f3data/cloud-run-builds/analytics-etl:[^@]+@sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::unexpected image reference: ${IMAGE}" >&2
-            exit 1
-          fi
-          gcloud run jobs deploy analytics-release-gc \
-            --image "${IMAGE}" \
-            --region us-central1 \
-            --project f3data \
-            --service-account analytics-release-gc@f3data.iam.gserviceaccount.com \
-            --tasks=1 \
-            --parallelism=1 \
-            --max-retries=0 \
-            --task-timeout=30m \
-            --memory=1Gi \
-            --cpu=1 \
-            --command=analytics-etl \
-            --args=gc-releases,--apply \
-            --set-env-vars="ANALYTICS_ENVIRONMENT=production,ANALYTICS_CATALOG_BUCKET=f3-analytics,ANALYTICS_PRODUCER_REVISION=${PRODUCER_REVISION}"
+          REGION: us-central1
+          PROJECT: f3data
+        run: bash scripts/deploy-analytics-release-gc.sh

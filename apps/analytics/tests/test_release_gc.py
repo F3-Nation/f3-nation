@@ -532,3 +532,15 @@ def test_cli_gc_releases_without_product_still_cleans_others_when_one_refuses(mo
     ) in cli_events
     assert release_ids(gcs) == {"r030", "r031", "r032", "r033", "r034"}
     assert len(release_ids(gcs, "pax-vault")) == 10
+
+
+def test_cli_gc_releases_without_product_still_cleans_others_when_one_errors(monkeypatch, gcs, cli_events):
+    seed_pax_vault(gcs)
+    gcs.put("pax-vault/current.json", b'{"releaseId":"p030"}')
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "gc-releases", "--min-age-days", "7", "--apply"])
+
+    assert cli.main() == 1
+    assert ("analytics.etl.release_gc_failed", {"product": "pax-vault"}) in cli_events
+    assert "analytics.etl.cli_failed" not in [event for event, _ in cli_events]
+    assert release_ids(gcs) == {"r030", "r031", "r032", "r033", "r034"}
+    assert len(release_ids(gcs, "pax-vault")) == 10

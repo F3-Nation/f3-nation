@@ -245,8 +245,12 @@ granted to that operator on the service account itself, never project-wide.
 
 Each identity is also the runtime of a Cloud Run job, `analytics-release-gc-nonprod`
 and `analytics-release-gc`, which the Analytics tagged workflow deploys with the
-publisher's image digest. The job runs `analytics-etl gc-releases --apply` for
-every product, with no Cloud SQL connection or secrets. The GitHub deploy
+publisher's image digest. The job runs `analytics-etl` with the arguments in
+`apps/analytics/release-gc-job.args` at the release commit (`gc-releases
+--apply`, for every product), with no Cloud SQL connection or secrets: each
+deploy clears any secrets and volumes the job holds. A release without that
+file, or one whose publisher job has since moved to another image, leaves the
+cleanup job as it is. The GitHub deploy
 identities hold Cloud Run permissions on their own jobs only, not
 project-wide, so they can update these jobs but not create them: an operator
 creates each job once, then grants the environment's deploy identity

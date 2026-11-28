@@ -26,6 +26,7 @@ gh_check_status=0
 release_protections_status=0
 dockerfile_installs_status=0
 wait_check_runs_status=0
+release_gc_deploy_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
 pnpm run lint:ws || ws_status=$?
@@ -56,6 +57,7 @@ bash scripts/release-protections.test.sh || release_protections_status=$?
 node scripts/check-dockerfile-global-installs.mjs || dockerfile_installs_status=$?
 bash scripts/check-dockerfile-global-installs.test.sh || dockerfile_installs_status=$?
 bash scripts/wait-for-check-runs.test.sh || wait_check_runs_status=$?
+bash scripts/deploy-analytics-release-gc.test.sh || release_gc_deploy_status=$?
 
 if [ "$turbo_status" -ne 0 ]; then
   exit "$turbo_status"
@@ -143,6 +145,10 @@ fi
 
 if [ "$wait_check_runs_status" -ne 0 ]; then
   exit "$wait_check_runs_status"
+fi
+
+if [ "$release_gc_deploy_status" -ne 0 ]; then
+  exit "$release_gc_deploy_status"
 fi
 
 if [ "$github_scripts_status" -ne 0 ]; then
