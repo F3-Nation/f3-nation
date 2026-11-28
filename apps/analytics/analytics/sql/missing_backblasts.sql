@@ -5,10 +5,8 @@ q_data AS (
     SELECT a.event_instance_id,
            STRING_AGG(u.f3_name, ', ' ORDER BY u.f3_name) AS q_names
     FROM pg.public.attendance a
-    JOIN pg.public.attendance_x_attendance_types axat ON a.id = axat.attendance_id
-    JOIN pg.public.attendance_types atype ON axat.attendance_type_id = atype.id
     JOIN pg.public.users u ON a.user_id = u.id
-    WHERE atype.type = 'Q'
+    WHERE a.attendance_type = 'q'
     GROUP BY a.event_instance_id
 )
 SELECT COALESCE(q_data.q_names, 'No Q Listed') AS q_who,

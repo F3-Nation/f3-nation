@@ -36,7 +36,7 @@ eligible_events AS (
       END = false
 ),
 eligible_actual_attendance AS (
-    SELECT a.id AS attendance_id, a.user_id, e.event_id, e.region_id, e.ao_id, e.ao_name
+    SELECT a.user_id, a.attendance_type, e.event_id, e.region_id, e.ao_id, e.ao_name
     FROM pg.public.attendance a
     JOIN eligible_events e ON e.event_id = a.event_instance_id
     WHERE a.user_id IS NOT NULL AND a.is_planned = false
@@ -49,12 +49,7 @@ observed AS (
 lifetime_counts AS (
     SELECT aa.user_id,
            COUNT(DISTINCT aa.event_id)::INTEGER AS lifetime_posts,
-           COUNT(DISTINCT CASE WHEN EXISTS (
-               SELECT 1
-               FROM pg.public.attendance_x_attendance_types ax
-               JOIN pg.public.attendance_types att_type ON att_type.id = ax.attendance_type_id
-               WHERE ax.attendance_id = aa.attendance_id AND att_type.type = 'Q'
-           ) THEN aa.event_id END)::INTEGER AS lifetime_qs
+           COUNT(DISTINCT CASE WHEN aa.attendance_type = 'q' THEN aa.event_id END)::INTEGER AS lifetime_qs
     FROM eligible_actual_attendance aa
     GROUP BY aa.user_id
 ),
