@@ -96,6 +96,14 @@ Each deploy workflow:
 3. Deploys to the staging Cloud Run service
 4. Promotes the image and deploys to production
 
+A workflow that pins a runtime service account (`--service-account` in its
+`staging_flags` / `prod_flags`) deploys each revision as that account. The
+deploy fails, and the previous revision keeps serving, when the account doesn't
+exist in that environment's project or can't read a secret the service
+references. Create the account and its grants before the first release that
+pins it: for a new app, [GCP app setup § 4](GCP_APP_SETUP.md#4-create-runtime-service-accounts-and-cloud-run-services);
+for a service that already runs, [move an existing service to its own runtime account](GCP_APP_SETUP.md#move-an-existing-service-to-its-own-runtime-account).
+
 For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 
 1. Main Slackbot Cloud Run service deploy (`f3-slackbot` in `f3-slackbot-staging` and `f3-slackbot`)

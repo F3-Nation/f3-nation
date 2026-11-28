@@ -38,6 +38,10 @@ jobs:
       prod_environment: me-production
       staging_url: https://staging.me.f3nation.com
       prod_url: https://me.f3nation.com
-      flags: "--max-instances=25"
+      # Each environment runs as its own runtime service account, which holds
+      # the service's bucket and secret grants. See "Create Runtime Service
+      # Accounts and Cloud Run Services" in docs/GCP_APP_SETUP.md.
+      staging_flags: "--max-instances=25 --service-account=cloudrun-f3-me@f3-me-app-staging.iam.gserviceaccount.com"
+      prod_flags: "--max-instances=25 --service-account=cloudrun-f3-me@f3-me-app.iam.gserviceaccount.com"
     secrets:
       posthog_key: ${{ secrets.POSTHOG_KEY }}

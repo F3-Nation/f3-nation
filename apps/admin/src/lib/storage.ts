@@ -4,5 +4,5 @@ import { env } from "~/env";
 
 export const storage = createPublicImageStorage({
   channel: deriveStorageChannel(env.F3_CHANNEL),
-  credentials: env.GCS_CREDENTIALS,
+  auth: { kind: "identity" },
 });

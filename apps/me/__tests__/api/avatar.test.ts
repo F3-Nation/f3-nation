@@ -8,6 +8,10 @@ vi.mock("@/lib/gcs", () => ({
   uploadAvatar: vi.fn(),
 }));
 
+vi.mock("@/lib/logging", () => ({
+  logError: vi.fn(),
+}));
+
 vi.mock("@/lib/api/client", () => ({
   updateMyProfile: vi.fn(),
   isNotFoundApiError: vi.fn().mockReturnValue(false),
@@ -21,6 +25,7 @@ import {
   isNotFoundApiError,
   getMyProfile,
 } from "@/lib/api/client";
+import { logError } from "@/lib/logging";
 import type { NextRequest } from "next/server";
 
 const mockSession = {
@@ -398,11 +403,15 @@ describe("Avatar API route", () => {
     expect(data.error).toContain("Failed to upload avatar");
   });
 
-  it("returns 503 with actionable message when GCS service account is missing", async () => {
+  it("returns 503 and logs storage_access_denied when the service can't write to the image bucket", async () => {
     vi.mocked(requireAuth).mockResolvedValue(mockSession);
-    vi.mocked(uploadAvatar).mockRejectedValue(
-      new Error("invalid_grant: Invalid grant: account not found"),
+    const denied = Object.assign(
+      new Error(
+        "svc@proj.iam.gserviceaccount.com does not have storage.objects.create access",
+      ),
+      { code: 403 },
     );
+    vi.mocked(uploadAvatar).mockRejectedValue(denied);
 
     const { POST } = await import("@/app/api/profile/avatar/route");
     const content = new Uint8Array([0xff, 0xd8]);
@@ -420,13 +429,23 @@ describe("Avatar API route", () => {
     const response = await POST(req);
     expect(response.status).toBe(503);
     const data = (await response.json()) as { error: string };
-    expect(data.error).toContain("service account was not found");
+    expect(data.error).toBe(
+      "Avatar storage is misconfigured: this service can't write to the image bucket.",
+    );
+    expect(logError).toHaveBeenCalledWith(
+      "me.avatar.storage_access_denied",
+      { sessionUserId: 42 },
+      denied,
+    );
   });
 
-  it("returns 500 with configuration message when GCS credentials payload is invalid", async () => {
+  it("does not report an API 403 from the profile update as a storage problem", async () => {
     vi.mocked(requireAuth).mockResolvedValue(mockSession);
-    vi.mocked(uploadAvatar).mockRejectedValue(
-      new Error("invalid gcs_credentials payload: missing field"),
+    vi.mocked(uploadAvatar).mockResolvedValue(
+      "https://storage.googleapis.com/f3-public-images-staging/user-avatars/42.jpg",
+    );
+    vi.mocked(updateMyProfile).mockRejectedValue(
+      Object.assign(new Error("Forbidden"), { status: 403 }),
     );
 
     const { POST } = await import("@/app/api/profile/avatar/route");
@@ -445,7 +464,42 @@ describe("Avatar API route", () => {
     const response = await POST(req);
     expect(response.status).toBe(500);
     const data = (await response.json()) as { error: string };
-    expect(data.error).toContain("Set GCS_CREDENTIALS");
+    expect(data.error).toBe("Failed to upload avatar");
+    expect(logError).not.toHaveBeenCalledWith(
+      "me.avatar.storage_access_denied",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("returns the generic 500 for a storage error other than access denied", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(mockSession);
+    vi.mocked(uploadAvatar).mockRejectedValue(
+      Object.assign(new Error("backend error"), { code: 500 }),
+    );
+
+    const { POST } = await import("@/app/api/profile/avatar/route");
+    const content = new Uint8Array([0xff, 0xd8]);
+    const file = Object.assign(
+      new File([content], "avatar.jpg", { type: "image/jpeg" }),
+      { arrayBuffer: async () => content.buffer },
+    );
+    const mockFormData = {
+      get: (key: string) => (key === "file" ? file : null),
+    } as unknown as FormData;
+    const req = {
+      formData: async () => mockFormData,
+    } as unknown as NextRequest;
+
+    const response = await POST(req);
+    expect(response.status).toBe(500);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toBe("Failed to upload avatar");
+    expect(logError).toHaveBeenCalledWith(
+      "me.avatar.upload_failed",
+      expect.objectContaining({ sessionUserId: 42 }),
+      expect.any(Error),
+    );
   });
 
   it("returns 500 when updateMyProfile throws after upload", async () => {
