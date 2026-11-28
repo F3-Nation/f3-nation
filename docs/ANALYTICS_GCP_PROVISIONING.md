@@ -2,9 +2,10 @@
 
 This is a human-reviewed provisioning checklist, not live-state validation.
 Platform, security, database, analytics, and consumer owners must approve the
-actual grants and production release. No IAM commands have been executed, and
-this document does not assert that any role, binding, service account, bucket,
-schedule, or API configuration is present. See the
+actual grants and production release. Apart from the
+[release cleanup operator](#release-cleanup-operator) setup, which this document
+records as provisioned, it does not assert that any role, binding, service
+account, bucket, schedule, or API configuration is present. See the
 [`analytics-parquet-etl` spec](specs/analytics-parquet-etl.md),
 [`pax-vault-parquet-etl` spec](specs/pax-vault-parquet-etl.md), and
 [operations guide](ANALYTICS_ETL_OPERATIONS.md) for contracts and gates. Use
@@ -66,7 +67,8 @@ Required release approvals include:
   generation-aware cleanup design.
 
 Production release is **BLOCKED**. The focused Phase 2 review passed for
-controlled nonprod testing only; it is not production review or signoff. No
+controlled nonprod testing only; it is not production review or signoff. Apart
+from the [release cleanup operator](#release-cleanup-operator) setup, no
 production IAM/deployment action or live production validation is claimed.
 Synthetic tests do not satisfy production gates.
 
@@ -86,9 +88,10 @@ sets its own `WIF_SA`, and `WIF_PROVIDER` comes from the organization-level
 variable shared by every app. Do not store
 service-account keys. Follow the shared setup guide for provider/repository
 conditions. Deployment identities are not runtime or Scheduler identities. The
-Analytics tagged workflow defaults to staging only (`deploy_prod=false`).
-Enabling production deployment later requires a separate reviewed workflow
-change; do not bypass this default. Do not assume a production environment
+Analytics tagged workflow
+([`deploy-analytics.yml`](../.github/workflows/deploy-analytics.yml)) deploys
+the nonprod job and then the production job (`deploy_prod: true`); deploying
+updates a job without running it. Do not assume a production environment
 reviewer is currently configured. Verify environment protection at deployment
 time and tie its approval to recorded evidence for the unattended-invocation
 gate below.
@@ -153,13 +156,14 @@ The following are permission requirements for security/platform owners to
 validate against the actual GCS API behavior and bucket configuration. They are
 not instructions to execute blanket project/bucket grants.
 
-| Principal                 | Required access                                                                                                                                                                                                                                                                                                  | Explicitly excluded                                                                                        |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Runtime producer          | Read-only database role; accessor on only matching environment secrets; `storage.objects.get` and `storage.objects.create` on approved immutable product release prefixes; pointer read/create/content-replacement on only each approved product's `current.json` when the runtime is authorized to publish both | Database write/DDL/admin; release delete or overwrite; unrelated bucket/product access; broad bucket admin |
-| Product consumer          | `storage.objects.get` on that product's fixed pointer and approved release prefix                                                                                                                                                                                                                                | Write, pointer mutation, other product access unless approved, end-user direct access                      |
-| Pointer rollback operator | Separately approved pointer read and exact-key content-replacement permissions; read retained release chain                                                                                                                                                                                                      | Release mutation/deletion; broad bucket update/delete                                                      |
-| Scheduler                 | `roles/run.invoker` on production `analytics-etl` only                                                                                                                                                                                                                                                           | Storage, database, secrets, deploy, Scheduler administration                                               |
-| GitHub deployer           | Reviewed build/deploy and service-account-use permissions                                                                                                                                                                                                                                                        | Runtime data, database, Scheduler administration, Owner/Editor                                             |
+| Principal                 | Required access                                                                                                                                                                                                                                                                                                  | Explicitly excluded                                                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime producer          | Read-only database role; accessor on only matching environment secrets; `storage.objects.get` and `storage.objects.create` on approved immutable product release prefixes; pointer read/create/content-replacement on only each approved product's `current.json` when the runtime is authorized to publish both | Database write/DDL/admin; release delete or overwrite; unrelated bucket/product access; broad bucket admin                                      |
+| Product consumer          | `storage.objects.get` on that product's fixed pointer and approved release prefix                                                                                                                                                                                                                                | Write, pointer mutation, other product access unless approved, end-user direct access                                                           |
+| Pointer rollback operator | Separately approved pointer read and exact-key content-replacement permissions; read retained release chain                                                                                                                                                                                                      | Release mutation/deletion; broad bucket update/delete                                                                                           |
+| Release cleanup operator  | `storage.objects.list` on the bucket; `storage.objects.get` on each product's `current.json` and release prefix; `storage.objects.delete` on only the release prefixes (see [Release cleanup operator](#release-cleanup-operator))                                                                               | Object create or overwrite; pointer delete or replacement; reads outside the product pointers and release prefixes; use as the runtime producer |
+| Scheduler                 | `roles/run.invoker` on production `analytics-etl` only                                                                                                                                                                                                                                                           | Storage, database, secrets, deploy, Scheduler administration                                                                                    |
+| GitHub deployer           | Reviewed build/deploy and service-account-use permissions                                                                                                                                                                                                                                                        | Runtime data, database, Scheduler administration, Owner/Editor                                                                                  |
 
 `storage.objects.update` is a metadata permission and is **not sufficient** to
 replace pointer content. GCS replacement of an existing object commonly requires
@@ -223,8 +227,77 @@ preserves each product's current and `retainedPrevious` releases; its rules and
 operator procedure are in
 [`ANALYTICS_ETL_OPERATIONS.md`](ANALYTICS_ETL_OPERATIONS.md#generation-aware-release-cleanup).
 It runs under a separately privileged operator identity with delete on only the
-product release prefix, never the runtime producer. The publisher does not
+product release prefixes, never the runtime producer. The publisher does not
 delete releases.
+
+### Release cleanup operator
+
+Each environment has its own cleanup identity, so a nonprod run can never
+delete production releases:
+
+| Environment | Service account                                               | Bucket                      |
+| ----------- | ------------------------------------------------------------- | --------------------------- |
+| Nonprod     | `analytics-release-gc-nonprod@f3data.iam.gserviceaccount.com` | `gs://f3-analytics-nonprod` |
+| Production  | `analytics-release-gc@f3data.iam.gserviceaccount.com`         | `gs://f3-analytics`         |
+
+Neither has keys. An operator runs the command by impersonating the
+environment's identity, which needs `roles/iam.serviceAccountTokenCreator`
+granted to that operator on the service account itself, never project-wide.
+
+Grants live on the bucket, using these roles in project `f3data`:
+
+| Role                                             | Permission               | Condition                                                  |
+| ------------------------------------------------ | ------------------------ | ---------------------------------------------------------- |
+| `projects/f3data/roles/analyticsReleaseGcList`   | `storage.objects.list`   | None                                                       |
+| `projects/f3data/roles/analyticsConsumerReader`  | `storage.objects.get`    | `release-gc-read`: both pointers and both release prefixes |
+| `projects/f3data/roles/analyticsReleaseGcDelete` | `storage.objects.delete` | `release-gc-delete`: both release prefixes only            |
+
+Get and delete are separate roles so the pointer can be read but never
+deleted. The list binding has no condition because IAM checks
+`storage.objects.list` against the bucket, not an object name, so an
+object-path condition would never match. The identity can therefore see object
+names, but not contents, anywhere in the bucket. `analyticsConsumerReader` is
+shared with product consumers; adding a permission to it widens this identity
+too.
+
+The conditions, with `<bucket>` replaced by the environment's bucket name:
+
+```text
+release-gc-read:
+resource.type == 'storage.googleapis.com/Object' && (
+  resource.name == 'projects/_/buckets/<bucket>/objects/analytics/current.json' ||
+  resource.name == 'projects/_/buckets/<bucket>/objects/pax-vault/current.json' ||
+  resource.name.startsWith('projects/_/buckets/<bucket>/objects/analytics/releases/') ||
+  resource.name.startsWith('projects/_/buckets/<bucket>/objects/pax-vault/releases/'))
+
+release-gc-delete:
+resource.type == 'storage.googleapis.com/Object' && (
+  resource.name.startsWith('projects/_/buckets/<bucket>/objects/analytics/releases/') ||
+  resource.name.startsWith('projects/_/buckets/<bucket>/objects/pax-vault/releases/'))
+```
+
+Both buckets already hold conditional bindings, so `gcloud storage buckets
+add-iam-policy-binding` requires an explicit condition: pass `--condition=None`
+for the list binding and `--condition-from-file` for the other two.
+
+To check the boundary, call the Storage JSON API as the identity, against
+objects that exist. Probing a missing object proves nothing: with
+`storage.objects.list` granted, a missing object returns 404 whether or not get
+or delete is allowed. A `DELETE` with `?ifGenerationMatch=0` never matches an
+existing object, so it changes nothing: 412 means delete is permitted, 403
+means it is denied. Expect 412 on a release object, and 403 on each
+`current.json` and on any object outside the product roots.
+
+Probe create the same way: upload to the name of an existing release object
+with `?ifGenerationMatch=0`, which fails on a live object, so the upload writes
+nothing. Expect 403, meaning create is denied. A 412 means create is granted,
+which is a permission defect: stop probing and fix the binding. Don't probe
+while a cleanup is running: if the object is deleted before the upload, a
+mistaken create grant would let the upload succeed.
+
+Probe reads with a metadata `GET`, which changes nothing. Expect 200 on each
+`current.json` and on a release object, and 403 on an object outside the
+product roots.
 
 ## 5. Scheduler
 
@@ -236,6 +309,9 @@ ETL job. Before enabling it, validate the OAuth `jobs:run` target, zero retry
 policy, identity, timezone, and a completed execution. Record the approver,
 change, and validation evidence. Never provision IAM or schedules as a side
 effect of deploying an application image.
+
+Release cleanup has no schedule: an operator runs `gc-releases` by hand under
+the [release cleanup operator](#release-cleanup-operator) identity.
 
 ## 6. Staging, cutover, and recovery gates
 
@@ -256,9 +332,9 @@ Use this human-reviewed order for each environment/product:
    complete all production release gates before deploying while accepting an
    immediate run. Tie production environment reviewer approval to this recorded
    evidence and disposition; do not assume a reviewer is currently configured.
-2. The Analytics tagged workflow defaults to staging-only (`deploy_prod=false`).
-   Enabling production deployment later requires a separate reviewed workflow
-   change; do not bypass that default.
+2. The Analytics tagged workflow deploys the production job right after
+   nonprod (`deploy_prod: true`), so a release tag reaches production unless
+   the `analytics-production` environment approval holds it.
 3. Consumer owners document the serving release and verify read support for the
    proposed contract/schema before the pointer is exposed.
 4. Security approves product-specific consumer reads and producer access to
@@ -293,8 +369,9 @@ Production publication remains **BLOCKED** until external consumer
 compatibility, security/IAM, source-load, unattended-invocation, staged
 race/rollback, retention, and cutover gates are explicitly approved. The focused
 Phase 2 review passed for controlled nonprod testing only; it is not production
-review or signoff. No production IAM/deployment action or live production
-validation is claimed.
+review or signoff. Apart from the
+[release cleanup operator](#release-cleanup-operator) setup, no production
+IAM/deployment action or live production validation is claimed.
 
 CI/CD owns tests, image build/digest promotion, and Cloud Run deployment under
 the GitHub environment gate. Platform/security/database/analytics/consumer
