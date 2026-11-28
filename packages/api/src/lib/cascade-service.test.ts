@@ -891,6 +891,47 @@ describe("Cascade Service", () => {
         .where(eq(schema.events.id, nonRecurring!.id));
       expect(event!.isActive).toBe(true);
     });
+
+    it("identifies series by weekday, not by recurrence pattern", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        recurrencePattern: null,
+        dayOfWeek: "monday",
+      });
+      // Every row gets a pattern now, including one with no weekday
+      const [noWeekday] = await db
+        .insert(schema.events)
+        .values({
+          name: `No Weekday ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: null,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+        })
+        .returning();
+      if (noWeekday) createdEventIds.push(noWeekday.id);
+
+      const deletedCount = await softDeleteSeriesForOrg(db, ao.id);
+      expect(deletedCount).toBe(1);
+
+      const rows = await db
+        .select({ id: schema.events.id, isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.orgId, ao.id));
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          { id: series.id, isActive: false },
+          { id: noWeekday!.id, isActive: true },
+        ]),
+      );
+    });
   });
 
   describe("softDeleteFutureInstancesForOrg", () => {

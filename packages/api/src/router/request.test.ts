@@ -948,6 +948,9 @@ describe("Request Router", () => {
         .from(schema.events)
         .where(eq(schema.events.id, savedRequest?.eventId ?? -1));
       expect(createdEvent?.orgId).toBe(ao.id);
+      // The request carries no cadence, so the series is saved as weekly
+      expect(createdEvent?.recurrencePattern).toBe("weekly");
+      expect(createdEvent?.recurrenceInterval).toBe(1);
 
       // The webhook payload carries the created event id too
       expect(mockNotifyMapDataChange).toHaveBeenCalledWith(
@@ -1027,6 +1030,8 @@ describe("Request Router", () => {
         .from(schema.events)
         .where(eq(schema.events.id, savedRequest?.eventId ?? -1));
       expect(createdEvent?.orgId).toBe(savedRequest?.aoId);
+      expect(createdEvent?.recurrencePattern).toBe("weekly");
+      expect(createdEvent?.recurrenceInterval).toBe(1);
 
       const [createdAo] = await db
         .select()

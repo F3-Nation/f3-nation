@@ -4966,7 +4966,8 @@ describe("Event Router", () => {
         });
 
         expect(result.event).not.toBeNull();
-        expect(result.event?.recurrencePattern).toBeNull();
+        expect(result.event?.recurrencePattern).toBe("weekly");
+        expect(result.event?.recurrenceInterval).toBe(1);
 
         if (result.event) {
           createdEventIds.push(result.event.id);
@@ -5096,6 +5097,205 @@ describe("Event Router", () => {
         expect(instancesAfterUpdate.every((i) => i.name === updatedName)).toBe(
           true,
         );
+      });
+
+      describe("recurrence defaults", () => {
+        const setUp = async () => {
+          const region = await createTestRegion();
+          const ao = region && (await createTestAO(region.id));
+          const eventType = await createTestEventType();
+          if (!region || !ao || !eventType) {
+            throw new Error("Failed to create test fixtures");
+          }
+          await mockAuthWithSession(
+            createEditorSession({ orgId: ao.id, orgName: ao.name }),
+          );
+          return { region, ao, eventType };
+        };
+
+        const insertSeries = async (
+          aoId: number,
+          recurrence: {
+            recurrencePattern: "weekly" | "monthly" | null;
+            recurrenceInterval: number | null;
+          },
+        ) => {
+          const [series] = await db
+            .insert(schema.events)
+            .values({
+              name: `Stored Cadence ${uniqueId()}`,
+              orgId: aoId,
+              locationId: null,
+              dayOfWeek: "wednesday",
+              startTime: "0530",
+              endTime: "0615",
+              startDate: "2027-01-01",
+              endDate: "2027-03-31",
+              indexWithinInterval: null,
+              isActive: true,
+              highlight: false,
+              isPrivate: false,
+              ...recurrence,
+            })
+            .returning();
+          if (!series) throw new Error("Failed to create test series");
+          createdEventIds.push(series.id);
+          return series;
+        };
+
+        const storedRecurrence = async (id: number) => {
+          const [row] = await db
+            .select({
+              recurrencePattern: schema.events.recurrencePattern,
+              recurrenceInterval: schema.events.recurrenceInterval,
+            })
+            .from(schema.events)
+            .where(eq(schema.events.id, id));
+          return row;
+        };
+
+        it("saves weekly every week when a new series leaves the cadence out", async () => {
+          const { region, ao, eventType } = await setUp();
+
+          const result = await createTestClient().event.crupdate({
+            name: `No Cadence ${uniqueId()}`,
+            aoId: ao.id,
+            regionId: region.id,
+            locationId: null,
+            dayOfWeek: "wednesday",
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2027-01-01",
+            endDate: "2027-03-31",
+            highlight: false,
+            isActive: true,
+            eventTypeIds: [eventType.id],
+            email: null,
+          });
+          const id = result.event?.id ?? -1;
+          createdEventIds.push(id);
+
+          expect(await storedRecurrence(id)).toEqual({
+            recurrencePattern: "weekly",
+            recurrenceInterval: 1,
+          });
+        });
+
+        it("keeps an explicit monthly cadence on create", async () => {
+          const { region, ao, eventType } = await setUp();
+
+          const result = await createTestClient().event.crupdate({
+            name: `Monthly ${uniqueId()}`,
+            aoId: ao.id,
+            regionId: region.id,
+            locationId: null,
+            dayOfWeek: "wednesday",
+            startTime: "0530",
+            endTime: "0615",
+            startDate: "2027-01-01",
+            endDate: "2027-03-31",
+            recurrencePattern: "monthly",
+            recurrenceInterval: 1,
+            indexWithinInterval: 3,
+            highlight: false,
+            isActive: true,
+            eventTypeIds: [eventType.id],
+            email: null,
+          });
+          const id = result.event?.id ?? -1;
+          createdEventIds.push(id);
+
+          expect(await storedRecurrence(id)).toEqual({
+            recurrencePattern: "monthly",
+            recurrenceInterval: 1,
+          });
+        });
+
+        it("keeps a stored monthly / 2 cadence when an update leaves it out", async () => {
+          const { region, ao, eventType } = await setUp();
+          const series = await insertSeries(ao.id, {
+            recurrencePattern: "monthly",
+            recurrenceInterval: 2,
+          });
+
+          await createTestClient().event.crupdate({
+            id: series.id,
+            name: `${series.name} Renamed`,
+            aoId: ao.id,
+            regionId: region.id,
+            locationId: null,
+            dayOfWeek: "wednesday",
+            startTime: "0530",
+            endTime: "0615",
+            startDate: series.startDate,
+            endDate: series.endDate,
+            highlight: false,
+            isActive: true,
+            eventTypeIds: [eventType.id],
+            email: null,
+          });
+
+          expect(await storedRecurrence(series.id)).toEqual({
+            recurrencePattern: "monthly",
+            recurrenceInterval: 2,
+          });
+        });
+
+        it("fills a stored NULL cadence on edit without recreating instances", async () => {
+          const { region, ao, eventType } = await setUp();
+          const series = await insertSeries(ao.id, {
+            recurrencePattern: null,
+            recurrenceInterval: null,
+          });
+          const [instance] = await db
+            .insert(schema.eventInstances)
+            .values({
+              name: series.name,
+              orgId: ao.id,
+              seriesId: series.id,
+              startDate: "2027-01-06",
+              startTime: "0530",
+              endTime: "0615",
+              isActive: true,
+              highlight: false,
+              isPrivate: false,
+            })
+            .returning({ id: schema.eventInstances.id });
+          if (!instance) throw new Error("Failed to create test instance");
+
+          const renamed = `${series.name} Renamed`;
+          await createTestClient().event.crupdate({
+            id: series.id,
+            name: renamed,
+            aoId: ao.id,
+            regionId: region.id,
+            locationId: null,
+            dayOfWeek: "wednesday",
+            startTime: "0530",
+            endTime: "0615",
+            startDate: series.startDate,
+            endDate: series.endDate,
+            highlight: false,
+            isActive: true,
+            eventTypeIds: [eventType.id],
+            email: null,
+          });
+
+          expect(await storedRecurrence(series.id)).toEqual({
+            recurrencePattern: "weekly",
+            recurrenceInterval: 1,
+          });
+          // NULL and weekly are the same schedule, so the instance is
+          // updated in place, not deleted and generated again.
+          const instances = await db
+            .select({
+              id: schema.eventInstances.id,
+              name: schema.eventInstances.name,
+            })
+            .from(schema.eventInstances)
+            .where(eq(schema.eventInstances.seriesId, series.id));
+          expect(instances).toEqual([{ id: instance.id, name: renamed }]);
+        });
       });
 
       it("should cascade soft-delete to instances when deleting a series", async () => {

@@ -160,7 +160,6 @@ describe("handleCreateLocationAndEvent - creates a new AO with location and even
       eventStartTime: "0530",
       eventEndTime: "0615",
       eventStartDate: undefined,
-      eventRecurrencePattern: "weekly",
     });
 
     // Verify updateEventTypes was called with event ID and type IDs

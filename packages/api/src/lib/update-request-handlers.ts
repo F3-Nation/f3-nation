@@ -386,7 +386,6 @@ export const handleCreateLocationAndEvent = async (
       eventStartTime: request.eventStartTime,
       eventEndTime: request.eventEndTime,
       eventStartDate: request.eventStartDate,
-      eventRecurrencePattern: "weekly",
     });
     const eventId = event.id;
 
