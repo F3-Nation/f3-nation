@@ -3,6 +3,7 @@ import "~/instrument";
 import { serve } from "@hono/node-server";
 
 import { flushObservability } from "@acme/observability";
+import { closeDb } from "@acme/db/client";
 
 import { app } from "~/app";
 import { env } from "~/env";
@@ -48,13 +49,16 @@ process.on("SIGTERM", () => {
   }, 8000).unref();
 
   server.close((err) => {
-    clearTimeout(forceExit);
-    void flushObservability(2000).finally(() => {
-      if (err) {
-        logError("api.server.shutdown_error", {}, err);
+    const finish = (error?: unknown) => {
+      clearTimeout(forceExit);
+      if (error) {
+        logError("api.server.shutdown_error", {}, error);
         process.exit(1);
       }
       process.exit(0);
-    });
+    };
+    void closeDb()
+      .then(() => flushObservability(2000))
+      .then(() => finish(err), finish);
   });
 });

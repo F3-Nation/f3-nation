@@ -40,10 +40,9 @@ def source():
     c.execute("CREATE TABLE pg.public.event_tags(id INTEGER, name VARCHAR, description VARCHAR)")
     c.execute("CREATE TABLE pg.public.users(id INTEGER, f3_name VARCHAR, email VARCHAR, avatar_url VARCHAR)")
     c.execute(
-        "CREATE TABLE pg.public.attendance(id INTEGER, event_instance_id INTEGER, user_id INTEGER, is_planned BOOLEAN)"
+        "CREATE TABLE pg.public.attendance(id INTEGER, event_instance_id INTEGER, user_id INTEGER, "
+        "is_planned BOOLEAN, attendance_type VARCHAR)"
     )
-    c.execute("CREATE TABLE pg.public.attendance_types(id INTEGER, type VARCHAR)")
-    c.execute("CREATE TABLE pg.public.attendance_x_attendance_types(attendance_id INTEGER, attendance_type_id INTEGER)")
     c.executemany(
         "INSERT INTO pg.public.orgs VALUES (?, ?, ?, ?)",
         [
@@ -89,19 +88,17 @@ def source():
         ],
     )
     c.executemany(
-        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?)",
+        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?, ?)",
         [
-            (1, 1, 1, True),
-            (2, 1, 1, False),
-            (3, 1, 2, False),
-            (4, 1, 3, False),
-            (5, 2, 1, True),
-            (6, 3, 1, True),
-            (7, 3, 2, False),
+            (1, 1, 1, True, "q"),
+            (2, 1, 1, False, "co_q"),
+            (3, 1, 2, False, "pax"),
+            (4, 1, 3, False, "pax"),
+            (5, 2, 1, True, "pax"),
+            (6, 3, 1, True, "pax"),
+            (7, 3, 2, False, "pax"),
         ],
     )
-    c.executemany("INSERT INTO pg.public.attendance_types VALUES (?, ?)", [(2, "Q"), (3, "Co-Q")])
-    c.executemany("INSERT INTO pg.public.attendance_x_attendance_types VALUES (?, ?)", [(1, 2), (2, 3)])
     return c
 
 
@@ -482,18 +479,13 @@ def test_events_aggregates_independent_lists_and_attendance_flags():
         [(4, 7), (4, 8)],
     )
     c.execute("INSERT INTO pg.public.event_tags VALUES (8, 'Evening', 'Evening workout')")
-    c.execute("INSERT INTO pg.public.attendance_types VALUES (4, 'CoQ')")
     c.executemany(
         "INSERT INTO pg.public.users VALUES (?, ?, ?, ?)",
         [(4, "Charlie", "c@example.com", "charlie.png"), (5, "Delta", "d@example.com", "delta.png")],
     )
     c.executemany(
-        "INSERT INTO pg.public.attendance VALUES (?, 4, ?, ?)",
-        [(8, 4, True), (9, 5, False), (10, 3, True)],
-    )
-    c.executemany(
-        "INSERT INTO pg.public.attendance_x_attendance_types VALUES (?, ?)",
-        [(8, 3), (9, 4)],
+        "INSERT INTO pg.public.attendance VALUES (?, 4, ?, ?, ?)",
+        [(8, 4, True, "co_q"), (9, 5, False, "co_q"), (10, 3, True, "pax")],
     )
 
     rows = rows_as_dicts(c, SQL, ["2026-01-03T00:00:00Z", "2026-01-03"])

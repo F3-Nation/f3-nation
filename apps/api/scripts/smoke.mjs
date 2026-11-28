@@ -90,9 +90,36 @@ const healthBody = await readJsonObject(health);
 if (healthBody.service !== "f3-api") {
   fail(`GET /health reported service ${JSON.stringify(healthBody.service)}`);
 }
-// The endpoint answers 200 even when a check is down; the body says which.
-if (healthBody.status !== "ok") {
+// The image build has no database credentials. Dependency failure must be
+// visible in the body while memory-only liveness remains healthy.
+if (!Array.isArray(healthBody.checks)) fail("GET /health has no check list");
+const checks = /** @type {unknown[]} */ (healthBody.checks).map((check) => {
+  if (typeof check !== "object" || check === null)
+    fail("GET /health has an invalid check");
+  return /** @type {Record<string, unknown>} */ (check);
+});
+const database = checks.find((check) => check.id === "database");
+if (
+  database?.status !== "down" ||
+  database.severity !== "critical" ||
+  JSON.stringify(database.details) !== JSON.stringify({ reason: "error" })
+) {
+  fail(
+    "GET /health did not report the unavailable database as a sanitized critical failure",
+  );
+}
+if (healthBody.status !== "down") {
   fail(`GET /health reported status ${JSON.stringify(healthBody.status)}`);
+}
+if (checks.some((check) => check.id !== "database" && check.status !== "ok")) {
+  fail("GET /health reported another unavailable check");
+}
+const live = await expectOk("/live");
+if (
+  (await live.text()) !== "ok" ||
+  live.headers.get("cache-control") !== "no-store"
+) {
+  fail("GET /live did not report uncached memory-only liveness");
 }
 
 const spec = await readJsonObject(await expectOk("/docs/openapi.json"));

@@ -5,6 +5,9 @@ import dotenv
 
 dotenv.load_dotenv()
 
+F3VERSARY_ACTIVITY_DAYS = (0, 30, 60, 90, 180, 360)
+DEFAULT_F3VERSARY_ACTIVITY_DAYS = 90
+
 
 def is_production_deployment() -> bool:
     """Return whether this process is explicitly configured for production."""
@@ -22,6 +25,14 @@ SLACK_CLIENT_SECRET = "SLACK_CLIENT_SECRET"
 SLACK_SCOPES = "SLACK_SCOPES"
 PASSWORD_ENCRYPT_KEY = "PASSWORD_ENCRYPT_KEY"
 APP_URL = "APP_URL"
+
+# Tables holding Slack-only state, which the bot may keep writing directly.
+# Every other table is shared F3 data and is written through the F3 API.
+# tests/shared_table_writes.py checks the bot's code against this list. The
+# bot's database login can be limited to these tables once the baseline in
+# tests/shared_table_writes_baseline.json is empty.
+BOT_OWNED_TABLES = frozenset({"slack_spaces", "slack_users", "orgs_x_slack_spaces"})
+BOT_OWNED_SCHEMA = "slackbot"
 
 DATABASE_HOST = "DATABASE_HOST"
 ADMIN_DATABASE_USER = "ADMIN_DATABASE_USER"

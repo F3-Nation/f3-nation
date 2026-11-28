@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 describe("lib/storage", () => {
-  it("uses prod storage channel when F3_CHANNEL is prod", async () => {
+  it("uses the service identity and the prod channel when F3_CHANNEL is prod", async () => {
     vi.resetModules();
 
     const createPublicImageStorage = vi.fn(() => ({
@@ -17,7 +17,6 @@ describe("lib/storage", () => {
     vi.doMock("@/env", () => ({
       env: {
         F3_CHANNEL: "prod",
-        GCS_CREDENTIALS: "cred-prod",
       },
     }));
 
@@ -25,7 +24,7 @@ describe("lib/storage", () => {
 
     expect(createPublicImageStorage).toHaveBeenCalledWith({
       channel: "prod",
-      credentials: "cred-prod",
+      auth: { kind: "identity" },
     });
   });
 
@@ -45,7 +44,6 @@ describe("lib/storage", () => {
     vi.doMock("@/env", () => ({
       env: {
         F3_CHANNEL: "dev",
-        GCS_CREDENTIALS: "cred-staging",
       },
     }));
 
@@ -53,7 +51,7 @@ describe("lib/storage", () => {
 
     expect(createPublicImageStorage).toHaveBeenCalledWith({
       channel: "staging",
-      credentials: "cred-staging",
+      auth: { kind: "identity" },
     });
   });
 });

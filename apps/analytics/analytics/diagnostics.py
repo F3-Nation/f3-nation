@@ -75,27 +75,16 @@ _STAGED_EVENTS_TABLES = (
     ),
     (
         "attendance",
-        "SELECT id, event_instance_id, user_id, is_planned FROM public.attendance",
-        "CREATE TABLE staged.attendance (id INTEGER, event_instance_id INTEGER, user_id INTEGER, is_planned BOOLEAN)",
-        "INSERT INTO staged.attendance VALUES (?, ?, ?, ?)",
+        "SELECT id, event_instance_id, user_id, is_planned, attendance_type::text FROM public.attendance",
+        "CREATE TABLE staged.attendance (id INTEGER, event_instance_id INTEGER, user_id INTEGER, is_planned BOOLEAN, "
+        "attendance_type VARCHAR)",
+        "INSERT INTO staged.attendance VALUES (?, ?, ?, ?, ?)",
     ),
     (
         "users",
         "SELECT id, f3_name, email, avatar_url FROM public.users",
         "CREATE TABLE staged.users (id INTEGER, f3_name VARCHAR, email VARCHAR, avatar_url VARCHAR)",
         "INSERT INTO staged.users VALUES (?, ?, ?, ?)",
-    ),
-    (
-        "attendance_x_attendance_types",
-        "SELECT attendance_id, attendance_type_id FROM public.attendance_x_attendance_types",
-        "CREATE TABLE staged.attendance_x_attendance_types (attendance_id INTEGER, attendance_type_id INTEGER)",
-        "INSERT INTO staged.attendance_x_attendance_types VALUES (?, ?)",
-    ),
-    (
-        "attendance_types",
-        "SELECT id, type FROM public.attendance_types",
-        "CREATE TABLE staged.attendance_types (id INTEGER, type VARCHAR)",
-        "INSERT INTO staged.attendance_types VALUES (?, ?)",
     ),
 )
 _CTAS_EVENTS_TABLES = (
@@ -126,20 +115,12 @@ _CTAS_EVENTS_TABLES = (
     ),
     (
         "attendance",
-        "CREATE TABLE staged.attendance AS SELECT id, event_instance_id, user_id, is_planned FROM pg.public.attendance",
+        "CREATE TABLE staged.attendance AS "
+        "SELECT id, event_instance_id, user_id, is_planned, attendance_type FROM pg.public.attendance",
     ),
     (
         "users",
         "CREATE TABLE staged.users AS SELECT id, f3_name, email, avatar_url FROM pg.public.users",
-    ),
-    (
-        "attendance_x_attendance_types",
-        "CREATE TABLE staged.attendance_x_attendance_types AS "
-        "SELECT attendance_id, attendance_type_id FROM pg.public.attendance_x_attendance_types",
-    ),
-    (
-        "attendance_types",
-        "CREATE TABLE staged.attendance_types AS SELECT id, type FROM pg.public.attendance_types",
     ),
 )
 

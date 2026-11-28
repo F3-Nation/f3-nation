@@ -72,12 +72,31 @@ def test_send_attaches_file_content(transport):
         attachments=[{"content": b"full", "meta": {"filename": "F1.jpg", "maintype": "image", "subtype": "jpeg"}}],
     )
 
-    transport.smtp.assert_called_once_with("smtp.test", 587)
+    transport.smtp.assert_called_once_with("smtp.test", 587, timeout=10)
     message = transport.client.send_message.call_args.args[0]
     [attachment] = list(message.iter_attachments())
     assert attachment.get_content() == b"full"
     assert attachment.get_filename() == "F1.jpg"
     assert attachment.get_content_type() == "image/jpeg"
+
+
+def test_send_closes_connection_when_login_fails(transport):
+    transport.client.login.side_effect = sendmail.smtplib.SMTPAuthenticationError(535, b"Synthetic rejection")
+
+    with pytest.raises(sendmail.smtplib.SMTPAuthenticationError):
+        sendmail.send(
+            "Synthetic subject",
+            "Synthetic body",
+            "smtp.test",
+            587,
+            "sender@f3local.dev",
+            "synthetic-password",
+            "recipient@f3local.dev",
+            attachments=[],
+        )
+
+    transport.client.__exit__.assert_called_once()
+    transport.client.send_message.assert_not_called()
 
 
 @pytest.mark.parametrize("keyword", [False, True], ids=["positional", "keyword"])

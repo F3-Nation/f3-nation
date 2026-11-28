@@ -30,11 +30,8 @@ def fixture() -> duckdb.DuckDBPyConnection:
     db.execute("CREATE TABLE pg.public.event_tags (id INTEGER, name VARCHAR)")
     db.execute("CREATE TABLE pg.public.users (id INTEGER, f3_name VARCHAR, avatar_url VARCHAR)")
     db.execute(
-        "CREATE TABLE pg.public.attendance (id INTEGER, user_id INTEGER, event_instance_id INTEGER, is_planned BOOLEAN)"
-    )
-    db.execute("CREATE TABLE pg.public.attendance_types (id INTEGER, type VARCHAR)")
-    db.execute(
-        "CREATE TABLE pg.public.attendance_x_attendance_types (attendance_id INTEGER, attendance_type_id INTEGER)"
+        "CREATE TABLE pg.public.attendance (id INTEGER, user_id INTEGER, event_instance_id INTEGER, "
+        "is_planned BOOLEAN, attendance_type VARCHAR)"
     )
     db.executemany(
         "INSERT INTO pg.public.orgs VALUES (?, ?, ?, ?, ?, ?)",
@@ -72,9 +69,7 @@ def fixture() -> duckdb.DuckDBPyConnection:
     db.execute("INSERT INTO pg.public.event_tags VALUES (10, 'Hill')")
     db.execute("INSERT INTO pg.public.event_tags_x_event_instances VALUES (600, 10)")
     db.execute("INSERT INTO pg.public.users VALUES (1, 'Q', 'avatar')")
-    db.execute("INSERT INTO pg.public.attendance_types VALUES (1, 'Q'), (2, 'Planned')")
-    db.execute("INSERT INTO pg.public.attendance VALUES (1, 1, 600, true)")
-    db.execute("INSERT INTO pg.public.attendance_x_attendance_types VALUES (1, 1)")
+    db.execute("INSERT INTO pg.public.attendance VALUES (1, 1, 600, true, 'q')")
     return db
 
 
@@ -201,8 +196,10 @@ def test_upcoming_q_list_ignores_planned_flag_but_requires_q_type():
     db = fixture()
     db.execute("INSERT INTO pg.public.users VALUES (2, 'Alpha', 'alpha-avatar')")
     db.execute("INSERT INTO pg.public.users VALUES (3, 'Beta', 'beta-avatar')")
-    db.execute("INSERT INTO pg.public.attendance VALUES (2, 2, 603, false), (3, 1, 603, true), (4, 3, 603, false)")
-    db.execute("INSERT INTO pg.public.attendance_x_attendance_types VALUES (2, 1), (3, 1), (4, 2)")
+    db.execute(
+        "INSERT INTO pg.public.attendance VALUES "
+        "(2, 2, 603, false, 'q'), (3, 1, 603, true, 'q'), (4, 3, 603, false, 'co_q')"
+    )
 
     row = next(row for row in run(db, "pv_upcoming.sql") if row[1] == date(2026, 9, 1))
     assert row[-1] == [

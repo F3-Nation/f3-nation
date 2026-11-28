@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import threading
 import traceback
 import uuid
 from collections.abc import Mapping
@@ -42,6 +43,38 @@ from utilities.slack_tokens.store import SlackSpaceInstallationStore
 
 REGION_RECORDS: Dict[str, SlackSettings] = {}
 SLACK_USERS: Dict[tuple[str, str], SlackUser] = {}
+_REGION_RECORDS_REFRESH_LOCK = threading.RLock()
+_SLACK_USERS_REFRESH_LOCK = threading.RLock()
+
+
+def _replace_cache_in_place(cache: dict, fresh: dict) -> None:
+    """Replace cache entries in place without ever leaving the dict empty.
+
+    Callers import `SLACK_USERS` and `REGION_RECORDS` by reference and read
+    them without the refresh lock. Calling `.clear()` before `.update()`
+    exposes an empty dict to concurrent threads: direct `.get()` readers see
+    a miss, and `ensure_*_loaded` callers miss the fast path and block on
+    the refresh lock.
+    """
+    cache.update(fresh)
+    for stale_key in list(cache.keys() - fresh.keys()):
+        cache.pop(stale_key, None)
+
+
+def ensure_slack_users_loaded() -> None:
+    if SLACK_USERS:
+        return
+    with _SLACK_USERS_REFRESH_LOCK:
+        if not SLACK_USERS:
+            update_local_slack_users()
+
+
+def ensure_region_records_loaded() -> None:
+    if REGION_RECORDS:
+        return
+    with _REGION_RECORDS_REFRESH_LOCK:
+        if not REGION_RECORDS:
+            update_local_region_records()
 
 
 def get_location_display_name(location: Location) -> str:
@@ -328,15 +361,13 @@ def _resolve_user(slack_user_id: str, region_record: SlackSettings, client: WebC
     if not team_id:
         raise ValueError("Slack team ID is required")
     if not constants.is_production_deployment():
-        if not SLACK_USERS:
-            update_local_slack_users()
+        ensure_slack_users_loaded()
         cached_user: SlackUser | None = SLACK_USERS.get((team_id, slack_user_id))
         if cached_user and safe_get(cached_user, "user_id"):
             return cached_user
         return create_user({"id": slack_user_id}, region_record.org_id, team_id=team_id)
 
-    if not SLACK_USERS:
-        update_local_slack_users()
+    ensure_slack_users_loaded()
 
     user: SlackUser | None = SLACK_USERS.get((team_id, slack_user_id))
     # An unlinked cached identity can be linked when a member email becomes available.
@@ -503,19 +534,19 @@ def update_local_slack_users(slack_user: SlackUser = None) -> None:
     if slack_user:
         SLACK_USERS[(slack_user.slack_team_id, slack_user.slack_id)] = slack_user
         return
-    slack_users: List[SlackUser] = DbManager.find_records(SlackUser, filters=[True])
-    selected = {}
-    for user in sorted(
-        slack_users,
-        key=lambda user: (
-            safe_get(user, "slack_updated") is None,
-            -(safe_get(user, "slack_updated") or 0),
-            safe_get(user, "id") or 0,
-        ),
-    ):
-        selected.setdefault((user.slack_team_id, user.slack_id), user)
-    SLACK_USERS.clear()
-    SLACK_USERS.update(selected)
+    with _SLACK_USERS_REFRESH_LOCK:
+        slack_users: List[SlackUser] = DbManager.find_records(SlackUser, filters=[True])
+        selected = {}
+        for user in sorted(
+            slack_users,
+            key=lambda user: (
+                safe_get(user, "slack_updated") is None,
+                -(safe_get(user, "slack_updated") or 0),
+                safe_get(user, "id") or 0,
+            ),
+        ):
+            selected.setdefault((user.slack_team_id, user.slack_id), user)
+        _replace_cache_in_place(SLACK_USERS, selected)
 
 
 def _parse_stored_settings(slack_space: SlackSpace | None, team_id: str) -> SlackSettings | None:
@@ -548,8 +579,7 @@ def _parse_stored_settings(slack_space: SlackSpace | None, team_id: str) -> Slac
 
 
 def get_region_record(team_id: str, body, context, client, logger) -> SlackSettings:
-    if not REGION_RECORDS:
-        update_local_region_records()
+    ensure_region_records_loaded()
 
     region_record: SlackSettings | None = safe_get(REGION_RECORDS, team_id)
     team_domain = safe_get(body, "team", "domain")
@@ -704,29 +734,28 @@ def get_request_type(body: dict) -> Tuple[str]:
 
 def update_local_region_records() -> None:
     print("Updating local region records...")
-    slack_space_records: List[SlackSpace] = DbManager.find_records(SlackSpace, filters=[True])
-    region_records = []
-    for slack_space in slack_space_records:
-        settings = safe_get(slack_space, "settings")
-        if isinstance(settings, str):
+    with _REGION_RECORDS_REFRESH_LOCK:
+        slack_space_records: List[SlackSpace] = DbManager.find_records(SlackSpace, filters=[True])
+        region_records = []
+        for slack_space in slack_space_records:
+            settings = safe_get(slack_space, "settings")
+            if isinstance(settings, str):
+                try:
+                    settings = json.loads(settings)
+                except (TypeError, json.JSONDecodeError):
+                    settings = None
+
+            team_id = safe_get(slack_space, "team_id")
+            if not isinstance(settings, Mapping) or not settings.get("team_id") or settings.get("team_id") != team_id:
+                logging.getLogger(__name__).warning("Skipping Slack workspace with invalid settings")
+                continue
+
             try:
-                settings = json.loads(settings)
-            except (TypeError, json.JSONDecodeError):
-                settings = None
+                region_records.append(SlackSettings(**settings))
+            except (TypeError, ValueError):
+                logging.getLogger(__name__).warning("Skipping Slack workspace with invalid settings")
 
-        team_id = safe_get(slack_space, "team_id")
-        if not isinstance(settings, Mapping) or not settings.get("team_id") or settings.get("team_id") != team_id:
-            logging.getLogger(__name__).warning("Skipping Slack workspace with invalid settings")
-            continue
-
-        try:
-            region_records.append(SlackSettings(**settings))
-        except (TypeError, ValueError):
-            logging.getLogger(__name__).warning("Skipping Slack workspace with invalid settings")
-
-    global REGION_RECORDS
-    REGION_RECORDS.clear()
-    REGION_RECORDS.update({region.team_id: region for region in region_records})
+        _replace_cache_in_place(REGION_RECORDS, {region.team_id: region for region in region_records})
 
 
 def parse_rich_block(
@@ -1228,4 +1257,45 @@ def error_stack(exc: BaseException) -> str:
     return " <- ".join(
         f"{os.path.basename(f.filename)}:{f.lineno}:{f.name}"
         for f in reversed(traceback.extract_tb(exc.__traceback__)[-5:])
+    )
+
+
+def _bounded_slack_error(error: SlackApiError) -> str:
+    """Slack's short error code, or ``unclassified`` when it doesn't look like one."""
+    try:
+        code = error.response.get("error")
+    except Exception:
+        # A missing or unreadable response must not replace the caller's handling with a new failure.
+        code = None
+    if (
+        isinstance(code, str)
+        and re.fullmatch(r"[a-z0-9_]{1,64}", code)
+        and not code.startswith(("xox", "xapp", "secret"))
+    ):
+        return code
+    return "unclassified"
+
+
+def log_error_event(
+    logger: Logger, event: str, error: BaseException, *, level: int = logging.ERROR, **context: str | int | None
+) -> None:
+    """Log a caught error as a fixed event with the caller's IDs, at ERROR unless the caller recovers from it.
+
+    The exception message, Slack response and SQL parameters can carry credentials or member data, so only
+    the class name, a bounded Slack error code and the frame locations from `error_stack` are kept. Callers
+    pass IDs in `context`, never names.
+    """
+    name = type(error).__name__
+    fields: dict[str, Any] = {
+        **context,
+        "error_type": name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) else "Exception",
+    }
+    if isinstance(error, SlackApiError):
+        fields["slack_error"] = _bounded_slack_error(error)
+    message = " ".join([event, *(f"{key}={value}" for key, value in fields.items())])
+    logger.log(
+        level,
+        "%s",
+        message,
+        extra={"json_fields": {"event": event, **fields, "error_stack": error_stack(error)}},
     )

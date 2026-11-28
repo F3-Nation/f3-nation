@@ -33,7 +33,7 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
   const link = new RPCLink({
     url: requireApiBaseUrl(),
     fetch: async (input, init) => {
-      input.headers.set(Header.Client, Client.ORPC);
+      input.headers.set(Header.Client, Client.F3_ADMIN);
       input.headers.set(Header.Authorization, `Bearer ${accessToken}`);
       const response = await fetch(input, init);
       // A 5xx page from a proxy or load balancer (not a JSON oRPC error) would

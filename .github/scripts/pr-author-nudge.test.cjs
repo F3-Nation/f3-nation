@@ -168,19 +168,38 @@ test("a nudge from an earlier stretch doesn't count toward closing", () => {
   assert.equal(run(pr, 15.1, oldNudge).action, "nudge");
 });
 
-test("drafts are the author's turn but are never nudged, warned or closed", () => {
+test("a draft is the author's turn: nudged, warned and closed on the usual days", () => {
   const pr = basePr({ isDraft: true });
-  // Still the author's turn, so the codeowners' report leaves it out.
   assert.deepEqual(
     summarize(pr, ["ci"], null).reasons.map((r) => r.kind),
     ["draft"],
   );
-  assert.equal(run(pr, 60).why, "draft");
-  assert.equal(run(pr, 60, { nudgedAt: at(5.1) }).action, "none");
+  assert.equal(run(pr, 4.9).action, "none");
+  assert.equal(run(pr, 5.1).action, "nudge");
+  assert.equal(run(pr, 9.2, { nudgedAt: at(5.1) }).action, "warn");
   assert.equal(
-    run(pr, 60, { nudgedAt: at(5.1), warnedAt: at(9.2) }).action,
-    "none",
+    run(pr, 10.2, { nudgedAt: at(5.1), warnedAt: at(9.2) }).action,
+    "close",
   );
+});
+
+test("an outside contributor's draft is nudged at 3 days", () => {
+  const pr = basePr({ isDraft: true, authorAssociation: "CONTRIBUTOR" });
+  assert.equal(run(pr, 2.9).action, "none");
+  assert.equal(run(pr, 3.1).action, "nudge");
+});
+
+test("a push to a draft restarts its clock", () => {
+  const pr = basePr({ isDraft: true, commits: pushedAt(4) });
+  assert.equal(run(pr, 8.9).action, "none");
+  assert.equal(run(pr, 9.1).action, "nudge");
+});
+
+test("a draft's reminder tells the author it is still a draft", () => {
+  const facts = summarize(basePr({ isDraft: true }), ["ci"], null);
+  const now = T0 + 5.1 * DAY;
+  const body = nudgeBody(facts, decide(facts, now), now);
+  assert.match(body, /^- It's still a Draft\./m);
 });
 
 test("a drive-by commenter's thread doesn't start the clock", () => {
@@ -1048,12 +1067,27 @@ test("the run reports whether the heads-up reached Slack", async () => {
   assert.ok(failed.slackNote);
 });
 
-test("a reminded PR moved back to draft records a pause", async () => {
-  const github = fakeGithub({ nudgedAt: at(5) }, { isDraft: true });
-  const { rows } = await liveRun(github, 9.5);
-  assert.equal(rows[0].outcome, "draft, paused");
-  assert.equal(github.writes.length, 1);
-  assert.match(github.writes[0].params.body, /"pausedAt"/);
+test("a reminded PR moved back to draft needs a new reminder, whoever moves it", async () => {
+  const moved = {
+    isDraft: true,
+    timelineItems: {
+      nodes: [
+        {
+          __typename: "ConvertToDraftEvent",
+          createdAt: at(6),
+          actor: { login: "taterhead247" },
+        },
+      ],
+    },
+  };
+  const early = fakeGithub({ nudgedAt: at(5) }, moved);
+  const { rows } = await liveRun(early, 9.5);
+  assert.equal(rows[0].outcome, "author's turn, under the limit");
+  assert.equal(early.writes.length, 0);
+
+  const later = fakeGithub({ nudgedAt: at(5) }, moved);
+  const { rows: laterRows } = await liveRun(later, 11.1);
+  assert.equal(laterRows[0].outcome, "nudged");
 });
 
 test("a commit dated in the future can't hold the PR open", () => {

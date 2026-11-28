@@ -1,14 +1,20 @@
-# Slack calendar modal capacity and failure handling
+# Slack calendar modal layout, capacity and failure handling
 
 > Human designer: Michael Potter (@michaeldpotter)
 
 ## 1. Summary
 
-The interactive Slack calendar renders chronologically ordered future events
-until the next complete event group would exceed Slack's 100-block modal
-limit. Calendar rendering must count fixed controls, date headers, and every
-event—including closed events—and a rejected modal update must be observable
-and must not leave the user indefinitely on a loading view.
+The interactive Slack calendar (Calendar Home) shows the region's upcoming
+events one page at a time. Filter inputs stay hidden behind a Filters button so
+the schedule starts near the top; Slack does not allow its collapsible container
+block in modals. Each event is one section: a title line, a detail line and
+an overflow menu of its actions, Take Q and HC first. A page renders events by
+date, latest start first within a day, until the next complete event group would exceed Slack's 100-block
+modal limit, less one block kept free for the paging row, and "Show more"
+continues from there. Rendering counts fixed
+controls, any filter inputs on screen, date headers and every
+event, including closed events. A rejected modal update must be observable and
+must not leave the user indefinitely on a loading view.
 
 ## 2. Context & links
 
@@ -17,14 +23,20 @@ and must not leave the user indefinitely on a loading view.
 - Key code:
   - `apps/slackbot/features/calendar/home.py`
   - `apps/slackbot/utilities/slack/orm.py`
+  - `apps/slackbot/utilities/database/special_queries.py` (`home_schedule_query`)
   - `apps/slackbot/utilities/builders.py`
   - `apps/slackbot/main.py`
 
 ## 3. User stories
 
 - As a Slack workspace member, I want the calendar to display every
-  chronological event that fits so that a dense schedule does not prevent the
+  upcoming event that fits so that a dense schedule does not prevent the
   calendar from loading.
+- As a Slack workspace member, I want the schedule near the top of the modal
+  and each event's main actions first in its menu, so I can HC or take a Q
+  quickly.
+- As a Slack workspace member, I want to page past the first screen of events
+  so that a busy schedule is not cut off.
 - As a Slack workspace member, I want a clear failure response if Slack rejects
   the calendar so that I am not left on an indefinite loading view.
 - As an operator, I want modal-update failures recorded without sensitive Slack
@@ -33,16 +45,18 @@ and must not leave the user indefinitely on a loading view.
 ## 4. Acceptance criteria (testable, non-contradictory)
 
 - **AC-1** — GIVEN calendar controls and future events WHEN the event list is
-  rendered THEN the resulting modal contains no more than 100 blocks.
-- **AC-2** — GIVEN an event on a date that is not yet rendered WHEN its divider,
-  date header, and event block would exceed 100 blocks THEN none of those three
-  blocks is appended.
-- **AC-3** — GIVEN a closed event WHEN capacity is evaluated THEN it consumes
-  one event block under the same capacity rule as a non-closed event.
-- **AC-4** — GIVEN an event group that brings the modal to exactly 100 blocks
-  WHEN capacity is evaluated THEN the complete group is appended.
-- **AC-5** — GIVEN additional chronological events after the modal reaches
-  capacity WHEN rendering continues THEN no later event is appended.
+  rendered THEN the resulting modal contains no more than 100 blocks, counting
+  each filter input on screen.
+- **AC-2** — GIVEN an event on a date that is not yet rendered WHEN its date
+  header and event blocks would exceed the limit THEN none of them is appended.
+- **AC-3** — GIVEN an open or closed event WHEN capacity is evaluated THEN it
+  consumes one block (title, detail and menu in one section).
+- **AC-4** — GIVEN an event group that brings the modal to exactly 99 blocks
+  (100 less the block kept for the paging row) WHEN capacity is evaluated THEN
+  the complete group is appended, and the paging row still fits.
+- **AC-5** — GIVEN additional events after the page reaches
+  capacity WHEN rendering continues THEN no later event is appended and a
+  "Show more" button continues from the first event not shown.
 - **AC-6** — GIVEN Slack rejects `views.update` WHEN a modal is updated THEN the
   failure is logged with a safe operation name and Slack error code, without
   logging payloads, response URLs, trigger IDs, view IDs, user IDs, or tokens.
@@ -53,6 +67,33 @@ and must not leave the user indefinitely on a loading view.
   THEN the application attempts to replace it with a small generic error view;
   if that replacement also fails, it falls back to the existing direct-message
   error response.
+
+- **AC-9** — GIVEN Calendar Home opens WHEN it renders THEN the filter inputs
+  are hidden and the top row has a Filters button labelled with the number of
+  active filters, followed by a one-line summary of those filters and a legend
+  for the event icons. The button shows or hides the inputs, and hidden
+  filters keep applying, including across pages.
+- **AC-10** — GIVEN the user changes a filter WHEN the calendar re-renders THEN
+  the filter inputs stay shown and the first page of results is shown.
+- **AC-11** — GIVEN an open event WHEN its row renders THEN its overflow menu
+  lists Take Q first when the Q slot is open, then HC (or Un-HC when the user
+  has already HC'd), then every other action the user may take. A closed event's
+  menu holds only Reopen Event for admins, or Event Closed for everyone else.
+- **AC-12** — GIVEN an event with more than one event type WHEN the schedule is
+  queried THEN it is listed once, with all of its types, and an event-type
+  filter matches it when any of its types is selected. Events with no event
+  type are not listed.
+- **AC-13** — GIVEN the user is on a later page WHEN an action taken directly
+  on the calendar (HC, Un-HC, Take Q, Reopen) refreshes it THEN the same page is
+  shown. A refresh from a modal stacked on top (Assign Q, Close Event) and
+  "Back to start" return to the first page. A later page with no events left
+  says so and points back to the first page.
+- **AC-14** — GIVEN "Special events only" is selected WHEN the schedule is
+  queried THEN only highlighted events are listed.
+- **AC-15** — GIVEN events on the same date WHEN the schedule is queried THEN
+  they are listed latest start time first, events with no start time last, then
+  by AO name, with the event id breaking any remaining tie so pages never
+  overlap.
 
 ## 5. Roles & authorization (RBAC)
 
@@ -67,26 +108,38 @@ permissions continue to determine which event actions are available.
 
 ## 6. Out of scope / non-goals
 
-- Adding pagination or a “Load more” action.
+- Showing other regions' events, and saving a user's default filters.
 - Establishing a fixed calendar date range shared by every region.
 - Increasing Slack's 100-block platform limit.
-- Changing the database query's 100-event limit.
-- Changing event ordering, filtering, or authorization.
+- Changing authorization.
 
 ## 7. Critical-path test cases
 
-1. A production-shaped sequence at 96 blocks followed by six closed events
-   stops at exactly 100 blocks and produces a Slack-valid modal (AC-1/AC-3/AC-4/AC-5).
-2. A new date whose complete three-block group cannot fit leaves no orphan
-   divider or date header (AC-2).
+1. A page that fills the event area exactly still has room for "Show more", and
+   a short page cut by the limit still offers it (AC-1/AC-3/AC-4/AC-5).
+2. A new date whose complete group cannot fit leaves no orphan date header
+   (AC-2), and a group that reaches the limit exactly is appended (AC-4).
+   Closed events take one block each (AC-3).
 3. A rejected `views.update` records only sanitized error context and propagates
    to the dispatcher (AC-6/AC-7).
 4. A failed completed-view update replaces the loading modal with a generic
    error view, with direct-message fallback if replacement fails (AC-8).
+5. Opening the calendar renders hidden filter inputs, the Filters button,
+   summary and legend; the button shows and hides the inputs without dropping
+   active filters; a filter change keeps them shown and resets to the first
+   page; no block type outside those Slack allows in modals is sent
+   (AC-9/AC-10).
+6. Each row type renders its title, detail line and menu order (AC-11).
+7. Against Postgres, a two-type event is listed once, the type filter matches
+   it, an untyped event is left out, and offsets page through events without
+   gaps or repeats (AC-12), and a day's events come latest start first, then by
+   AO name (AC-15).
+8. Show more, Back to start, a refresh from the same view and one from a
+   stacked modal each land on the right page (AC-13).
 
 ## 8. Observability
 
 - Emit `slack.modal.update_failed` for rejected modal updates.
-- Safe context may include the Slack error code and constraint messages.
+- Safe context may include the Slack error code and the block paths (JSON pointers) that Slack's validation messages name; never the message text, which can quote rejected content.
 - Do not record Slack payloads, response URLs, trigger IDs, view IDs, user IDs,
   tokens, or other sensitive request data.

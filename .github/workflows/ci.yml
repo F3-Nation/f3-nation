@@ -416,7 +416,60 @@ jobs:
           turbo-task: build
       - run: pnpm build ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
 
+  # The required `test-coverage` check. Its suites run in the parallel jobs it
+  # needs, so the check takes as long as the slowest of them rather than their
+  # sum; this job only reports their combined result.
   test-coverage:
+    if: ${{ !cancelled() }}
+    needs: [test-suites, test-slackbot-postgres]
+    runs-on: ubuntu-latest
+    steps:
+      # Reads every entry in `needs`, so a job added there is gated without
+      # editing this step.
+      - name: Require every test job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"${NEEDS}"
+          jq -e 'length > 0 and all(.[]; .result == "success")' <<<"${NEEDS}" >/dev/null
+
+  # Each test starts a fresh database in one container the fixture shares
+  # across the session, so this job needs no service and no Node toolchain.
+  test-slackbot-postgres:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.8"
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Verify Slack identity and token refresh against Postgres
+        working-directory: apps/slackbot
+        run: >-
+          uv run --frozen pytest
+          tests/test_postgres_fixture.py
+          tests/utilities/test_create_user_postgres.py
+          tests/utilities/slack_tokens/test_refresh_postgres.py
+          tests/utilities/slack_tokens/test_store_postgres.py
+          tests/scripts/test_import_slack_installations.py
+          tests/scripts/test_f3versary_activity_postgres.py
+          tests/utilities/test_get_region_record_postgres.py
+          tests/utilities/test_home_schedule_query_postgres.py
+        env:
+          SLACKBOT_POSTGRES_TESTS: "1"
+          SLACKBOT_POSTGRES_IMAGE: ghcr.io/f3-nation/f3-nation-ci-postgres@sha256:55d810d8c285ca9aa56d4b8594f31e2b09b300ed64c9b072980216d33fb6f449
+
+  test-suites:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -453,26 +506,7 @@ jobs:
           enable-turbo-cache: "true"
           select-turbo-affected: "true"
           turbo-task: test
-      # GCS_CREDENTIALS must exist with client_email/private_key fields, but
-      # nothing real is needed. Built here from plainly fake JSON — a committed
-      # base64 blob trips generic high-entropy secret scanners.
-      - name: Set mock GCS credentials
-        run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
       - run: pnpm test ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
-      # The authenticated service pull above already supplies this image to
-      # Docker; the disposable fixture uses the same digest and its own database.
-      - name: Verify Slack identity and token refresh against Postgres
-        working-directory: apps/slackbot
-        run: >-
-          uv run pytest
-          tests/utilities/test_create_user_postgres.py
-          tests/utilities/slack_tokens/test_refresh_postgres.py
-          tests/utilities/slack_tokens/test_store_postgres.py
-          tests/scripts/test_import_slack_installations.py
-          tests/utilities/test_get_region_record_postgres.py
-        env:
-          SLACKBOT_POSTGRES_TESTS: "1"
-          SLACKBOT_POSTGRES_IMAGE: ghcr.io/f3-nation/f3-nation-ci-postgres@sha256:55d810d8c285ca9aa56d4b8594f31e2b09b300ed64c9b072980216d33fb6f449
       # The apps/api characterization matrix, dispatched in-process through the
       # Hono app. Runs in this job, sequentially after pnpm test and never
       # concurrent with it, because both suites mutate f3_test. Needs no extra

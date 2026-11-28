@@ -42,6 +42,45 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 - [ ] **Confirm it's a go.** The Staging plan (#{{STAGING_PLAN_ISSUE}}) has a **Go** comment{{AND_ANY_ROLLOUT_GATES}}. Owner: Release lead
   - **Stop if:** it doesn't.
 
+<!-- OPTIONAL (Staging only, when an app with a Staging service is in the release): -->
+
+- [ ] **Confirm Staging runs this release.** The plans are filed when the release is cut, so a deploy may still be running or building. Nothing below, and no test in the test plan, starts until every app prints `serves: true` and `deploy in flight: false`: its Staging service serves a ready revision of this release's exact image with all its traffic, and no run of its deploy workflow can still replace it. Owner: Release lead
+
+  ```bash
+  for ROW in {{EACH_STAGING_SERVICE_ROW}}; do
+    read -r APP SERVICE PROJECT REGION IMAGE <<<"$ROW"
+    VERSION="${IMAGE##*:}"
+    if SVC=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json); then
+      SERVES=$(jq --arg image "$IMAGE" '.status.latestReadyRevisionName as $ready
+        | .status.observedGeneration == .metadata.generation
+        and any(.status.conditions[]?; .type == "Ready" and .status == "True")
+        and .spec.template.spec.containers[0].image == $image
+        and $ready == .status.latestCreatedRevisionName
+        and ([.status.traffic[] | select(.latestRevision == true or .revisionName == $ready) | .percent] | add // 0) == 100' <<<"$SVC")
+    else
+      SERVES="lookup failed"
+    fi
+    IN_FLIGHT=false
+    for STATUS in requested queued pending waiting in_progress; do
+      RUNS=$(gh run list -R F3-Nation/f3-nation --workflow "deploy-$APP.yml" --status "$STATUS" --limit 1000 --json databaseId --jq '.[].databaseId') \
+        || { IN_FLIGHT="lookup failed"; break; }
+      for RUN in $RUNS; do
+        STAGING_PENDING=$(gh run view "$RUN" -R F3-Nation/f3-nation --json jobs \
+          --jq '[.jobs[] | select(.name | endswith("deploy-staging"))] | length == 0 or any(.status != "completed")') \
+          || STAGING_PENDING="lookup failed"
+        [ "$STAGING_PENDING" = false ] || IN_FLIGHT="$STAGING_PENDING"
+      done
+    done
+    echo "$APP serves $VERSION: $SERVES"
+    echo "$APP deploy in flight: $IN_FLIGHT"
+  done
+  ```
+
+  - **`lookup failed`:** fix your access (`gcloud auth login`, `gh auth status`) and run the check again. Don't redeploy for this.
+  - **`deploy in flight: true`:** a run of the app's deploy workflow on the [Actions page](https://github.com/F3-Nation/f3-nation/actions) hasn't finished its `deploy-staging` job (or hasn't reached it). Wait for that job, not the whole run (its `deploy-prod` job waits for a Production approval), then run the check again.
+  - **`serves: false` with nothing in flight:** the deploy failed, was cancelled, or a deploy of another tag replaced it. Run the app's deploy workflow from `main` with this release's tag, wait for its `deploy-staging` job, and run the check again. If that deploy fails too, post in `#monorepo` and stop.
+  - **Until the go/no-go,** nobody deploys another tag of a released app to Staging; say so when announcing the start. If one is needed, post in `#monorepo` first and run this check again afterwards.
+
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 
 <!-- OPTIONAL (only if there is a migration): -->
@@ -180,6 +219,8 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   ```
 
 ### Step 4: Test
+
+<!-- scripts/check-filed-plans.sh finds the link by "Staging test plan, #<n>"; change both together. -->
 
 - [ ] **Work through the Staging test plan, #{{TEST_PLAN_ISSUE}}.** Owner: Monitor
   - **Watch** (Monitor): keep the app error logs streaming. Post any new error not on the [known-noise list](#known-noise-ignore-these) in `#monorepo` with the time and what you were doing. {{ANYTHING_ELSE_TO_WATCH}}

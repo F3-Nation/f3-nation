@@ -50,30 +50,21 @@ event_tags AS (
     GROUP BY x.event_instance_id
 ),
 valid_attendance AS (
-    SELECT a.id, a.user_id, a.event_instance_id, e.start_date, e.ao_org_id, e.region_org_id
+    SELECT a.id, a.user_id, a.event_instance_id, a.attendance_type, e.start_date, e.ao_org_id, e.region_org_id
     FROM pg.public.attendance a
     JOIN pg.public.users u ON u.id = a.user_id
     JOIN eligible_events e ON e.id = a.event_instance_id
     WHERE a.is_planned = false
       AND u.email IS NOT NULL
       AND regexp_matches(CAST(u.email AS VARCHAR), '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$')
-),
-attendance_flags AS (
-    SELECT a.id AS attendance_id,
-           COALESCE(bool_or(t.type = 'Q'), false)::INTEGER AS q_ind,
-           COALESCE(bool_or(t.type IN ('Co-Q', 'CoQ')), false)::INTEGER AS coq_ind
-    FROM valid_attendance a
-    LEFT JOIN pg.public.attendance_x_attendance_types x ON x.attendance_id = a.id
-    LEFT JOIN pg.public.attendance_types t ON t.id = x.attendance_type_id
-    GROUP BY a.id
 )
 SELECT p.refreshed_at, a.id, a.user_id, a.event_instance_id,
-       f.q_ind, f.coq_ind, a.start_date, a.ao_org_id, a.region_org_id,
+       (a.attendance_type = 'q')::INTEGER AS q_ind, (a.attendance_type = 'co_q')::INTEGER AS coq_ind,
+       a.start_date, a.ao_org_id, a.region_org_id,
        COALESCE(et.tags, []::INTEGER[]) AS tags,
        COALESCE(ty.types, []::INTEGER[]) AS types,
        COALESCE(ty.categories, []::VARCHAR[]) AS categories
 FROM valid_attendance a
-JOIN attendance_flags f ON f.attendance_id = a.id
 LEFT JOIN event_types ty ON ty.event_id = a.event_instance_id
 LEFT JOIN event_tags et ON et.event_id = a.event_instance_id
 CROSS JOIN params p

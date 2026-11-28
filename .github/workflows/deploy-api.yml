@@ -38,6 +38,6 @@ jobs:
       prod_environment: api-production
       staging_url: https://staging.api.f3nation.com
       prod_url: https://api.f3nation.com
-      flags: "--max-instances=20"
+      flags: "--max-instances=20 --liveness-probe=httpGet.path=/live,periodSeconds=15,timeoutSeconds=5,failureThreshold=6"
     secrets:
       posthog_key: ${{ secrets.POSTHOG_KEY }}

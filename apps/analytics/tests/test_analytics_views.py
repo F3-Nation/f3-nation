@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from pathlib import Path
 
@@ -40,11 +41,9 @@ def fixture() -> duckdb.DuckDBPyConnection:
     db.execute("CREATE TABLE pg.public.event_tags_x_event_instances (event_instance_id INTEGER, event_tag_id INTEGER)")
     db.execute(
         "CREATE TABLE pg.public.attendance (id INTEGER, user_id INTEGER, event_instance_id INTEGER, "
-        "meta JSON, created TIMESTAMP, updated TIMESTAMP, is_planned BOOLEAN)"
-    )
-    db.execute("CREATE TABLE pg.public.attendance_types (id INTEGER, type VARCHAR)")
-    db.execute(
-        "CREATE TABLE pg.public.attendance_x_attendance_types (attendance_id INTEGER, attendance_type_id INTEGER)"
+        "meta JSON, created TIMESTAMP, updated TIMESTAMP, is_planned BOOLEAN, "
+        # Production's attendance_type is a Postgres enum, which the scanner reads as a DuckDB ENUM.
+        "attendance_type ENUM('pax', 'q', 'co_q'))"
     )
     db.execute(
         "CREATE TABLE pg.public.users (id INTEGER, f3_name VARCHAR, home_region_id INTEGER, "
@@ -90,18 +89,20 @@ def fixture() -> duckdb.DuckDBPyConnection:
     db.executemany("INSERT INTO pg.public.event_instances_x_event_types VALUES (?, ?)", [(1, 1), (1, 2), (1, 3)])
     db.executemany("INSERT INTO pg.public.event_tags VALUES (?, ?)", [(1, "VQ"), (2, "Pre-Workout")])
     db.executemany("INSERT INTO pg.public.event_tags_x_event_instances VALUES (?, ?)", [(1, 1), (1, 2)])
-    db.executemany("INSERT INTO pg.public.attendance_types VALUES (?, ?)", [(2, "Q"), (3, "Co-Q")])
     db.executemany(
         "INSERT INTO pg.public.users VALUES (?, ?, ?, ?, ?)",
         [(1, "Zed", 40, "zed.png", "active"), (2, "Amy", 40, "amy.png", "active")],
     )
     db.executemany(
-        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, '{}', NULL, NULL, ?)",
-        [(11, 1, 2, True), (12, 2, 2, True), (13, 1, 2, False), (14, 2, 1, False)],
-    )
-    db.executemany(
-        "INSERT INTO pg.public.attendance_x_attendance_types VALUES (?, ?)",
-        [(11, 2), (12, 2), (13, 3), (14, 2)],
+        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, '{}', NULL, NULL, ?, ?)",
+        [
+            (11, 1, 2, True, "q"),
+            (12, 2, 2, True, "q"),
+            (13, 1, 2, False, "co_q"),
+            (14, 2, 1, False, "q"),
+            # A planned PAX sign-up is not a planned Q.
+            (16, 1, 2, True, "pax"),
+        ],
     )
     return db
 
@@ -206,7 +207,7 @@ def test_connector_shaped_invalid_metadata_json_fails(name: str, table: str, col
 def test_attendance_materializes_with_enum_user_status(tmp_path: Path):
     db = fixture()
     db.execute("ALTER TABLE pg.public.users ALTER COLUMN status TYPE ENUM('active') USING status::ENUM('active')")
-    db.execute("INSERT INTO pg.public.attendance VALUES (15, 99, 2, '{}', NULL, NULL, false)")
+    db.execute("INSERT INTO pg.public.attendance VALUES (15, 99, 2, '{}', NULL, NULL, false, 'pax')")
 
     definition = next(
         item for item in select_materializations(None, product="analytics") if item.name == "attendance_info"
@@ -224,6 +225,15 @@ def test_attendance_materializes_with_enum_user_status(tmp_path: Path):
         [str(artifacts.parquet_files[0])],
     ).fetchall()
     assert values == [(13, "active"), (14, "active"), (15, None)]
+
+
+def test_no_query_reads_the_attendance_type_link_tables():
+    # attendance.attendance_type is the only source of a record's type; no query may read the link tables.
+    sql_files = sorted(SQL_DIR.glob("*.sql"))
+    assert sql_files
+    for path in sql_files:
+        sql = path.read_text()
+        assert not re.search(r"\battendance_types\b|\battendance_x_attendance_types\b", sql), path.name
 
 
 def test_each_query_uses_two_parameters_and_exact_projection():
@@ -414,6 +424,7 @@ def test_attendance_and_missing_backblast_null_and_date_semantics():
     attendance_by_id = {row[0]: row for row in attendance}
     assert set(attendance_by_id) == {13, 14}
     assert attendance_by_id[13][6:8] == (0, 1)
+    assert attendance_by_id[14][6:8] == (1, 0)
     assert attendance_by_id[13][8:14] == ("Zed", 40, "Region", "zed.png", "active", date(2026, 8, 26))
 
     missing = run(db, "missing_backblasts")

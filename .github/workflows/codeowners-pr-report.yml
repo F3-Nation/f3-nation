@@ -15,6 +15,9 @@ name: Codeowners PR report
 # Slack mentions; unmapped logins show as plain text. A manual run is a dry run by default: the message goes to the
 # job summary only. Every run writes it there.
 #
+# On a holiday listed in .github/holidays.json, a scheduled run posts a
+# holiday greeting instead of the report. A manual run always builds the report.
+#
 # The triage step must not pass pr-triage.sh's --with-advisories: security
 # advisory fix PRs must stay out of this public channel and the public run
 # log. Building the report fails on a board that lists advisories or holds
@@ -54,13 +57,34 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check for a holiday
+        id: holiday
+        if: github.event_name == 'schedule'
+        uses: ./.github/actions/holiday-check
+
+      - name: Build the holiday greeting
+        id: greeting
+        if: steps.holiday.outputs.name != ''
+        env:
+          GREETING: ${{ steps.holiday.outputs.greeting }}
+        run: |
+          set -euo pipefail
+          jq --null-input --arg text "$GREETING" '{text: $text}' >"$RUNNER_TEMP/slack-payload.json"
+          {
+            echo "## Codeowners PR report (holiday greeting)"
+            echo
+            echo "$GREETING"
+          } >>"$GITHUB_STEP_SUMMARY"
+
       - name: Sort open PRs by stage
+        if: steps.holiday.outputs.name == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/pr-triage.sh -R "$GITHUB_REPOSITORY" --json >"$RUNNER_TEMP/board.json"
 
       - name: Build the report
         id: report
+        if: steps.holiday.outputs.name == ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           # A manual run uses its input; a scheduled run posts.
@@ -112,13 +136,14 @@ jobs:
             }
 
       - name: Post to Slack
-        if: steps.report.outputs.dry_run == 'false'
+        # The greeting only runs on a schedule, which always posts.
+        if: steps.report.outputs.dry_run == 'false' || steps.greeting.outcome == 'success'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_MONOREPO_WEBHOOK_URL }}
         run: |
           set -euo pipefail
           if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
-            echo "::error::SLACK_MONOREPO_WEBHOOK_URL isn't set, so the report can't be posted."
+            echo "::error::SLACK_MONOREPO_WEBHOOK_URL isn't set, so the message can't be posted."
             exit 1
           fi
           response="$(mktemp)"
@@ -128,7 +153,7 @@ jobs:
             --data @"$RUNNER_TEMP/slack-payload.json" "$SLACK_WEBHOOK_URL")
           # Slack answers a delivered message with HTTP 200 and the body "ok".
           if [[ "$status" != "200" || "$(cat "$response")" != "ok" ]]; then
-            echo "::error::Slack rejected the report: HTTP $status $(head -c 300 "$response")"
+            echo "::error::Slack rejected the message: HTTP $status $(head -c 300 "$response")"
             exit 1
           fi
-          echo "Posted the report to Slack."
+          echo "Posted the message to Slack."

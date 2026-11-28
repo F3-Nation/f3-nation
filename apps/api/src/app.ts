@@ -4,16 +4,22 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
 import { securityHeadersRecord } from "@acme/security-headers";
+import { enableDbRecovery, isDbLive } from "@acme/db/client";
 import { buildHealthResponse, runChecks } from "@f3nation/health";
 
 import { openApiJson } from "~/docs";
 import { docsPage } from "~/docs-page";
 import { handleRequest } from "~/handler";
 import { logError } from "~/lib/logging";
+import {
+  checkDatabase,
+  DATABASE_HEALTH_TIMEOUT_MS,
+} from "~/lib/database-health";
 // Surfaced as the service version in the health endpoints below.
 import packageJson from "../package.json";
 
 export const app = new Hono();
+enableDbRecovery();
 
 // Baseline security headers on every response (including the 308 below and
 // errors). The API is never legitimately framed. Registered first so it wraps
@@ -73,6 +79,12 @@ app.get("/health", async (c) => {
         defaultSeverity: "info",
         run: () => ({ status: "ok" }),
       },
+      {
+        id: "database",
+        defaultSeverity: "critical",
+        timeoutMs: DATABASE_HEALTH_TIMEOUT_MS,
+        run: checkDatabase,
+      },
     ]);
     const payload = buildHealthResponse({
       service: SERVICE_NAME,
@@ -99,6 +111,13 @@ app.get("/health", async (c) => {
     });
     return c.json(payload, 200, { "Cache-Control": "no-store" });
   }
+});
+
+app.get("/live", (c) => {
+  const live = isDbLive();
+  return c.text(live ? "ok" : "recovery_failed", live ? 200 : 503, {
+    "Cache-Control": "no-store",
+  });
 });
 
 // Next's route-handler layer only exports GET for /docs and /docs/openapi.json,

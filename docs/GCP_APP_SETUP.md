@@ -1,6 +1,6 @@
 # GCP Cloud Run — New App Setup
 
-Run these steps once when wiring a new (or migrated) app into the GCP Cloud Run + GitHub Actions CI/CD pipeline. Every app follows the same pattern: Artifact Registry → Cloud Run placeholder → Workload Identity Federation (WIF) service accounts → GitHub environments → secrets → domain mapping.
+Run these steps once when wiring a new (or migrated) app into the GCP Cloud Run + GitHub Actions CI/CD pipeline. Every app follows the same pattern: Artifact Registry → runtime service account and Cloud Run placeholder → Workload Identity Federation (WIF) service accounts → GitHub environments → secrets → domain mapping.
 
 The Workload Identity pool (`github-actions`) and provider (`github`) live in the shared **`f3-github`** GCP project and are reused by every app. You **do not** re-create them — only create new service accounts and bind them.
 
@@ -32,6 +32,8 @@ GH_PROD_ENV="${APP_NAME}-production"     # e.g. me-production
 WIF_PROJECT="f3-github"
 STAGING_SA="github-actions-deploy@${GCP_STAGING_PROJECT}.iam.gserviceaccount.com"
 PROD_SA="github-actions-deploy@${GCP_PROD_PROJECT}.iam.gserviceaccount.com"
+STAGING_RUNTIME_SA="cloudrun-${CLOUDRUN_SERVICE}@${GCP_STAGING_PROJECT}.iam.gserviceaccount.com"
+PROD_RUNTIME_SA="cloudrun-${CLOUDRUN_SERVICE}@${GCP_PROD_PROJECT}.iam.gserviceaccount.com"
 ```
 
 After pasting, run this to confirm the values look right before continuing:
@@ -88,14 +90,29 @@ gcloud artifacts repositories create cloud-run-builds \
 
 ---
 
-## 4. Create Cloud Run Services
+## 4. Create Runtime Service Accounts and Cloud Run Services
 
-Cloud Run requires an initial image before secrets/env can be configured. Deploy a placeholder first.
+An app set up with this guide runs as its own runtime service account, `cloudrun-<service name>`, created with no roles. Every GCP resource the app uses at runtime (secrets, buckets, Cloud SQL) is granted to that account, so it holds exactly what the app needs. The alternative, the project's default Compute Engine service account, holds project Editor.
+
+Apps reach GCP as this identity, never with a stored service-account key. A key is a long-lived secret that keeps working until someone deletes it; an identity's access ends when its grant is removed.
+
+```bash
+gcloud iam service-accounts create "cloudrun-${CLOUDRUN_SERVICE}" \
+  --display-name="Cloud Run runtime: ${CLOUDRUN_SERVICE}" \
+  --project="$GCP_STAGING_PROJECT"
+
+gcloud iam service-accounts create "cloudrun-${CLOUDRUN_SERVICE}" \
+  --display-name="Cloud Run runtime: ${CLOUDRUN_SERVICE}" \
+  --project="$GCP_PROD_PROJECT"
+```
+
+Cloud Run requires an initial image before secrets/env can be configured. Deploy a placeholder that already runs as the runtime service account.
 
 ```bash
 # Staging
 gcloud run deploy "$CLOUDRUN_SERVICE" \
   --image=us-docker.pkg.dev/cloudrun/container/hello \
+  --service-account="$STAGING_RUNTIME_SA" \
   --region="$GCP_REGION" \
   --project="$GCP_STAGING_PROJECT" \
   --allow-unauthenticated
@@ -103,10 +120,62 @@ gcloud run deploy "$CLOUDRUN_SERVICE" \
 # Production
 gcloud run deploy "$CLOUDRUN_SERVICE" \
   --image=us-docker.pkg.dev/cloudrun/container/hello \
+  --service-account="$PROD_RUNTIME_SA" \
   --region="$GCP_REGION" \
   --project="$GCP_PROD_PROJECT" \
   --allow-unauthenticated
 ```
+
+A deploy that omits `--service-account` keeps the service's current account, so a service recreated by hand would come back as the default one. The app's deploy workflow pins the account per environment in `staging_flags` and `prod_flags` (`--service-account=<runtime SA email>`), which keeps the identity in code review and fails the deploy if the account is missing. The deploy service account may deploy as it through the project-level `roles/iam.serviceAccountUser` granted below.
+
+### Move an existing service to its own runtime account
+
+A service that already runs, usually as the default Compute Engine account, keeps its image: don't deploy the placeholder over it. Give the new account everything the service reads before switching, because a revision that can't read a referenced secret fails to start. Run this per environment; the example is staging.
+
+```bash
+PROJECT="$GCP_STAGING_PROJECT"
+RUNTIME_SA="$STAGING_RUNTIME_SA"
+
+gcloud iam service-accounts create "cloudrun-${CLOUDRUN_SERVICE}" \
+  --display-name="Cloud Run runtime: ${CLOUDRUN_SERVICE}" \
+  --project="$PROJECT"
+# A new account can take a few seconds to be visible to IAM. Wait up to about a
+# minute; gcloud's error stays visible if it never appears.
+ready=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  if gcloud iam service-accounts describe "$RUNTIME_SA" --project="$PROJECT" --format='value(email)'; then ready=1; break; fi
+  sleep 5
+done
+
+# Every secret the service references now, read from the live service. A
+# missing account or a failed lookup, parse or grant prints STOP instead of
+# "All secrets granted."
+if [ "$ready" != 1 ]; then
+  echo "STOP: $RUNTIME_SA isn't visible to IAM. Check that it was created in $PROJECT before going on."
+elif svc_json="$(gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$PROJECT" --format=json)" &&
+  secrets="$(jq -r '[.spec.template.spec.containers[].env[]? | .valueFrom.secretKeyRef.name // empty] | unique[]' <<<"$svc_json")"; then
+  failed=0
+  for secret in $secrets; do
+    gcloud secrets add-iam-policy-binding "$secret" \
+      --project="$PROJECT" \
+      --member="serviceAccount:${RUNTIME_SA}" \
+      --role=roles/secretmanager.secretAccessor || failed=1
+  done
+  if [ "$failed" = 0 ]; then echo "All secrets granted."; else echo "STOP: a grant failed. Fix it before switching the account."; fi
+else
+  echo "STOP: couldn't read $CLOUDRUN_SERVICE or list its secrets (is jq installed?). Fix that before switching the account."
+fi
+```
+
+Continue only after "All secrets granted." Then grant the account the rest of what the app uses from § 6 (Cloud SQL, buckets), with `STAGING_RUNTIME_SA` / `PROD_RUNTIME_SA` still set to the new `cloudrun-…` account, not the one the service runs as now, and switch the running service to it. The update creates a new revision of the image already running; if it fails to start, the previous revision keeps serving.
+
+```bash
+gcloud run services update "$CLOUDRUN_SERVICE" \
+  --service-account="$RUNTIME_SA" \
+  --region="$GCP_REGION" --project="$PROJECT"
+```
+
+Switch each environment before the first deploy that pins the account there (`--service-account` in the workflow's `staging_flags` / `prod_flags`); a pinned deploy fails if the account is missing.
 
 ---
 
@@ -262,15 +331,9 @@ gcloud projects add-iam-policy-binding "$DB_PROJECT" \
   --role="roles/serviceusage.serviceUsageViewer"
 ```
 
-Then grant the Cloud Run runtime service accounts Cloud SQL Client. The commands below use the default Compute Engine service accounts created for each project; if the Cloud Run service uses a custom runtime service account, replace these values with that account email.
+Then grant the Cloud Run runtime service accounts Cloud SQL Client. Grant the account the service will run as. When you are [moving a service to its own runtime account](#move-an-existing-service-to-its-own-runtime-account), that is the new `cloudrun-…` account, so keep `STAGING_RUNTIME_SA` / `PROD_RUNTIME_SA` on it. Only for a service that stays on another account (check with `gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project=<project> --format='value(spec.template.spec.serviceAccountName)'`) set the variables to that account first:
 
 ```bash
-STAGING_PROJECT_NUMBER=$(gcloud projects describe "$GCP_STAGING_PROJECT" --format='value(projectNumber)')
-PROD_PROJECT_NUMBER=$(gcloud projects describe "$GCP_PROD_PROJECT" --format='value(projectNumber)')
-
-STAGING_RUNTIME_SA="${STAGING_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-PROD_RUNTIME_SA="${PROD_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-
 gcloud projects add-iam-policy-binding "$GCP_STAGING_PROJECT" \
   --member="serviceAccount:${STAGING_RUNTIME_SA}" \
   --role="roles/cloudsql.client"
@@ -321,6 +384,26 @@ done
 ```
 
 For Cloud Run volume mounts, the `bucket=` value must be a bucket name only, not a folder path. Use `bucket=my-bucket`, not `bucket=my-bucket/some-prefix`.
+
+#### Public image uploads
+
+Apps that write public images through `@acme/storage` (org logos, user avatars) use the `f3-public-images-staging` and `f3-public-images` buckets in the shared `f3data` project. Each runtime service account gets `roles/storage.objectUser` on its own environment's bucket only, limited by an IAM condition to the one folder the app writes, so a compromised app can write only inside that folder, not the rest of the bucket. It can still overwrite images that any other service with access to the same folder wrote there. The folder is the path prefix the app's uploads use in [`packages/storage/src/public-images.ts`](../packages/storage/src/public-images.ts): `org-logos` for logo uploads, `user-avatars` for avatar uploads.
+
+```bash
+IMAGE_FOLDER="user-avatars" # the folder this app writes
+
+gcloud storage buckets add-iam-policy-binding gs://f3-public-images-staging \
+  --member="serviceAccount:${STAGING_RUNTIME_SA}" \
+  --role="roles/storage.objectUser" \
+  --condition="expression=resource.name.startsWith('projects/_/buckets/f3-public-images-staging/objects/${IMAGE_FOLDER}/'),title=${CLOUDRUN_SERVICE}-${IMAGE_FOLDER}"
+
+gcloud storage buckets add-iam-policy-binding gs://f3-public-images \
+  --member="serviceAccount:${PROD_RUNTIME_SA}" \
+  --role="roles/storage.objectUser" \
+  --condition="expression=resource.name.startsWith('projects/_/buckets/f3-public-images/objects/${IMAGE_FOLDER}/'),title=${CLOUDRUN_SERVICE}-${IMAGE_FOLDER}"
+```
+
+Bucket-level permission checks (`gcloud storage buckets get-iam-policy`, `testIamPermissions`) can't evaluate a per-object condition, so verify the grant with a real upload from the app. A missing grant makes the app's upload route answer 503 and log a `*.storage_access_denied` event.
 
 ---
 
@@ -409,12 +492,13 @@ In the Firebase Console for each project → **App Hosting** → select the back
 - [ ] Variables set and confirmed (`echo` block)
 - [ ] Required APIs enabled in staging and prod projects
 - [ ] Artifact Registry repos created (staging + prod)
-- [ ] Cloud Run services created with placeholder image
+- [ ] Runtime SAs (`cloudrun-<service>`) created and the Cloud Run services created with a placeholder image, running as them
+- [ ] Deploy workflow pins each environment's runtime SA with `--service-account` in `staging_flags` / `prod_flags`
 - [ ] `f3-github` WIF pool/provider exists (skip creation if already present) and the organization-level `WIF_PROVIDER` variable points at it
 - [ ] Staging SA created, IAM roles granted, WIF binding to the staging environment added
 - [ ] Prod SA created, IAM roles granted (including cross-project AR read on staging), WIF binding to the production environment added
 - [ ] Cloud SQL IAM granted to deploy/runtime SAs if the app uses Cloud SQL
-- [ ] Storage bucket IAM granted to runtime SAs if the app uses Cloud Storage buckets or volume mounts
+- [ ] Storage bucket IAM granted to runtime SAs if the app uses Cloud Storage buckets or volume mounts (folder-scoped for public image uploads)
 - [ ] GitHub environment setup complete: staging limited to `main` and release tags, prod reviewer set, `WIF_SA` set on each environment
 - [ ] Cloud Run env vars pushed for staging and prod
 - [ ] Custom domains mapped and DNS updated
