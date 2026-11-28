@@ -139,13 +139,16 @@ Add a **Migration** section:
 
 - The migration file and what it changes, one line each.
 - Lock and size risk; whether it needs a maintenance window.
-- Release steps: order relative to the app deploy (the migration lands before
-  code that reads it), manual grants or default privileges, staging-refresh
-  impact.
 - Rollback SQL, or "forward-fix only" with the reason.
 - Prod-only object check result (step 4), when it applied.
 - Any `openapi.golden.json` change (step 5).
 - A line saying a human must sign off before merge.
+
+Put the release steps in the template's **Release steps** section, not the
+Migration section, since the release plan is built from that section: order
+relative to the app deploy (the migration lands before code that reads it),
+manual grants or default privileges, and staging-refresh impact. Running the
+migration itself isn't a step to list; the release plan finds new migrations.
 
 Sign the PR body `_written by <model>_`, following the repo's
 [GitHub write rules](../../../AGENTS.md#writing-to-github).

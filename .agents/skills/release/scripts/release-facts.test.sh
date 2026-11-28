@@ -65,7 +65,11 @@ case "$1 $2" in
         [ -z "${FAIL_PULLS:-}" ] || exit 1
         sha="${path%/pulls}"
         sha="${sha##*/}"
-        if [ -f "$FAKE_DIR/pulls-$sha.json" ]; then cat "$FAKE_DIR/pulls-$sha.json"; else echo '[{"merged_at":"2026-01-01T00:00:00Z"}]'; fi
+        if [ -f "$FAKE_DIR/pulls-$sha.json" ]; then
+          cat "$FAKE_DIR/pulls-$sha.json"
+        else
+          echo '[{"number":99,"title":"chore(repo): tidy","merged_at":"2026-01-01T00:00:00Z","body":"### Release steps\n\nNone"}]'
+        fi
         ;;
       */pending_deployments)
         run="${path%/pending_deployments}"
@@ -133,7 +137,7 @@ echo 'create schema audit2;' >packages/db/drizzle/0004_schema.sql
 echo 'ALTER TABLE things Owner To app;' >packages/db/drizzle/0005_owner.sql
 echo 'revoke SELECT ON things FROM ro;' >packages/db/drizzle/0006_revoke.sql
 echo "SELECT Audit.Enable_Tracking('things');" >packages/db/drizzle/0007_audit.sql
-commit "feat(db): add things (#3)" >/dev/null
+db_change="$(commit "feat(db): add things (#3)")"
 echo two >README.md
 release="$(commit "chore: release main (#4)")"
 git tag admin@1.0.0 "$release"
@@ -154,6 +158,16 @@ git switch -q main
 
 echo '[]' >"$FAKE_DIR/pulls-$advisory.json"
 echo '[{"merged_at":null}]' >"$FAKE_DIR/pulls-$closed_pr.json"
+# The feature's PR has steps; the migration's predates the section. A closed PR
+# listed first must not be the one read.
+cat >"$FAKE_DIR/pulls-$feature.json" <<'JSON'
+[{"number":20,"title":"feat(api): old attempt","merged_at":null,"body":"### Release steps\n\nWrong PR."},
+ {"number":2,"title":"feat(api): add a setting","merged_at":"2026-01-02T00:00:00Z",
+  "body":"### TL;DR\n\nAdds X.\n\n### 🚀 Release steps\n\n<!-- template help -->\n\nSet X=1 on the API before approving it.\n\n### ✅ How to Test\n\nClick."}]
+JSON
+cat >"$FAKE_DIR/pulls-$db_change.json" <<'JSON'
+[{"number":3,"title":"feat(db): add things","merged_at":"2026-01-03T00:00:00Z","body":"### TL;DR\n\nAdds things."}]
+JSON
 # Newest first, as gh returns them.
 cat >"$FAKE_DIR/pr-list.json" <<JSON
 [{"number":4,"mergedAt":"2026-02-01T00:00:00Z"},{"number":1,"mergedAt":"2026-01-01T00:00:00Z"}]
@@ -232,6 +246,9 @@ assert_eq "commits without a merged PR, advisory merge flagged" \
   "$(jq -c '[.commits_without_pr[] | {sha, advisory_merge}]' <<<"$out")"
 assert_eq "an unlisted commit lists its files" '["apps/api/handler.ts"]' \
   "$(jq -c --arg s "$advisory" '.commits_without_pr[] | select(.sha == $s) | .files' <<<"$out")"
+assert_eq "PRs with release steps or no section, oldest first; None and unmerged PRs left out" \
+  '[{"pr":2,"title":"feat(api): add a setting","state":"steps","text":"Set X=1 on the API before approving it."},{"pr":3,"title":"feat(db): add things","state":"section_missing","text":""}]' \
+  "$(jq -c '.release_steps' <<<"$out")"
 assert_eq "runs of the release commit with a deployment waiting: in_progress and tag dispatches included, other commits not" \
   '[{"run_id":11,"workflow":"Deploy API","tag":"api@1.0.0","environments":["api-production"]},{"run_id":13,"workflow":"Deploy Slackbot","tag":"slackbot@1.0.0","environments":["slackbot-production"]},{"run_id":16,"workflow":"Deploy Admin","tag":"admin@1.0.0","environments":["admin-production"]}]' \
   "$(jq -c '.pending_deploys' <<<"$out")"

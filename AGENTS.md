@@ -273,7 +273,8 @@ These apply to every issue an agent opens, for any reason. The full rule and its
 ## Pull Request Guidelines
 
 - Every pull request should:
-  - Fill in the PR template with a plain-language TL;DR first, related issue(s) (`Closes #<n>` or `Part of #<n>`), commands run, and DB, env-var and deploy-order impact. Remove template placeholders, and keep the body true to the diff as scope changes.
+  - Fill in the PR template with a plain-language TL;DR first, related issue(s) (`Closes #<n>` or `Part of #<n>`), commands run, and DB and env-var impact. Remove template placeholders, and keep the body true to the diff as scope changes.
+  - Put everything someone must do by hand when the change ships (scripts or SQL to run, settings, secrets or grants to change, deploy order between apps) under the template's `### 🚀 Release steps` heading, and nowhere else; write `None` when there's nothing. The release plan is built from that section, and the [PR Release Steps](.github/workflows/pr-release-steps.yml) check fails while it's missing or empty.
   - Add screenshots or screen recordings for UI changes in `apps/map`.
   - Highlight any new migrations or environment variables.
   - Never include secrets.
