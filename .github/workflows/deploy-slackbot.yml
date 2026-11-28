@@ -51,7 +51,7 @@ jobs:
         --add-volume-mount=volume=event_instance_images,mount-path=/mnt/event_instance_images
         --add-volume=name=org-logos,type=cloud-storage,bucket=f3-public-images-staging,mount-options=only-dir=org-logos
         --add-volume-mount=volume=org-logos,mount-path=/mnt/org-logos
-        --add-volume=name=oauth_states,type=cloud-storage,bucket=f3nation-bot-oauth-state
+        --add-volume=name=oauth_states,type=cloud-storage,bucket=f3-slackbot-oauth-state-staging
         --add-volume-mount=volume=oauth_states,mount-path=/mnt/oauth_states
         --add-volume=name=oauth_installations,type=cloud-storage,bucket=f3nation-bot-oauth-installation
         --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
@@ -70,7 +70,7 @@ jobs:
         --add-volume-mount=volume=event_instance_images,mount-path=/mnt/event_instance_images
         --add-volume=name=org-logos,type=cloud-storage,bucket=f3-public-images,mount-options=only-dir=org-logos
         --add-volume-mount=volume=org-logos,mount-path=/mnt/org-logos
-        --add-volume=name=oauth_states,type=cloud-storage,bucket=f3nation-prod-bot-oauth-state
+        --add-volume=name=oauth_states,type=cloud-storage,bucket=f3-slackbot-oauth-state
         --add-volume-mount=volume=oauth_states,mount-path=/mnt/oauth_states
         --add-volume=name=oauth_installations,type=cloud-storage,bucket=f3nation-prod-bot-oauth-installation
         --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
