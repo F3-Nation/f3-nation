@@ -213,12 +213,6 @@ describe.each(OrgType)("%s table contract", (type) => {
     expect(columns[0]?.meta?.name).toBe(
       type === "ao" ? "Name" : orgTypeDisplay[type].label,
     );
-    if (type === "nation") {
-      expect(mocks.props).not.toHaveProperty("totalCount");
-      expect(mocks.props).not.toHaveProperty("pagination");
-      expect(screen.queryByText("Reset")).toBeNull();
-    }
-    if (type === "region") expect(mocks.props).not.toHaveProperty("sorting");
     expect(mocks.props.paginationOptions).toEqual(
       type === "region"
         ? { pageSize: 20, pageSizeOptions: [10, 20, 50, 100] }
@@ -230,6 +224,18 @@ describe.each(OrgType)("%s table contract", (type) => {
       id: 40,
     });
   });
+});
+
+it("gives the nation table no total, pagination or reset", () => {
+  render(<OrgTable orgType="nation" />);
+  expect(mocks.props).not.toHaveProperty("totalCount");
+  expect(mocks.props).not.toHaveProperty("pagination");
+  expect(screen.queryByText("Reset")).toBeNull();
+});
+
+it("gives the region table no sorting state", () => {
+  render(<OrgTable orgType="region" />);
+  expect(mocks.props).not.toHaveProperty("sorting");
 });
 
 describe("ancestor columns", () => {
@@ -341,36 +347,45 @@ describe("ancestor columns", () => {
   );
 });
 
-it.each(["sector", "territory", "area", "region", "ao"] as const)(
+const resetAfterSearchSortAndPage = (
+  type: "sector" | "territory" | "area" | "region" | "ao",
+) => {
+  render(<OrgTable orgType={type} />);
+  fireEvent.click(screen.getByText("Search"));
+  fireEvent.click(screen.getByText("Sort"));
+  fireEvent.click(screen.getByText("Page"));
+  expect(lastQuery(type)).toMatchObject({
+    pageIndex: 2,
+    pageSize: 50,
+    searchTerm: "needle",
+  });
+  fireEvent.click(screen.getByText("Inactive all"));
+  expect(lastQuery(type)).toMatchObject({
+    statuses: ["inactive"],
+    onlyMine: undefined,
+  });
+  fireEvent.click(screen.getByText("Reset"));
+  expect(lastQuery(type)).toMatchObject({
+    pageIndex: 0,
+    pageSize: 50,
+    statuses: ["active"],
+    onlyMine: true,
+    searchTerm: "needle",
+  });
+};
+
+it.each(["sector", "territory", "area", "ao"] as const)(
   "preserves %s search/sorting while resetting filters and page",
   (type) => {
-    render(<OrgTable orgType={type} />);
-    fireEvent.click(screen.getByText("Search"));
-    fireEvent.click(screen.getByText("Sort"));
-    fireEvent.click(screen.getByText("Page"));
-    expect(lastQuery(type)).toMatchObject({
-      pageIndex: 2,
-      pageSize: 50,
-      searchTerm: "needle",
-    });
-    fireEvent.click(screen.getByText("Inactive all"));
-    expect(lastQuery(type)).toMatchObject({
-      statuses: ["inactive"],
-      onlyMine: undefined,
-    });
-    fireEvent.click(screen.getByText("Reset"));
-    expect(lastQuery(type)).toMatchObject({
-      pageIndex: 0,
-      pageSize: 50,
-      statuses: ["active"],
-      onlyMine: true,
-      searchTerm: "needle",
-    });
-    if (type !== "region")
-      expect(lastQuery(type)?.sorting).toEqual([{ id: "name", desc: true }]);
-    else expect(lastQuery(type)).not.toHaveProperty("sorting");
+    resetAfterSearchSortAndPage(type);
+    expect(lastQuery(type)?.sorting).toEqual([{ id: "name", desc: true }]);
   },
 );
+
+it("preserves region search, with no sorting input, while resetting filters and page", () => {
+  resetAfterSearchSortAndPage("region");
+  expect(lastQuery("region")).not.toHaveProperty("sorting");
+});
 
 it("retains the independent AO Region-filter option query", () => {
   render(<OrgTable orgType="ao" />);
