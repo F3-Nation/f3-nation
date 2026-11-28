@@ -59,6 +59,11 @@ city X" to "this workout, this address, this time" in a few interactions.
   result THEN the map pans/zooms to that area and no location panel opens.
 - **AC-7** — GIVEN search results are navigable by keyboard THEN ArrowUp/Down
   move focus and Enter activates the focused result.
+- **AC-20** — GIVEN AO or workout (event) search results THEN each result
+  uses that result's own AO logo; a missing or empty logo uses the pin's
+  logo only when the AO names match. Otherwise, or when neither has a
+  logo, the default F3 image is shown. This is the same rule nearby-list
+  rows follow in AC-12.
 
 ### Location detail
 

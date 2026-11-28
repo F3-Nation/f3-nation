@@ -1,4 +1,5 @@
 import type { F3LocationMapSearchResult, SparseF3Marker } from "~/utils/types";
+import { resolveAoLogo } from "~/utils/group-markers-by-ao";
 
 export const buildF3LocationSearchResults = ({
   locationMarkers,
@@ -32,7 +33,7 @@ export const buildF3LocationSearchResults = ({
             id: location.id,
             lat: location.lat ?? 0,
             lng: location.lon ?? 0,
-            logo: aoEvent?.aoLogo ?? location.logo ?? "",
+            logo: resolveAoLogo(location, aoName, aoEvent?.aoLogo) ?? "",
             item: { eventId: null, locationId: location.id },
             placeId: null,
             regionName: locationIdToRegionNameLookup?.[location.id] ?? null,
@@ -56,7 +57,7 @@ export const buildF3LocationSearchResults = ({
               id: event.id,
               lat: location.lat ?? 0,
               lng: location.lon ?? 0,
-              logo: event.aoLogo ?? location.logo ?? "",
+              logo: resolveAoLogo(location, event.aoName, event.aoLogo) ?? "",
               item: { eventId: event.id, locationId: location.id },
               placeId: null,
               regionName: eventIdToRegionNameLookup?.[event.id] ?? null,
