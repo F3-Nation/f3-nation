@@ -1,5 +1,28 @@
 # Changelog
 
+## [7.12.0](https://github.com/F3-Nation/f3-nation/compare/map@7.11.0...map@7.12.0) (2026-11-28)
+
+
+### Features
+
+* **api,map,admin:** preserve client names in audit history ([#1795](https://github.com/F3-Nation/f3-nation/issues/1795)) ([9e54526](https://github.com/F3-Nation/f3-nation/commit/9e545263bf4dad35c89e168b18d0eb9662877e0e))
+* **map:** add robots.ts and sitemap.ts ([#1660](https://github.com/F3-Nation/f3-nation/issues/1660)) ([2cffc9c](https://github.com/F3-Nation/f3-nation/commit/2cffc9cfb2e7683a7f2ccb820984af9294b34c33))
+
+
+### Bug Fixes
+
+* **api:** recover silent database connections ([#1804](https://github.com/F3-Nation/f3-nation/issues/1804)) ([a8bf075](https://github.com/F3-Nation/f3-nation/commit/a8bf075928fd61f26cae0193dece85e0372618ec))
+* **map:** stop shared-location AO rows borrowing another AO's logo ([#1577](https://github.com/F3-Nation/f3-nation/issues/1577)) ([18f2708](https://github.com/F3-Nation/f3-nation/commit/18f2708129c213687ef06e73a68cd798c1f7eae0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.19.0
+    * @acme/auth bumped to 0.3.2
+    * @acme/validators bumped to 0.6.1
+
 ## [7.11.0](https://github.com/F3-Nation/f3-nation/compare/map@7.10.0...map@7.11.0) (2026-11-24)
 
 

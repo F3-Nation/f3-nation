@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-env@0.2.0...pkg-env@0.3.0) (2026-11-28)
+
+
+### Features
+
+* **storage,admin,me:** upload public images as the Cloud Run service identity ([#1818](https://github.com/F3-Nation/f3-nation/issues/1818)) ([86c6d6e](https://github.com/F3-Nation/f3-nation/commit/86c6d6e71d81447560535ba3867aabe155c56f8c))
+
 ## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-env@0.1.4...pkg-env@0.2.0) (2026-10-29)
 
 

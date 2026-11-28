@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.8.1...auth@2.9.0) (2026-11-28)
+
+
+### Features
+
+* **auth,admin,me:** add robots.ts that keeps sign-in apps out of search ([#1794](https://github.com/F3-Nation/f3-nation/issues/1794)) ([a76548d](https://github.com/F3-Nation/f3-nation/commit/a76548d8ed3b065d4b2711c813f08e3d980d4e9c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.19.0
+    * @acme/db bumped to 0.12.1
+
 ## [2.8.1](https://github.com/F3-Nation/f3-nation/compare/auth@2.8.0...auth@2.8.1) (2026-11-24)
 
 

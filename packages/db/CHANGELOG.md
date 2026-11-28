@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.12.0...pkg-db@0.12.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **api:** recover silent database connections ([#1804](https://github.com/F3-Nation/f3-nation/issues/1804)) ([a8bf075](https://github.com/F3-Nation/f3-nation/commit/a8bf075928fd61f26cae0193dece85e0372618ec))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/env bumped to 0.3.0
+
 ## [0.12.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.11.0...pkg-db@0.12.0) (2026-11-24)
 
 

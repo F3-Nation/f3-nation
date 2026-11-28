@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.19.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.18.0...pkg-api@0.19.0) (2026-11-28)
+
+
+### Features
+
+* **api,map,admin:** preserve client names in audit history ([#1795](https://github.com/F3-Nation/f3-nation/issues/1795)) ([9e54526](https://github.com/F3-Nation/f3-nation/commit/9e545263bf4dad35c89e168b18d0eb9662877e0e))
+
+
+### Bug Fixes
+
+* **api:** recover silent database connections ([#1804](https://github.com/F3-Nation/f3-nation/issues/1804)) ([a8bf075](https://github.com/F3-Nation/f3-nation/commit/a8bf075928fd61f26cae0193dece85e0372618ec))
+* **api:** serve the event-instance list without a credential ([#1815](https://github.com/F3-Nation/f3-nation/issues/1815)) ([954f4a5](https://github.com/F3-Nation/f3-nation/commit/954f4a51b6072f3f802c3028cd0689b811c4009a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.3.2
+    * @acme/db bumped to 0.12.1
+    * @acme/env bumped to 0.3.0
+    * @acme/mail bumped to 0.1.7
+    * @acme/validators bumped to 0.6.1
+
 ## [0.18.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.17.0...pkg-api@0.18.0) (2026-11-24)
 
 
