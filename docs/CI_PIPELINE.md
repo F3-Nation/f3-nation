@@ -12,6 +12,8 @@
 PR opened/updated
   │
   ├─ pr-title.yml ······· Conventional-Commit PR title lint [required to merge]
+  ├─ pr-release-steps.yml  PR description has a Release steps section
+  │                        (re-runs when the description is edited) [required to merge]
   └─ ci.yml
        ├─ format-check ·· pnpm format (Prettier)             [required to merge]
        ├─ lint ·········· pnpm lint (ESLint)                 [required to merge]
@@ -30,9 +32,10 @@ PR opened/updated
   │
 merge queue ("Merge when ready"; PR + every PR queued ahead of it on main)
   ├─ pr-title.yml ······· reports green without linting (title linted on the PR)
+  ├─ pr-release-steps.yml  reports green without checking (description checked on the PR)
   └─ ci.yml ············· full-workspace required checks; a failure ejects the PR
   │
-merge to main (ruleset "main": PR required, merge queue required, the eight
+merge to main (ruleset "main": PR required, merge queue required, the nine
   │            checks above required, no force-push, no deletion)
   ├─ ci.yml ············· full-workspace required checks
   └─ docker-cache-refresh per-app GHCR cache repair/refresh
@@ -167,6 +170,7 @@ checked-out merge tree.
 | 9   | `docker-cache-refresh` | Per-app Docker validation plus GHCR layer-cache export (`main` pushes only)                                                                                                                                                                                                                                                                        | Refreshes the read-only cache consumed by PR builds                                                           | ❌ advisory                     |
 | 10  | `recent-package-watch` | npm publish-time report for all workspace deps (same-repo PRs only)                                                                                                                                                                                                                                                                                | Supply-chain freshness signal — flags deps published in the last 3 days; upserts a PR comment                 | ❌ advisory                     |
 | —   | `pr-title.yml`         | PR title lint (`lint-title`)                                                                                                                                                                                                                                                                                                                       | Non-Conventional-Commit squash titles                                                                         | ✅ (separate workflow)          |
+| —   | `pr-release-steps.yml` | PR description check (`release-steps`): a Release steps section that says None or lists steps                                                                                                                                                                                                                                                      | Manual release steps written where the release plan would miss them                                           | ✅ (separate workflow)          |
 
 Local equivalents before pushing: `pnpm format`, `pnpm lint`, `pnpm typecheck`,
 `pnpm build`, `pnpm test` (see [`AGENTS.md`](../AGENTS.md#build-test-and-development-commands)).
@@ -203,9 +207,9 @@ that app's thin `deploy-<app>.yml` caller into the shared
 1. **`ci-gate`** — fails unless the tag points at a commit on `main`, then
    waits (does not re-run) for the CI checks matched by its `check-regexp` to
    succeed on the tagged SHA. That is every required check except
-   `lint-title`, plus the jobs in `test-coverage`'s `needs` (see above).
-   `lint-title` runs only on pull requests and so never reports on a tagged
-   commit. The gate fails if a matching check concludes anything
+   `lint-title` and `release-steps`, plus the jobs in `test-coverage`'s
+   `needs` (see above). Those two check PR metadata, run only on pull
+   requests and so never report on a tagged commit. The gate fails if a matching check concludes anything
    other than `success` (including `failure` or `skipped`), or if no check
    matches at all. A required check that is missing on its own does not fail
    it, so redeploying a tag cut before a required check was added passes on

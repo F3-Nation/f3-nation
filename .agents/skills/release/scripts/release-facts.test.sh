@@ -138,6 +138,14 @@ echo 'ALTER TABLE things Owner To app;' >packages/db/drizzle/0005_owner.sql
 echo 'revoke SELECT ON things FROM ro;' >packages/db/drizzle/0006_revoke.sql
 echo "SELECT Audit.Enable_Tracking('things');" >packages/db/drizzle/0007_audit.sql
 db_change="$(commit "feat(db): add things (#3)")"
+# Its PR gets the fake gh's default body, whose section says None.
+mkdir -p docs
+echo 'tidy' >docs/tidy.md
+commit "chore(repo): tidy (#11)" >/dev/null
+echo 'empty' >docs/empty.md
+empty_section="$(commit "docs(repo): note (#12)")"
+echo 'stacked' >docs/stacked.md
+stacked="$(commit "feat(api): stacked change (#13)")"
 echo two >README.md
 release="$(commit "chore: release main (#4)")"
 git tag admin@1.0.0 "$release"
@@ -167,6 +175,15 @@ cat >"$FAKE_DIR/pulls-$feature.json" <<'JSON'
 JSON
 cat >"$FAKE_DIR/pulls-$db_change.json" <<'JSON'
 [{"number":3,"title":"feat(db): add things","merged_at":"2026-01-03T00:00:00Z","body":"### TL;DR\n\nAdds things."}]
+JSON
+cat >"$FAKE_DIR/pulls-$empty_section.json" <<'JSON'
+[{"number":12,"title":"docs(repo): note","merged_at":"2026-01-04T00:00:00Z","body":"### 🚀 Release steps\n\n<!-- template help -->\n\n### ✅ How to Test\n\nRead it."}]
+JSON
+# A stacked PR merged into a feature branch is listed before the PR that
+# landed the commit on main; the main one's steps must be read.
+cat >"$FAKE_DIR/pulls-$stacked.json" <<JSON
+[{"number":14,"title":"feat(api): stacked part","merged_at":"2026-01-05T00:00:00Z","merge_commit_sha":"0000000","base":{"ref":"feat/big"},"body":"### Release steps\n\nNone"},
+ {"number":13,"title":"feat(api): stacked change","merged_at":"2026-01-06T00:00:00Z","merge_commit_sha":"$stacked","base":{"ref":"main"},"body":"### Release steps\n\nRestart the API job."}]
 JSON
 # Newest first, as gh returns them.
 cat >"$FAKE_DIR/pr-list.json" <<JSON
@@ -246,8 +263,8 @@ assert_eq "commits without a merged PR, advisory merge flagged" \
   "$(jq -c '[.commits_without_pr[] | {sha, advisory_merge}]' <<<"$out")"
 assert_eq "an unlisted commit lists its files" '["apps/api/handler.ts"]' \
   "$(jq -c --arg s "$advisory" '.commits_without_pr[] | select(.sha == $s) | .files' <<<"$out")"
-assert_eq "PRs with release steps or no section, oldest first; None and unmerged PRs left out" \
-  '[{"pr":2,"title":"feat(api): add a setting","state":"steps","text":"Set X=1 on the API before approving it."},{"pr":3,"title":"feat(db): add things","state":"section_missing","text":""}]' \
+assert_eq "PRs with release steps or a missing or empty section, oldest first; None and unmerged PRs left out, and the PR that landed a commit on main read" \
+  '[{"pr":2,"title":"feat(api): add a setting","state":"steps","text":"Set X=1 on the API before approving it."},{"pr":3,"title":"feat(db): add things","state":"section_missing","text":""},{"pr":12,"title":"docs(repo): note","state":"section_missing","text":""},{"pr":13,"title":"feat(api): stacked change","state":"steps","text":"Restart the API job."}]' \
   "$(jq -c '.release_steps' <<<"$out")"
 assert_eq "runs of the release commit with a deployment waiting: in_progress and tag dispatches included, other commits not" \
   '[{"run_id":11,"workflow":"Deploy API","tag":"api@1.0.0","environments":["api-production"]},{"run_id":13,"workflow":"Deploy Slackbot","tag":"slackbot@1.0.0","environments":["slackbot-production"]},{"run_id":16,"workflow":"Deploy Admin","tag":"admin@1.0.0","environments":["admin-production"]}]' \

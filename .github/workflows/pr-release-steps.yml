@@ -29,10 +29,12 @@ jobs:
         with:
           persist-credentials: false
       # Release Please's own PRs are exempt: their body is the changelog, and
-      # their release steps come from the PRs they release. Gate the step, not
-      # the job, so a skipped run still reports green.
+      # their release steps come from the PRs they release. A fork can name a
+      # branch anything, so the exemption also needs the branch to be in this
+      # repository. Gate the step, not the job, so a skipped run still reports
+      # green.
       - name: Check the Release steps section
-        if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--') }}
+        if: ${{ github.event_name == 'pull_request' && !(startsWith(github.head_ref, 'release-please--') && github.event.pull_request.head.repo.full_name == github.repository) }}
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |

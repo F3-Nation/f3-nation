@@ -138,8 +138,12 @@ unlisted_json='[]'
 release_steps_json='[]'
 while IFS= read -r sha; do
   [ -n "$sha" ] || continue
+  # GitHub lists every PR the commit belongs to, in no set order. Read the one
+  # that landed it on main: the PR whose merge commit it is, else one based on
+  # main, else any merged one.
   merged_pr="$(gh api "repos/$repo/commits/$sha/pulls" \
-    | jq -c '[.[] | select(.merged_at != null)] | first // empty')" \
+    | jq -c --arg sha "$sha" '[.[] | select(.merged_at != null)]
+      | (map(select(.merge_commit_sha == $sha)) + map(select(.base.ref == "main")) + .) | first // empty')" \
     || die "can't read the pull requests for commit $sha"
   if [ -n "$merged_pr" ]; then
     number="$(jq -r '.number' <<<"$merged_pr")"

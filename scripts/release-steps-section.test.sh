@@ -209,6 +209,106 @@ None
 '
 assert_eq "the first Release steps section is the one read" "0" "$status"
 
+run_section '### Release steps
+
+````markdown
+```bash
+# Run the backfill
+### not a heading
+```
+````
+
+Then restart the job.
+
+### Next
+'
+assert_eq "a shorter fence inside a longer one doesn't close it" "0" "$status"
+assert_eq "steps after a nested fence example are kept" 'Then restart the job.' "$(printf '%s\n' "$out" | tail -n 1)"
+
+run_section '### Release steps
+
+````
+``
+### not a heading
+````
+
+Then restart the job.
+'
+assert_eq "a fence shorter than the opening one doesn't close it" 'Then restart the job.' "$(printf '%s\n' "$out" | tail -n 1)"
+
+run_section '### Release steps
+
+```
+```text
+### not a heading
+```
+
+Then restart the job.
+'
+assert_eq "a fence with text after it doesn't close the block" 'Then restart the job.' "$(printf '%s\n' "$out" | tail -n 1)"
+
+run_section '### Release steps
+
+~~~sh
+# Backfill
+### not a heading
+~~~
+
+Then restart the job.
+'
+assert_eq "a tilde fence keeps its lines in the section" "0" "$status"
+assert_eq "a tilde block stays intact" $'~~~sh\n# Backfill\n### not a heading\n~~~\n\nThen restart the job.' "$out"
+
+run_section '### 👋 TL;DR
+
+```markdown
+### Release steps
+
+None
+```
+'
+assert_eq "a heading inside a fenced block isn't the section" "4" "$status"
+
+run_section '### 👋 TL;DR
+
+```pnpm ci:local``` passes.
+
+### 🚀 Release steps
+
+None
+'
+assert_eq "a line-leading inline code span above the section isn't a fence" "3" "$status"
+
+run_section '### 🚀 Release steps
+
+```pnpm db:migrate:prod``` after the API deploy.
+
+### ✅ How to Test
+
+Click things.
+'
+assert_eq "a line-leading inline code span inside the section isn't a fence" '```pnpm db:migrate:prod``` after the API deploy.' "$out"
+
+run_section '### 👋 TL;DR
+
+Strips `<!--` comments.
+
+### 🚀 Release steps
+
+<!--
+Write None, or list the steps.
+-->
+
+None
+'
+assert_eq "a literal <!-- in inline code doesn't start a comment" "3" "$status"
+
+run_section '### Release steps
+
+Run `a <!-- b` then <!-- hidden --> go.
+'
+assert_eq "comments around inline code are still cut out" 'Run `a <!-- b` then  go.' "$out"
+
 if [ "$failures" -ne 0 ]; then
   echo "${failures} release-steps-section test(s) failed"
   exit 1
