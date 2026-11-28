@@ -37,6 +37,19 @@ Consider linking out to project artifacts like:
 
 (coming soon)
 
+### 🚀 Release steps
+
+<!--
+Required: a check fails until this section has something in it.
+Write None if shipping this needs nothing beyond deploying the apps and running
+any new migration (the release plan finds those on its own).
+Otherwise list, in order, everything someone must do by hand when this ships:
+scripts or SQL to run, settings or secrets to change, grants, which app must
+deploy before which, and whether each happens on Staging, Production or both.
+Put every step here: the release plan is built from this section, so a step
+written anywhere else in the description can be missed.
+-->
+
 ### ✅ How to Test
 
 <!--
@@ -59,9 +72,8 @@ Check what applies; delete lines that don't. Explain anything left unchecked.
 - [ ] Commands run: <!-- e.g. pnpm ci:local -->
 - [ ] Tests pin the new behavior and fail without this change
 - [ ] Docs updated with the code (specs, `AGENTS.md`, READMEs, `docs/` — see "Docs that change with the code" in `REVIEW.md`)
-- [ ] Database migration: none / included and follows the [`db-migration`](https://github.com/F3-Nation/f3-nation/blob/main/.agents/skills/db-migration/SKILL.md) skill (lock risk, release steps, rollback)
+- [ ] Database migration: none / included and follows the [`db-migration`](https://github.com/F3-Nation/f3-nation/blob/main/.agents/skills/db-migration/SKILL.md) skill (lock risk, rollback), with its manual steps under Release steps
 - [ ] Environment variables: none / added to every `.env*.example`, `cloud-run-env*.sh` and env docs
-- [ ] Deploy order: none / stated (e.g. `api` before an app that depends on it)
 - [ ] UI change: screenshots or recording attached
 - [ ] Touches security, availability or scalability: called out for human sign-off
 

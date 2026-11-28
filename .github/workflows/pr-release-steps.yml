@@ -1,0 +1,63 @@
+name: PR Release Steps
+
+# Every PR body needs a "Release steps" section saying either "None" or what
+# someone has to do by hand when the change ships. The release skill's
+# release-facts.sh reads that section from every PR in a release, so steps
+# written anywhere else in the body can be missed. The section rules are in
+# scripts/release-steps-section.sh.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+  # A required check must also report on merge-queue commits, or the queue
+  # waits for it until it times out. A merge-group run has no PR body to read;
+  # the body was already checked on the PR, so every step is skipped there and
+  # the job reports green.
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+jobs:
+  release-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Release Please's own PRs are exempt: their body is the changelog, and
+      # their release steps come from the PRs they release. Gate the step, not
+      # the job, so a skipped run still reports green.
+      - name: Check the Release steps section
+        if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--') }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          status=0
+          steps="$(printf '%s\n' "$PR_BODY" | bash scripts/release-steps-section.sh)" || status=$?
+          case "$status" in
+            0)
+              {
+                echo "### Release steps"
+                echo
+                printf '%s\n' "$steps"
+              } >>"$GITHUB_STEP_SUMMARY"
+              echo "The Release steps section lists steps."
+              ;;
+            3) echo "The Release steps section says None." ;;
+            4)
+              echo "::error title=No Release steps section::Add a '### 🚀 Release steps' section to the PR description (see .github/PULL_REQUEST_TEMPLATE.md). Write None if shipping this needs nothing done by hand; otherwise list the steps."
+              exit 1
+              ;;
+            5)
+              echo "::error title=Empty Release steps section::The Release steps section has nothing in it but comments. Write None if shipping this needs nothing done by hand; otherwise list the steps."
+              exit 1
+              ;;
+            *)
+              echo "::error::scripts/release-steps-section.sh failed with status $status"
+              exit 1
+              ;;
+          esac

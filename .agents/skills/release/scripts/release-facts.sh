@@ -28,6 +28,11 @@ die() {
   exit 1
 }
 
+# Found next to this script rather than in the current checkout, which may not
+# contain it.
+RELEASE_STEPS_SECTION="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)/scripts/release-steps-section.sh"
+[ -f "$RELEASE_STEPS_SECTION" ] || die "can't find $RELEASE_STEPS_SECTION"
+
 pr=""
 fetch=1
 while [ $# -gt 0 ]; do
@@ -123,17 +128,38 @@ done <<<"$new_migrations"
 env_files_json="$(git diff --name-only "$previous_sha" "$release_sha" \
   | { grep -E "$ENV_FILE_PATTERN" || true; } | jq -R -s 'split("\n") | map(select(length > 0))')"
 
-# Commits with no merged pull request. GitHub lands a security advisory's fix
-# from its private fork as one commit named "Merge commit from fork"; it has no
+# Each commit's merged pull request, for its Release steps section, oldest
+# first; and the commits with none. GitHub lands a security advisory's fix from
+# its private fork as one commit named "Merge commit from fork"; it has no
 # conventional-commit type, so release-please leaves it out of the changelog.
 candidates="$(git rev-list --first-parent "$previous_sha..$release_sha^")" \
   || die "can't list the commits between $previous_sha and $release_sha"
 unlisted_json='[]'
+release_steps_json='[]'
 while IFS= read -r sha; do
   [ -n "$sha" ] || continue
-  merged="$(gh api "repos/$repo/commits/$sha/pulls" | jq '[.[] | select(.merged_at != null)] | length')" \
+  merged_pr="$(gh api "repos/$repo/commits/$sha/pulls" \
+    | jq -c '[.[] | select(.merged_at != null)] | first // empty')" \
     || die "can't read the pull requests for commit $sha"
-  [ "$merged" -eq 0 ] || continue
+  if [ -n "$merged_pr" ]; then
+    number="$(jq -r '.number' <<<"$merged_pr")"
+    section_status=0
+    steps="$(jq -r '.body // ""' <<<"$merged_pr" | bash "$RELEASE_STEPS_SECTION")" || section_status=$?
+    case "$section_status" in
+      0) section_state="steps" ;;
+      3) continue ;;
+      4 | 5)
+        section_state="section_missing"
+        steps=""
+        ;;
+      *) die "can't read the Release steps section of PR #$number" ;;
+    esac
+    # rev-list is newest first, so prepending leaves the list oldest first.
+    release_steps_json="$(jq --argjson pr "$number" --arg title "$(jq -r '.title' <<<"$merged_pr")" \
+      --arg state "$section_state" --arg text "$steps" \
+      '[{pr: $pr, title: $title, state: $state, text: $text}] + .' <<<"$release_steps_json")"
+    continue
+  fi
   subject="$(git log -1 --format=%s "$sha")"
   # Against the first parent: a merge's own diff lists only files that differ
   # from every parent, which for an advisory merge is usually none.
@@ -222,11 +248,13 @@ jq -n \
   --argjson migrations "$migrations_json" \
   --argjson env_files "$env_files_json" \
   --argjson unlisted "$unlisted_json" \
+  --argjson release_steps "$release_steps_json" \
   --argjson pending "$pending_json" \
   --arg homepage "$homepage_deploy" \
   --argjson missing_runs "$missing_runs_json" \
   '{repo: $repo, pr: $pr, merged_at: $merged_at, release_sha: $release_sha,
     previous_release_sha: $previous_sha, components: $components, tags: $tags,
     migrations: $migrations, env_files_changed: $env_files,
-    commits_without_pr: $unlisted, pending_deploys: $pending,
+    commits_without_pr: $unlisted, release_steps: $release_steps,
+    pending_deploys: $pending,
     tags_without_waiting_run: $missing_runs, homepage_deploy: $homepage}'

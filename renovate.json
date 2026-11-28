@@ -20,6 +20,7 @@
   "dependencyDashboardAutoclose": true,
   "minimumReleaseAge": "7 days",
   "labels": ["dependencies"],
+  "prBodyNotes": ["### 🚀 Release steps\n\nNone"],
   "rangeStrategy": "bump",
   "pinDigests": true,
   "prConcurrentLimit": 10,

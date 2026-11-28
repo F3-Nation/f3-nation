@@ -171,7 +171,7 @@ has a body-shaped home:
 | Content                                               | Home                                                                     |
 | ----------------------------------------------------- | ------------------------------------------------------------------------ |
 | What this particular change did and why               | PR body                                                                  |
-| One-time data fix / backfill script, run-once runbook | PR body that performs it; an issue body if no PR will carry it           |
+| One-time data fix / backfill script, run-once runbook | **Release steps** section of the PR body; an issue if no PR carries it   |
 | Plan or roadmap for upcoming work                     | An **issue or milestone**, closed when the work ships                    |
 | We tried X and it failed — worth remembering          | An **issue that quotes the file path and symbol**, then closed as record |
 | Schema migration `.sql`                               | **Stays** — versioned schema history in `packages/db/drizzle/`           |
