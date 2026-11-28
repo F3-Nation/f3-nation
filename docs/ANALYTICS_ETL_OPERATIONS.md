@@ -170,13 +170,14 @@ check. The identities and their grants are in
 Point Application Default Credentials at the environment's identity and dry-run
 both products. Unset `GOOGLE_APPLICATION_CREDENTIALS` first: the storage client
 reads that file before the ADC file, so leaving it set runs cleanup under a
-different identity.
+different identity. The `&&` chain stops if the login fails, so a dry run
+never runs under your previous credentials.
 
 ```bash
 unset GOOGLE_APPLICATION_CREDENTIALS
-gcloud auth application-default login --impersonate-service-account=analytics-release-gc@f3data.iam.gserviceaccount.com
-export ANALYTICS_ENVIRONMENT=production ANALYTICS_CATALOG_BUCKET=f3-analytics ANALYTICS_PRODUCER_REVISION=release-gc-operator
-uv --directory apps/analytics run analytics-etl gc-releases --product analytics &&
+gcloud auth application-default login --impersonate-service-account=analytics-release-gc@f3data.iam.gserviceaccount.com &&
+  export ANALYTICS_ENVIRONMENT=production ANALYTICS_CATALOG_BUCKET=f3-analytics ANALYTICS_PRODUCER_REVISION=release-gc-operator &&
+  uv --directory apps/analytics run analytics-etl gc-releases --product analytics &&
   uv --directory apps/analytics run analytics-etl gc-releases --product pax-vault
 ```
 

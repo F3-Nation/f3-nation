@@ -291,7 +291,13 @@ means it is denied. Expect 412 on a release object, and 403 on each
 Probe create the same way: upload to the name of an existing release object
 with `?ifGenerationMatch=0`, which fails on a live object, so the upload writes
 nothing. Expect 403, meaning create is denied. A 412 means create is granted,
-which is a permission defect: stop probing and fix the binding.
+which is a permission defect: stop probing and fix the binding. Don't probe
+while a cleanup is running: if the object is deleted before the upload, a
+mistaken create grant would let the upload succeed.
+
+Probe reads with a metadata `GET`, which changes nothing. Expect 200 on each
+`current.json` and on a release object, and 403 on an object outside the
+product roots.
 
 ## 5. Scheduler
 
