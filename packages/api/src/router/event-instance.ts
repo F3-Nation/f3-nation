@@ -13,6 +13,7 @@ import {
   inArray,
   isNull,
   lte,
+  notExists,
   or,
   schema,
   sql,
@@ -122,6 +123,31 @@ const resolveSlackChannel = ({
 
   return { channelId: null, source: "none" };
 };
+
+/** Event instance fields shared by the Q and Co-Q lookup responses. */
+const qMenuEventFields = {
+  id: z.number().describe("Event instance ID"),
+  name: z.string().describe("Event instance name"),
+  startDate: z.string().describe("Start date (YYYY-MM-DD)"),
+  startTime: z.string().nullable().describe("Start time (HHMM)"),
+  orgId: z.number().describe("ID of the AO or region the event is at"),
+  orgName: z.string().nullable().describe("Name of that AO or region"),
+  locationId: z.number().nullable().describe("Location ID"),
+  seriesId: z
+    .number()
+    .nullable()
+    .describe("ID of the series the instance belongs to"),
+};
+
+const preblastTsField = z
+  .number()
+  .nullable()
+  .describe("Slack timestamp of the posted preblast, or null if none");
+
+const backblastTsField = z
+  .number()
+  .nullable()
+  .describe("Slack timestamp of the posted backblast, or null if none");
 
 // The list is public, so its filters reject what Postgres would otherwise
 // turn into a 500: ids outside the int4 range and unbounded id lists.
@@ -1085,11 +1111,17 @@ export const eventInstanceRouter = {
       description:
         "Get events where the user has Q or Co-Q attendance for preblast creation",
     })
+    .output(
+      z.object({
+        eventInstances: z
+          .array(z.object({ ...qMenuEventFields, preblastTs: preblastTsField }))
+          .describe(
+            "Upcoming events where the user is Q or Co-Q, soonest first",
+          ),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
-
-      // Attendance type IDs: 2 = Q, 3 = Co-Q
-      const qAttendanceTypeIds = [2, 3];
 
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split("T")[0]!;
@@ -1104,10 +1136,7 @@ export const eventInstanceRouter = {
         eq(schema.attendance.userId, input.userId),
         eq(schema.attendance.isPlanned, true),
         // Attendance is Q or Co-Q type
-        inArray(
-          schema.attendanceXAttendanceTypes.attendanceTypeId,
-          qAttendanceTypeIds,
-        ),
+        inArray(schema.attendance.attendanceType, ["q", "co_q"]),
         // Event is in the region or a child org of the region
         or(
           eq(schema.eventInstances.orgId, input.regionOrgId),
@@ -1137,13 +1166,6 @@ export const eventInstanceRouter = {
         .innerJoin(
           schema.attendance,
           eq(schema.attendance.eventInstanceId, schema.eventInstances.id),
-        )
-        .innerJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
         )
         .where(and(...whereConditions))
         .orderBy(
@@ -1179,11 +1201,17 @@ export const eventInstanceRouter = {
       description:
         "Get past events where the user has Q or Co-Q attendance for backblast creation",
     })
+    .output(
+      z.object({
+        eventInstances: z
+          .array(
+            z.object({ ...qMenuEventFields, backblastTs: backblastTsField }),
+          )
+          .describe("Past events where the user was Q or Co-Q, latest first"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
-
-      // Attendance type IDs: 2 = Q, 3 = Co-Q
-      const qAttendanceTypeIds = [2, 3];
 
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split("T")[0]!;
@@ -1198,10 +1226,7 @@ export const eventInstanceRouter = {
         eq(schema.attendance.userId, input.userId),
         eq(schema.attendance.isPlanned, true),
         // Attendance is Q or Co-Q type
-        inArray(
-          schema.attendanceXAttendanceTypes.attendanceTypeId,
-          qAttendanceTypeIds,
-        ),
+        inArray(schema.attendance.attendanceType, ["q", "co_q"]),
         // Event is in the region or a child org of the region
         or(
           eq(schema.eventInstances.orgId, input.regionOrgId),
@@ -1231,13 +1256,6 @@ export const eventInstanceRouter = {
         .innerJoin(
           schema.attendance,
           eq(schema.attendance.eventInstanceId, schema.eventInstances.id),
-        )
-        .innerJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
         )
         .where(and(...whereConditions))
         .orderBy(
@@ -1273,27 +1291,31 @@ export const eventInstanceRouter = {
       summary: "Get past events without Q assigned",
       description: "Get past events that have no Q or Co-Q attendance assigned",
     })
+    .output(
+      z.object({
+        eventInstances: z
+          .array(
+            z.object({ ...qMenuEventFields, backblastTs: backblastTsField }),
+          )
+          .describe("Past events with no planned Q or Co-Q, latest first"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
 
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split("T")[0]!;
 
-      // Subquery to find event instances that DO have Q or Co-Q attendance
-      const eventsWithQ = ctx.db
-        .selectDistinct({ eventInstanceId: schema.attendance.eventInstanceId })
+      // Planned Q or Co-Q attendance on the outer row's event instance,
+      // correlated on event_instance_id so it can be checked per event.
+      const plannedQOnEvent = ctx.db
+        .select({ one: sql`1` })
         .from(schema.attendance)
-        .innerJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
-        )
         .where(
           and(
+            eq(schema.attendance.eventInstanceId, schema.eventInstances.id),
             eq(schema.attendance.isPlanned, true),
-            inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [2, 3]),
+            inArray(schema.attendance.attendanceType, ["q", "co_q"]),
           ),
         );
 
@@ -1309,7 +1331,7 @@ export const eventInstanceRouter = {
           eq(aoOrg.parentId, input.regionOrgId),
         ),
         // Exclude events that have Q or Co-Q
-        sql`${schema.eventInstances.id} NOT IN (${eventsWithQ})`,
+        notExists(plannedQOnEvent),
       ];
 
       // Add backblast_ts IS NULL filter if notPostedOnly is true
@@ -1376,6 +1398,64 @@ export const eventInstanceRouter = {
       description:
         "Get events for calendar home view with Q info and user attendance status",
     })
+    .output(
+      z.object({
+        events: z
+          .array(
+            z.object({
+              id: z.number().describe("Event instance ID"),
+              name: z.string().describe("Event instance name"),
+              startDate: z.string().describe("Start date (YYYY-MM-DD)"),
+              startTime: z.string().nullable().describe("Start time (HHMM)"),
+              orgId: z
+                .number()
+                .describe("ID of the AO or region the event is at"),
+              orgName: z
+                .string()
+                .nullable()
+                .describe("Name of that AO or region"),
+              seriesId: z
+                .number()
+                .nullable()
+                .describe("ID of the series the instance belongs to"),
+              seriesName: z.string().nullable().describe("Series name"),
+              seriesException: z
+                .enum(SeriesException)
+                .nullable()
+                .describe(
+                  `How this instance departs from its series: ${SeriesException.join(", ")}`,
+                ),
+              meta: z
+                .unknown()
+                .describe("Free-form event instance metadata (JSON), or null"),
+              hasPreblast: z
+                .boolean()
+                .describe("Whether a preblast has been posted"),
+              eventTypes: z
+                .array(
+                  z.object({
+                    id: z.number().describe("Event type ID"),
+                    name: z.string().describe("Event type name"),
+                  }),
+                )
+                .describe("The instance's event types"),
+              plannedQs: z
+                .string()
+                .nullable()
+                .describe(
+                  "F3 names of the planned Q and Co-Qs that have one, comma-separated; null if no planned Q or Co-Q has an F3 name",
+                ),
+              userAttending: z
+                .boolean()
+                .describe("Whether the user has planned attendance"),
+              userIsQ: z
+                .boolean()
+                .describe("Whether the user is a planned Q or Co-Q"),
+            }),
+          )
+          .describe("Events from the start date on, soonest first"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const seriesEvent = aliasedTable(schema.events, "series_event");
@@ -1482,10 +1562,9 @@ export const eventInstanceRouter = {
               SELECT string_agg(u.f3_name, ', ')
               FROM attendance a
               JOIN users u ON u.id = a.user_id
-              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
               WHERE a.event_instance_id = ${schema.eventInstances.id}
                 AND a.is_planned = true
-                AND axat.attendance_type_id IN (2, 3)
+                AND a.attendance_type IN ('q', 'co_q')
             )`,
             userAttending: sql<boolean>`EXISTS(
               SELECT 1 FROM attendance a
@@ -1495,11 +1574,10 @@ export const eventInstanceRouter = {
             )`,
             userIsQ: sql<boolean>`EXISTS(
               SELECT 1 FROM attendance a
-              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
               WHERE a.event_instance_id = ${schema.eventInstances.id}
                 AND a.user_id = ${input.userId}
                 AND a.is_planned = true
-                AND axat.attendance_type_id IN (2, 3)
+                AND a.attendance_type IN ('q', 'co_q')
             )`,
           })
           .from(schema.eventInstances)
@@ -1574,10 +1652,9 @@ export const eventInstanceRouter = {
               SELECT string_agg(u.f3_name, ', ')
               FROM attendance a
               JOIN users u ON u.id = a.user_id
-              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
               WHERE a.event_instance_id = ${schema.eventInstances.id}
                 AND a.is_planned = true
-                AND axat.attendance_type_id IN (2, 3)
+                AND a.attendance_type IN ('q', 'co_q')
             )`,
             userAttending: sql<boolean>`EXISTS(
               SELECT 1 FROM attendance a
@@ -1587,11 +1664,10 @@ export const eventInstanceRouter = {
             )`,
             userIsQ: sql<boolean>`EXISTS(
               SELECT 1 FROM attendance a
-              JOIN attendance_x_attendance_types axat ON axat.attendance_id = a.id
               WHERE a.event_instance_id = ${schema.eventInstances.id}
                 AND a.user_id = ${input.userId}
                 AND a.is_planned = true
-                AND axat.attendance_type_id IN (2, 3)
+                AND a.attendance_type IN ('q', 'co_q')
             )`,
           })
           .from(schema.eventInstances)

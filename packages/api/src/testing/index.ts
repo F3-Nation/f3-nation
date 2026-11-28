@@ -9,8 +9,11 @@
 
 import type { Session } from "@acme/auth";
 import type { OrgType } from "@acme/shared/app/enums";
-import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
-import { eq, schema } from "@acme/db";
+import {
+  ATTENDANCE_TYPE_IDS,
+  F3_NATION_ORG_ID,
+} from "@acme/shared/app/constants";
+import { asc, eq, inArray, schema, sql } from "@acme/db";
 import { db } from "@acme/db/client";
 
 /**
@@ -41,6 +44,46 @@ export const getOrCreateRoles = async (): Promise<void> => {
         .values({ name: roleName, description: `${roleName} role` });
     }
   }
+};
+
+/**
+ * Inserts the PAX, Q and Co-Q attendance types with the ids in
+ * `ATTENDANCE_TYPE_IDS`, unless rows with those ids already exist, and throws
+ * if any of those ids names a different type. Then moves the id sequence past
+ * them so a test inserting its own type gets a free id. Returns their ids.
+ */
+export const ensureAttendanceTypes = async () => {
+  const expected = [
+    { id: ATTENDANCE_TYPE_IDS.PAX, type: "PAX" },
+    { id: ATTENDANCE_TYPE_IDS.Q, type: "Q" },
+    { id: ATTENDANCE_TYPE_IDS.COQ, type: "Co-Q" },
+  ];
+  await db
+    .insert(schema.attendanceTypes)
+    .values(expected)
+    .onConflictDoNothing();
+  const rows = await db
+    .select({
+      id: schema.attendanceTypes.id,
+      type: schema.attendanceTypes.type,
+    })
+    .from(schema.attendanceTypes)
+    .where(
+      inArray(
+        schema.attendanceTypes.id,
+        expected.map((row) => row.id),
+      ),
+    )
+    .orderBy(asc(schema.attendanceTypes.id));
+  if (JSON.stringify(rows) !== JSON.stringify(expected)) {
+    throw new Error(
+      `attendance_types rows must be ${JSON.stringify(expected)}; found ${JSON.stringify(rows)}`,
+    );
+  }
+  await db.execute(
+    sql`SELECT setval('attendance_types_id_seq', GREATEST((SELECT max(id) FROM attendance_types), (SELECT last_value FROM attendance_types_id_seq)))`,
+  );
+  return ATTENDANCE_TYPE_IDS;
 };
 
 export interface FixtureOrg {

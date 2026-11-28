@@ -27,6 +27,7 @@ import {
   createTestClient,
   createUserSession,
   db,
+  ensureAttendanceTypes,
   getOrCreateF3NationOrg,
   mockAuthWithSession,
   uniqueId,
@@ -45,53 +46,7 @@ let ATTENDANCE_TYPE_IDS: {
  * Get or create required attendance types for testing
  */
 const getOrCreateAttendanceTypes = async () => {
-  if (ATTENDANCE_TYPE_IDS) return ATTENDANCE_TYPE_IDS;
-
-  // Check for existing PAX type
-  let [paxType] = await db
-    .select()
-    .from(schema.attendanceTypes)
-    .where(eq(schema.attendanceTypes.type, "PAX"));
-
-  if (!paxType) {
-    [paxType] = await db
-      .insert(schema.attendanceTypes)
-      .values({ type: "PAX", description: "Regular attendee" })
-      .returning();
-  }
-
-  // Check for existing Q type
-  let [qType] = await db
-    .select()
-    .from(schema.attendanceTypes)
-    .where(eq(schema.attendanceTypes.type, "Q"));
-
-  if (!qType) {
-    [qType] = await db
-      .insert(schema.attendanceTypes)
-      .values({ type: "Q", description: "Workout leader" })
-      .returning();
-  }
-
-  // Check for existing Co-Q type
-  let [coQType] = await db
-    .select()
-    .from(schema.attendanceTypes)
-    .where(eq(schema.attendanceTypes.type, "Co-Q"));
-
-  if (!coQType) {
-    [coQType] = await db
-      .insert(schema.attendanceTypes)
-      .values({ type: "Co-Q", description: "Co-leader" })
-      .returning();
-  }
-
-  ATTENDANCE_TYPE_IDS = {
-    PAX: paxType!.id,
-    Q: qType!.id,
-    COQ: coQType!.id,
-  };
-
+  ATTENDANCE_TYPE_IDS ??= await ensureAttendanceTypes();
   return ATTENDANCE_TYPE_IDS;
 };
 
@@ -482,6 +437,107 @@ describe("Attendance Router", () => {
       expect(result.attendance[0]?.user?.f3Name).toBe(user.f3Name);
       expect(result.attendance[0]?.user).not.toHaveProperty("email");
     });
+
+    it("should return every attendance field callers read", async () => {
+      await mockAuthWithSession(await createAdminSession());
+
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const user = await createTestUser();
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance!.id,
+          userId: user!.id,
+          isPlanned: true,
+          meta: { source: "test" },
+        })
+        .returning();
+      createdAttendanceIds.push(attendance!.id);
+
+      const client = createTestClient();
+      const result = await client.attendance.getForEventInstance({
+        eventInstanceId: eventInstance!.id,
+        isPlanned: true,
+      });
+
+      expect(result.attendance).toEqual([
+        {
+          id: attendance!.id,
+          userId: user!.id,
+          eventInstanceId: eventInstance!.id,
+          isPlanned: true,
+          meta: { source: "test" },
+          created: attendance!.created,
+          user: { id: user!.id, f3Name: user!.f3Name },
+          attendanceType: "pax",
+          attendanceTypes: [{ id: ATTENDANCE_TYPE_IDS!.PAX, type: "PAX" }],
+        },
+      ]);
+    });
+
+    it("should return each record's attendance type as a single named value", async () => {
+      await mockAuthWithSession(await createAdminSession());
+
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const paxUser = await createTestUser();
+      const qUser = await createTestUser();
+      const coQUser = await createTestUser();
+      const untypedUser = await createTestUser();
+      const ids = ATTENDANCE_TYPE_IDS!;
+
+      const pax = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        paxUser!.id,
+        [ids.PAX],
+      );
+      // A Q who also signed up as PAX is reported as Q alone.
+      const q = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        qUser!.id,
+        [ids.Q, ids.PAX],
+      );
+      const coQ = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        coQUser!.id,
+        [ids.COQ],
+      );
+      // A record with no type rows is PAX.
+      const [untyped] = await db
+        .insert(schema.attendance)
+        .values({
+          eventInstanceId: eventInstance!.id,
+          userId: untypedUser!.id,
+          isPlanned: true,
+        })
+        .returning();
+      createdAttendanceIds.push(untyped!.id);
+
+      const client = createTestClient();
+      const result = await client.attendance.getForEventInstance({
+        eventInstanceId: eventInstance!.id,
+        isPlanned: true,
+      });
+
+      const byId = new Map(result.attendance.map((r) => [r.id, r]));
+      expect(byId.get(pax.id)).toMatchObject({
+        attendanceType: "pax",
+        attendanceTypes: [{ id: ids.PAX, type: "PAX" }],
+      });
+      expect(byId.get(q.id)).toMatchObject({
+        attendanceType: "q",
+        attendanceTypes: [{ id: ids.Q, type: "Q" }],
+      });
+      expect(byId.get(coQ.id)).toMatchObject({
+        attendanceType: "co_q",
+        attendanceTypes: [{ id: ids.COQ, type: "Co-Q" }],
+      });
+      expect(byId.get(untyped!.id)).toMatchObject({
+        attendanceType: "pax",
+        attendanceTypes: [{ id: ids.PAX, type: "PAX" }],
+      });
+    });
   });
   describe("createPlanned", () => {
     it("should create planned attendance for a user", async () => {
@@ -774,6 +830,27 @@ describe("Attendance Router", () => {
       ]);
     });
 
+    it("should let a member sign up as Q when another user is Co-Q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const coQ = await createTestUser();
+      const member = await createTestUser();
+      await createPlannedAttendanceWithTypes(eventInstance!.id, coQ!.id, [
+        ATTENDANCE_TYPE_IDS!.COQ,
+      ]);
+      await signInAs(member!);
+
+      const client = createTestClient();
+      const result = await client.attendance.createPlanned({
+        eventInstanceId: eventInstance!.id,
+        userId: member!.id,
+        attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.Q],
+      });
+      createdAttendanceIds.push(result.attendanceId);
+
+      expect(await getPlannedQUserIds(eventInstance!.id)).toEqual([member!.id]);
+    });
+
     it("should reject creating planned attendance for another user", async () => {
       const { ao } = await createTestAO();
       if (!ao) return;
@@ -1042,6 +1119,82 @@ describe("Attendance Router", () => {
       const typeIds = attendanceTypes.map((at) => at.attendanceTypeId);
       expect(typeIds).toContain(ATTENDANCE_TYPE_IDS!.PAX); // PAX
       expect(typeIds).toContain(ATTENDANCE_TYPE_IDS!.Q); // Q
+    });
+
+    it("should add Q to a user already signed up as PAX", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const user = await createTestUser();
+      const existing = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        user!.id,
+        [ATTENDANCE_TYPE_IDS!.PAX],
+      );
+
+      const client = createTestClient();
+      const result = await client.attendance.takeQ({
+        eventInstanceId: eventInstance!.id,
+        userId: user!.id,
+      });
+
+      expect(result.attendanceId).toBe(existing.id);
+      expect(await getTypeIds(existing.id)).toEqual([
+        ATTENDANCE_TYPE_IDS!.PAX,
+        ATTENDANCE_TYPE_IDS!.Q,
+      ]);
+      const [row] = await db
+        .select({ attendanceType: schema.attendance.attendanceType })
+        .from(schema.attendance)
+        .where(eq(schema.attendance.id, existing.id));
+      expect(row?.attendanceType).toBe("q");
+    });
+
+    it("should add Q to a user already signed up as Co-Q", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const user = await createTestUser();
+      const existing = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        user!.id,
+        [ATTENDANCE_TYPE_IDS!.COQ],
+      );
+
+      const client = createTestClient();
+      const result = await client.attendance.takeQ({
+        eventInstanceId: eventInstance!.id,
+        userId: user!.id,
+      });
+
+      expect(result.attendanceId).toBe(existing.id);
+      expect(await getTypeIds(existing.id)).toContain(ATTENDANCE_TYPE_IDS!.Q);
+      const [row] = await db
+        .select({ attendanceType: schema.attendance.attendanceType })
+        .from(schema.attendance)
+        .where(eq(schema.attendance.id, existing.id));
+      expect(row?.attendanceType).toBe("q");
+    });
+
+    it("should leave a user who is already Q unchanged when they take Q again", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const user = await createTestUser();
+      const existing = await createPlannedAttendanceWithTypes(
+        eventInstance!.id,
+        user!.id,
+        [ATTENDANCE_TYPE_IDS!.Q],
+      );
+
+      const client = createTestClient();
+      const result = await client.attendance.takeQ({
+        eventInstanceId: eventInstance!.id,
+        userId: user!.id,
+      });
+
+      expect(result.attendanceId).toBe(existing.id);
+      expect(await getTypeIds(existing.id)).toEqual([ATTENDANCE_TYPE_IDS!.Q]);
     });
 
     it("should throw CONFLICT when Q already assigned to another user", async () => {
@@ -1819,6 +1972,91 @@ describe("Attendance Router", () => {
           eventInstanceId: eventInstance.id,
         }),
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
+  });
+
+  // Records whose attendance_type is set with no link rows behind it. The Q
+  // checks must read the column: each test fails if its check reads
+  // attendance_x_attendance_types instead.
+  describe("Q checks read the attendance_type column", () => {
+    const createAttendanceWithColumnType = async (
+      eventInstanceId: number,
+      userId: number,
+      attendanceType: "pax" | "q" | "co_q",
+    ) => {
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({ eventInstanceId, userId, isPlanned: true, attendanceType })
+        .returning();
+      createdAttendanceIds.push(attendance!.id);
+      return attendance!;
+    };
+
+    it("should reject signing up as Q when another user's record is type q", async () => {
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const scheduledQ = await createTestUser();
+      const member = await createTestUser();
+      await createAttendanceWithColumnType(
+        eventInstance!.id,
+        scheduledQ!.id,
+        "q",
+      );
+      await signInAs(member!);
+
+      const client = createTestClient();
+      await expect(
+        client.attendance.createPlanned({
+          eventInstanceId: eventInstance!.id,
+          userId: member!.id,
+          attendanceTypeIds: [ATTENDANCE_TYPE_IDS!.Q],
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+    });
+
+    it("should not add a Q link when taking Q on a record that is already type q", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const user = await createTestUser();
+      const existing = await createAttendanceWithColumnType(
+        eventInstance!.id,
+        user!.id,
+        "q",
+      );
+
+      const client = createTestClient();
+      const result = await client.attendance.takeQ({
+        eventInstanceId: eventInstance!.id,
+        userId: user!.id,
+      });
+
+      expect(result.attendanceId).toBe(existing.id);
+      expect(await getTypeIds(existing.id)).toEqual([]);
+    });
+
+    it("should demote a record of type co_q when assigning a different Q", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { ao } = await createTestAO();
+      const eventInstance = await createTestEventInstance(ao!.id);
+      const oldCoQ = await createTestUser();
+      const newQ = await createTestUser();
+      const oldCoQAttendance = await createAttendanceWithColumnType(
+        eventInstance!.id,
+        oldCoQ!.id,
+        "co_q",
+      );
+
+      const client = createTestClient();
+      await client.attendance.assignQAndCoQs({
+        eventInstanceId: eventInstance!.id,
+        qUserId: newQ!.id,
+        coQUserIds: [],
+      });
+
+      expect(await getTypeIds(oldCoQAttendance.id)).toEqual([
+        ATTENDANCE_TYPE_IDS!.PAX,
+      ]);
     });
   });
 });

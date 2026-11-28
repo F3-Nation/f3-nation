@@ -33,6 +33,7 @@ import {
   createEditorSession,
   createTestClient,
   db,
+  ensureAttendanceTypes,
   getOrCreateF3NationOrg,
   mockAuthWithSession,
   uniqueId,
@@ -3439,5 +3440,380 @@ describe("Event Instance Router", () => {
         ]);
       },
     );
+  });
+
+  // Q and Co-Q are found from the attendance record's type; a PAX record is
+  // never a Q, even on the same event.
+  describe("Q lookups", () => {
+    const qLookupUserIds: number[] = [];
+    const qLookupEventInstanceIds: number[] = [];
+
+    // Runs before the outer afterAll, so attendance goes before its users.
+    afterAll(async () => {
+      for (const eventInstanceId of qLookupEventInstanceIds) {
+        await db
+          .delete(schema.attendance)
+          .where(eq(schema.attendance.eventInstanceId, eventInstanceId));
+      }
+      for (const userId of qLookupUserIds) {
+        await cleanup.user(userId);
+      }
+    });
+
+    const daysFromToday = (days: number) => {
+      const date = new Date();
+      date.setUTCDate(date.getUTCDate() + days);
+      return date.toISOString().split("T")[0]!;
+    };
+
+    const createRegionWithAo = async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region!.id);
+      return { region: region!, ao: ao! };
+    };
+
+    const createUser = async () => {
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `q-lookup-${uniqueId()}@example.com`,
+          f3Name: `QLookup ${uniqueId()}`,
+        })
+        .returning();
+      qLookupUserIds.push(user!.id);
+      return user!;
+    };
+
+    const createInstance = async (orgId: number, startDate: string) => {
+      const instance = await createTestEventInstance(orgId, { startDate });
+      qLookupEventInstanceIds.push(instance!.id);
+      return instance!;
+    };
+
+    // Attendance with the given type rows, planned unless isPlanned is false;
+    // the database sets the record's attendance_type from them.
+    const attend = async (
+      eventInstanceId: number,
+      userId: number,
+      typeIds: number[],
+      isPlanned = true,
+    ) => {
+      const [attendance] = await db
+        .insert(schema.attendance)
+        .values({ eventInstanceId, userId, isPlanned })
+        .returning();
+      await db.insert(schema.attendanceXAttendanceTypes).values(
+        typeIds.map((attendanceTypeId) => ({
+          attendanceId: attendance!.id,
+          attendanceTypeId,
+        })),
+      );
+    };
+
+    // One event with a Q (also signed up as PAX), a Co-Q and a PAX.
+    const createStaffedEvent = async (orgId: number, startDate: string) => {
+      const ids = await ensureAttendanceTypes();
+      const instance = await createInstance(orgId, startDate);
+      const q = await createUser();
+      const coQ = await createUser();
+      const pax = await createUser();
+      await attend(instance.id, q.id, [ids.Q, ids.PAX]);
+      await attend(instance.id, coQ.id, [ids.COQ]);
+      await attend(instance.id, pax.id, [ids.PAX]);
+      return { instance, q, coQ, pax };
+    };
+
+    it("getUpcomingQs returns events where the user is Q or Co-Q, not PAX", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { region, ao } = await createRegionWithAo();
+      const { instance, q, coQ, pax } = await createStaffedEvent(
+        ao.id,
+        daysFromToday(7),
+      );
+      const client = createTestClient();
+
+      for (const user of [q, coQ]) {
+        const result = await client.eventInstance.getUpcomingQs({
+          userId: user.id,
+          regionOrgId: region.id,
+        });
+        expect(result.eventInstances.map((e) => e.id)).toEqual([instance.id]);
+      }
+      const paxResult = await client.eventInstance.getUpcomingQs({
+        userId: pax.id,
+        regionOrgId: region.id,
+      });
+      expect(paxResult.eventInstances).toEqual([]);
+    });
+
+    it("getPastQs returns events where the user was Q or Co-Q, not PAX", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { region, ao } = await createRegionWithAo();
+      const { instance, q, coQ, pax } = await createStaffedEvent(
+        ao.id,
+        daysFromToday(-7),
+      );
+      const client = createTestClient();
+
+      for (const user of [q, coQ]) {
+        const result = await client.eventInstance.getPastQs({
+          userId: user.id,
+          regionOrgId: region.id,
+        });
+        expect(result.eventInstances.map((e) => e.id)).toEqual([instance.id]);
+      }
+      const paxResult = await client.eventInstance.getPastQs({
+        userId: pax.id,
+        regionOrgId: region.id,
+      });
+      expect(paxResult.eventInstances).toEqual([]);
+    });
+
+    it("getEventsWithoutQ returns only events with no planned Q or Co-Q", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const ids = await ensureAttendanceTypes();
+      const { region, ao } = await createRegionWithAo();
+      const past = daysFromToday(-3);
+      const withQ = await createInstance(ao.id, past);
+      const withCoQ = await createInstance(ao.id, past);
+      const paxOnly = await createInstance(ao.id, past);
+      const empty = await createInstance(ao.id, past);
+      // Its only Q is actual (backblast) attendance, so it has no planned Q.
+      const actualQOnly = await createInstance(ao.id, past);
+      await attend(withQ.id, (await createUser()).id, [ids.Q]);
+      await attend(withCoQ.id, (await createUser()).id, [ids.COQ]);
+      await attend(paxOnly.id, (await createUser()).id, [ids.PAX]);
+      await attend(actualQOnly.id, (await createUser()).id, [ids.Q], false);
+
+      const client = createTestClient();
+      const result = await client.eventInstance.getEventsWithoutQ({
+        regionOrgId: region.id,
+      });
+
+      expect(result.eventInstances.map((e) => e.id).sort()).toEqual(
+        [paxOnly.id, empty.id, actualQOnly.id].sort(),
+      );
+    });
+
+    it("calendarHomeSchedule reports planned Qs and whether the user is Q", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const { region, ao } = await createRegionWithAo();
+      const startDate = daysFromToday(5);
+      const staffed = await createStaffedEvent(ao.id, startDate);
+      const unstaffed = await createInstance(ao.id, startDate);
+      const client = createTestClient();
+      const plannedQNames = [staffed.q.f3Name, staffed.coQ.f3Name].sort();
+
+      // Without attendance filters (the limit-first query)
+      const asQ = await client.eventInstance.calendarHomeSchedule({
+        userId: staffed.q.id,
+        regionOrgId: region.id,
+        startDate,
+      });
+      const staffedRow = asQ.events.find((e) => e.id === staffed.instance.id);
+      expect(staffedRow?.plannedQs?.split(", ").sort()).toEqual(plannedQNames);
+      expect(staffedRow?.userIsQ).toBe(true);
+      expect(
+        asQ.events.find((e) => e.id === unstaffed.id)?.plannedQs,
+      ).toBeNull();
+
+      const asPax = await client.eventInstance.calendarHomeSchedule({
+        userId: staffed.pax.id,
+        regionOrgId: region.id,
+        startDate,
+      });
+      expect(
+        asPax.events.find((e) => e.id === staffed.instance.id)?.userIsQ,
+      ).toBe(false);
+
+      // With an attendance filter (the filter-first query)
+      const mine = await client.eventInstance.calendarHomeSchedule({
+        userId: staffed.coQ.id,
+        regionOrgId: region.id,
+        startDate,
+        onlyUserEvents: true,
+      });
+      expect(mine.events.map((e) => e.id)).toEqual([staffed.instance.id]);
+      expect(mine.events[0]?.userIsQ).toBe(true);
+      expect(mine.events[0]?.plannedQs?.split(", ").sort()).toEqual(
+        plannedQNames,
+      );
+
+      const openQ = await client.eventInstance.calendarHomeSchedule({
+        userId: staffed.pax.id,
+        regionOrgId: region.id,
+        startDate,
+        openQOnly: true,
+      });
+      expect(openQ.events.map((e) => e.id)).toEqual([unstaffed.id]);
+    });
+
+    // The lookups must read attendance_type, not the link rows: here the Q
+    // and Co-Q have the type with no link rows, and the PAX has a Q link row
+    // but type pax. Each test fails if its lookup reads the link rows instead.
+    describe("read the attendance_type column", () => {
+      const attendWithColumnType = async (
+        eventInstanceId: number,
+        userId: number,
+        attendanceType: "pax" | "q" | "co_q",
+      ) => {
+        const [attendance] = await db
+          .insert(schema.attendance)
+          .values({ eventInstanceId, userId, isPlanned: true, attendanceType })
+          .returning();
+        return attendance!;
+      };
+
+      // A record with a Q link row whose type is then set back to pax, which
+      // the trigger never does on its own.
+      const attendWithStaleQLink = async (
+        eventInstanceId: number,
+        userId: number,
+      ) => {
+        const ids = await ensureAttendanceTypes();
+        const attendance = await attendWithColumnType(
+          eventInstanceId,
+          userId,
+          "pax",
+        );
+        await db.insert(schema.attendanceXAttendanceTypes).values({
+          attendanceId: attendance.id,
+          attendanceTypeId: ids.Q,
+        });
+        await db
+          .update(schema.attendance)
+          .set({ attendanceType: "pax" })
+          .where(eq(schema.attendance.id, attendance.id));
+      };
+
+      const createColumnStaffedEvent = async (
+        orgId: number,
+        startDate: string,
+      ) => {
+        const instance = await createInstance(orgId, startDate);
+        const q = await createUser();
+        const coQ = await createUser();
+        const pax = await createUser();
+        await attendWithColumnType(instance.id, q.id, "q");
+        await attendWithColumnType(instance.id, coQ.id, "co_q");
+        await attendWithStaleQLink(instance.id, pax.id);
+        return { instance, q, coQ, pax };
+      };
+
+      it("getUpcomingQs and getPastQs", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const { region, ao } = await createRegionWithAo();
+        const upcoming = await createColumnStaffedEvent(
+          ao.id,
+          daysFromToday(7),
+        );
+        const past = await createColumnStaffedEvent(ao.id, daysFromToday(-7));
+        const client = createTestClient();
+
+        for (const user of [upcoming.q, upcoming.coQ]) {
+          const result = await client.eventInstance.getUpcomingQs({
+            userId: user.id,
+            regionOrgId: region.id,
+          });
+          expect(result.eventInstances.map((e) => e.id)).toEqual([
+            upcoming.instance.id,
+          ]);
+        }
+        for (const user of [past.q, past.coQ]) {
+          const result = await client.eventInstance.getPastQs({
+            userId: user.id,
+            regionOrgId: region.id,
+          });
+          expect(result.eventInstances.map((e) => e.id)).toEqual([
+            past.instance.id,
+          ]);
+        }
+        expect(
+          (
+            await client.eventInstance.getUpcomingQs({
+              userId: upcoming.pax.id,
+              regionOrgId: region.id,
+            })
+          ).eventInstances,
+        ).toEqual([]);
+        expect(
+          (
+            await client.eventInstance.getPastQs({
+              userId: past.pax.id,
+              regionOrgId: region.id,
+            })
+          ).eventInstances,
+        ).toEqual([]);
+      });
+
+      it("getEventsWithoutQ", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const { region, ao } = await createRegionWithAo();
+        const pastDate = daysFromToday(-3);
+        const withQ = await createInstance(ao.id, pastDate);
+        const withCoQ = await createInstance(ao.id, pastDate);
+        const staleQLinkOnly = await createInstance(ao.id, pastDate);
+        await attendWithColumnType(withQ.id, (await createUser()).id, "q");
+        await attendWithColumnType(withCoQ.id, (await createUser()).id, "co_q");
+        await attendWithStaleQLink(staleQLinkOnly.id, (await createUser()).id);
+
+        const client = createTestClient();
+        const result = await client.eventInstance.getEventsWithoutQ({
+          regionOrgId: region.id,
+        });
+
+        expect(result.eventInstances.map((e) => e.id)).toEqual([
+          staleQLinkOnly.id,
+        ]);
+      });
+
+      it("calendarHomeSchedule", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const { region, ao } = await createRegionWithAo();
+        const startDate = daysFromToday(5);
+        const staffed = await createColumnStaffedEvent(ao.id, startDate);
+        const staleQLinkOnly = await createInstance(ao.id, startDate);
+        await attendWithStaleQLink(staleQLinkOnly.id, staffed.pax.id);
+        const client = createTestClient();
+        const plannedQNames = [staffed.q.f3Name, staffed.coQ.f3Name].sort();
+
+        // Without attendance filters (the limit-first query)
+        const asQ = await client.eventInstance.calendarHomeSchedule({
+          userId: staffed.q.id,
+          regionOrgId: region.id,
+          startDate,
+        });
+        const staffedRow = asQ.events.find((e) => e.id === staffed.instance.id);
+        expect(staffedRow?.plannedQs?.split(", ").sort()).toEqual(
+          plannedQNames,
+        );
+        expect(staffedRow?.userIsQ).toBe(true);
+
+        // With an attendance filter (the filter-first query)
+        const asPax = await client.eventInstance.calendarHomeSchedule({
+          userId: staffed.pax.id,
+          regionOrgId: region.id,
+          startDate,
+          onlyUserEvents: true,
+        });
+        expect(asPax.events.map((e) => e.id).sort()).toEqual(
+          [staffed.instance.id, staleQLinkOnly.id].sort(),
+        );
+        for (const event of asPax.events) {
+          expect(event.userIsQ).toBe(false);
+        }
+        expect(
+          asPax.events.find((e) => e.id === staleQLinkOnly.id)?.plannedQs,
+        ).toBeNull();
+
+        const openQ = await client.eventInstance.calendarHomeSchedule({
+          userId: staffed.pax.id,
+          regionOrgId: region.id,
+          startDate,
+          openQOnly: true,
+        });
+        expect(openQ.events.map((e) => e.id)).toEqual([staleQLinkOnly.id]);
+      });
+    });
   });
 });
