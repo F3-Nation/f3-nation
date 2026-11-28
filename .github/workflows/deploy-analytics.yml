@@ -72,3 +72,119 @@ jobs:
         --args=run
         --set-env-vars=ANALYTICS_ENVIRONMENT=production,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data,ANALYTICS_POSTGRES_DATABASE=f3_prod,ANALYTICS_PRODUCER_REVISION=gha-${{ github.run_id }}-${{ github.run_attempt }}
         --set-secrets=ANALYTICS_POSTGRES_USER=analytics-etl-database-user:latest,ANALYTICS_POSTGRES_PASSWORD=analytics-etl-database-password:latest
+
+  # Release cleanup ships with the publisher's image, so its pointer and
+  # manifest validation always matches the code that wrote the releases.
+  # Deploying updates the job without running it; production runs come from
+  # Cloud Scheduler. scripts/deploy-analytics-release-gc.sh skips the update
+  # when the release predates scheduled cleanup or the publisher job has
+  # since moved to another image.
+  deploy-release-gc-nonprod:
+    needs: deploy
+    concurrency:
+      group: cloudrun-job-deploy-f3data-us-central1-analytics-release-gc-nonprod
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # id-token: write -> GCP OIDC for the nonprod deploy identity.
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: analytics-nonprod
+    steps:
+      - name: Check out the deploy script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/deploy-analytics-release-gc.sh
+          sparse-checkout-cone-mode: false
+
+      # The release commit says how its CLI runs cleanup; a release that
+      # predates the file leaves the job's current template in place.
+      - name: Check out the release's cleanup arguments
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          ref: ${{ needs.deploy.outputs.release_sha }}
+          path: release
+          persist-credentials: false
+          sparse-checkout: apps/analytics/release-gc-job.args
+          sparse-checkout-cone-mode: false
+
+      - name: Authenticate to GCP (nonprod)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Deploy release cleanup job (nonprod)
+        env:
+          IMAGE: ${{ needs.deploy.outputs.staging_image }}
+          ARGS_FILE: release/apps/analytics/release-gc-job.args
+          JOB_NAME: analytics-release-gc-nonprod
+          PUBLISHER_JOB: analytics-etl-nonprod
+          SERVICE_ACCOUNT: analytics-release-gc-nonprod@f3data.iam.gserviceaccount.com
+          ANALYTICS_ENV: nonprod
+          BUCKET: f3-analytics-nonprod
+          PRODUCER_REVISION: gha-${{ github.run_id }}-${{ github.run_attempt }}
+          REGION: us-central1
+          PROJECT: f3data
+        run: bash scripts/deploy-analytics-release-gc.sh
+
+  deploy-release-gc-prod:
+    needs: [deploy, deploy-release-gc-nonprod]
+    concurrency:
+      group: cloudrun-job-deploy-f3data-us-central1-analytics-release-gc
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # id-token: write -> GCP OIDC for the production deploy identity.
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: analytics-production
+    steps:
+      - name: Check out the deploy script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/deploy-analytics-release-gc.sh
+          sparse-checkout-cone-mode: false
+
+      # The release commit says how its CLI runs cleanup; a release that
+      # predates the file leaves the job's current template in place.
+      - name: Check out the release's cleanup arguments
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
+        with:
+          ref: ${{ needs.deploy.outputs.release_sha }}
+          path: release
+          persist-credentials: false
+          sparse-checkout: apps/analytics/release-gc-job.args
+          sparse-checkout-cone-mode: false
+
+      - name: Authenticate to GCP (production)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      # Production and nonprod share project f3data, so the production job runs
+      # the same staging-registry digest the publisher's production job does.
+      - name: Deploy release cleanup job (production)
+        env:
+          IMAGE: ${{ needs.deploy.outputs.staging_image }}
+          ARGS_FILE: release/apps/analytics/release-gc-job.args
+          JOB_NAME: analytics-release-gc
+          PUBLISHER_JOB: analytics-etl
+          SERVICE_ACCOUNT: analytics-release-gc@f3data.iam.gserviceaccount.com
+          ANALYTICS_ENV: production
+          BUCKET: f3-analytics
+          PRODUCER_REVISION: gha-${{ github.run_id }}-${{ github.run_attempt }}
+          REGION: us-central1
+          PROJECT: f3data
+        run: bash scripts/deploy-analytics-release-gc.sh

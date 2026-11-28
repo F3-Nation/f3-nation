@@ -157,6 +157,16 @@ caps one run, oldest first. The defaults for `--min-age-days`,
 matches the 14-day minimum above, and shortening it is a retention-policy
 decision for the release owners.
 
+In production it runs weekly from Cloud Scheduler as the `analytics-release-gc`
+Cloud Run job, which cleans every product with `--apply`; its schedule and
+grants are in
+[`ANALYTICS_GCP_PROVISIONING.md`](ANALYTICS_GCP_PROVISIONING.md#5-scheduler).
+Without `--product` the command cleans each product in turn, and a refusal or
+stop in one product does not prevent cleanup of the others; the command exits 1
+if any product failed. Read a scheduled run's outcome from its
+`analytics.etl.release_gc_*` events in the job's logs. To preview a run, use the
+dry run below; executing the job deletes.
+
 Run it as an operator identity, never the product runtime, which must not hold
 release delete. That identity needs `storage.objects.list` on the bucket,
 `storage.objects.get` on the product's `current.json` and release prefix, and

@@ -98,6 +98,13 @@ on:
         required: false
         type: boolean
         default: true
+    outputs:
+      staging_image:
+        description: "Built image pinned to its digest in the staging project's Artifact Registry"
+        value: ${{ jobs.build.outputs.image }}@${{ jobs.build.outputs.digest }}
+      release_sha:
+        description: "Release commit the image was built from, after the main-ancestry check"
+        value: ${{ jobs.ci-gate.outputs.sha }}
 
 jobs:
   ci-gate:

@@ -358,8 +358,10 @@ Production IAM, load sizing, freshness/SLO, retention/garbage collection,
 rollback, and consumer/schema compatibility are human-owned release blockers.
 Retention targets are at least one day for current and previous valid releases,
 14 days for ordinary completed releases, and a minimum age of 14 days before
-abandoned prefixes are eligible for cleanup; never delete current. These
-targets do not claim automated garbage collection or a live lifecycle policy.
+abandoned prefixes are eligible for cleanup; never delete current. The
+generation-aware `analytics-etl gc-releases` command enforces them, and the
+operational design runs it weekly in production from Cloud Scheduler. No bucket
+lifecycle rule deletes releases.
 Keep prior live data and its serving path until consumer
 owners sign off on the pointer-based cutover. This spec records intended
 contracts, not passed gates or live validation evidence.

@@ -82,12 +82,13 @@ On merge of the Release Please PR, the workflow runs again and this time creates
 
 The tag triggers the corresponding deploy workflow:
 
-| Tag pattern  | Workflow                                | Environments                               |
-| ------------ | --------------------------------------- | ------------------------------------------ |
-| `me@*`       | `.github/workflows/deploy-me.yml`       | `me-staging` → `me.f3nation.com`           |
-| `admin@*`    | `.github/workflows/deploy-admin.yml`    | `admin-staging` → `admin.f3nation.com`     |
-| `auth@*`     | `.github/workflows/deploy-auth.yml`     | `auth-staging` → `auth.f3nation.com`       |
-| `slackbot@*` | `.github/workflows/deploy-slackbot.yml` | `slackbot-staging` → `slackbot-production` |
+| Tag pattern   | Workflow                                 | Environments                                 |
+| ------------- | ---------------------------------------- | -------------------------------------------- |
+| `me@*`        | `.github/workflows/deploy-me.yml`        | `me-staging` → `me.f3nation.com`             |
+| `admin@*`     | `.github/workflows/deploy-admin.yml`     | `admin-staging` → `admin.f3nation.com`       |
+| `auth@*`      | `.github/workflows/deploy-auth.yml`      | `auth-staging` → `auth.f3nation.com`         |
+| `slackbot@*`  | `.github/workflows/deploy-slackbot.yml`  | `slackbot-staging` → `slackbot-production`   |
+| `analytics@*` | `.github/workflows/deploy-analytics.yml` | `analytics-nonprod` → `analytics-production` |
 
 Each deploy workflow:
 
@@ -100,6 +101,21 @@ For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 
 1. Main Slackbot Cloud Run service deploy (`f3-slackbot` in `f3-slackbot-staging` and `f3-slackbot`)
 2. Scripts Cloud Run Job deploy (`f3-slackbot-scripts` in `f3-slackbot-staging` and `f3-slackbot`)
+
+For `analytics@*`, the workflow deploys Cloud Run jobs in project `f3data`, in
+this order, each production step waiting for its own `analytics-production`
+approval:
+
+1. Publisher job: `analytics-etl-nonprod`, then `analytics-etl`
+2. Release cleanup job, with the publisher's image digest:
+   `analytics-release-gc-nonprod`, then `analytics-release-gc`
+
+A cleanup step finishes without updating its job, and logs a warning, when the
+release has no `apps/analytics/release-gc-job.args` (its CLI predates
+scheduled cleanup) or when the environment's publisher job no longer runs this
+release's digest (another release deployed it since). Deploying a job doesn't
+run it; see
+[Release cleanup operator](ANALYTICS_GCP_PROVISIONING.md#release-cleanup-operator).
 
 The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes
 directly to GitHub Pages. Its emitted check names must stay distinct from the CI
@@ -125,6 +141,11 @@ What this does not guarantee:
   job. A third run arriving while one is pending replaces it, and the replaced
   run shows as cancelled. A production job waiting for approval may hold its
   group until it is approved or rejected.
+- **Matching jobs across groups.** Jobs that must run the same image sit in
+  separate groups. The Analytics cleanup deploy checks the publisher job's
+  digest just before updating, which leaves a short window in which another
+  release can deploy the publisher. Reject a pending approval from an older
+  run rather than approving it after a newer one.
 
 The workflow-level `concurrency` in each Cloud Run `deploy-*.yml` caller is
 still keyed by tag; it only stops the same tag from building twice at once.
